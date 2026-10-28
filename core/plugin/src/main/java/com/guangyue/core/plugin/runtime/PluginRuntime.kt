@@ -70,15 +70,17 @@ class PluginRuntime(
             runtime.evaluationTimeoutMillis = EVAL_TIMEOUT_MS
 
             runtime.function("__gy_log") { args ->
-                val level = args.getOrNull(0)?.toString() ?: "log"
-                val msg = args.getOrNull(1)?.toString() ?: ""
+                // Never `Any.toString()` here: quickjs-kt converts a returned TypeRef<*> by
+                // calling toString(), so a hard cast to String throws for non-string JS values.
+                val level = args.getOrNull(0)?.let(::asBridgeText) ?: "log"
+                val msg = args.getOrNull(1)?.let(::asBridgeText) ?: ""
                 onLog?.invoke(level, msg)
                 Log.d(TAG, "[${meta.platform}] $level: $msg")
                 null
             }
 
             runtime.function("__gy_http") { args ->
-                val payload = args.getOrNull(0)?.toString() ?: "{}"
+                val payload = args.getOrNull(0)?.let(::asBridgeText) ?: "{}"
                 performHttp(payload)
             }
 
@@ -127,11 +129,21 @@ class PluginRuntime(
 
         val obj = Json2.parse(raw).asObj() ?: throw PluginRuntimeException("bad bridge payload")
         if (obj["ok"].asBool() == true) {
-            return obj["data"] ?: JsonNull
+            return decodePayload(obj["data"])
         }
         val message = obj["error"].asStr() ?: "unknown plugin error"
         if (obj["missing"].asBool() == true) throw PluginRuntimeException.Missing(fn, message)
         throw PluginRuntimeException(message)
+    }
+
+    /**
+     * The dispatcher returns `{"ok":true,"data":"<json text>"}`, so the payload is a *string*
+     * holding JSON. Older/hand-written call sites returned it inline — handle both.
+     */
+    private fun decodePayload(data: JsonElement?): JsonElement {
+        val text = (data as? JsonPrimitive)?.takeIf { it.isString }?.content
+            ?: return data ?: JsonNull
+        return Json2.parse(text) ?: JsonNull
     }
 
     /** Probe which MusicFree functions the plugin implements. */
@@ -179,7 +191,7 @@ class PluginRuntime(
                 iconUrl: str(p.iconUrl) || str(p.icon),
                 cacheControl: str(p.cacheControl) || 'no-cache',
                 supportedSearchType: list(p.supportedSearchType),
-                supportedQualities: list(p.supportedQualities) || list(p.supportedQuality),
+                supportedQualities: list(p.supportedQualities).concat(list(p.supportedQuality)),
                 functions: fns
               });
             })()
@@ -370,6 +382,21 @@ class PluginRuntime(
         is PluginRuntimeException -> t
         is InterruptedException -> PluginRuntimeException("插件执行超时（${CALL_TIMEOUT_MS / 1000}s），已中断")
         else -> PluginRuntimeException(t.message ?: t::class.simpleName ?: "plugin error")
+    }
+
+    /**
+     * Coerce a JS value handed to a host [QuickJs.function] into text.
+     *
+     * quickjs-kt binds `args` as `Array<TypeRef<*>>` and converts each entry by calling
+     * `toString()` on it, so `args[0] as String` throws `ClassCastException` whenever the JS
+     * side passes a number, boolean or object. Calling the same `toString()` on an `Any?` keeps
+     * the conversion Kotlin-side and gets the JS value out alive.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun asBridgeText(value: Any?): String = when (value) {
+        null -> ""
+        is String -> value
+        else -> value.toString()
     }
 
     companion object {

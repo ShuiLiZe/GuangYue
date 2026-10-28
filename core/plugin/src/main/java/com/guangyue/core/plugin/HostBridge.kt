@@ -259,7 +259,7 @@ internal object HostBridge {
   G.__gy_call = function (fnName, argsJson) {
     var args;
     try { args = argsJson ? JSON.parse(argsJson) : []; } catch (e) { args = []; }
-    if (!Object.prototype.toString.call(args) === '[object Array]') args = [args];
+    if (Object.prototype.toString.call(args) !== '[object Array]') args = [args];
     try {
       var plugin = G.__plugin;
       if (!plugin) return JSON.stringify({ ok: false, error: 'plugin object missing' });
@@ -273,10 +273,14 @@ internal object HostBridge {
         if (result && typeof result.then === 'function') {
           return JSON.stringify({ ok: false, error: 'function ' + fnName + ' returned a Promise; MusicFree plugins must be synchronous' });
         }
-        var text = JSON.stringify(result === undefined ? null : result);
-        return JSON.stringify({ ok: true, data: text === undefined ? null : JSON.parse(text) });
+        // Serialising the payload twice keeps the envelope safe against any plugin data:
+        // `data` carries the JSON *text* of the result, the host parses it a second time.
+        // Nothing the plugin returns (toJSON hooks, getters, cycles) can corrupt the envelope.
+        var payload = JSON.stringify(result === undefined ? null : result);
+        if (payload === undefined) payload = 'null';
+        return JSON.stringify({ ok: true, data: payload });
       } catch (e2) {
-        return JSON.stringify({ ok: false, error: describe(e2) });
+        return JSON.stringify({ ok: false, error: describe(e2), stack: e2 && e2.stack ? String(e2.stack) : '' });
       }
     } catch (e) {
       return JSON.stringify({ ok: false, error: describe(e), stack: e && e.stack ? String(e.stack) : '' });

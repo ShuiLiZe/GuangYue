@@ -1,4 +1,4 @@
-﻿package com.guangyue.core.plugin
+package com.guangyue.core.plugin
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
@@ -104,9 +104,10 @@ object Json2 {
                 is String -> put(k, v)
                 is Int -> put(k, v)
                 is Long -> put(k, v)
-                is Boolean -> put(k, v)
                 is JsonElement -> put(k, v)
-                else -> put(k, v.toString())
+                is Number -> put(k, JsonPrimitive(v))
+                is Boolean -> put(k, JsonPrimitive(v))
+                else -> put(k, JsonPrimitive(v.toString()))
             }
         }
     }

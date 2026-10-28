@@ -16,7 +16,7 @@ module.exports = {
   srcUrl: 'https://raw.githubusercontent.com/YG224586/GuangYue/main/docs/demo-plugin.js',
   cacheControl: 'no-cache',
   // low / standard / high / super —— demo 只有标准音质
-  supportedSearchType: ['music'],
+  supportedSearchType: ['music', 'album', 'artist'],
   defaultSearchType: 'music',
 
   /**
@@ -24,7 +24,7 @@ module.exports = {
    * @param {number} page 从 1 开始
    * @param {string} type 'music' | 'album' | 'artist' | 'sheet'
    */
-  async search(query, page, type) {
+  search(query, page, type) {
     if (type && type !== 'music') {
       return { isEnd: true, data: [] };
     }
@@ -45,23 +45,64 @@ module.exports = {
   },
 
   /** 播放时才解析直链。广乐拿到 url 后交给 Media3。 */
-  async getMediaSource(musicItem, quality) {
+  getMediaSource(musicItem, quality) {
     const t = tracks.find((x) => x.id === musicItem.id) || tracks[0];
     return { url: t.url, quality: quality || 'standard' };
   },
 
-  async getLyric(musicItem) {
+  getLyric(musicItem) {
     const t = tracks.find((x) => x.id === musicItem.id);
     return { rawLrc: t ? t.lrc : '' };
   },
 
-  async getMusicInfo(musicItem) {
+  getMusicInfo(musicItem) {
     const t = tracks.find((x) => x.id === musicItem.id) || tracks[0];
     return { id: t.id, title: t.title, artist: t.artist, album: t.album, artwork: t.artwork, duration: t.duration };
   },
 };
 
 // ---------------------------------------------------------------------------
+/**
+ * 一组可以立刻播放的示例曲目。
+ *
+ * MusicFree 的榜单/推荐位协议里，插件就是这样把一页歌交给宿主：返回 `{ isEnd, data: [...] }`。
+ * 广乐用它给「歌单」Tab 铺一组示例曲目，同时也是返回标准结构的范例。
+ */
+module.exports.getRecommendSheetDetail = function (sheetItem, page) {
+  return { isEnd: true, sheetItem: sheetItem, data: allItems() };
+};
+
+/** 频道/榜单的父级列表（MusicFree `getTopLists`，返回 `[{ title, data: [topListItem] }]`）。 */
+module.exports.getTopLists = function () {
+  return [
+    {
+      title: '广乐示例',
+      data: [
+        { id: 'demo-top', platform: 'demo', title: '演示曲目', description: 'SoundHelix 公开示例音频' },
+      ],
+    },
+  ];
+};
+
+/** 「把这批歌给我」的第二条通道：MusicFree `getTopListDetail`。 */
+module.exports.getTopListDetail = function (topListItem, page) {
+  return { isEnd: true, data: allItems() };
+};
+
+function allItems() {
+  return tracks.map(function (t) {
+    return {
+      id: t.id,
+      platform: 'demo',
+      title: t.title,
+      artist: t.artist,
+      album: t.album,
+      artwork: t.artwork,
+      duration: t.duration,
+      qualitys: ['standard'],
+    };
+  });
+}
 // 数据：SoundHelix 公开示例 MP3（soundhelix.com，作者 T. Schürger，公开发布供演示使用）
 // ---------------------------------------------------------------------------
 const tracks = [
