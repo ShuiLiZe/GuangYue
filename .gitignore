@@ -20,3 +20,4 @@ core/plugin/jsprelude/node_modules/
 # CLI scratch
 .cli/*.tmp
 *.bak
+*.zip
