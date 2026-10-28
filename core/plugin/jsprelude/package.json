@@ -1,0 +1,23 @@
+{
+  "name": "guangyue-jsprelude",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GuangYue plugin runtime JS prelude bundle (esbuild iife)",
+  "type": "commonjs",
+  "scripts": {
+    "build": "node build.mjs",
+    "verify": "node verify.mjs",
+    "all": "node build.mjs && node verify.mjs"
+  },
+  "dependencies": {
+    "big-integer": "^1.6.52",
+    "cheerio": "^1.2.0",
+    "crypto-js": "^4.1.1",
+    "dayjs": "^1.11.23",
+    "he": "^2.0.0",
+    "qs": "^6.17.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

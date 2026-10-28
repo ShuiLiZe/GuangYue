@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1">
+<title>广乐 · 歌词舞台</title>
+<style>
+  :root{
+    --blue:#1A73E8;
+    --navy:#0B1026;
+    --navy-2:#111A3A;
+  }
+  *{box-sizing:border-box;-webkit-font-smoothing:antialiased;}
+  html,body{margin:0;padding:0;background:#05070F;width:390px;}
+  body{
+    font-family:-apple-system,"SF Pro Text","Segoe UI",Roboto,"Noto Sans CJK SC","PingFang SC","Microsoft YaHei",sans-serif;
+    margin:0 auto;
+  }
+  .phone{
+    position:relative;width:390px;height:844px;overflow:hidden;isolation:isolate;
+    background:
+      radial-gradient(90% 60% at 18% 4%,  rgba(38,58,118,.55) 0%, rgba(38,58,118,0) 60%),
+      radial-gradient(80% 55% at 92% 22%, rgba(20,84,168,.34) 0%, rgba(20,84,168,0) 62%),
+      radial-gradient(110% 70% at 50% 108%,rgba(10,18,44,.9) 0%, rgba(10,18,44,0) 70%),
+      linear-gradient(180deg,#0C1230 0%,#0B1026 46%,#090E20 100%);
+    color:#fff;
+  }
+  /* ---------- 几何浮动图形 ---------- */
+  .geo{position:absolute;inset:0;z-index:0;pointer-events:none;}
+  .geo .shape{position:absolute;}
+  .g-circle1{
+    width:300px;height:300px;border-radius:50%;
+    left:-120px;top:60px;
+    border:1px solid rgba(140,175,255,.16);
+    background:radial-gradient(circle at 30% 30%, rgba(120,160,255,.10), rgba(120,160,255,0) 68%);
+    filter:blur(.4px);
+  }
+  .g-circle2{
+    width:190px;height:190px;border-radius:50%;
+    right:-60px;top:210px;
+    border:1px solid rgba(255,255,255,.10);
+    background:radial-gradient(circle at 60% 40%, rgba(255,255,255,.06), rgba(255,255,255,0) 70%);
+  }
+  .g-tri{
+    width:0;height:0;left:-30px;bottom:200px;
+    border-left:120px solid transparent;
+    border-right:120px solid transparent;
+    border-bottom:200px solid rgba(120,160,255,.05);
+    transform:rotate(-14deg);
+  }
+  .g-tri2{
+    width:0;height:0;right:14px;top:118px;
+    border-left:58px solid transparent;
+    border-right:58px solid transparent;
+    border-bottom:100px solid rgba(255,255,255,.045);
+    transform:rotate(18deg);
+  }
+  .g-line1{
+    left:24px;right:24px;top:214px;height:1px;
+    background:linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(160,190,255,.22) 30%,rgba(160,190,255,.05) 70%,rgba(255,255,255,0) 100%);
+    transform:rotate(-8deg);
+  }
+  .g-line2{
+    left:-20px;right:-20px;top:600px;height:1px;
+    background:linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.14) 50%,rgba(255,255,255,0) 100%);
+    transform:rotate(6deg);
+  }
+  .g-dot{
+    width:5px;height:5px;border-radius:50%;background:rgba(160,190,255,.5);
+    box-shadow:0 0 12px rgba(120,160,255,.6);
+  }
+  .gd1{left:64px;top:330px;}
+  .gd2{right:52px;top:470px;background:rgba(255,255,255,.35);}
+  .gd3{left:150px;top:152px;width:3px;height:3px;}
+
+  /* ---------- 内容 ---------- */
+  .page{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;}
+  .top{
+    padding:26px 24px 0;display:flex;align-items:center;justify-content:space-between;
+    font-size:12px;letter-spacing:1.2px;color:rgba(255,255,255,.42);
+  }
+  .top .lbl{text-transform:uppercase;}
+  .top .round{
+    width:32px;height:32px;border-radius:50%;
+    border:1px solid rgba(255,255,255,.16);
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  /* 歌词舞台 */
+  .stage{
+    position:relative;flex:1;
+    padding:0;margin:24px 0 0;
+    font-family:"Songti SC","Noto Serif CJK SC","Source Han Serif SC","Georgia","Times New Roman",serif;
+  }
+  .line{
+    position:absolute;white-space:nowrap;
+  }
+  /* 每个字符：独立旋转 + 字号 + 基线偏移 */
+  .ch{
+    display:inline-block;
+    color:rgba(255,255,255,.42);
+    will-change:transform;
+  }
+  .ch.prev{color:rgba(255,255,255,.20);}
+
+  /* 当前唱到的字 —— 发光 */
+  .ch.now{
+    color:#FFFFFF;
+    text-shadow:
+      0 0 6px rgba(26,115,232,.95),
+      0 0 18px rgba(26,115,232,.85),
+      0 0 40px rgba(60,140,255,.65),
+      0 0 70px rgba(26,115,232,.35);
+    position:relative;
+    z-index:3;
+  }
+  .ch.now::before{
+    content:"";
+    position:absolute;left:50%;top:50%;
+    width:120px;height:120px;margin:-60px 0 0 -60px;
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(70,150,255,.55) 0%, rgba(40,110,230,.22) 34%, rgba(26,115,232,0) 70%);
+    filter:blur(10px);
+    z-index:-1;
+  }
+  .ch.now::after{
+    content:"";
+    position:absolute;left:50%;top:50%;
+    width:86px;height:86px;margin:-43px 0 0 -43px;
+    border-radius:50%;
+    border:1px solid rgba(120,180,255,.38);
+    box-shadow:0 0 26px rgba(26,115,232,.55), inset 0 0 22px rgba(26,115,232,.35);
+  }
+
+  /* 翻译 */
+  .trans{
+    position:absolute;left:0;right:0;bottom:150px;z-index:4;
+    text-align:center;
+    font-family:-apple-system,"SF Pro Text","Segoe UI",Roboto,"Noto Sans CJK SC",sans-serif;
+    font-size:12px;letter-spacing:1.6px;color:rgba(255,255,255,.38);
+  }
+  .trans .tline{height:22px;line-height:22px;}
+  .trans .tline.cur{color:rgba(255,255,255,.78);}
+
+  /* ---------- 悬浮播放条（深色毛玻璃） ---------- */
+  .bar{
+    position:absolute;left:16px;right:16px;bottom:16px;z-index:20;
+    border-radius:30px;
+    padding:12px 14px 14px;
+    background:rgba(18,26,54,.55);
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 18px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.12);
+    backdrop-filter:blur(26px) saturate(160%);
+    -webkit-backdrop-filter:blur(26px) saturate(160%);
+  }
+  .bar .row{display:flex;align-items:center;gap:12px;}
+  .bar .cover{
+    width:44px;height:44px;border-radius:14px;flex:none;
+    background:radial-gradient(120% 100% at 30% 20%,#F1D3BE,#C8946E 58%,#8E6244);
+    box-shadow:0 4px 14px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.16);
+  }
+  .bar .meta{flex:1;min-width:0;}
+  .bar .meta .t{font-size:13.5px;font-weight:600;color:#fff;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bar .meta .s{font-size:11px;color:rgba(255,255,255,.45);margin-top:3px;letter-spacing:.4px;}
+  .bar .play{
+    width:42px;height:42px;border-radius:50%;flex:none;
+    background:var(--blue);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 8px 20px rgba(26,115,232,.55), inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .bar .track{margin-top:12px;display:flex;align-items:center;gap:9px;}
+  .bar .track .tm{font-size:10px;letter-spacing:.5px;color:rgba(255,255,255,.4);font-variant-numeric:tabular-nums;}
+  .bar .track .rail{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.16);position:relative;}
+  .bar .track .rail i{position:absolute;left:0;top:0;bottom:0;width:42%;border-radius:2px;background:var(--blue);
+    box-shadow:0 0 10px rgba(26,115,232,.7);}
+  .bar .track .rail b{position:absolute;left:42%;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:#fff;
+    box-shadow:0 0 10px rgba(120,180,255,.9);}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="geo">
+    <div class="shape g-circle1"></div>
+    <div class="shape g-circle2"></div>
+    <div class="shape g-tri"></div>
+    <div class="shape g-tri2"></div>
+    <div class="shape g-line1"></div>
+    <div class="shape g-line2"></div>
+    <div class="shape g-dot gd1"></div>
+    <div class="shape g-dot gd2"></div>
+    <div class="shape g-dot gd3"></div>
+  </div>
+
+  <div class="page">
+    <div class="top">
+      <div class="lbl">GuangYue · Now Playing</div>
+      <div class="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2" stroke-linecap="round">
+          <path d="M4 7h16M4 12h16M4 17h10"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="stage">
+      <!-- 第一行：上一句（暗） -->
+      <div class="line" style="left:34px;top:34px;font-size:19px;letter-spacing:4px;">
+        <span class="ch prev" style="transform:rotate(-6deg) translateY(3px)">我</span><span class="ch prev" style="transform:rotate(4deg) translateY(-4px);font-size:17px">把</span><span class="ch prev" style="transform:rotate(-3deg) translateY(6px)">夜</span><span class="ch prev" style="transform:rotate(5deg) translateY(-1px);font-size:18px">色</span><span class="ch prev" style="transform:rotate(-8deg) translateY(4px)">折</span><span class="ch prev" style="transform:rotate(3deg) translateY(-6px);font-size:17px">进</span><span class="ch prev" style="transform:rotate(-2deg) translateY(2px)">信</span><span class="ch prev" style="transform:rotate(7deg) translateY(-2px)">封</span>
+      </div>
+
+      <!-- 主行 1 -->
+      <div class="line" style="left:26px;top:112px;font-size:46px;letter-spacing:2px;">
+        <span class="ch" style="transform:rotate(-5deg) translateY(6px)">潮</span><span class="ch" style="transform:rotate(3deg) translateY(-8px);font-size:43px">汐</span><span class="ch" style="transform:rotate(-2deg) translateY(4px)">涌</span><span class="ch" style="transform:rotate(6deg) translateY(-3px);font-size:44px">上</span><span class="ch" style="transform:rotate(-7deg) translateY(9px)">来</span>
+      </div>
+
+      <!-- 主行 2（当前行，含当前发光字） -->
+      <div class="line" style="left:30px;top:208px;font-size:40px;letter-spacing:0px;">
+        <span class="ch" style="transform:rotate(4deg) translateY(-6px);font-size:38px">淹</span><span class="ch" style="transform:rotate(-6deg) translateY(8px)">没</span><span class="ch" style="transform:rotate(2deg) translateY(-3px);font-size:39px">我</span><span class="ch now" style="transform:rotate(-4deg) translateY(10px);font-size:48px">呼</span><span class="ch" style="transform:rotate(5deg) translateY(-9px);font-size:39px">吸</span><span class="ch" style="transform:rotate(-3deg) translateY(5px)">的</span><span class="ch" style="transform:rotate(7deg) translateY(-4px);font-size:38px">声</span><span class="ch" style="transform:rotate(-5deg) translateY(6px);font-size:37px">音</span>
+      </div>
+
+      <!-- 主行 3 -->
+      <div class="line" style="left:64px;top:316px;font-size:44px;letter-spacing:4px;">
+        <span class="ch" style="transform:rotate(-5deg) translateY(-5px);font-size:41px">在</span><span class="ch" style="transform:rotate(4deg) translateY(7px)">最</span><span class="ch" style="transform:rotate(-2deg) translateY(-8px);font-size:43px">深</span><span class="ch" style="transform:rotate(6deg) translateY(3px)">的</span><span class="ch" style="transform:rotate(-7deg) translateY(-2px);font-size:42px">蓝</span><span class="ch" style="transform:rotate(3deg) translateY(6px)">里</span>
+      </div>
+
+      <!-- 下一句（微弱） -->
+      <div class="line" style="left:44px;top:414px;font-size:21px;letter-spacing:5px;">
+        <span class="ch prev" style="transform:rotate(5deg) translateY(-3px);font-size:19px">而</span><span class="ch prev" style="transform:rotate(-4deg) translateY(5px)">你</span><span class="ch prev" style="transform:rotate(2deg) translateY(-6px);font-size:18px">是</span><span class="ch prev" style="transform:rotate(-6deg) translateY(2px)">唯</span><span class="ch prev" style="transform:rotate(4deg) translateY(-2px);font-size:19px">一</span><span class="ch prev" style="transform:rotate(-3deg) translateY(6px)">的</span><span class="ch prev" style="transform:rotate(6deg) translateY(-4px);font-size:18px">航</span><span class="ch prev" style="transform:rotate(-5deg) translateY(3px)">标</span>
+      </div>
+    </div>
+
+    <div class="trans">
+      <div class="tline cur">The tide rises and swallows the sound of my breathing</div>
+      <div class="tline" style="opacity:.65">— 潮汐与琥珀 / 林间计划</div>
+    </div>
+  </div>
+
+  <div class="bar">
+    <div class="row">
+      <div class="cover"></div>
+      <div class="meta">
+        <div class="t">潮汐与琥珀</div>
+        <div class="s">林间计划</div>
+      </div>
+      <div class="play">
+        <svg width="12" height="14" viewBox="0 0 14 16" fill="#fff"><rect x="1" y="1" width="4" height="14" rx="1"/><rect x="9" y="1" width="4" height="14" rx="1"/></svg>
+      </div>
+    </div>
+    <div class="track">
+      <span class="tm">01:48</span>
+      <div class="rail"><i></i><b></b></div>
+      <span class="tm">04:12</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>
