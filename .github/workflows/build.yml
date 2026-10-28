@@ -139,12 +139,18 @@ jobs:
             fi
           done
 
+      # artifact 存储配额用满时这一步会失败（Failed to CreateArtifact:
+      # Artifact storage quota has been hit），但编译与签名都已经完成，
+      # 所以让它 continue-on-error：不因配额问题判定整个构建失败。
+      # 同理，每次 push 都会上传 50MB 的包，长期会持续吃配额，
+      # 想永久省掉就把这张任务注释掉，改用 tag 触发的 Release 附件取包。
       - name: 上传 APK
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: GuangYue-APK-${{ github.sha }}
           path: dist/*.apk
-          retention-days: 30
+          retention-days: 14
           if-no-files-found: error
 
       - name: 创建 Release（仅 tag）

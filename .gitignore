@@ -35,5 +35,5 @@ core/plugin/jsprelude/node_modules/
 *.zip
 
 # 本地复现 CI 用的临时克隆 + 打包产物
-build-gh/
+build-gh*/
 dist/
