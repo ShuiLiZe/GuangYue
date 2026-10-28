@@ -8,6 +8,7 @@ import com.guangyue.core.plugin.Json2
 import com.guangyue.core.plugin.PluginMeta
 import com.guangyue.core.plugin.HostBridge
 import com.guangyue.core.plugin.PluginFunctions
+import com.guangyue.core.plugin.PluginMetaCodec
 import com.guangyue.core.plugin.asArr
 import com.guangyue.core.plugin.asBool
 import com.guangyue.core.plugin.asLong
@@ -164,63 +165,35 @@ class PluginRuntime(
         return parsed.asArr()?.mapNotNull { it.asStr() }?.toSet() ?: emptySet()
     }
 
-    /** Read `platform`, `version`, `srcUrl`, `supportedSearchType` … from the module. */
-    fun readMeta(source: String, sizeBytes: Long): PluginMeta {
-        val expr = """
-            (function(){
-              var p = globalThis.__plugin || {};
-              function str(v){ return typeof v === 'string' ? v : null; }
-              function list(v){
-                if (Object.prototype.toString.call(v) === '[object Array]') {
-                  var out = [];
-                  for (var i = 0; i < v.length; i++) if (typeof v[i] === 'string') out.push(v[i]);
-                  return out;
-                }
-                return [];
-              }
-              var fns = [];
-              var names = ${JsonArray(PluginFunctions.ALL.map { JsonPrimitive(it) }).toString()};
-              for (var i = 0; i < names.length; i++) if (typeof p[names[i]] === 'function') fns.push(names[i]);
-              return JSON.stringify({
-                platform: str(p.platform),
-                version: str(p.version) || '0.0.0',
-                srcUrl: str(p.srcUrl),
-                name: str(p.name),
-                author: str(p.author),
-                description: str(p.description),
-                iconUrl: str(p.iconUrl) || str(p.icon),
-                cacheControl: str(p.cacheControl) || 'no-cache',
-                supportedSearchType: list(p.supportedSearchType),
-                supportedQualities: list(p.supportedQualities).concat(list(p.supportedQuality)),
-                functions: fns
-              });
-            })()
-        """.trimIndent()
-        val runtime = qjs ?: throw PluginRuntimeException("runtime not installed")
-        val raw = runCatching { evalBlocking(runtime, expr, "meta.js") }.getOrElse { "{}" }
-        val o = Json2.parse(raw).asObj() ?: JsonObject(emptyMap())
-        val platform = o["platform"].asStr()?.takeIf { it.isNotBlank() }
-            ?: throw PluginRuntimeException("插件缺少 platform 字段")
-        val searchTypes = o["supportedSearchType"].asArr()?.mapNotNull { it.asStr() }
-            ?.takeIf { it.isNotEmpty() } ?: listOf("music")
-        val functions = o["functions"].asArr()?.mapNotNull { it.asStr() }?.toSet() ?: emptySet()
-
-        return PluginMeta(
-            id = "",
-            platform = platform,
-            name = o["name"].asStr() ?: platform,
-            version = o["version"].asStr() ?: "0.0.0",
-            srcUrl = o["srcUrl"].asStr(),
-            author = o["author"].asStr(),
-            description = o["description"].asStr(),
-            iconUrl = o["iconUrl"].asStr(),
-            supportedSearchType = searchTypes,
-            supportedQualities = o["supportedQualities"].asArr()?.mapNotNull { it.asStr() } ?: emptyList(),
-            cacheControl = o["cacheControl"].asStr() ?: "no-cache",
-            functions = functions,
+    /**
+     * 读取插件导出的元信息并宽松解析。
+     *
+     * JS 侧只做 `JSON.stringify`（见 [PluginMetaProbe]），返回的是**字符串**；
+     * Kotlin 侧交给 [PluginMetaCodec] 用 kotlinx.serialization 解析，字段缺失可兜底、
+     * 类型不符就按文本读取。全程不经过 quickjs-kt 的 `TypeConverter`，因此
+     * `platform: true` / `version: 1` / `cacheControl: false` 这类插件不会再报
+     * `No such type converter to convert 'boolean ...' to 'java.lang.String'`。
+     */
+    fun readMeta(source: String, sizeBytes: Long, fallbackPlatform: String? = null): PluginMeta {
+        val decoded = PluginMetaCodec.decode(
+            json = readMetaJson(),
             source = source,
             sizeBytes = sizeBytes,
+            fallbackPlatform = fallbackPlatform,
         )
+        decoded.meta?.let { return it }
+        throw PluginRuntimeException(decoded.error ?: "插件元信息不完整")
+    }
+
+    /** 取插件元信息的原始 JSON 文本（不含类型转换）。 */
+    fun readMetaJson(): String {
+        val runtime = qjs ?: throw PluginRuntimeException("runtime not installed")
+        runCatching { evalBlocking(runtime, PluginMetaProbe.SCRIPT, "meta-probe.js") }
+        val raw = runCatching { evalBlocking(runtime, PluginMetaProbe.callSource(PluginFunctions.ALL), "meta.js") }
+            .getOrElse { "{}" }
+        val err = Json2.parse(raw).asObj()?.get("__error").asStr()
+        if (!err.isNullOrBlank()) throw PluginRuntimeException(err)
+        return raw.trim().ifEmpty { "{}" }
     }
 
     /** Fetch the remote plugin version file (`srcUrl`) to detect updates. */

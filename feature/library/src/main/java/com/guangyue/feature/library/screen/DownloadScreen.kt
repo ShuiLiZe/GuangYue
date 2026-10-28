@@ -44,7 +44,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.guangyue.core.download.DownloadProgress
 import com.guangyue.core.download.DownloadedTrack
-import com.guangyue.feature.library.design.GuangYueDesign
+import com.guangyue.feature.library.design.GyRadius
+import com.guangyue.feature.library.design.Gyp
+import com.guangyue.feature.library.design.marbleBackground
 import com.guangyue.feature.library.viewmodel.DownloadViewModel
 
 /**
@@ -64,7 +66,7 @@ fun DownloadScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val toast by vm.message.collectAsStateWithLifecycle()
 
-    Surface(color = GuangYueDesign.MarbleMid, modifier = Modifier.fillMaxSize()) {
+    Surface(color = Color.Transparent, modifier = Modifier.fillMaxSize().marbleBackground()) {
         Column(Modifier.fillMaxSize()) {
             // ---- 顶栏
             Row(
@@ -74,7 +76,7 @@ fun DownloadScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", tint = GuangYueDesign.Ink)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", tint = Gyp.ink)
                 }
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -82,7 +84,7 @@ fun DownloadScreen(
                         fontSize = 21.sp,
                         fontFamily = FontFamily.Serif,
                         fontWeight = FontWeight.Bold,
-                        color = GuangYueDesign.Ink,
+                        color = Gyp.ink,
                     )
                     Text(
                         buildString {
@@ -95,7 +97,7 @@ fun DownloadScreen(
                             if (isEmpty()) append("已完成 ").append(state.done.size).append(" 首 · ").append(state.totalSizeText)
                         },
                         fontSize = 11.sp,
-                        color = GuangYueDesign.InkSoft,
+                        color = Gyp.inkSoft,
                     )
                 }
                 if (state.active.isNotEmpty()) {
@@ -111,11 +113,11 @@ fun DownloadScreen(
                     Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 4.dp)
-                        .background(GuangYueDesign.MarbleBlueTint, RoundedCornerShape(10.dp))
+                        .background(Gyp.tint, GyRadius.fieldShape())
                         .clickable { vm.clearMessage() }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                 ) {
-                    Text(toast.orEmpty(), fontSize = 12.sp, color = GuangYueDesign.BlueDeep)
+                    Text(toast.orEmpty(), fontSize = 12.sp, color = Gyp.accentText)
                 }
             }
 
@@ -179,10 +181,10 @@ private fun SectionTitle(text: String, count: Int) {
             text,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            color = GuangYueDesign.Ink,
+            color = Gyp.ink,
         )
         Spacer(Modifier.width(6.dp))
-        Text("$count", fontSize = 11.sp, color = GuangYueDesign.InkSoft)
+        Text("$count", fontSize = 11.sp, color = Gyp.inkSoft)
     }
 }
 
@@ -193,24 +195,24 @@ private fun ActiveRow(progress: DownloadProgress, onPause: () -> Unit) {
             Box(
                 Modifier
                     .size(40.dp)
-                    .background(GuangYueDesign.MarbleBlueTint, RoundedCornerShape(10.dp)),
+                    .background(Gyp.tint, GyRadius.fieldShape()),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.MusicNote, null, tint = GuangYueDesign.Blue, modifier = Modifier.size(20.dp))
+                Icon(Icons.Filled.MusicNote, null, tint = Gyp.accent, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     progress.title.ifBlank { "未命名任务" },
                     fontSize = 14.sp,
-                    color = GuangYueDesign.Ink,
+                    color = Gyp.ink,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     progress.artist.ifBlank { "未知艺术家" },
                     fontSize = 11.sp,
-                    color = GuangYueDesign.InkSoft,
+                    color = Gyp.inkSoft,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -222,29 +224,29 @@ private fun ActiveRow(progress: DownloadProgress, onPause: () -> Unit) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(3.dp),
-                        color = GuangYueDesign.Blue,
-                        trackColor = GuangYueDesign.MarbleMid,
+                        color = Gyp.accent,
+                        trackColor = Gyp.tint,
                     )
                 } else {
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(3.dp),
-                        color = GuangYueDesign.Blue,
-                        trackColor = GuangYueDesign.MarbleMid,
+                        color = Gyp.accent,
+                        trackColor = Gyp.tint,
                     )
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     progress.stageText() + if (progress.bytesTotal > 0) " · " + progress.progressText() else "",
                     fontSize = 10.sp,
-                    color = GuangYueDesign.InkSoft,
+                    color = Gyp.inkSoft,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
             IconButton(onClick = onPause) {
-                Icon(Icons.Filled.Pause, "暂停", tint = GuangYueDesign.InkSoft, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Pause, "暂停", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -257,7 +259,7 @@ private fun FailedRow(progress: DownloadProgress, onRetry: () -> Unit, onRemove:
             Icon(
                 Icons.Filled.ErrorOutline,
                 null,
-                tint = Color(0xFFD0574F),
+                tint = Gyp.danger,
                 modifier = Modifier.size(22.dp),
             )
             Spacer(Modifier.width(10.dp))
@@ -265,23 +267,23 @@ private fun FailedRow(progress: DownloadProgress, onRetry: () -> Unit, onRemove:
                 Text(
                     progress.title.ifBlank { "未命名任务" },
                     fontSize = 14.sp,
-                    color = GuangYueDesign.Ink,
+                    color = Gyp.ink,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     progress.error ?: progress.stageText(),
                     fontSize = 11.sp,
-                    color = Color(0xFFD0574F),
+                    color = Gyp.danger,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
             IconButton(onClick = onRetry) {
-                Icon(Icons.Filled.Refresh, "重试", tint = GuangYueDesign.Blue, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Refresh, "重试", tint = Gyp.accent, modifier = Modifier.size(18.dp))
             }
             IconButton(onClick = onRemove) {
-                Icon(Icons.Filled.Delete, "删除", tint = GuangYueDesign.InkSoft, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Delete, "删除", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -294,17 +296,17 @@ private fun DoneRow(track: DownloadedTrack, onPlay: () -> Unit, onRemove: () -> 
             Box(
                 Modifier
                     .size(40.dp)
-                    .background(GuangYueDesign.MarbleBlueTint, RoundedCornerShape(10.dp)),
+                    .background(Gyp.tint, GyRadius.fieldShape()),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.MusicNote, null, tint = GuangYueDesign.Blue, modifier = Modifier.size(20.dp))
+                Icon(Icons.Filled.MusicNote, null, tint = Gyp.accent, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     track.title,
                     fontSize = 14.sp,
-                    color = GuangYueDesign.Ink,
+                    color = Gyp.ink,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -313,25 +315,25 @@ private fun DoneRow(track: DownloadedTrack, onPlay: () -> Unit, onRemove: () -> 
                         .filter { it.isNotBlank() }
                         .joinToString(" · "),
                     fontSize = 11.sp,
-                    color = GuangYueDesign.InkSoft,
+                    color = Gyp.inkSoft,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
             Box(
                 Modifier
-                    .background(GuangYueDesign.MarbleMid, CircleShape)
+                    .background(Gyp.tint, GyRadius.capsuleShape())
                     .padding(horizontal = 8.dp, vertical = 3.dp),
             ) {
                 Text(
                     track.quality.uppercase(),
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
-                    color = GuangYueDesign.InkSoft,
+                    color = Gyp.inkSoft,
                 )
             }
             IconButton(onClick = onRemove) {
-                Icon(Icons.Filled.Delete, "删除本地文件", tint = GuangYueDesign.InkSoft, modifier = Modifier.size(17.dp))
+                Icon(Icons.Filled.Delete, "删除本地文件", tint = Gyp.inkSoft, modifier = Modifier.size(17.dp))
             }
         }
     }
@@ -349,23 +351,23 @@ private fun EmptyDownloads() {
         Box(
             Modifier
                 .size(72.dp)
-                .background(GuangYueDesign.CardWhite, CircleShape),
+                .background(Gyp.card, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Download, null, tint = GuangYueDesign.Blue, modifier = Modifier.size(30.dp))
+            Icon(Icons.Filled.Download, null, tint = Gyp.accent, modifier = Modifier.size(30.dp))
         }
         Spacer(Modifier.height(14.dp))
         Text(
             "还没有下载任务",
             fontSize = 15.sp,
             fontFamily = FontFamily.Serif,
-            color = GuangYueDesign.Ink,
+            color = Gyp.ink,
         )
         Spacer(Modifier.height(4.dp))
         Text(
             "在搜索结果或播放器里点「下载」，\n文件会存进 音乐/GuangYue/ 并写入 ID3 标签",
             fontSize = 11.sp,
-            color = GuangYueDesign.InkSoft,
+            color = Gyp.inkSoft,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
@@ -380,7 +382,7 @@ private fun Card(
 ) {
     val base = Modifier
         .fillMaxWidth()
-        .background(GuangYueDesign.CardWhite, RoundedCornerShape(14.dp))
+        .background(Gyp.cardTranslucent, GyRadius.rowShape())
         .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
         .padding(horizontal = 12.dp, vertical = 10.dp)
     Box(base) { content() }
@@ -391,10 +393,10 @@ private fun TextAction(text: String, onClick: () -> Unit) {
     Box(
         Modifier
             .padding(end = 8.dp)
-            .background(GuangYueDesign.MarbleBlueTint, RoundedCornerShape(10.dp))
+            .background(Gyp.tint, GyRadius.fieldShape())
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 5.dp),
     ) {
-        Text(text, fontSize = 11.sp, color = GuangYueDesign.BlueDeep)
+        Text(text, fontSize = 11.sp, color = Gyp.accentText)
     }
 }

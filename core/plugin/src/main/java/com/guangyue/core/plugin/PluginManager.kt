@@ -66,6 +66,11 @@ class PluginManager @Inject constructor(
 
     @Volatile private var loaded = false
 
+    /** 最近一次失败插件的原始报错（含元信息 JSON），供「展开详情」显示。 */
+    @Volatile
+    var lastErrorDetails: String? = null
+        private set
+
     suspend fun load() = withContext(Dispatchers.IO) {
         if (loaded) return@withContext
         _plugins.value = store.readIndex().sortedBy { it.name }
@@ -96,7 +101,7 @@ class PluginManager @Inject constructor(
         _busy.value = true
         try {
             val code = readText(uri) ?: return@withContext InstallResult.Failure("无法读取文件")
-            installCode(code, uri.toString())
+            installCode(code, uri.toString(), displayNameOf(uri))
         } finally {
             _busy.value = false
         }
@@ -130,7 +135,7 @@ class PluginManager @Inject constructor(
                 val single = singleEntryUrl(text) ?: target
                 val code = if (single == target) text
                 else (download(single) ?: return@withContext InstallResult.Failure("下载失败：$single"))
-                installCode(code, single)
+                installCode(code, single, single.substringAfterLast('/').removeSuffix(".js"))
             }
         } finally {
             _progress.value = BatchProgress()
@@ -168,7 +173,11 @@ class PluginManager @Inject constructor(
      * 沙箱探测会拒掉非 MusicFree 文件（HTML 错误页、没有 `module.exports` 的压缩包等），
      * 之后才碰磁盘。
      */
-    suspend fun installCode(code: String, source: String): InstallResult = withContext(Dispatchers.IO) {
+    suspend fun installCode(
+        code: String,
+        source: String,
+        fallbackName: String? = null,
+    ): InstallResult = withContext(Dispatchers.IO) {
         if (code.isBlank()) return@withContext InstallResult.Failure("插件内容为空")
 
         val runtime = PluginRuntime(
@@ -179,7 +188,17 @@ class PluginManager @Inject constructor(
         )
         try {
             runtime.install()
-            val probed = runtime.readMeta(source, code.toByteArray().size.toLong())
+            // 元信息一律走「JS 侧 JSON.stringify → Kotlin 宽松解析」，不经过任何反射类型转换。
+            val metaJson = runtime.readMetaJson()
+            val decoded = PluginMetaCodec.decode(
+                json = metaJson,
+                source = source,
+                sizeBytes = code.toByteArray().size.toLong(),
+                fallbackPlatform = fallbackName,
+            )
+            val probed = decoded.meta ?: return@withContext InstallResult.Failure(
+                shortReason(decoded.error, metaJson),
+            )
             val id = store.idFor(probed.platform, source)
 
             // 同 platform 同 source → 更新；同 platform 不同 source → 拒绝（平台 id 会撞车）
@@ -202,14 +221,38 @@ class PluginManager @Inject constructor(
             upsert(finalMeta)
             InstallResult.Success(finalMeta)
         } catch (e: PluginRuntimeException) {
-            InstallResult.Failure(e.message ?: "插件加载失败")
+            InstallResult.Failure(shortReason(e.message, null))
         } catch (t: Throwable) {
-            InstallResult.Failure(t.message ?: "插件加载失败")
+            InstallResult.Failure(shortReason(t.message, null))
         } finally {
             runtime.close()
         }
     }
 
+    /**
+     * 单插件失败时给用户一句短中文（列表里直接显示），原始报错留在 [PluginManager.lastErrorDetails]
+     * 里供「展开详情」查看。
+     */
+    private fun shortReason(raw: String?, metaJson: String?): String {
+        val message = raw?.trim().orEmpty()
+        lastErrorDetails = buildString {
+            if (message.isNotEmpty()) append(message)
+            if (!metaJson.isNullOrBlank()) {
+                if (isNotEmpty()) append('\n')
+                append("meta = ").append(metaJson.take(800))
+            }
+        }.ifEmpty { "插件加载失败" }
+        return when {
+            message.isEmpty() -> "插件加载失败"
+            message.contains("No such type converter", ignoreCase = true) ->
+                "插件返回了无法识别的数据类型（内部桥接已改为 JSON 解析，如仍报此错请反馈）"
+            message.contains("platform", ignoreCase = true) -> "插件没有声明 platform 字段"
+            message.contains("module.exports", ignoreCase = true) -> "插件没有导出 module.exports 对象"
+            message.contains("超时", ignoreCase = true) -> message
+            message.contains("无法加载模块", ignoreCase = true) -> "插件依赖的模块无法加载"
+            else -> message.lineSequence().first().take(120)
+        }
+    }
     // ------------------------------------------------------------------ subscription
 
     /** 记录 / 刷新一条订阅源。 */
@@ -327,7 +370,7 @@ class PluginManager @Inject constructor(
                             failed += entry.displayName to "下载失败"
                             continue
                         }
-                        when (val r = installCode(code, entry.url)) {
+                        when (val r = installCode(code, entry.url, entry.displayName)) {
                             is InstallResult.Success -> updated += r.meta
                             is InstallResult.Failure -> failed += entry.displayName to r.message
                             is InstallResult.BatchInstalled -> Unit
@@ -398,7 +441,7 @@ class PluginManager @Inject constructor(
                                         if (code == null) {
                                             synchronized(failed) { failed += entry.displayName to "下载失败" }
                                         } else {
-                                            when (val r = installCode(code, entry.url)) {
+                                            when (val r = installCode(code, entry.url, entry.displayName)) {
                                                 is InstallResult.Success ->
                                                     synchronized(installed) { installed += r.meta }
                                                 is InstallResult.Failure ->
@@ -414,7 +457,7 @@ class PluginManager @Inject constructor(
                                             synchronized(failed) { failed += entry.displayName to "下载失败" }
                                         } else {
                                             val wasEnabled = local.enabled
-                                            when (val r = installCode(code, entry.url)) {
+                                            when (val r = installCode(code, entry.url, entry.displayName)) {
                                                 is InstallResult.Success -> {
                                                     if (!wasEnabled) setEnabled(r.meta.id, false)
                                                     synchronized(updated) { updated += r.meta }

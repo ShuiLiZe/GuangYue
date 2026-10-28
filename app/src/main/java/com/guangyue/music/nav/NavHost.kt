@@ -186,6 +186,7 @@ fun GuangYueNavHost(
             val plugins by vm.plugins.collectAsStateWithLifecycle()
             val busy by vm.busy.collectAsStateWithLifecycle()
             val message by vm.message.collectAsStateWithLifecycle()
+            val messageDetails by vm.messageDetails.collectAsStateWithLifecycle()
             val subscriptions by vm.subscriptions.collectAsStateWithLifecycle()
             val batch by vm.batchProgress.collectAsStateWithLifecycle()
             val ctx = LocalContext.current
@@ -217,6 +218,7 @@ fun GuangYueNavHost(
                 onCheckAllUpdates = { vm.checkAllUpdates() },
                 onSetAllEnabled = { vm.setAllEnabled(it) },
                 onForgetSubscription = { vm.forgetSubscription(it) },
+                errorDetails = messageDetails,
             )
         }
     }

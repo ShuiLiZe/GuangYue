@@ -2,7 +2,8 @@ name: 🤖 打包
 
 # 触发方式：
 #   1. push 到 main      → 打包 debug + release（都用发布密钥签，可直接覆盖安装）
-#   2. push tag v*       → 额外创建 GitHub Release，把 APK 挂上去
+#   2. push tag          → 额外创建 GitHub Release（prerelease），挂 APK + design 截图
+#                          版本 tag 不带 v 前缀，形如 0.0.1；老 tag v* 仍然兼容
 #   3. 手动 Run workflow → 可选 debug / release / both
 #
 # 签名密钥：仓库内 build/keystore/guangyue-release.jks.base64（base64 文本）被
@@ -11,7 +12,7 @@ name: 🤖 打包
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['v*', '[0-9]*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -160,9 +161,11 @@ jobs:
           name: 广乐 ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
           draft: false
-          prerelease: false
+          prerelease: true
           generate_release_notes: true
-          files: dist/*.apk
+          files: |
+            dist/*.apk
+            design/*.png
 
       - name: 作业摘要
         if: always()

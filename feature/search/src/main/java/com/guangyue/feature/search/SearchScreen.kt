@@ -44,7 +44,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import com.guangyue.feature.library.design.GuangYueDesign
+import com.guangyue.feature.library.design.GyRadius
+import com.guangyue.feature.library.design.Gyp
+import com.guangyue.feature.library.design.marbleBackground
 
 /**
  * Search across plugins.
@@ -68,42 +70,42 @@ fun SearchScreen(
     Column(
         modifier
             .fillMaxSize()
-            .background(GuangYueDesign.MarbleBottom)
+            .marbleBackground()
             .padding(horizontal = 18.dp),
     ) {
         Spacer(Modifier.height(48.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, "返回", tint = GuangYueDesign.Ink)
+                Icon(Icons.Filled.ArrowBack, "返回", tint = Gyp.ink)
             }
             Row(
                 Modifier
                     .weight(1f)
                     .height(44.dp)
                     .clip(RoundedCornerShape(22.dp))
-                    .background(Color.White)
+                    .background(Gyp.cardTranslucent)
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Search, null, tint = GuangYueDesign.InkSoft, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Search, null, tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f)) {
                     if (state.query.isEmpty()) {
-                        Text("搜索歌曲、歌手", color = GuangYueDesign.InkSoft, fontSize = 14.sp)
+                        Text("搜索歌曲、歌手", color = Gyp.inkSoft, fontSize = 14.sp)
                     }
                     BasicTextField(
                         value = state.query,
                         onValueChange = onQueryChange,
                         singleLine = true,
-                        textStyle = TextStyle(color = GuangYueDesign.Ink, fontSize = 14.sp),
-                        cursorBrush = SolidColor(GuangYueDesign.Blue),
+                        textStyle = TextStyle(color = Gyp.ink, fontSize = 14.sp),
+                        cursorBrush = SolidColor(Gyp.accent),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 Text(
                     "搜索",
-                    color = GuangYueDesign.Blue,
+                    color = Gyp.accent,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.clickable { onSearch() },
@@ -117,7 +119,7 @@ fun SearchScreen(
             Spacer(Modifier.height(40.dp))
             Text(
                 "还没有可用的插件。先去「插件管理」安装一个插件，再回来搜索。",
-                color = GuangYueDesign.InkSoft,
+                color = Gyp.inkSoft,
                 fontSize = 13.sp,
             )
             return@Column
@@ -150,7 +152,7 @@ fun SearchScreen(
 
         if (state.loading) {
             Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = GuangYueDesign.Blue, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+                CircularProgressIndicator(color = Gyp.accent, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
             }
         }
 
@@ -177,7 +179,7 @@ fun SearchScreen(
                         modifier = Modifier
                             .size(46.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(GuangYueDesign.MarbleBlueTint),
+                            .background(Gyp.tint),
                     )
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
@@ -186,12 +188,12 @@ fun SearchScreen(
                             Box(
                                 Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(GuangYueDesign.Blue.copy(alpha = 0.12f))
+                                    .background(Gyp.tint)
                                     .padding(horizontal = 5.dp, vertical = 1.dp),
                             ) {
                                 Text(
                                     "[${row.platformLabel}]",
-                                    color = GuangYueDesign.BlueDeep,
+                                    color = Gyp.accentText,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -199,7 +201,7 @@ fun SearchScreen(
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 row.item.title,
-                                color = GuangYueDesign.Ink,
+                                color = Gyp.ink,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
@@ -208,7 +210,7 @@ fun SearchScreen(
                         }
                         Text(
                             row.item.displayArtist,
-                            color = GuangYueDesign.InkSoft,
+                            color = Gyp.inkSoft,
                             fontSize = 11.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -218,17 +220,17 @@ fun SearchScreen(
                         Icon(
                             Icons.Filled.Download,
                             "下载",
-                            tint = GuangYueDesign.InkSoft,
+                            tint = Gyp.inkSoft,
                             modifier = Modifier.size(18.dp),
                         )
                     }
                     IconButton(onClick = { onAddToSheet(row.item) }) {
-                        Icon(Icons.Filled.Add, "收藏", tint = GuangYueDesign.InkSoft, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.Add, "收藏", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
                     }
                     Icon(
                         Icons.Filled.PlayArrow,
                         "播放",
-                        tint = GuangYueDesign.Blue,
+                        tint = Gyp.accent,
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -238,7 +240,7 @@ fun SearchScreen(
                 item {
                     Text(
                         "没有找到结果。换首歌名试试，或检查插件是否已启用。",
-                        color = GuangYueDesign.InkSoft,
+                        color = Gyp.inkSoft,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(vertical = 24.dp),
                     )
@@ -247,7 +249,7 @@ fun SearchScreen(
 
             state.errors.forEach { err ->
                 item {
-                    Text(err, color = Color(0xFFB4472E), fontSize = 11.sp, modifier = Modifier.padding(vertical = 2.dp))
+                    Text(err, color = Gyp.danger, fontSize = 11.sp, modifier = Modifier.padding(vertical = 2.dp))
                 }
             }
         }
@@ -273,9 +275,9 @@ private fun SourceChip(
         },
         shape = RoundedCornerShape(16.dp),
         colors = FilterChipDefaults.filterChipColors(
-            containerColor = Color.White,
-            labelColor = GuangYueDesign.InkSoft,
-            selectedContainerColor = GuangYueDesign.Blue,
+            containerColor = Gyp.cardTranslucent,
+            labelColor = Gyp.inkSoft,
+            selectedContainerColor = Gyp.accent,
             selectedLabelColor = Color.White,
         ),
         border = FilterChipDefaults.filterChipBorder(

@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.guangyue.core.player.Quality
 import com.guangyue.core.player.QualityLadder
 import com.guangyue.feature.library.design.GuangYueDesign
+import com.guangyue.feature.library.design.Gyp
 
 /**
  * 音质切换弹窗。
@@ -49,7 +50,7 @@ fun QualityPickerSheet(
     current: Quality,
     onSelect: (Quality) -> Unit,
     onDismiss: () -> Unit,
-    accent: Color = GuangYueDesign.Blue,
+    accent: Color = Gyp.accent,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val options = QualityLadder.of(declared).ifEmpty { QualityLadder.default() }
@@ -57,7 +58,7 @@ fun QualityPickerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = GuangYueDesign.MarbleMid,
+        containerColor = Gyp.card,
     ) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -68,7 +69,7 @@ fun QualityPickerSheet(
                     fontSize = 17.sp,
                     fontFamily = FontFamily.Serif,
                     fontWeight = FontWeight.Bold,
-                    color = GuangYueDesign.Ink,
+                    color = Gyp.ink,
                 )
             }
             Spacer(Modifier.height(2.dp))
@@ -79,7 +80,7 @@ fun QualityPickerSheet(
                     "共 ${options.size} 档 · 由当前音源提供"
                 },
                 fontSize = 11.sp,
-                color = GuangYueDesign.InkSoft,
+                color = Gyp.inkSoft,
             )
             Spacer(Modifier.height(14.dp))
 
@@ -125,7 +126,7 @@ private fun QualityRow(
                     quality.label,
                     fontSize = 14.sp,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (selected) accent else GuangYueDesign.Ink,
+                    color = if (selected) accent else Gyp.ink,
                 )
                 if (quality.isLossless) {
                     Spacer(Modifier.width(6.dp))
@@ -138,7 +139,7 @@ private fun QualityRow(
                     }
                 }
             }
-            Text(quality.subtitle, fontSize = 11.sp, color = GuangYueDesign.InkSoft)
+            Text(quality.subtitle, fontSize = 11.sp, color = Gyp.inkSoft)
         }
         if (selected) {
             Box(

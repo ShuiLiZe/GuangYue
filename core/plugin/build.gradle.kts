@@ -30,4 +30,8 @@ dependencies {
     implementation(libs.quickjs.android)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+
+    // 插件元信息宽松解析的单元测试（纯 JVM，不需要模拟器）
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.serialization.json)
 }

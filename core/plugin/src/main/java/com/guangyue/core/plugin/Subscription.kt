@@ -65,7 +65,7 @@ data class BatchInstallResult(
     val successCount: Int get() = installed.size + updated.size
     val isSubscription: Boolean get() = subscriptions.isNotEmpty()
 
-    /** 一行给 UI 的摘要。 */
+    /** 一行给 UI 的摘要（不带失败明细，明细走 [details]）。 */
     fun summary(): String = buildString {
         if (total == 0) {
             append("订阅源里没有插件")
@@ -76,11 +76,22 @@ data class BatchInstallResult(
         if (updated.isNotEmpty()) append(" · 更新 ${updated.size}")
         if (skipped.isNotEmpty()) append(" · 已最新 ${skipped.size}")
         if (failed.isNotEmpty()) append(" · 失败 ${failed.size}")
-        if (failed.isNotEmpty()) {
-            append("\n")
-            append(failed.take(3).joinToString("\n") { (n, m) -> "· $n：$m" })
-            if (failed.size > 3) append("\n· …")
-        }
+    }
+
+    /**
+     * 失败明细（可展开详情里显示）。
+     *
+     * 每个失败插件一行「名字：原因」，最多 40 条 —— 一次性导入 57 个插件时，全量贴进去
+     * 会把页面撑爆；超出部分只报数量。
+     */
+    fun details(): String? {
+        if (failed.isEmpty()) return null
+        return buildString {
+            failed.take(40).forEach { (name, msg) ->
+                append("· ").append(name).append("：").append(msg.lineSequence().first()).append('\n')
+            }
+            if (failed.size > 40) append("· …另有 ${failed.size - 40} 个\n")
+        }.trimEnd()
     }
 }
 

@@ -100,6 +100,15 @@ class PluginViewModel @Inject constructor(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    /** 与 [message] 配套的失败明细，UI 上以「详情」展开。 */
+    private val _messageDetails = MutableStateFlow<String?>(null)
+    val messageDetails: StateFlow<String?> = _messageDetails.asStateFlow()
+
+    private fun say(text: String, details: String? = null) {
+        _message.value = text
+        _messageDetails.value = details
+    }
+
     init {
         viewModelScope.launch { manager.load() }
     }
@@ -116,9 +125,9 @@ class PluginViewModel @Inject constructor(
         _busy.value = true
         viewModelScope.launch {
             try {
-                _message.value = manager.installCode(code, "local-file").describe()
+                say(manager.installCode(code, "local-file").describe(), lastDetails)
             } catch (t: Throwable) {
-                _message.value = "安装失败：" + (t.message ?: t.javaClass.simpleName)
+                say("安装失败：" + (t.message ?: t.javaClass.simpleName), lastDetails)
             } finally {
                 _busy.value = false
             }
@@ -126,7 +135,7 @@ class PluginViewModel @Inject constructor(
     }
 
     fun report(text: String) {
-        _message.value = text
+        say(text)
     }
 
     fun installFromUrl(url: String) = run {
@@ -134,9 +143,9 @@ class PluginViewModel @Inject constructor(
         _busy.value = true
         viewModelScope.launch {
             try {
-                _message.value = manager.installFromUrl(url.trim()).describe()
+                say(manager.installFromUrl(url.trim()).describe(), lastDetails)
             } catch (t: Throwable) {
-                _message.value = "安装失败：" + (t.message ?: t.javaClass.simpleName)
+                say("安装失败：" + (t.message ?: t.javaClass.simpleName), lastDetails)
             } finally {
                 _busy.value = false
             }
@@ -174,12 +183,25 @@ class PluginViewModel @Inject constructor(
 
     fun clearMessage() {
         _message.value = null
+        _messageDetails.value = null
     }
 
+    /** 最近一次批量结果的失败明细，供 [say] 一并带给 UI。 */
+    private var lastDetails: String? = null
+
     private fun InstallResult.describe(): String = when (this) {
-        is InstallResult.Success -> "已安装「${meta.displayName}」v${meta.version}"
-        is InstallResult.Failure -> "安装失败：$message"
-        is InstallResult.BatchInstalled -> result.summary()
+        is InstallResult.Success -> {
+            lastDetails = null
+            "已安装「${meta.displayName}」v${meta.version}"
+        }
+        is InstallResult.Failure -> {
+            lastDetails = null
+            "安装失败：$message"
+        }
+        is InstallResult.BatchInstalled -> {
+            lastDetails = result.details()
+            result.summary()
+        }
     }
 
     // ------------------------------------------------------------ 订阅源 / 一键安装
@@ -193,9 +215,9 @@ class PluginViewModel @Inject constructor(
         _busy.value = true
         viewModelScope.launch {
             try {
-                _message.value = manager.installFromUrl(PluginViewModelDefaults.OFFICIAL_SOURCE).describe()
+                say(manager.installFromUrl(PluginViewModelDefaults.OFFICIAL_SOURCE).describe(), lastDetails)
             } catch (t: Throwable) {
-                _message.value = "安装失败：" + (t.message ?: t.javaClass.simpleName)
+                say("安装失败：" + (t.message ?: t.javaClass.simpleName), lastDetails)
             } finally {
                 _busy.value = false
             }
@@ -208,9 +230,10 @@ class PluginViewModel @Inject constructor(
         _busy.value = true
         viewModelScope.launch {
             try {
-                _message.value = manager.checkUpdates(installDiscovered = true).summary()
+                val r = manager.checkUpdates(installDiscovered = true)
+                say(r.summary(), r.failed.takeIf { it.isNotEmpty() }?.joinToString("\n") { (n, m) -> "· $n：${m.lineSequence().first()}" })
             } catch (t: Throwable) {
-                _message.value = "检查更新失败：" + (t.message ?: t.javaClass.simpleName)
+                say("检查更新失败：" + (t.message ?: t.javaClass.simpleName))
             } finally {
                 _busy.value = false
             }

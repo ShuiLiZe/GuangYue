@@ -52,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.guangyue.feature.library.design.GuangYueDesign
+import com.guangyue.feature.library.design.Gyp
+import com.guangyue.feature.library.design.marbleBackground
 import kotlin.math.abs
 
 /** One card on the home coverflow. */
@@ -109,7 +111,7 @@ fun HomeScreen(
                     fontSize = 27.sp,
                     fontFamily = FontFamily.Serif,
                     fontWeight = FontWeight.Bold,
-                    color = GuangYueDesign.Ink,
+                    color = Gyp.ink,
                     modifier = Modifier.clickable { onPluginManager() },
                 )
                 Spacer(Modifier.weight(1f))
@@ -145,7 +147,7 @@ fun HomeScreen(
                 fontSize = 26.sp,
                 fontFamily = FontFamily.Serif,
                 fontWeight = FontWeight.Bold,
-                color = GuangYueDesign.Ink,
+                color = Gyp.ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 26.dp),
@@ -153,7 +155,7 @@ fun HomeScreen(
             Text(
                 current?.subtitle ?: "从插件搜索一首歌，收藏成自己的歌单",
                 fontSize = 12.sp,
-                color = GuangYueDesign.InkSoft,
+                color = Gyp.inkSoft,
                 modifier = Modifier.padding(horizontal = 26.dp, vertical = 4.dp),
             )
 
@@ -188,11 +190,11 @@ private fun SearchCapsule(onClick: () -> Unit) {
         Icon(
             Icons.Filled.Search,
             contentDescription = "搜索",
-            tint = GuangYueDesign.Ink.copy(alpha = 0.45f),
+            tint = Gyp.ink.copy(alpha = 0.45f),
             modifier = Modifier.size(18.dp),
         )
         Spacer(Modifier.width(8.dp))
-        Text("搜索歌曲 / 专辑 / 歌单", fontSize = 12.sp, color = GuangYueDesign.Ink.copy(alpha = 0.4f))
+        Text("搜索歌曲 / 专辑 / 歌单", fontSize = 12.sp, color = Gyp.ink.copy(alpha = 0.4f))
     }
 }
 
@@ -243,7 +245,7 @@ private fun SegmentedTabs(tabs: List<String>, selected: Int, onSelected: (Int) -
                     label,
                     fontSize = 13.sp,
                     fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (active) Color.White else GuangYueDesign.Ink.copy(alpha = 0.65f),
+                    color = if (active) Color.White else Gyp.ink.copy(alpha = 0.65f),
                 )
             }
         }
@@ -264,7 +266,7 @@ private fun Coverflow(
 ) {
     if (cards.isEmpty()) {
         Box(modifier, contentAlignment = Alignment.Center) {
-            Text("暂无内容", color = GuangYueDesign.InkSoft, fontSize = 13.sp)
+            Text("暂无内容", color = Gyp.inkSoft, fontSize = 13.sp)
         }
         return
     }
@@ -347,7 +349,7 @@ private fun Coverflow(
                             card.title.take(1),
                             fontFamily = FontFamily.Serif,
                             fontSize = 42.sp,
-                            color = GuangYueDesign.Ink.copy(alpha = 0.35f),
+                            color = Gyp.ink.copy(alpha = 0.35f),
                         )
                     }
                 }
@@ -425,7 +427,7 @@ private fun MiniPlayerBar(
             if (artwork != null) {
                 AsyncImage(model = artwork, contentDescription = title, modifier = Modifier.fillMaxSize())
             } else {
-                Text("♪", color = GuangYueDesign.Ink.copy(alpha = 0.4f))
+                Text("♪", color = Gyp.ink.copy(alpha = 0.4f))
             }
         }
         Spacer(Modifier.width(12.dp))
@@ -434,7 +436,7 @@ private fun MiniPlayerBar(
                 title,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = GuangYueDesign.Ink,
+                color = Gyp.ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -444,7 +446,7 @@ private fun MiniPlayerBar(
                     .fillMaxWidth()
                     .height(2.5.dp)
                     .clip(CircleShape)
-                    .background(GuangYueDesign.Ink.copy(alpha = 0.12f)),
+                    .background(Gyp.ink.copy(alpha = 0.12f)),
             ) {
                 Box(
                     Modifier
@@ -477,63 +479,5 @@ private fun MiniPlayerBar(
  * The signature home background: five stacked soft radial washes (white / ice blue / warm sand)
  * over a diagonal gradient, then SVG-style marble veins, then a 1px every-7px dot grid.
  */
-private fun Modifier.marbleBackground(): Modifier = this.drawBehind {
-    drawRect(
-        Brush.linearGradient(
-            listOf(GuangYueDesign.MarbleTop, GuangYueDesign.MarbleMid, GuangYueDesign.MarbleBottom),
-            start = Offset(0f, 0f),
-            end = Offset(size.width * 0.6f, size.height),
-        ),
-    )
-    fun wash(cx: Float, cy: Float, r: Float, color: Color, alpha: Float) {
-        drawCircle(
-            Brush.radialGradient(
-                listOf(color.copy(alpha = alpha), Color.Transparent),
-                center = Offset(size.width * cx, size.height * cy),
-                radius = size.width * r,
-            ),
-            radius = size.width * r,
-            center = Offset(size.width * cx, size.height * cy),
-        )
-    }
-    wash(0.15f, 0.08f, 0.7f, Color(0xFFE3EBFA), 0.9f)
-    wash(0.92f, 0.22f, 0.6f, Color(0xFFF3E9E2), 0.85f)
-    wash(0.30f, 0.55f, 0.8f, GuangYueDesign.MarbleBlueTint, 0.7f)
-    wash(0.80f, 0.82f, 0.75f, GuangYueDesign.MarbleWarm, 0.7f)
-    wash(0.05f, 0.95f, 0.55f, Color(0xFFFFFFFF), 0.8f)
 
-    // marble veins: a few thin bezier-ish sweeps, low alpha
-    val vein = Color(0xFFFFFFFF).copy(alpha = 0.75f)
-    var i = 0
-    while (i < 5) {
-        val y = size.height * (0.12f + i * 0.19f)
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(-40f, y)
-            cubicTo(
-                size.width * 0.25f, y - 60f,
-                size.width * 0.55f, y + 70f,
-                size.width + 40f, y - 20f,
-            )
-        }
-        drawPath(
-            path,
-            vein.copy(alpha = 0.35f + 0.08f * (i % 3)),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 26f),
-        )
-        i++
-    }
-
-    // fine dot grid
-    val step = 7.dp.toPx()
-    val dot = GuangYueDesign.Blue.copy(alpha = 0.16f)
-    var y = 0f
-    while (y < size.height) {
-        var x = 0f
-        while (x < size.width) {
-            drawCircle(dot, radius = 0.5f, center = Offset(x, y))
-            x += step
-        }
-        y += step
-    }
-}
 
