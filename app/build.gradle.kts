@@ -22,17 +22,25 @@ android {
     /**
      * 正式签名。
      *
-     * 密钥与口令优先从环境变量 / gradle.properties 读（CI 与本地发布用），
-     * 没配就让 release 包退化为未签名产物（assembleDebug 不受影响）。
-     * 口令一旦更换，已装机的版本必须卸载重装 —— 应用包名 com.guangyue.music 唯一。
+     * 密钥路径与口令按以下优先级解析（任何一级命中即生效）：
+     *   1. 环境变量 GUANGYUE_KEYSTORE / GUANGYUE_STORE_PASSWORD / GUANGYUE_KEY_ALIAS / GUANGYUE_KEY_PASSWORD
+     *   2. gradle.properties（含 CI 动态追加的几行）
+     *   3. 仓库内 build/keystore/guangyue-release.jks.base64（CI 解码目标）
+     *   4. 仓库内 build/keystore/guangyue-release.jks（本地构建）
+     * 密钥缺失时两种构建类型都会退回默认调试签名，保证产物恒为可安装的已签名 APK。
      */
     signingConfigs {
         create("release") {
-            val ksPath = System.getenv("GUANGYUE_KEYSTORE")
-                ?: (project.findProperty("guangyue.keystore") as String?)
-                ?: "${rootDir}/build/keystore/guangyue-release.jks"
-            val ksFile = file(ksPath)
-            if (ksFile.exists()) {
+            val envKs = System.getenv("GUANGYUE_KEYSTORE")
+            val propKs = project.findProperty("guangyue.keystore") as String?
+            val candidates = listOfNotNull(
+                envKs?.let(::file),
+                propKs?.let(::file),
+                file("${rootDir}/build/keystore/guangyue-release.jks"),
+                file("${rootDir}/build/keystore/guangyue-release.jks.base64"),
+            )
+            val ksFile = candidates.firstOrNull { it.exists() }
+            if (ksFile != null) {
                 storeFile = ksFile
                 storePassword = System.getenv("GUANGYUE_STORE_PASSWORD")
                     ?: (project.findProperty("guangyue.storePassword") as String?)
@@ -43,23 +51,24 @@ android {
                 keyPassword = System.getenv("GUANGYUE_KEY_PASSWORD")
                     ?: (project.findProperty("guangyue.keyPassword") as String?)
                     ?: "GuangYue2026Release"
+                logger.lifecycle("GuangYue signing: keystore = $ksFile")
+            } else {
+                logger.lifecycle("GuangYue signing: keystore 缺失，回退调试签名")
             }
         }
     }
 
     buildTypes {
+        // 两个构建类型共用同一个签名配置对象：有发布密钥就套发布密钥，
+        // 没密钥时该对象为空，Gradle 自动使用默认调试签名，产物永远可安装。
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            if (signingConfigs.getByName("release").storeFile != null) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            signingConfig = signingConfigs.getByName("release")
         }
         debug {
             // 调试包也套用同一把发布密钥，避免「debug 装过之后正式包覆盖不上」
-            if (signingConfigs.getByName("release").storeFile != null) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     buildFeatures { compose = true; buildConfig = true }

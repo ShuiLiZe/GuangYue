@@ -1,18 +1,30 @@
-# Gradle
+# Gradle 构建输出
 .gradle/
-build/
-!gradle/wrapper/gradle-wrapper.jar
-local.properties
+/*/build/
+/app/build/
+/core/*/build/
+/feature/*/build/
 
-# IDE
+# 根目录 build/ 是发布签名密钥的存放处：二进制的 .jks 永远忽略，
+# 但 base64 文本版必须进仓库，GitHub Actions 才能在裸 clone 里解码出密钥。
+# 这里只忽略根 build/ 下的内容，再单独放行 keystore 目录与那个 base64 文件。
+/build/*
+!/build/keystore/
+/build/keystore/*
+!/build/keystore/guangyue-release.jks.base64
+
+# 签名文件本体永不入库
+*.jks
+*.keystore
+keystore.properties
+
+# IDE / OS
 .idea/
 *.iml
 .DS_Store
 
-# Keystores / keys
-*.jks
-*.keystore
-keystore.properties
+# local 配置
+local.properties
 
 # Node (prelude source toolchain)
 core/plugin/jsprelude/node_modules/
@@ -21,3 +33,7 @@ core/plugin/jsprelude/node_modules/
 .cli/*.tmp
 *.bak
 *.zip
+
+# 本地复现 CI 用的临时克隆 + 打包产物
+build-gh/
+dist/
