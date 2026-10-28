@@ -1,13 +1,13 @@
 pluginManagement {
+    // 仓库顺序保持原样：本地离线缓存按此顺序建立键，改动顺序会让缓存全部失效
     repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-        // 国内镜像放后面兜底：优先走官方，避免镜像同步不全导致的解析失败
         maven(url = "https://maven.aliyun.com/repository/gradle-plugin")
         maven(url = "https://maven.aliyun.com/repository/google")
         maven(url = "https://maven.aliyun.com/repository/central")
         maven(url = "https://maven.aliyun.com/repository/public")
+        gradlePluginPortal()
+        google()
+        mavenCentral()
     }
 
     /**
@@ -15,11 +15,10 @@ pluginManagement {
      *
      * Gradle 解析 `plugins { id("com.google.devtools.ksp") }` 时默认去仓库找
      * marker 构件 com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin，
-     * 部分镜像（含本工程原先配置的阿里云组合）并不提供这个 marker，于是出现
+     * 部分镜像不提供这个 marker，于是报
      *   Plugin [id: 'com.google.devtools.ksp', version: '2.3.12'] was not found
-     * 而底层 jar（symbol-processing-gradle-plugin）其实是存在的。
-     *
-     * 这里显式指定真实模块坐标，彻底绕开 marker 查找，同时兼容本地离线缓存。
+     * 而底层 jar（symbol-processing-gradle-plugin）实际存在。
+     * 显式指定真实模块坐标即可绕开 marker 查找。
      */
     resolutionStrategy {
         eachPlugin {
@@ -45,15 +44,14 @@ pluginManagement {
         }
     }
 }
-
 dependencyResolutionManagement {
     repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
     repositories {
-        google()
-        mavenCentral()
         maven(url = "https://maven.aliyun.com/repository/google")
         maven(url = "https://maven.aliyun.com/repository/central")
         maven(url = "https://maven.aliyun.com/repository/public")
+        google()
+        mavenCentral()
     }
 }
 rootProject.name = "GuangYue"
