@@ -17,6 +17,8 @@ import kotlinx.serialization.json.put
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.OkHttpClient
 import java.io.File
 import javax.inject.Inject
@@ -42,7 +44,7 @@ class MusicPluginBridge @Inject constructor(
     @ApplicationContext private val context: Context,
     private val manager: PluginManager,
     private val preludeProvider: PreludeProvider,
-    private val http: OkHttpClient,
+    @com.guangyue.core.plugin.di.PlaybackHttp private val http: OkHttpClient,
 ) {
     private val runtimes = HashMap<String, PluginRuntime>()
     private val locks = HashMap<String, Any>()
@@ -143,22 +145,39 @@ class MusicPluginBridge @Inject constructor(
 
     /** Search every enabled plugin in parallel and merge, tagged by platform. */
     suspend fun searchAll(keyword: String, page: Int = 1, type: String = SearchType.MUSIC): List<SearchResult> =
-        withContext(Dispatchers.IO) {
-            manager.load()
-            coroutineScope {
-                manager.enabled()
-                    .filter { plugin ->
-                        when (type) {
-                            SearchType.MUSIC -> plugin.hasSearch
-                            SearchType.ALBUM -> plugin.hasAlbumSearch
-                            SearchType.ARTIST -> plugin.hasArtistSearch
-                            else -> plugin.hasSearch
-                        }
-                    }
-                    .map { plugin -> async(Dispatchers.IO) { search(plugin.id, keyword, page, type) } }
-                    .awaitAll()
+        searchAllDetailed(keyword, page, type).map { it.second }
+
+    /**
+     * 并发搜索：每个插件一个协程，但全局最多 [SEARCH_CONCURRENCY] 个同时在飞。
+     *
+     * 返回 `pluginId → 结果` 的有序列表，调用方（SearchViewModel）用来把错误的插件单独渲染。
+     */
+    suspend fun searchAllDetailed(
+        keyword: String,
+        page: Int = 1,
+        type: String = SearchType.MUSIC,
+    ): List<Pair<String, SearchResult>> = withContext(Dispatchers.IO) {
+        manager.load()
+        val targets = manager.enabled()
+            .filter { plugin ->
+                when (type) {
+                    SearchType.MUSIC -> plugin.hasSearch
+                    SearchType.ALBUM -> plugin.hasAlbumSearch
+                    SearchType.ARTIST -> plugin.hasArtistSearch
+                    else -> plugin.hasSearch
+                }
             }
+        val gate = Semaphore(SEARCH_CONCURRENCY)
+        coroutineScope {
+            targets
+                .map { plugin ->
+                    async(Dispatchers.IO) {
+                        plugin.id to gate.withPermit { search(plugin.id, keyword, page, type) }
+                    }
+                }
+                .awaitAll()
         }
+    }
 
     // ------------------------------------------------------------------ playback
 
@@ -330,6 +349,21 @@ class MusicPluginBridge @Inject constructor(
         cacheControl.isNullOrBlank() || cacheControl == "no-cache" -> 0L
         cacheControl == "no-store" -> 0L
         else -> 5 * 60_000L
+    }
+
+    /** 可选功能：插件声明的动态音质档位（`getMediaSource` 的 quality 入参取值）。 */
+    suspend fun getQualities(pluginId: String): List<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val raw = invoke(pluginId) { call("getQualities") }
+            (raw.asArr() ?: raw.asObj()?.get("data").asArr())
+                ?.mapNotNull { it.asStr()?.takeIf(String::isNotBlank) }
+                ?: emptyList()
+        }.getOrDefault(emptyList())
+    }
+
+    companion object {
+        /** 并发搜索同时在飞的插件数量上限：过多会触发源站限流或本机 socket 耗尽。 */
+        const val SEARCH_CONCURRENCY = 6
     }
 }
 

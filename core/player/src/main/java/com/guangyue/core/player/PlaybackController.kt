@@ -1,4 +1,4 @@
-package com.guangyue.core.player
+﻿package com.guangyue.core.player
 
 import android.content.Context
 import android.net.Uri
@@ -101,6 +101,7 @@ data class PlaybackState(
 class PlaybackController @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dataSources: MediaDataSourceProvider,
+    private val prefetcher: PlaybackPrefetcher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -167,12 +168,33 @@ class PlaybackController @Inject constructor(
             while (true) {
                 if (player.isPlaying || player.playbackState == Player.STATE_BUFFERING) {
                     publish()
+                    maybePrefetchNext()
                     delay(250)
                 } else {
                     delay(500)
                 }
             }
         }
+    }
+
+    /**
+     * 无缝切歌预热：进度到 80% 或剩余 ≤15s 时，提前异步解析并缓冲下一首。
+     *
+     * 只对「下一首」做，且 [PlaybackPrefetcher] 内部用 key 去重 —— 同一首不会因为 250ms
+     * 的 tick 反复触发。单曲循环 / 队列末尾直接返回。
+     */
+    private fun maybePrefetchNext() {
+        if (player.repeatMode == Player.REPEAT_MODE_ONE) return
+        val duration = player.duration
+        if (duration <= 0L || duration == androidx.media3.common.C.TIME_UNSET) return
+        val position = player.currentPosition
+        if (!PlaybackPrefetcher.shouldPrefetch(position, duration)) return
+
+        val nextIndex = player.nextMediaItemIndex
+        if (nextIndex == androidx.media3.common.C.INDEX_UNSET || nextIndex == player.currentMediaItemIndex) return
+        val nextKey = player.getMediaItemAt(nextIndex).mediaId
+        val next = currentQueueItem(nextKey) ?: return
+        prefetcher.prefetch(next)
     }
 
     fun currentQueueItem(key: String): QueueItem? = queue.firstOrNull { it.key == key }
@@ -253,10 +275,31 @@ class PlaybackController @Inject constructor(
         val at = queue.indexOfFirst { it.key == key }
         if (at >= 0) queue[at] = updated
         dataSources.pluginResolver.invalidate("quality switched to ${quality.wire}")
+        prefetcher.reset()
         player.setMediaItem(updated.toMediaItem(), player.currentPosition)
         player.prepare()
+        saveDefaultQuality(quality)
         publish()
     }
+
+    // ------------------------------------------------------------- 音质偏好
+
+    private val prefs by lazy {
+        context.getSharedPreferences("guangyue_player", Context.MODE_PRIVATE)
+    }
+
+    /** 用户选定的默认音质；新歌进来时按它解析直链。 */
+    val defaultQuality: Quality
+        get() = Quality.fromWire(prefs.getString(KEY_QUALITY, null))
+
+    fun setDefaultQuality(quality: Quality) {
+        prefs.edit().putString(KEY_QUALITY, quality.wire).apply()
+    }
+
+    private fun saveDefaultQuality(quality: Quality) = setDefaultQuality(quality)
+
+    /** 预取状态，供调试面板 / 设置页展示。 */
+    fun prefetchResult(): PrefetchResult = prefetcher.lastResult
 
     fun setVolume(v: Float) {
         player.volume = v.coerceIn(0f, 1f)
@@ -287,5 +330,6 @@ class PlaybackController @Inject constructor(
 
     companion object {
         private const val TAG = "GuangYuePlayer"
+        private const val KEY_QUALITY = "default_quality"
     }
 }

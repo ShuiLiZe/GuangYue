@@ -3,6 +3,7 @@ package com.guangyue.feature.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.guangyue.core.data.model.TrackMapper
+import com.guangyue.core.download.DownloadManager
 import com.guangyue.core.data.repository.PlaylistRepository
 import com.guangyue.core.data.repository.SearchHistoryRepository
 import com.guangyue.core.data.repository.TrackRepository
@@ -14,19 +15,54 @@ import com.guangyue.core.plugin.SearchType
 import com.guangyue.core.player.QueueItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import javax.inject.Inject
 
 /** One row of the result list, tagged with the plugin that produced it. */
 data class SearchRow(
     val pluginId: String,
     val pluginName: String,
+    /** 结果卡片上的音源角标，如 `[酷我]`。 */
+    val platformLabel: String,
     val item: MusicItem,
 )
+
+/** 单个插件的搜索产出：要么拿到结果，要么给出一条可显示的原因。 */
+private sealed interface SearchOutcome {
+    data class Hits(val items: List<MusicItem>) : SearchOutcome
+    data class Miss(val reason: String) : SearchOutcome
+}
+
+/** 从平台名里挑一个两字的短标（酷我 / 网易云 / QQ音乐 / 哔哩哔哩）。 */
+internal fun platformLabelOf(plugin: PluginMeta): String {
+    val raw = plugin.displayName
+    val known = listOf(
+        "酷我" to "酷我",
+        "酷狗" to "酷狗",
+        "网易" to "网易",
+        "QQ" to "QQ",
+        "qq" to "QQ",
+        "B站" to "B站",
+        "哔哩" to "B站",
+        "bilibili" to "B站",
+        "咪咕" to "咪咕",
+        "百度" to "百度",
+        "千千" to "千千",
+        "汽水" to "汽水",
+    )
+    known.firstOrNull { raw.contains(it.first, ignoreCase = true) }?.let { return it.second }
+    val cleaned = raw.removeSuffix("音乐").removeSuffix("插件").trim()
+    return cleaned.take(4).ifBlank { plugin.platform.take(4) }
+}
 
 data class SearchUiState(
     val query: String = "",
@@ -35,6 +71,8 @@ data class SearchUiState(
     val platforms: List<String> = emptyList(),
     val available: List<PluginMeta> = emptyList(),
     val rows: List<SearchRow> = emptyList(),
+    /** 「全部」筛选条：按插件聚合当前结果数量。 */
+    val resultCounts: Map<String, Int> = emptyMap(),
     val errors: List<String> = emptyList(),
     val history: List<String> = emptyList(),
     val message: String? = null,
@@ -53,12 +91,18 @@ class SearchViewModel @Inject constructor(
     private val tracks: TrackRepository,
     private val playlists: PlaylistRepository,
     private val history: SearchHistoryRepository,
+    private val downloads: DownloadManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SearchUiState())
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
 
     private var job: Job? = null
+
+    companion object {
+        /** 同时在搜的插件上限。 */
+        const val SEARCH_CONCURRENCY = 6
+    }
 
     init {
         viewModelScope.launch {
@@ -99,21 +143,75 @@ class SearchViewModel @Inject constructor(
             val picked = _state.value.platforms
             val targets = if (picked.isEmpty()) enabled else enabled.filter { it.id in picked }
 
+            // 并发控制：同时最多 SEARCH_CONCURRENCY 个插件在搜，其余排队。
+            // 源站（酷我 / QQ / B站）对瞬时并发很敏感，一次把全部插件拍过去会被限流或掐连接。
+            val gate = Semaphore(SEARCH_CONCURRENCY)
+            val results = coroutineScope {
+                targets
+                    .map { plugin ->
+                        async {
+                            gate.withPermit { plugin to oneSearch(plugin, query) }
+                        }
+                    }
+                    .awaitAll()
+            }
+
+            // 按插件顺序还原，保证同一音源的结果连续成块
             val rows = mutableListOf<SearchRow>()
             val errors = mutableListOf<String>()
-            for (plugin in targets) {
-                val result = runCatching {
-                    bridge.search(plugin.id, query, 1, SearchType.MUSIC)
-                }.getOrNull()
-                if (result == null || (result.items.isEmpty() && result.error != null)) {
-                    errors += "${plugin.displayName}：${result?.error ?: "没有结果"}"
-                    continue
+            for ((plugin, outcome) in results) {
+                when (outcome) {
+                    is SearchOutcome.Hits -> outcome.items.forEach { item ->
+                        rows += SearchRow(
+                            pluginId = plugin.id,
+                            pluginName = plugin.displayName,
+                            platformLabel = platformLabelOf(plugin),
+                            item = item,
+                        )
+                    }
+                    is SearchOutcome.Miss -> errors += "${plugin.displayName}：${outcome.reason}"
                 }
-                result.items.forEach { rows += SearchRow(plugin.id, plugin.displayName, it) }
             }
             // Keep the cache warm so playback and lyrics can look the row up by key.
             runCatching { tracks.cache(rows.map { it.item }) }
-            _state.value = _state.value.copy(loading = false, rows = rows, errors = errors)
+            _state.value = _state.value.copy(
+                loading = false,
+                rows = rows,
+                errors = errors,
+                resultCounts = rows.groupingBy { it.pluginId }.eachCount(),
+            )
+        }
+    }
+
+    private suspend fun oneSearch(plugin: PluginMeta, query: String): SearchOutcome {
+        val probe = runCatching { bridge.search(plugin.id, query, 1, SearchType.MUSIC) }
+        val result = probe.getOrElse { t ->
+            return SearchOutcome.Miss(t.message?.take(60) ?: "搜索失败")
+        }
+        val err = result.error
+        return when {
+            err != null && result.items.isEmpty() -> SearchOutcome.Miss(err)
+            result.items.isEmpty() -> SearchOutcome.Miss("没有结果")
+            else -> SearchOutcome.Hits(result.items)
+        }
+    }
+
+    /** 「全部」/ 单个音源选择。传空串表示全部。 */
+    fun selectPlatform(id: String) {
+        _state.value = if (id.isEmpty()) {
+            _state.value.copy(platforms = emptyList())
+        } else {
+            _state.value.copy(platforms = listOf(id))
+        }
+    }
+
+    /** 下载一条搜索结果。 */
+    fun download(item: MusicItem, quality: String = "high") {
+        viewModelScope.launch {
+            val ok = runCatching {
+                downloads.enqueue(item, com.guangyue.core.player.Quality.fromWire(quality))
+            }.getOrDefault(false)
+            _state.value = _state.value.copy(message = if (ok) "已加入下载队列" else "该歌曲已在队列或已下载")
         }
     }
 

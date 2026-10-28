@@ -1,4 +1,4 @@
-package com.guangyue.core.player
+﻿package com.guangyue.core.player
 
 /**
  * Where a media item comes from. Kept in :core:player so the session and the resolver can
@@ -14,11 +14,17 @@ data class MediaOrigin(
     /** Fallback: a playable url handed over directly (demo plugin, local files). */
     val directUrl: String? = null,
     val headers: Map<String, String> = emptyMap(),
+    /**
+     * 当前插件声明支持的音质（wire 值）。
+     * 空 = 插件没声明，音质弹窗按内置全集渲染。
+     */
+    val availableQualities: List<String> = emptyList(),
 ) {
     fun toExtraBundle(): android.os.Bundle = android.os.Bundle().apply {
         putString(KEY_PLUGIN_ID, pluginId)
         putString(KEY_QUALITY, quality.wire)
         putString(KEY_DIRECT_URL, directUrl)
+        putStringArray(KEY_QUALITIES, availableQualities.toTypedArray())
         putString(KEY_EXTRA_JSON, ioJson(extra))
         putString(KEY_HEADERS_JSON, ioJson(headers))
     }
@@ -29,6 +35,7 @@ data class MediaOrigin(
         const val KEY_DIRECT_URL = "guangyue.directUrl"
         const val KEY_EXTRA_JSON = "guangyue.extra"
         const val KEY_HEADERS_JSON = "guangyue.headers"
+        const val KEY_QUALITIES = "guangyue.qualities"
 
         private fun ioJson(map: Map<String, String>): String =
             map.entries.joinToString(prefix = "{", postfix = "}") { (k, v) ->
@@ -55,6 +62,7 @@ data class MediaOrigin(
                 directUrl = bundle.getString(KEY_DIRECT_URL)?.takeIf { it.isNotBlank() },
                 extra = parseFlatJson(bundle.getString(KEY_EXTRA_JSON)),
                 headers = parseFlatJson(bundle.getString(KEY_HEADERS_JSON)),
+                availableQualities = bundle.getStringArray(KEY_QUALITIES)?.toList().orEmpty(),
             )
         }
 
@@ -101,16 +109,85 @@ data class MediaOrigin(
     }
 }
 
-/** MusicFree quality ladder (low/standard/high/super). */
-enum class Quality(val wire: String, val label: String) {
-    LOW("low", "标准"),
-    STANDARD("standard", "高品"),
-    HIGH("high", "很高"),
-    SUPER("super", "无损");
+/**
+ * MusicFree quality ladder.
+ *
+ * 前四档是 MusicFree 既有约定（`low/standard/high/super`），后四档是各插件近年扩展出来的
+ * 高清档位。插件不认识某个 wire 值时会自行降级，所以「多给一档」是安全的。
+ *
+ * [order] 用于「音质由低到高」排序与比较；[bitrateHint] 只用于 UI 副标题与下载文件命名，
+ * 不代表真实码率。
+ */
+enum class Quality(val wire: String, val label: String, val order: Int, val bitrateHint: Int = 0) {
+    LOW("low", "标准", 0, 128),
+    STANDARD("standard", "高品", 1, 192),
+    HIGH("high", "很高", 2, 320),
+    SUPER("super", "无损", 3),
+    LOSSLESS("lossless", "无损 FLAC", 4),
+    HIRES("hires", "Hi-Res", 5),
+    ATMOS("atmos", "全景声", 6),
+    MASTER("master", "母带", 7);
 
+    /** 下一档；已经到顶则回到最低档（UI 长按循环用）。 */
     fun next(): Quality = entries[(ordinal + 1) % entries.size]
 
+    /** 向上一档 / 向下 [steps] 档，越界时夹在端点。 */
+    fun up(): Quality = entries.getOrElse(ordinal + 1) { this }
+
+    fun down(): Quality = entries.getOrElse(ordinal - 1) { this }
+
+    /** 是否无损类（FLAC / Hi-Res / 母带 / 全景声）。 */
+    val isLossless: Boolean get() = order >= LOSSLESS.order
+
+    /** 副标题：弹窗里的一句人话说明。 */
+    val subtitle: String
+        get() = when (this) {
+            LOW, STANDARD, HIGH -> "${bitrateHint}kbps"
+            SUPER, LOSSLESS -> "无损 FLAC"
+            HIRES -> "高解析 24bit"
+            ATMOS -> "杜比全景声"
+            MASTER -> "母带 录音室级"
+        }
+
     companion object {
+        /** 在一组候选档位里循环取下一档。 */
+        fun List<Quality>.nextOf(current: Quality): Quality {
+            if (isEmpty()) return current.next()
+            val at = indexOf(current)
+            return if (at < 0) first() else this[(at + 1) % size]
+        }
+
+        /** 按 [order] 从低到高排列，UI 的弹窗直接用这个顺序。 */
+        val ladder: List<Quality> = entries.sortedBy { it.order }
+
+        /** 与 [ladder] 等价的别名。 */
+        val ALL: List<Quality> = ladder
+
         fun fromWire(v: String?): Quality = entries.firstOrNull { it.wire == v } ?: STANDARD
+
+        /** 宽容解析：`flac` / `sq` / `96k` 之类的别名都映射到最近的档位。 */
+        fun parse(v: String?): Quality {
+            val key = v?.trim()?.lowercase() ?: return STANDARD
+            entries.firstOrNull { it.wire == key }?.let { return it }
+            return when (key) {
+                "sq", "flac", "cd", "lossless", "lossless_flac" -> LOSSLESS
+                "hr", "hi-res", "hires", "hires_lossless", "zq" -> HIRES
+                "atmos", "dolby", "spatial", "全景声" -> ATMOS
+                "master", "mq", "母带" -> MASTER
+                "320", "high" -> HIGH
+                "128", "low" -> LOW
+                else -> STANDARD
+            }
+        }
+
+        /** 插件声明的音质字符串列表 → 去重、去非法值、按档位从高到低排序。 */
+        fun fromPluginList(raw: List<String>?): List<Quality> =
+            raw.orEmpty()
+                .mapNotNull { wire ->
+                    entries.firstOrNull { it.wire.equals(wire.trim(), ignoreCase = true) }
+                        ?: wire.trim().takeIf { it.isNotBlank() }?.let { parse(it) }
+                }
+                .distinct()
+                .sortedWith(compareByDescending { it.order })
     }
 }

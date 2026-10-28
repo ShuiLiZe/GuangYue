@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -77,6 +78,7 @@ fun HomeScreen(
     onSearch: () -> Unit,
     onOpenCard: (ShelfCard) -> Unit,
     onPluginManager: () -> Unit,
+    onDownloads: () -> Unit = {},
     playbackTitle: String,
     playbackArtwork: String?,
     progress: Float,
@@ -111,6 +113,8 @@ fun HomeScreen(
                     modifier = Modifier.clickable { onPluginManager() },
                 )
                 Spacer(Modifier.weight(1f))
+                DownloadEntry(onClick = onDownloads)
+                Spacer(Modifier.width(10.dp))
                 SearchCapsule(onClick = onSearch)
             }
 
@@ -189,6 +193,26 @@ private fun SearchCapsule(onClick: () -> Unit) {
         )
         Spacer(Modifier.width(8.dp))
         Text("搜索歌曲 / 专辑 / 歌单", fontSize = 12.sp, color = GuangYueDesign.Ink.copy(alpha = 0.4f))
+    }
+}
+
+/** 顶栏的下载入口：圆角方块 + 云下载图标，作为「下载管理」页的常驻入口。 */
+@Composable
+private fun DownloadEntry(onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = 0.72f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Filled.CloudDownload,
+            contentDescription = "下载管理",
+            tint = GuangYueDesign.Blue,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 

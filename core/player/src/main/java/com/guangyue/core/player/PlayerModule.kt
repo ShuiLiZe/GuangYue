@@ -1,5 +1,6 @@
 package com.guangyue.core.player
 
+import androidx.media3.datasource.cache.CacheDataSource
 import com.guangyue.core.data.model.TrackMapper
 import com.guangyue.core.data.repository.TrackRepository
 import com.guangyue.core.plugin.MusicItem
@@ -8,6 +9,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import com.guangyue.core.plugin.di.PlaybackHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -60,8 +62,15 @@ class PluginMediaSourceResolver @Inject constructor(
 @InstallIn(SingletonComponent::class)
 object PlayerModule {
 
+    /**
+     * 播放 / 解析直链用的 OkHttp。
+     *
+     * 必须带 [PlaybackHttp] 限定符：:core:download 还提供了一个「长读超时」的同类型客户端，
+     * 两个 @Singleton OkHttpClient 会触发 Dagger DuplicateBindings。
+     */
     @Provides
     @Singleton
+    @PlaybackHttp
     fun okHttp(): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -72,4 +81,17 @@ object PlayerModule {
     @Provides
     @Singleton
     fun mediaSourceResolver(impl: PluginMediaSourceResolver): MediaSourceResolver = impl
+
+    /**
+     * 播放 / 预取共用的「带缓存的真实数据源」工厂。
+     *
+     * 抽成独立绑定是为了让 [PlaybackPrefetcher] 能直接构造 media3 官方
+     * [androidx.media3.datasource.cache.CacheWriter]，而不是自己 hack SimpleCache 的
+     * 逐段写入 API —— CacheWriter 需要的是 CacheDataSource，而 media3 1.11 的 SimpleCache
+     * 不再暴露 startCacheWrite。
+     */
+    @Provides
+    @Singleton
+    fun cacheDataSourceFactory(provider: MediaDataSourceProvider): CacheDataSource.Factory =
+        provider.preloadDataSourceFactory()
 }

@@ -46,7 +46,7 @@ import java.io.IOException
 class PluginRuntime(
     val meta: PluginMeta,
     private val code: String,
-    private val http: OkHttpClient,
+    @com.guangyue.core.plugin.di.PlaybackHttp private val http: OkHttpClient,
     private val preludeProvider: PreludeProvider,
 ) {
     @Volatile private var qjs: QuickJs? = null

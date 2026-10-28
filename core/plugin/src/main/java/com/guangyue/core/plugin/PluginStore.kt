@@ -41,6 +41,9 @@ class PluginStore @Inject constructor(@ApplicationContext private val context: C
 
     fun metaFile(id: String): File = File(dirOf(id), "meta.json")
 
+    /** 订阅源索引（subscription index）落盘位置。 */
+    val subscriptionsFile: File get() = File(root, "subscriptions.json")
+
     @WorkerThread
     fun readIndex(): List<PluginMeta> {
         val text = runCatching { indexFile.readText() }.getOrNull() ?: return emptyList()
@@ -51,6 +54,43 @@ class PluginStore @Inject constructor(@ApplicationContext private val context: C
     fun writeIndex(list: List<PluginMeta>) {
         runCatching { indexFile.writeText(Json2.json.encodeToString(PLUGIN_LIST, list)) }
     }
+
+    @WorkerThread
+    fun readSubscriptions(): List<Subscription> {
+        val text = runCatching { subscriptionsFile.readText() }.getOrNull() ?: return emptyList()
+        return runCatching { Json2.json.decodeFromString(SUBSCRIPTION_LIST, text) }.getOrElse { emptyList() }
+    }
+
+    @WorkerThread
+    fun writeSubscriptions(list: List<Subscription>) {
+        runCatching { subscriptionsFile.writeText(Json2.json.encodeToString(SUBSCRIPTION_LIST, list)) }
+    }
+
+    /** 订阅源解析结果的离线缓存，断网时仍能列出「可安装的插件」。 */
+    @WorkerThread
+    fun readCachedSource(url: String): SubscriptionSource? {
+        val f = File(sourceCacheDir(), CACHE_PREFIX + safeName(url) + ".json")
+        val text = runCatching { f.readText() }.getOrNull() ?: return null
+        return runCatching { Json2.json.decodeFromString(SOURCE_JSON, text) }.getOrNull()
+    }
+
+    @WorkerThread
+    fun writeCachedSource(url: String, source: SubscriptionSource) {
+        runCatching {
+            val dir = sourceCacheDir()
+            val f = File(dir, CACHE_PREFIX + safeName(url) + ".json")
+            val tmp = File(dir, f.name + ".tmp")
+            tmp.writeText(Json2.json.encodeToString(SOURCE_JSON, source))
+            if (f.exists()) f.delete()
+            tmp.renameTo(f)
+        }
+    }
+
+    private fun sourceCacheDir(): File = File(root, ".subs").apply { if (!exists()) mkdirs() }
+
+    private fun safeName(url: String): String =
+        MessageDigest.getInstance("SHA-1").digest(url.toByteArray())
+            .take(8).joinToString("") { "%02x".format(it) }
 
     @WorkerThread
     fun readCode(id: String): String? = codeFile(id).takeIf { it.isFile }?.readText()
@@ -90,8 +130,12 @@ class PluginStore @Inject constructor(@ApplicationContext private val context: C
     }
 
     private companion object {
+        const val CACHE_PREFIX = "source-"
         val PLUGIN_JSON = kotlinx.serialization.serializer<PluginMeta>()
         val PLUGIN_LIST = ListSerializer(PLUGIN_JSON)
+        val SUBSCRIPTION_JSON = kotlinx.serialization.serializer<Subscription>()
+        val SUBSCRIPTION_LIST = ListSerializer(SUBSCRIPTION_JSON)
+        val SOURCE_JSON = kotlinx.serialization.serializer<SubscriptionSource>()
     }
 }
 

@@ -1,5 +1,6 @@
-package com.guangyue.core.plugin
+﻿package com.guangyue.core.plugin
 
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -264,3 +265,4 @@ data class LyricSourceResult(
     val rawLrc: String? = null,
     val translation: String? = null,
 )
+

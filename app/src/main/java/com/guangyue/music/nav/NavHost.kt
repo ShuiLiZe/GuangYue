@@ -37,6 +37,7 @@ object Routes {
     const val LYRIC_FLOW = "lyricFlow"
     const val LYRIC_STAGE = "lyricStage"
     const val PLUGINS = "plugins"
+        const val DOWNLOADS = "downloads"
 }
 
 /**
@@ -76,6 +77,7 @@ fun GuangYueNavHost(
                     }
                 },
                 onPluginManager = { navController.navigate(Routes.PLUGINS) },
+                onDownloads = { navController.navigate(Routes.DOWNLOADS) },
                 playbackTitle = playbackState.item?.title ?: "还没有在听的歌",
                 playbackArtwork = playbackState.item?.artworkUri,
                 progress = playbackState.progress,
@@ -94,7 +96,8 @@ fun GuangYueNavHost(
                 state = state,
                 onQueryChange = vm::onQueryChange,
                 onSearch = vm::search,
-                onPickPlatforms = vm::togglePlatform,
+                onPickAll = { vm.selectPlatform("") },
+                onPickPlatform = { id -> vm.selectPlatform(id) },
                 onPlay = { index ->
                     vm.playFrom(index) { items, at ->
                         playback.setQueue(items, at, true)
@@ -102,6 +105,7 @@ fun GuangYueNavHost(
                     }
                 },
                 onAddToSheet = { item -> vm.addToCurrentSheet(item) },
+                onDownload = { item -> vm.download(item, playback.defaultQuality.wire) },
                 onBack = { navController.popBackStack() },
             )
         }
@@ -118,8 +122,12 @@ fun GuangYueNavHost(
                 onCycleRepeat = { playback.cycleRepeat() },
                 onToggleShuffle = { playback.setShuffle(!playbackState.shuffle) },
                 onQuality = {
-                    playback.setQuality(playbackState.item?.origin?.quality?.next()
-                        ?: com.guangyue.core.player.Quality.STANDARD)
+                    // 播放页的音质按钮按「插件支持的档位」循环切换；没有插件档位时退回内置全集
+                    val current = playbackState.item?.origin?.quality ?: playback.defaultQuality
+                    val ladder = com.guangyue.core.player.QualityLadder.of(
+                        playbackState.item?.origin?.availableQualities,
+                    ).ifEmpty { com.guangyue.core.player.QualityLadder.default() }
+                    playback.setQuality(com.guangyue.core.player.QualityLadder.cycle(ladder, current))
                 },
                 onOpenLyrics = { navController.navigate(Routes.LYRIC_FLOW) },
                 onBack = { navController.popBackStack() },
@@ -151,11 +159,35 @@ fun GuangYueNavHost(
             )
         }
 
+        composable(Routes.DOWNLOADS) {
+            com.guangyue.feature.library.screen.DownloadScreen(
+                onBack = { navController.popBackStack() },
+                onPlayLocal = { uri ->
+                    playback.setQueueFromTracks(
+                        listOf(
+                            com.guangyue.core.data.model.TrackEntity(
+                                key = uri,
+                                title = uri.substringAfterLast('/'),
+                                artist = "本地下载",
+                                localUri = uri,
+                                source = "local",
+                            ),
+                        ),
+                        0,
+                        true,
+                    )
+                    navController.navigate(Routes.PLAYER)
+                },
+            )
+        }
+
         composable(Routes.PLUGINS) {
             val vm: PluginViewModel = hiltViewModel()
             val plugins by vm.plugins.collectAsStateWithLifecycle()
             val busy by vm.busy.collectAsStateWithLifecycle()
             val message by vm.message.collectAsStateWithLifecycle()
+            val subscriptions by vm.subscriptions.collectAsStateWithLifecycle()
+            val batch by vm.batchProgress.collectAsStateWithLifecycle()
             val ctx = LocalContext.current
             PluginManagerScreen(
                 plugins = plugins,
@@ -178,6 +210,13 @@ fun GuangYueNavHost(
                 onDelete = { vm.delete(it) },
                 onCheckUpdate = { vm.checkUpdate(it) },
                 onBack = { navController.popBackStack() },
+                subscriptions = subscriptions,
+                batchStage = batch.stage,
+                batchFraction = batch.fraction,
+                onInstallOfficial = { vm.installOfficial() },
+                onCheckAllUpdates = { vm.checkAllUpdates() },
+                onSetAllEnabled = { vm.setAllEnabled(it) },
+                onForgetSubscription = { vm.forgetSubscription(it) },
             )
         }
     }

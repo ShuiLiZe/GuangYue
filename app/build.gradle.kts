@@ -19,10 +19,47 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    /**
+     * 正式签名。
+     *
+     * 密钥与口令优先从环境变量 / gradle.properties 读（CI 与本地发布用），
+     * 没配就让 release 包退化为未签名产物（assembleDebug 不受影响）。
+     * 口令一旦更换，已装机的版本必须卸载重装 —— 应用包名 com.guangyue.music 唯一。
+     */
+    signingConfigs {
+        create("release") {
+            val ksPath = System.getenv("GUANGYUE_KEYSTORE")
+                ?: (project.findProperty("guangyue.keystore") as String?)
+                ?: "${rootDir}/build/keystore/guangyue-release.jks"
+            val ksFile = file(ksPath)
+            if (ksFile.exists()) {
+                storeFile = ksFile
+                storePassword = System.getenv("GUANGYUE_STORE_PASSWORD")
+                    ?: (project.findProperty("guangyue.storePassword") as String?)
+                    ?: "GuangYue2026Release"
+                keyAlias = System.getenv("GUANGYUE_KEY_ALIAS")
+                    ?: (project.findProperty("guangyue.keyAlias") as String?)
+                    ?: "guangyue"
+                keyPassword = System.getenv("GUANGYUE_KEY_PASSWORD")
+                    ?: (project.findProperty("guangyue.keyPassword") as String?)
+                    ?: "GuangYue2026Release"
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (signingConfigs.getByName("release").storeFile != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+        debug {
+            // 调试包也套用同一把发布密钥，避免「debug 装过之后正式包覆盖不上」
+            if (signingConfigs.getByName("release").storeFile != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     buildFeatures { compose = true; buildConfig = true }

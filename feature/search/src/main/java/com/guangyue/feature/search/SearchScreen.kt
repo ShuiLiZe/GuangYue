@@ -14,16 +14,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -43,17 +47,21 @@ import coil3.compose.AsyncImage
 import com.guangyue.feature.library.design.GuangYueDesign
 
 /**
- * Search across plugins. Results are grouped by the plugin that produced them; the plugin
- * filter chips at the top narrow the fan-out.
+ * Search across plugins.
+ *
+ * 顶部是一条可横向滑动的音源筛选条（「全部」+ 每个已启用插件），不再把插件数量截断在 4 个；
+ * 每张结果卡片右上角带一个显眼的音源角标（[酷我] [QQ] [B站] …），并直接提供下载入口。
  */
 @Composable
 fun SearchScreen(
     state: SearchUiState,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
-    onPickPlatforms: (String) -> Unit,
+    onPickAll: () -> Unit,
+    onPickPlatform: (String) -> Unit,
     onPlay: (Int) -> Unit,
     onAddToSheet: (com.guangyue.core.plugin.MusicItem) -> Unit,
+    onDownload: (com.guangyue.core.plugin.MusicItem) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -115,22 +123,26 @@ fun SearchScreen(
             return@Column
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            state.available.take(4).forEach { plugin ->
-                val picked = plugin.id in state.platforms
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(if (picked) GuangYueDesign.Blue else Color.White)
-                        .clickable { onPickPlatforms(plugin.id) }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        plugin.displayName,
-                        color = if (picked) Color.White else GuangYueDesign.InkSoft,
-                        fontSize = 12.sp,
-                    )
-                }
+        // ---- 音源筛选条：横向滑动，不截断，"全部" 常驻第一格
+        LazyRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            item(key = "__all__") {
+                SourceChip(
+                    label = "全部",
+                    count = state.resultCounts.values.sum(),
+                    selected = state.platforms.isEmpty(),
+                    onClick = onPickAll,
+                )
+            }
+            items(state.available, key = { it.id }) { plugin ->
+                SourceChip(
+                    label = platformLabelOf(plugin),
+                    count = state.resultCounts[plugin.id] ?: 0,
+                    selected = state.platforms.contains(plugin.id),
+                    onClick = { onPickPlatform(plugin.id) },
+                )
             }
         }
 
@@ -142,8 +154,15 @@ fun SearchScreen(
             }
         }
 
+        // 选中单个音源时只展示该音源的结果
+        val visibleRows = if (state.platforms.isEmpty()) {
+            state.rows
+        } else {
+            state.rows.filter { it.pluginId in state.platforms }
+        }
+
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-            itemsIndexed(state.rows) { index, row ->
+            itemsIndexed(visibleRows) { index, row ->
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -162,20 +181,45 @@ fun SearchScreen(
                     )
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // 醒目的音源角标
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(GuangYueDesign.Blue.copy(alpha = 0.12f))
+                                    .padding(horizontal = 5.dp, vertical = 1.dp),
+                            ) {
+                                Text(
+                                    "[${row.platformLabel}]",
+                                    color = GuangYueDesign.BlueDeep,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                row.item.title,
+                                color = GuangYueDesign.Ink,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                         Text(
-                            row.item.title,
-                            color = GuangYueDesign.Ink,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            "${row.item.displayArtist} · ${row.pluginName}",
+                            row.item.displayArtist,
                             color = GuangYueDesign.InkSoft,
                             fontSize = 11.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    IconButton(onClick = { onDownload(row.item) }) {
+                        Icon(
+                            Icons.Filled.Download,
+                            "下载",
+                            tint = GuangYueDesign.InkSoft,
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                     IconButton(onClick = { onAddToSheet(row.item) }) {
@@ -190,7 +234,7 @@ fun SearchScreen(
                 }
             }
 
-            if (state.rows.isEmpty() && !state.loading && state.query.isNotEmpty()) {
+            if (visibleRows.isEmpty() && !state.loading && state.query.isNotEmpty()) {
                 item {
                     Text(
                         "没有找到结果。换首歌名试试，或检查插件是否已启用。",
@@ -208,4 +252,37 @@ fun SearchScreen(
             }
         }
     }
+}
+
+@Composable
+private fun SourceChip(
+    label: String,
+    count: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = {
+            Text(
+                if (count > 0) "$label · $count" else label,
+                fontSize = 12.sp,
+                maxLines = 1,
+            )
+        },
+        shape = RoundedCornerShape(16.dp),
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = Color.White,
+            labelColor = GuangYueDesign.InkSoft,
+            selectedContainerColor = GuangYueDesign.Blue,
+            selectedLabelColor = Color.White,
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = Color.Transparent,
+            selectedBorderColor = Color.Transparent,
+        ),
+    )
 }

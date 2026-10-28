@@ -88,6 +88,12 @@ class PluginViewModel @Inject constructor(
 
     val plugins: StateFlow<List<PluginMeta>> = manager.plugins
 
+    /** 已记录的订阅源。 */
+    val subscriptions: StateFlow<List<com.guangyue.core.plugin.Subscription>> = manager.subscriptions
+
+    /** 批量安装进度（跨多个插件下载时逐步推进）。 */
+    val batchProgress: StateFlow<com.guangyue.core.plugin.BatchProgress> = manager.progress
+
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
@@ -173,5 +179,149 @@ class PluginViewModel @Inject constructor(
     private fun InstallResult.describe(): String = when (this) {
         is InstallResult.Success -> "已安装「${meta.displayName}」v${meta.version}"
         is InstallResult.Failure -> "安装失败：$message"
+        is InstallResult.BatchInstalled -> result.summary()
+    }
+
+    // ------------------------------------------------------------ 订阅源 / 一键安装
+
+    /** 内置官方音源订阅地址。 */
+    fun officialSourceUrl(): String = PluginViewModelDefaults.OFFICIAL_SOURCE
+
+    /** 一键安装/更新官方音源：拉订阅 → 增量装缺的、升级旧的。 */
+    fun installOfficial() = run {
+        requireIdle() ?: return@run
+        _busy.value = true
+        viewModelScope.launch {
+            try {
+                _message.value = manager.installFromUrl(PluginViewModelDefaults.OFFICIAL_SOURCE).describe()
+            } catch (t: Throwable) {
+                _message.value = "安装失败：" + (t.message ?: t.javaClass.simpleName)
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    /** 检查所有订阅源 + 已装插件的版本，自动增量更新。 */
+    fun checkAllUpdates() = run {
+        requireIdle() ?: return@run
+        _busy.value = true
+        viewModelScope.launch {
+            try {
+                _message.value = manager.checkUpdates(installDiscovered = true).summary()
+            } catch (t: Throwable) {
+                _message.value = "检查更新失败：" + (t.message ?: t.javaClass.simpleName)
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    /** 全选 / 全不选。 */
+    fun setAllEnabled(enabled: Boolean) {
+        viewModelScope.launch { manager.setAllEnabled(enabled) }
+    }
+
+    fun forgetSubscription(url: String) {
+        viewModelScope.launch {
+            manager.forgetSubscription(url)
+            _message.value = "已移除订阅源"
+        }
+    }
+
+    private fun requireIdle(): Unit? {
+        if (_busy.value) {
+            _message.value = "上一个任务还在进行，请稍候"
+            return null
+        }
+        return Unit
+    }
+}
+
+/** 插件页的固定常量（不放进 Composable，便于单测）。 */
+object PluginViewModelDefaults {
+    /** 官方插件源（MusicFree 生态的公益音源集合）。 */
+    const val OFFICIAL_SOURCE = "https://hebijunge.github.io/musicfree-plugins/plugins.json"
+}
+
+/**
+ * 下载管理的界面状态。
+ *
+ * 只把「渲染需要的东西」整理好，Composable 里不再做任何过滤/求和，
+ * 这样 3 个区块（进行中 / 失败 / 已完成）在重组时互不影响。
+ */
+data class DownloadUiState(
+    val active: List<com.guangyue.core.download.DownloadProgress> = emptyList(),
+    val failed: List<com.guangyue.core.download.DownloadProgress> = emptyList(),
+    val done: List<com.guangyue.core.download.DownloadedTrack> = emptyList(),
+    val speedText: String = "",
+    val totalSizeText: String = "",
+) {
+    val isEmpty: Boolean get() = active.isEmpty() && failed.isEmpty() && done.isEmpty()
+}
+
+/**
+ * 下载管理页的 ViewModel。
+ *
+ * 数据来源有两条：进行中/失败来自 [DownloadStore]（内存 + 阶段实时刷新），
+ * 已完成来自 [DownloadedLibrary]（落盘索引，冷启动也在）。两条 flow 合成一个 UI 状态。
+ */
+@HiltViewModel
+class DownloadViewModel @Inject constructor(
+    private val manager: com.guangyue.core.download.DownloadManager,
+) : ViewModel() {
+
+    private val library: com.guangyue.core.download.DownloadedLibrary get() = manager.library
+
+    val tasks: StateFlow<List<com.guangyue.core.download.DownloadProgress>> =
+        manager.storeRef.tasks.map { map ->
+            map.values.sortedBy { it.updatedAt }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(3_000), emptyList())
+
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
+    val state: StateFlow<DownloadUiState> = combine(tasks, library.tracks) { list, done ->
+        val active = list.filter { it.isActive }
+        val failed = list.filter { it.isFailed || it.stage == com.guangyue.core.download.DownloadStage.CANCELED }
+        DownloadUiState(
+            active = active,
+            failed = failed,
+            done = done.sortedByDescending { it.downloadedAt },
+            speedText = com.guangyue.core.download.DownloadProgress.formatBytes(active.sumOf { it.bytesPerSecond }),
+            totalSizeText = com.guangyue.core.download.DownloadProgress.formatBytes(done.sumOf { it.sizeBytes }),
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(3_000), DownloadUiState())
+
+    /** 暂停单任务（WorkManager 取消；已写入的 .part 保留，重试时接着下）。 */
+    fun cancel(key: String) {
+        manager.cancel(key)
+        _message.value = "已暂停下载"
+    }
+
+    fun retry(key: String) {
+        manager.retry(key)
+        _message.value = "已重新排队"
+    }
+
+    fun remove(key: String) {
+        library.remove(key)
+        manager.storeRef.remove(key)
+        _message.value = "已删除本地文件"
+    }
+
+    fun cancelAll() {
+        manager.cancelAll()
+        _message.value = "已暂停全部下载"
+    }
+
+    /** 清理失败/取消记录，不删已下载的文件。 */
+    fun clearFinished() {
+        manager.clearFinished(deleteFiles = false)
+        _message.value = "已清理失败记录"
+    }
+
+    fun clearMessage() {
+        _message.value = null
     }
 }
