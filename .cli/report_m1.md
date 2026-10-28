@@ -60,7 +60,7 @@ GuangYue/
 
 | 组件 | 任务书要求 | 实际使用 |
 | --- | --- | --- |
-| Gradle | 9.8.2 | **9.7.1**（降级，见 §5） |
+| Gradle | 9.8.2 | **9.7.1**（降级，见 §5；Hark 验收决定保持 9.7.1） |
 | AGP | 9.4.1 | 9.4.1 |
 | Kotlin | 2.4.21 | 2.4.21 |
 | KSP | 2.3.12 | 2.3.12 |
@@ -83,7 +83,8 @@ GuangYue/
 ## 5. 编译结果与降级说明
 
 - `./gradlew assembleDebug` → **BUILD SUCCESSFUL**，248 tasks。
-- **Gradle 9.8.2 → 9.7.1**：`services.gradle.org` 的分发包重定向到 GitHub releases，本机网络 `curl exit 35` 下载失败；工作区自带的 `gradle-9.8.2-bin.zip` 实测只有 2 MB 且 SHA256（`ea7be7…`）与官方（`21bd5d…`）不符，是损坏文件，已弃用。本机 `~/.gradle` 内已有可用的 9.7.1 分发包，故锁定 9.7.1。换网络后改 `gradle/wrapper/gradle-wrapper.properties` 一行即可升回。
+- **Gradle 9.8.2 → 9.7.1**：`services.gradle.org` 的分发包重定向到 GitHub releases，本机网络 `curl exit 35` 下载失败；工作区自带的 `gradle-9.8.2-bin.zip` 实测只有 2 MB 且 SHA256（`ea7be7…`）与官方（`21bd5d…`）不符，是损坏文件，已弃用。本机 `~/.gradle` 内已有可用的 9.7.1 分发包，故锁定 9.7.1。
+- **Hark 验收决定（2026-10-28）：保持 9.7.1，不回 9.8.2。** 损坏的 `gradle-9.8.2-bin.zip` 已从工作区删除，且从未被 git 跟踪（`git ls-files` 无 `.zip`），`.gitignore` 已加 `*.zip`。
 - 依赖仓库全部走阿里云镜像（`settings.gradle.kts`），因为 Maven Central 直连极慢。
 - AGP 9 的内置 Kotlin 支持按新写法配置；KSP 与 Hilt 在 AGP 9 下正常。
 
