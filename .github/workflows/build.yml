@@ -112,7 +112,10 @@ jobs:
       - name: 整理产物
         run: |
           set -e
-          VERSION=$(grep -m1 'versionName' app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
+          # 只取真正赋值的那一行（跳过注释与说明文字），再取出第一个引号串
+          VERSION=$(grep -E '^[[:space:]]*versionName[[:space:]]*=' app/build.gradle.kts | head -n1 | sed 's/[^"]*"\([^"]*\)".*/\1/')
+          VERCODE=$(grep -E '^[[:space:]]*versionCode[[:space:]]*=' app/build.gradle.kts | head -n1 | grep -oE '[0-9]+' | head -n1)
+          echo "解析到 versionName=${VERSION} versionCode=${VERCODE}"
           ABB=${GITHUB_SHA::7}
           mkdir -p dist
           found=0
