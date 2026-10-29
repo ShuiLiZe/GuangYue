@@ -111,7 +111,14 @@ module.exports = {
             assertTrue("Buffer 没生效：$search", search.toString().contains("bufText"))
 
             // 5) async 函数（已 settle 的 Promise 必须能同步取回）
-            val media = rt.call("getMediaSource", kotlinx.serialization.json.JsonPrimitive("song-1"))
+            //    注意：插件里读的是 `item.id`，所以要传对象 `{id:'song-1'}`，
+            //    传裸字符串会得到 `undefined.mp3`（0.0.2 时代没跑过这条 async 路径，一直没暴露）。
+            val media = rt.call(
+                "getMediaSource",
+                kotlinx.serialization.json.buildJsonObject {
+                    put("id", kotlinx.serialization.json.JsonPrimitive("song-1"))
+                },
+            )
             assertTrue("getMediaSource 返回：$media", media.toString().contains("song-1.mp3"))
 
             // 6) 未实现的函数 → Missing，而不是崩掉整个插件

@@ -24,8 +24,24 @@ internal object HostBridge {
   var MAIN_ID = '__main__';
 
   G.__gy_defineModule = function (id, factory) { __modules[id] = factory; };
+  // 打包进 prelude 的库：它们是 esbuild 打的 IIFE，把成品挂到 globalThis 上
+  // （`G.cheerio` / `G.CryptoJS` / `G.dayjs` / `G.Qs` / `G.he` / `G.BigInteger`）。
+  // 插件里写的是 `require('cheerio')`，所以 require 必须先认这些全局名；
+  // 否则每一条 import 都会走到「Cannot find module」，插件在加载阶段就整段炸掉。
+  var __preludeModules = {
+    'cheerio': 'cheerio',
+    'crypto-js': 'CryptoJS',
+    'dayjs': 'dayjs',
+    'qs': 'Qs',
+    'he': 'he',
+    'big-integer': 'BigInteger'
+  };
   G.__gy_require = function (id) {
     if (id === 'axios') return G.axios;
+    if (Object.prototype.hasOwnProperty.call(__preludeModules, id)) {
+      var lib = G[__preludeModules[id]];
+      if (lib !== undefined) return lib;
+    }
     if (Object.prototype.hasOwnProperty.call(__cache, id)) return __cache[id].exports;
     var factory = __modules[id];
     if (typeof factory !== 'function') {
@@ -40,10 +56,6 @@ internal object HostBridge {
   };
 
   // The plugin wrapper calls this with the plugin source turned into a factory.
-  // `__gy_state` records what the *last statement* of the plugin actually evaluated to, so the
-  // host can fall back to it when the wrapper expression itself yields a non-string value
-  // (see PluginRuntime.evalBlocking — that is the bug that broke 0.0.1 under R8).
-  G.__gy_state = function (v) { G.__gy_last = v; return v; };
   G.__gy_boot = function (factory) {
     __modules[MAIN_ID] = factory;
     var exported = G.__gy_require(MAIN_ID);
@@ -324,7 +336,10 @@ internal object HostBridge {
   // ---------------------------------------------------------------- utils
   G.module = { exports: {} };
   G.exports = G.module.exports;
-  G.require.cache = __cache;
+  // G.require 在此刻还不存在（它在下面 20 行才被替换成包装版），直接赋值会抛
+  // `TypeError: cannot set property 'cache' of undefined`，把整个 shim 的执行打断，
+  // 之后所有插件都表现为「语法错误 / 不是函数」。改成在包装版里挂 cache。
+
   // `require('buffer').Buffer` / `require('util')` … are common in MusicFree plugins.
   var __builtinModules = {
     buffer: { Buffer: BufferShim },
@@ -339,6 +354,7 @@ internal object HostBridge {
     if (Object.prototype.hasOwnProperty.call(__builtinModules, id)) return __builtinModules[id];
     return __gy_requireRaw(id);
   };
+  G.require.cache = __cache;   // 包装版 require 已经就位，这里才是合法赋值
   G.__gy_require = G.require;
   G.process = {
     env: { NODE_ENV: 'production' },
@@ -346,7 +362,7 @@ internal object HostBridge {
     version: 'v18.0.0',
     nextTick: function (fn) { G.setTimeout(fn, 0); }
   };
-})();
+})()
 """
 
     /**
@@ -356,6 +372,9 @@ internal object HostBridge {
      * `module.exports = {...}` and `exports.foo = ...` work, exactly like in MusicFree.
      */
     fun wrapPluginSource(source: String): String = buildString {
+        // 工厂是作为**实参**传给 `__gy_boot(...)` 的函数表达式，所以自身前后都不带 `;`；
+        // 整条 `globalThis.__gy_ret = globalThis.__gy_boot( <factory> );` 由宿主以**语句**形式
+        // 交给 PluginRuntime.exec 执行（exec 不拼括号，语句分号本来就合法）。
         append("(function(module, exports, require){\n")
         append(source)
         append("\n})")
@@ -393,6 +412,12 @@ internal object HostBridge {
                   function (e) { state.done = true; state.ok = false; state.error = e; });
     } catch (e) {
       return { ok: false, error: 'function ' + fnName + ' returned a broken Promise: ' + describe(e) };
+    }
+    // `async function` 的续体挂在 job 队列上：只挂 then 不驱动 job，`state.done` 永远是 false。
+    // 这里主动把已入队的微任务跑掉（`__gy_drainJobs` 由宿主注入，内部调用 QuickJS 的
+    // executePendingJob 直到队列空），于是「声明成 async、但同步返回」的插件能正常拿到值。
+    if (typeof G.__gy_drainJobs === 'function') {
+      try { G.__gy_drainJobs(); } catch (e) { /* 驱动失败就走下面的未结算分支 */ }
     }
     if (!state.done) {
       return {

@@ -29,8 +29,6 @@ local.properties
 # Node (prelude source toolchain)
 core/plugin/jsprelude/node_modules/
 
-# CLI scratch
-.cli/*.tmp
 *.bak
 *.zip
 
@@ -38,7 +36,10 @@ core/plugin/jsprelude/node_modules/
 build-gh*/
 dist/
 
-# Folia Web ¹¹½¨²úÎï£¨ÓÉ :app µÄ foliaWeb ÈÎÎñÔÚ¹¹½¨ÆÚÉú³É£¬²»Èë¿â£©
+# Folia Web ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï£¨ï¿½ï¿½ :app ï¿½ï¿½ foliaWeb ï¿½ï¿½ï¿½ï¿½ï¿½Ú¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É£ï¿½ï¿½ï¿½ï¿½ï¿½â£©
 /app/src/main/assets/folia/
-# Folia ÉÏÓÎÔ´ÂëÓëÖĞ¼ä²úÎï£¨¹¹½¨Ê±°´ web/folia-overlay/manifest.json µÄ commit À­È¡£©
+# Folia ï¿½ï¿½ï¿½ï¿½Ô´ï¿½ï¿½ï¿½ï¿½ï¿½Ğ¼ï¿½ï¿½ï¿½ï£¨ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ web/folia-overlay/manifest.json ï¿½ï¿½ commit ï¿½ï¿½È¡ï¿½ï¿½
 /web/.work/
+
+# CLI scratch
+.cli/

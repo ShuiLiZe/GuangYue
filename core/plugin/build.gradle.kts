@@ -38,4 +38,15 @@ dependencies {
     // 插件元信息宽松解析的单元测试（纯 JVM，不需要模拟器）
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.serialization.json)
+    // 真·QuickJS 的 JVM 产物：android 版只有 .so，Windows/Linux 的 JVM 加载不了。
+    // 有了它，求值通道 / 插件加载才能在 CI 上端到端跑（见 PluginRuntimeJvmTest）。
+    testImplementation(libs.quickjs.jvm)
+}
+
+tasks.withType<Test>().configureEach {
+    // 测试要读 app/src/main/assets/prelude.js 这份真产物（cheerio/CryptoJS 都在里面），
+    // 统一把工作目录钉在模块目录，避免受 daemon / IDE 的 cwd 影响。
+    workingDir = projectDir
+    // prelude 有 54 万字符，QuickJS 冷启动要几百毫秒；给足余量。
+    maxHeapSize = "2g"
 }

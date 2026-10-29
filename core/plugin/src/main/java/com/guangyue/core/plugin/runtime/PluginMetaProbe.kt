@@ -173,42 +173,4 @@ $COMMON_FUNCTION
     /** 调用表达式的完整源码。 */
     fun callSource(keys: List<String>): String =
         "__gy_meta_json(${keysJson(keys)})"
-
-    /**
-     * 宿主读值的**唯一**出口：把任意 JS 值压成字符串。
-     *
-     * 为什么必须存在：quickjs-kt 的 `evaluate<T>` 会把「表达式的求值结果」按 `T` 的 `KType`
-     * 做一次反射转换。`module.exports = { platform: true }` 这类插件，`__gy_boot(...)` 这条语句
-     * 自身的求值结果并不是字符串，R8 剥掉 `kotlin-reflect` 后 `castValueOr` 找不到
-     * `TypeConverter` 就直接抛
-     * `No such type converter to convert 'boolean ... (Kotlin reflection is not available)'
-     *  to 'java.lang.String'` —— 0.0.1 的 release 包正是这样让 57 个插件全部导入失败。
-     *
-     * 包一层 `__gy_text(...)` 后表达式结果永远是 JS 字符串，Kotlin 侧只做 `String` 赋值，
-     * 不触发任何类型转换。
-     */
-    const val TEXT_HELPER: String = """
-(function(){
-  'use strict';
-  var G = globalThis;
-  if (typeof G.__gy_text === 'function') return 'true';
-  G.__gy_text = function (v) {
-    try {
-      if (v === undefined) return 'undefined';
-      if (v === null) return 'null';
-      var t = typeof v;
-      if (t === 'string') return v;
-      if (t === 'number' || t === 'boolean') return String(v);
-      if (t === 'function') return '[function]';
-      if (t === 'symbol' || t === 'bigint') return String(v);
-      var s = JSON.stringify(v);
-      if (s !== undefined) return s;
-      return String(v);
-    } catch (e) {
-      try { return String(v); } catch (e2) { return '[unserializable]'; }
-    }
-  };
-  return 'true';
-})();
-"""
 }

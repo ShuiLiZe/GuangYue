@@ -1,6 +1,7 @@
 package com.guangyue.core.web
 
 import android.content.Context
+import com.guangyue.core.plugin.InstallResult
 import com.guangyue.core.plugin.PluginManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +27,7 @@ class DemoPluginSeeder @Inject constructor(
     private val plugins: PluginManager,
 ) {
     suspend fun seedIfEmpty() = withContext(Dispatchers.IO) {
+        android.util.Log.i(TAG, "seedIfEmpty 开始")
         val prefs = context.getSharedPreferences("guangyue.demo", Context.MODE_PRIVATE)
         if (prefs.getBoolean(KEY_SEEDED, false)) return@withContext
         plugins.load()
@@ -41,7 +43,11 @@ class DemoPluginSeeder @Inject constructor(
         runCatching { plugins.installCode(source, source = "asset:demo/demo-plugin.js", fallbackName = "广乐演示音源") }
             .onSuccess { result ->
                 android.util.Log.i(TAG, "demo 插件安装结果：$result")
-                prefs.edit().putBoolean(KEY_SEEDED, true).apply()
+                // 只有真的成功了才标记：早先这里无条件标记，一次安装失败（沙箱探针报错）就让
+                // 演示源永久缺席——整条搜索 / 播放 / 歌词链路全空，且没有任何入口能自救。
+                if (result is InstallResult.Success) {
+                    prefs.edit().putBoolean(KEY_SEEDED, true).apply()
+                }
             }
             .onFailure { android.util.Log.w(TAG, "demo 插件安装失败", it) }
     }
