@@ -14,9 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -34,6 +31,7 @@ import com.guangyue.core.player.Quality
 import com.guangyue.core.player.QualityLadder
 import com.guangyue.feature.library.design.GuangYueDesign
 import com.guangyue.feature.library.design.Gyp
+import com.guangyue.feature.library.design.icons.GuangYueIcons
 
 /**
  * 音质切换弹窗。
@@ -62,7 +60,7 @@ fun QualityPickerSheet(
     ) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Hearing, null, tint = accent, modifier = Modifier.size(18.dp))
+                Icon(GuangYueIcons.AudioLines, null, tint = accent, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "播放音质",
@@ -148,7 +146,7 @@ private fun QualityRow(
                     .background(accent, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                Icon(GuangYueIcons.Check, null, tint = Color.White, modifier = Modifier.size(13.dp))
             }
         }
     }

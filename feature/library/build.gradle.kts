@@ -9,7 +9,8 @@ android {
     namespace = "com.guangyue.feature.library"
     compileSdk = 37
     defaultConfig { minSdk = 26 }
-    buildFeatures { compose = true }
+    // buildConfig：perf/FrameJank 用 BuildConfig.DEBUG 决定是否做掉帧采样（release 恒 false）。
+    buildFeatures { compose = true; buildConfig = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -29,8 +30,6 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.animation)
     implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material.icons.core)
-    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.palette.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

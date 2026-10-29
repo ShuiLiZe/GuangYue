@@ -1,42 +1,30 @@
 package com.guangyue.music.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.guangyue.core.player.PlaybackState
+import com.guangyue.feature.library.design.FoliaBottomNav
+import com.guangyue.feature.library.design.FoliaNavItem
 import com.guangyue.feature.library.design.GuangYueDesign
 import com.guangyue.feature.library.design.MarbleBackground
+import com.guangyue.feature.library.design.icons.GuangYueIcons
+import com.guangyue.feature.library.home.FoliaMiniPlayer
 import com.guangyue.feature.library.home.HomeScreen
-import com.guangyue.feature.library.home.ShelfCard
+import com.guangyue.feature.library.home.HomeTile
+import com.guangyue.feature.library.home.HomeTileKind
+import com.guangyue.feature.library.screen.AboutScreen
 import com.guangyue.feature.library.screen.LicensesScreen
 import com.guangyue.feature.library.screen.PluginManagerScreen
+import com.guangyue.feature.library.screen.ProfileScreen
 import com.guangyue.feature.library.screen.SettingsScreen
-import com.guangyue.feature.library.viewmodel.HomeTab
 import com.guangyue.feature.player.screen.IPlayerRoute
 import com.guangyue.feature.search.SearchScreen
+import com.guangyue.feature.search.SearchTab
 import com.guangyue.feature.search.SearchUiState
 import com.guangyue.music.theme.GuangYueTheme
 import org.junit.Rule
@@ -47,11 +35,12 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * 0.0.5 每个主要页面的 JVM 截图（Robolectric 真渲染 + Roborazzi 抓图）。
+ * 0.0.6 每个主要页面的 JVM 截图（Robolectric 真渲染 + Roborazzi 抓图）。
  *
  * 没有真机 adb 也能看界面：`GUANGYUE_RECORD_SCREENSHOTS=true ./gradlew :app:testDebugUnitTest`
- * 会把图写到 `docs/ui-0.0.5/`。图里全部用**空状态**（没有假数据）：歌单/搜索结果都是空的，
- * 播放条停在「还没有在听的歌」，这样截图看到的就是首次安装时的真实样子。
+ * 会把图写到仓库里的 `docs/ui-0.0.6/`，尺寸 w411dp-h891dp-xxhdpi（与 Folia 桌面窗口不同比例，
+ * 但同一构件、同一 token，逐项对照见 docs/ui-0.0.6/REPORT.md）。
+ * 图里先用**空状态**（不造假数据）：歌单 / 搜索结果都是空的，播放条停在「还没有在听的歌」。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-xxhdpi")
@@ -72,56 +61,123 @@ class ScreenshotTest {
             }
         }
         compose.waitForIdle()
-        compose.onRoot().captureRoboImage("docs/ui-0.0.5/$name.png")
+        compose.onRoot().captureRoboImage(filePath("$name.png"))
+    }
+
+    /** Roborazzi 的路径相对 module 目录，统一指回仓库根上的 docs/ui-0.0.6/。 */
+    private fun filePath(name: String): String {
+        val module = java.io.File(System.getProperty("user.dir"))
+        val root = module.parentFile ?: module
+        return java.io.File(root, "docs/ui-0.0.6").resolve(name).absolutePath
     }
 
     private val emptyPlayback = PlaybackState()
 
-    @Test
-    fun homeLight() = shoot("home-light") { Home(withBar = true) }
-
-    @Test
-    fun homeDark() = shoot("home-dark", dark = true) { Home(withBar = true) }
-
-    /** 首页没有底部导航时的样子（导航由 App 外壳注入，这里验证两者都不依赖对方）。 */
-    @Test
-    fun homeNoBar() = shoot("home-no-bar") { Home(withBar = false) }
+    private val navItems = listOf(
+        FoliaNavItem("home", "首页", GuangYueIcons.House),
+        FoliaNavItem("search", "搜索", GuangYueIcons.Search),
+        FoliaNavItem("profile", "我的", GuangYueIcons.User),
+    )
 
     @Composable
-    private fun Home(withBar: Boolean) {
-        HomeScreen(
-            cards = emptyList<ShelfCard>(),
-            selectedTab = HomeTab.SHELF.ordinal,
-            tabs = HomeTab.entries.map { it.label },
-            onTabSelected = {},
-            onSearch = {},
-            onOpenCard = {},
-            onPluginManager = {},
-            onDownloads = {},
-            playbackTitle = "还没有在听的歌",
-            playbackArtwork = null,
+    private fun Bar(current: String) {
+        FoliaBottomNav(items = navItems, current = current, onSelect = {})
+    }
+
+    @Composable
+    private fun Mini() {
+        FoliaMiniPlayer(
+            title = "还没有在听的歌",
+            subtitle = "广乐",
+            artwork = null,
             progress = 0f,
             isPlaying = false,
             onTogglePlay = {},
-            onOpenNowPlaying = {},
-            bottomBar = if (withBar) ({ FauxBottomBar() }) else null,
+            onOpen = {},
+        )
+    }
+
+    // ---------- 首页 ----------
+    private val sampleRecommend = listOf(
+        HomeTile("playlist:1", "夜间城市流行", "本地歌单", null, HomeTileKind.PLAYLIST),
+        HomeTile("playlist:2", "女声华语精选", "本地歌单", null, HomeTileKind.PLAYLIST),
+        HomeTile("playlist:3", "华语摇滚", "本地歌单", null, HomeTileKind.PLAYLIST),
+    )
+
+    private val sampleCharts = listOf(
+        HomeTile("chart:n1", "夜曲", "周杰伦", null, HomeTileKind.TRACK),
+        HomeTile("chart:n2", "红豆", "王菲", null, HomeTileKind.TRACK),
+        HomeTile("chart:n3", "平凡之路", "朴树", null, HomeTileKind.TRACK),
+    )
+
+    @Composable
+    private fun HomeEmpty() {
+        HomeScreen(
+            recommended = emptyList(),
+            recent = emptyList(),
+            charts = emptyList(),
+            hasAnyPlugin = false,
+            onOpenTile = {},
+            onOpenPlugins = {},
+            onOpenPlayer = {},
+            playbackTitle = "还没有在听的歌",
+            playbackArtwork = null,
+            playbackProgress = 0f,
+            isPlaying = false,
+            onTogglePlay = {},
+            bottomBar = { Bar("home") },
+        )
+    }
+
+    @Composable
+    private fun HomeFilled() {
+        HomeScreen(
+            recommended = sampleRecommend,
+            recent = sampleCharts.take(2),
+            charts = sampleCharts,
+            hasAnyPlugin = true,
+            onOpenTile = {},
+            onOpenPlugins = {},
+            onOpenPlayer = {},
+            playbackTitle = "夜曲",
+            playbackArtwork = null,
+            playbackProgress = 0.35f,
+            isPlaying = true,
+            onTogglePlay = {},
+            bottomBar = { Bar("home") },
+            miniPlayer = { Mini() },
         )
     }
 
     @Test
-    fun searchEmpty() = shoot("search-empty") {
+    fun homeEmptyLight() = shoot("home-empty-light") { HomeEmpty() }
+
+    @Test
+    fun homeEmptyDark() = shoot("home-empty-dark", dark = true) { HomeEmpty() }
+
+    @Test
+    fun homeFilledLight() = shoot("home-filled-light") { HomeFilled() }
+
+    @Test
+    fun homeFilledDark() = shoot("home-filled-dark", dark = true) { HomeFilled() }
+
+    // ---------- 搜索 ----------
+    private fun emptySearchState() = SearchUiState(
+        query = "",
+        loading = false,
+        platforms = emptyList(),
+        available = emptyList(),
+        rows = emptyList(),
+        resultCounts = emptyMap(),
+        errors = emptyList(),
+        history = listOf("晴天", "海阔天空"),
+        message = null,
+    )
+
+    @Composable
+    private fun Search(current: String = "search") {
         SearchScreen(
-            state = SearchUiState(
-                query = "",
-                loading = false,
-                platforms = emptyList(),
-                available = emptyList(),
-                rows = emptyList(),
-                resultCounts = emptyMap(),
-                errors = emptyList(),
-                history = listOf("晴天", "海阔天空"),
-                message = null,
-            ),
+            state = emptySearchState(),
             onQueryChange = {},
             onSearch = {},
             onPickAll = {},
@@ -129,15 +185,76 @@ class ScreenshotTest {
             onPlay = {},
             onAddToSheet = {},
             onDownload = {},
-            onBack = {},
+            onPickHistory = {},
+            onOpenAlbum = {},
+            onOpenArtist = {},
+            tab = SearchTab.TRACKS,
+            onTabChange = {},
+            bottomBar = if (current.isEmpty()) null else ({ Bar(current) }),
         )
     }
 
     @Test
-    fun playerIdle() = shoot("player-idle", dark = true) {
+    fun searchEmptyLight() = shoot("search-empty-light") { Search() }
+
+    @Test
+    fun searchEmptyDark() = shoot("search-empty-dark", dark = true) { Search() }
+
+    // ---------- 我的 ----------
+    @Composable
+    private fun Profile(dark: Boolean) {
+        ProfileScreen(
+            likedCount = 0,
+            downloadedCount = 0,
+            recentCount = 0,
+            playlists = emptyList(),
+            isDark = dark,
+            onOpenLiked = {},
+            onOpenDownloads = {},
+            onOpenRecent = {},
+            onOpenPlaylist = {},
+            onOpenPlugins = {},
+            onOpenDownloadSettings = {},
+            onToggleDark = {},
+            onOpenLicenses = {},
+            onOpenAbout = {},
+            bottomBar = { Bar("profile") },
+        )
+    }
+
+    @Test
+    fun profileLight() = shoot("profile-light") { Profile(false) }
+
+    @Test
+    fun profileDark() = shoot("profile-dark", dark = true) { Profile(true) }
+
+    @Test
+    fun profileFilled() = shoot("profile-filled") {
+        ProfileScreen(
+            likedCount = 24,
+            downloadedCount = 6,
+            recentCount = 50,
+            playlists = sampleRecommend,
+            isDark = false,
+            onOpenLiked = {},
+            onOpenDownloads = {},
+            onOpenRecent = {},
+            onOpenPlaylist = {},
+            onOpenPlugins = {},
+            onOpenDownloadSettings = {},
+            onToggleDark = {},
+            onOpenLicenses = {},
+            onOpenAbout = {},
+            bottomBar = { Bar("profile") },
+        )
+    }
+
+    // ---------- 播放页 / 二级页 ----------
+    @Test
+    fun playerIdleDark() = shoot("player-idle-dark", dark = true) {
         IPlayerRoute(
             playback = emptyPlayback,
-            accent = GuangYueDesign.Blue,
+            accent = GuangYueDesign.AccentDaylight,
             darkMode = true,
             onTogglePlay = {},
             onNext = {},
@@ -168,9 +285,19 @@ class ScreenshotTest {
     }
 
     @Test
-    fun settings() = shoot("settings") {
+    fun settingsLight() = shoot("settings-light") {
         SettingsScreen(
             darkMode = false,
+            onDarkModeChange = {},
+            onOpenLicenses = {},
+            onBack = {},
+        )
+    }
+
+    @Test
+    fun settingsDark() = shoot("settings-dark", dark = true) {
+        SettingsScreen(
+            darkMode = true,
             onDarkModeChange = {},
             onOpenLicenses = {},
             onBack = {},
@@ -181,48 +308,9 @@ class ScreenshotTest {
     fun licenses() = shoot("licenses") {
         LicensesScreen(onBack = {})
     }
-}
 
-/**
- * 截图用的底部导航：和 App 外壳里那条视觉一致，但不依赖 NavController，
- * 这样单页截图也能看到「首页 + 迷你播放条 + 导航栏」的完整构图。
- */
-@Composable
-private fun FauxBottomBar() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(if (com.guangyue.feature.library.design.Gyp.isDark) Color(0xFF16203A) else Color.White.copy(alpha = 0.92f))
-            .padding(horizontal = 8.dp)
-            .padding(top = 6.dp, bottom = 10.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val items = listOf(
-            Triple("首页", Icons.Filled.Home, true),
-            Triple("搜索", Icons.Filled.Search, false),
-            Triple("插件", Icons.Filled.Extension, false),
-            Triple("设置", Icons.Filled.Settings, false),
-        )
-        items.forEach { (label, icon, active) ->
-            val tint = if (active) Color(0xFF1A73E8) else Color(0xFF5B6879)
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(width = 44.dp, height = 26.dp),
-                ) {
-                    Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
-                }
-                Text(
-                    label,
-                    color = tint,
-                    fontSize = 11.sp,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                )
-            }
-        }
+    @Test
+    fun about() = shoot("about") {
+        AboutScreen(onBack = {})
     }
 }

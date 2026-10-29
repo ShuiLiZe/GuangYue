@@ -1,9 +1,14 @@
 package com.guangyue.music.nav
 
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -15,10 +20,17 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.guangyue.core.player.PlaybackController
 import com.guangyue.feature.library.design.GuangYueDesign
+import com.guangyue.feature.library.design.GySpace
+import com.guangyue.feature.library.home.FoliaMiniPlayer
 import com.guangyue.feature.library.home.HomeScreen
-import com.guangyue.feature.library.home.ShelfCard
+import com.guangyue.feature.library.home.HomeTile
+import com.guangyue.feature.library.screen.AboutScreen
+import com.guangyue.feature.library.screen.DownloadScreen
+import com.guangyue.feature.library.screen.LicensesScreen
 import com.guangyue.feature.library.screen.PluginManagerScreen
-import com.guangyue.feature.library.viewmodel.HomeTab
+import com.guangyue.feature.library.screen.ProfileScreen
+import com.guangyue.feature.library.screen.SettingsScreen
+import com.guangyue.feature.library.viewmodel.DownloadViewModel
 import com.guangyue.feature.library.viewmodel.HomeViewModel
 import com.guangyue.feature.library.viewmodel.PluginViewModel
 import com.guangyue.feature.player.lyrics.LyricFlowScreen
@@ -26,6 +38,7 @@ import com.guangyue.feature.player.lyrics.LyricStageScreen
 import com.guangyue.feature.player.screen.IPlayerRoute
 import com.guangyue.feature.player.viewmodel.LyricsViewModel
 import com.guangyue.feature.search.SearchScreen
+import com.guangyue.feature.search.SearchTab
 import com.guangyue.feature.search.SearchViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -34,6 +47,7 @@ import kotlinx.coroutines.withContext
 object Routes {
     const val HOME = "home"
     const val SEARCH = "search"
+    const val PROFILE = "profile"
     const val PLAYER = "player"
     const val LYRIC_FLOW = "lyricFlow"
     const val LYRIC_STAGE = "lyricStage"
@@ -41,13 +55,15 @@ object Routes {
     const val DOWNLOADS = "downloads"
     const val SETTINGS = "settings"
     const val LICENSES = "licenses"
+    const val ABOUT = "about"
 }
 
 /**
  * 根导航。
  *
- * 所有页面共享同一个 [PlaybackController] 与歌词状态，所以首页迷你播放条和全屏播放页永远一致。
- * 播放页 / 歌词页是全屏路由（[GuangYueRoot] 会在这些路由下隐藏底部导航）。
+ * 信息架构按手机重排：三个顶层页（首页 / 搜索 / 我的）挂底栏，其余都是二级页或全屏页。
+ * 所有页面共享同一个 [PlaybackController]，所以迷你播放条和全屏播放页永远一致。
+ * [bottomBar] 由 [GuangYueRoot] 只注入给顶层页，二级页 / 播放页传入 null 即自然隐藏底栏。
  */
 @Composable
 fun GuangYueNavHost(
@@ -55,162 +71,149 @@ fun GuangYueNavHost(
     onDarkModeChange: (Boolean) -> Unit = {},
     playback: PlaybackController,
     navController: NavHostController = rememberNavController(),
-    rootBar: (@Composable () -> Unit)? = null,
+    bottomBar: (@Composable () -> Unit)? = null,
 ) {
-    val accent: Color = GuangYueDesign.Blue
+    val accent: Color = GuangYueDesign.AccentDaylight
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val playbackState by playback.state.collectAsStateWithLifecycle()
 
-    NavHost(navController = navController, startDestination = Routes.HOME) {
-
-        composable(Routes.HOME) {
-            val vm: HomeViewModel = hiltViewModel()
-            val tab by vm.tab.collectAsStateWithLifecycle()
-            val cards by vm.cards.collectAsStateWithLifecycle()
-            val tracks by vm.currentTracks.collectAsStateWithLifecycle()
-
-            HomeScreen(
-                cards = cards,
-                selectedTab = tab.ordinal,
-                tabs = HomeTab.entries.map { it.label },
-                onTabSelected = { vm.selectTab(HomeTab.entries[it]) },
-                onSearch = { navController.navigate(Routes.SEARCH) },
-                onOpenCard = { _: ShelfCard ->
-                    if (tracks.isNotEmpty()) {
-                        playback.setQueueFromTracks(tracks, 0, true)
-                        navController.navigate(Routes.PLAYER)
-                    }
-                },
-                onPluginManager = { navController.navigate(Routes.PLUGINS) },
-                onDownloads = { navController.navigate(Routes.DOWNLOADS) },
-                playbackTitle = playbackState.item?.title ?: "还没有在听的歌",
-                playbackArtwork = playbackState.item?.artworkUri,
+    // 迷你播放条：三个顶层页共用同一份，避免各页各建一条。
+    val miniPlayer: (@Composable () -> Unit)? = playbackState.item?.let { item ->
+        {
+            FoliaMiniPlayer(
+                title = item.title,
+                subtitle = item.artist ?: "广乐",
+                artwork = item.artworkUri,
                 progress = playbackState.progress,
                 isPlaying = playbackState.isPlaying,
                 onTogglePlay = { playback.toggle() },
-                onOpenNowPlaying = {
-                    if (playbackState.item != null) navController.navigate(Routes.PLAYER)
+                onOpen = { navController.navigate(Routes.PLAYER) },
+                modifier = Modifier.padding(
+                    start = GySpace.pageH,
+                    end = GySpace.pageH,
+                    bottom = GySpace.s,
+                ),
+            )
+        }
+    }
+
+    NavHost(navController = navController, startDestination = Routes.HOME) {
+
+        // ---------- 顶层：首页 ----------
+        composable(Routes.HOME) {
+            val vm: HomeViewModel = hiltViewModel()
+            val playlists by vm.playlistsFlow.collectAsStateWithLifecycle()
+            val recent by vm.recentTiles.collectAsStateWithLifecycle()
+            val charts by vm.charts.collectAsStateWithLifecycle()
+            val plugins by vm.enabledPlugins.collectAsStateWithLifecycle()
+
+            LaunchedEffect(plugins.isNotEmpty()) {
+                if (plugins.isNotEmpty()) vm.loadChartsIfNeeded()
+            }
+
+            ShellColumn(
+                content = {
+                    HomeScreen(
+                        recommended = vm.recommended(playlists, recent),
+                        recent = recent,
+                        charts = charts,
+                        hasAnyPlugin = plugins.isNotEmpty(),
+                        onOpenTile = { tile ->
+                            vm.playTracksOf(tile) { tracks, at ->
+                                playback.setQueueFromTracks(tracks, at, true)
+                                navController.navigate(Routes.PLAYER)
+                            }
+                        },
+                        onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
+                        onOpenPlayer = { navController.navigate(Routes.PLAYER) },
+                        playbackTitle = playbackState.item?.title ?: "",
+                        playbackArtwork = playbackState.item?.artworkUri,
+                        playbackProgress = playbackState.progress,
+                        isPlaying = playbackState.isPlaying,
+                        onTogglePlay = { playback.toggle() },
+                    )
                 },
-                bottomBar = rootBar,
+                miniPlayer = miniPlayer,
+                bottomBar = bottomBar,
             )
         }
 
+        // ---------- 顶层：搜索 ----------
         composable(Routes.SEARCH) {
             val vm: SearchViewModel = hiltViewModel()
             val state by vm.state.collectAsStateWithLifecycle()
-            Column(Modifier.fillMaxSize()) {
-            SearchScreen(
-                state = state,
-                onQueryChange = vm::onQueryChange,
-                onSearch = vm::search,
-                onPickAll = { vm.selectPlatform("") },
-                onPickPlatform = { id -> vm.selectPlatform(id) },
-                onPlay = { index ->
-                    vm.playFrom(index) { items, at ->
-                        playback.setQueue(items, at, true)
-                        navController.navigate(Routes.PLAYER)
-                    }
-                },
-                onAddToSheet = { item -> vm.addToCurrentSheet(item) },
-                onDownload = { item -> vm.download(item, playback.defaultQuality.wire) },
-                onBack = { navController.popBackStack() },
-            )
-            rootBar?.invoke()
-            }
-        }
-
-        composable(Routes.SETTINGS) {
-            Column(Modifier.fillMaxSize()) {
-                com.guangyue.feature.library.screen.SettingsScreen(
-                    darkMode = darkMode,
-                    onDarkModeChange = onDarkModeChange,
-                    onOpenLicenses = { navController.navigate(Routes.LICENSES) },
-                    onBack = { navController.popBackStack() },
-                )
-                rootBar?.invoke()
-            }
-        }
-
-        composable(Routes.LICENSES) {
-            com.guangyue.feature.library.screen.LicensesScreen(
-                onBack = { navController.popBackStack() },
-            )
-        }
-
-        composable(Routes.PLAYER) {
-            IPlayerRoute(
-                playback = playbackState,
-                accent = accent,
-                darkMode = darkMode,
-                onTogglePlay = { playback.toggle() },
-                onNext = { playback.next() },
-                onPrevious = { playback.previous() },
-                onSeek = { playback.seekToProgress(it) },
-                onCycleRepeat = { playback.cycleRepeat() },
-                onToggleShuffle = { playback.setShuffle(!playbackState.shuffle) },
-                onQuality = {
-                    // 音质按钮按「插件支持的档位」循环切换；没有插件档位时退回内置全集。
-                    val current = playbackState.item?.origin?.quality ?: playback.defaultQuality
-                    val ladder = com.guangyue.core.player.QualityLadder.of(
-                        playbackState.item?.origin?.availableQualities,
-                    ).ifEmpty { com.guangyue.core.player.QualityLadder.default() }
-                    playback.setQuality(com.guangyue.core.player.QualityLadder.cycle(ladder, current))
-                },
-                onOpenLyrics = { navController.navigate(Routes.LYRIC_FLOW) },
-                onBack = { navController.popBackStack() },
-            )
-        }
-
-        composable(Routes.LYRIC_FLOW) {
-            val vm: LyricsViewModel = hiltViewModel()
-            val sync by vm.syncState.collectAsStateWithLifecycle()
-            LyricFlowScreen(
-                vm = vm,
-                state = sync,
-                playback = playbackState,
-                accent = accent,
-                onBack = { navController.popBackStack() },
-                onSwitchStage = { navController.navigate(Routes.LYRIC_STAGE) },
-            )
-        }
-
-        composable(Routes.LYRIC_STAGE) {
-            val vm: LyricsViewModel = hiltViewModel()
-            val sync by vm.syncState.collectAsStateWithLifecycle()
-            LyricStageScreen(
-                vm = vm,
-                state = sync,
-                playback = playbackState,
-                onTogglePlay = { playback.toggle() },
-                onBack = { navController.navigate(Routes.LYRIC_FLOW) },
-            )
-        }
-
-        composable(Routes.DOWNLOADS) {
-            com.guangyue.feature.library.screen.DownloadScreen(
-                onBack = { navController.popBackStack() },
-                onPlayLocal = { uri ->
-                    playback.setQueueFromTracks(
-                        listOf(
-                            com.guangyue.core.data.model.TrackEntity(
-                                key = uri,
-                                title = uri.substringAfterLast('/'),
-                                artist = "本地下载",
-                                localUri = uri,
-                                source = "local",
-                            ),
-                        ),
-                        0,
-                        true,
+            var tab by remember { mutableStateOf(SearchTab.TRACKS) }
+            ShellColumn(
+                content = {
+                    SearchScreen(
+                        state = state,
+                        onQueryChange = vm::onQueryChange,
+                        onSearch = vm::search,
+                        onPickAll = { vm.selectPlatform("") },
+                        onPickPlatform = { id -> vm.selectPlatform(id) },
+                        onPlay = { index ->
+                            vm.playFrom(index) { items, at ->
+                                playback.setQueue(items, at, true)
+                                navController.navigate(Routes.PLAYER)
+                            }
+                        },
+                        onAddToSheet = { item -> vm.addToCurrentSheet(item) },
+                        onDownload = { item -> vm.download(item, playback.defaultQuality.wire) },
+                        onPickHistory = { q ->
+                            vm.onQueryChange(q)
+                            vm.search()
+                        },
+                        onOpenAlbum = { item -> vm.openAlbum(item) },
+                        onOpenArtist = { item -> vm.openArtist(item) },
+                        tab = tab,
+                        onTabChange = { tab = it },
                     )
-                    navController.navigate(Routes.PLAYER)
                 },
+                miniPlayer = miniPlayer,
+                bottomBar = bottomBar,
             )
         }
 
+        // ---------- 顶层：我的 ----------
+        composable(Routes.PROFILE) {
+            val home: HomeViewModel = hiltViewModel()
+            val playlists by home.playlistsFlow.collectAsStateWithLifecycle()
+            val recent by home.recentTiles.collectAsStateWithLifecycle()
+            val liked by home.likedCount.collectAsStateWithLifecycle()
+            val downloaded by home.downloadedCount.collectAsStateWithLifecycle()
+
+            ShellColumn(
+                content = {
+                    ProfileScreen(
+                        likedCount = liked,
+                        downloadedCount = downloaded,
+                        recentCount = recent.size,
+                        playlists = playlists,
+                        isDark = darkMode,
+                        onOpenLiked = { navController.navigate(Routes.SEARCH) },
+                        onOpenDownloads = { navController.navigate(Routes.DOWNLOADS) },
+                        onOpenRecent = { navController.navigate(Routes.HOME) },
+                        onOpenPlaylist = { tile ->
+                            home.playTracksOf(tile) { tracks, at ->
+                                playback.setQueueFromTracks(tracks, at, true)
+                                navController.navigate(Routes.PLAYER)
+                            }
+                        },
+                        onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
+                        onOpenDownloadSettings = { navController.navigate(Routes.DOWNLOADS) },
+                        onToggleDark = { onDarkModeChange(!darkMode) },
+                        onOpenLicenses = { navController.navigate(Routes.LICENSES) },
+                        onOpenAbout = { navController.navigate(Routes.ABOUT) },
+                    )
+                },
+                miniPlayer = miniPlayer,
+                bottomBar = bottomBar,
+            )
+        }
+
+        // ---------- 二级页 ----------
         composable(Routes.PLUGINS) {
             val vm: PluginViewModel = hiltViewModel()
-            Column(Modifier.fillMaxSize()) {
             val plugins by vm.plugins.collectAsStateWithLifecycle()
             val busy by vm.busy.collectAsStateWithLifecycle()
             val message by vm.message.collectAsStateWithLifecycle()
@@ -248,9 +251,96 @@ fun GuangYueNavHost(
                 onForgetSubscription = { vm.forgetSubscription(it) },
                 errorDetails = messageDetails,
             )
-            rootBar?.invoke()
-            }
+        }
+
+        composable(Routes.DOWNLOADS) {
+            val vm: DownloadViewModel = hiltViewModel()
+            DownloadScreen(
+                onBack = { navController.popBackStack() },
+                onPlayLocal = { uri ->
+                    playback.setQueueFromTracks(
+                        listOf(
+                            com.guangyue.core.data.model.TrackEntity(
+                                key = uri,
+                                title = uri.substringAfterLast('/'),
+                                artist = "本地下载",
+                                localUri = uri,
+                                source = "local",
+                            ),
+                        ),
+                        0,
+                        true,
+                    )
+                    navController.navigate(Routes.PLAYER)
+                },
+                vm = vm,
+            )
+        }
+
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                darkMode = darkMode,
+                onDarkModeChange = onDarkModeChange,
+                onOpenLicenses = { navController.navigate(Routes.LICENSES) },
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Routes.LICENSES) {
+            LicensesScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.ABOUT) {
+            AboutScreen(onBack = { navController.popBackStack() })
+        }
+
+        // ---------- 全屏播放 / 歌词 ----------
+        composable(Routes.PLAYER) {
+            IPlayerRoute(
+                playback = playbackState,
+                accent = accent,
+                darkMode = darkMode,
+                onTogglePlay = { playback.toggle() },
+                onNext = { playback.next() },
+                onPrevious = { playback.previous() },
+                onSeek = { playback.seekToProgress(it) },
+                onCycleRepeat = { playback.cycleRepeat() },
+                onToggleShuffle = { playback.setShuffle(!playbackState.shuffle) },
+                onQuality = {
+                    val current = playbackState.item?.origin?.quality ?: playback.defaultQuality
+                    val ladder = com.guangyue.core.player.QualityLadder.of(
+                        playbackState.item?.origin?.availableQualities,
+                    ).ifEmpty { com.guangyue.core.player.QualityLadder.default() }
+                    playback.setQuality(com.guangyue.core.player.QualityLadder.cycle(ladder, current))
+                },
+                onOpenLyrics = { navController.navigate(Routes.LYRIC_FLOW) },
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Routes.LYRIC_FLOW) {
+            val vm: LyricsViewModel = hiltViewModel()
+            val sync by vm.syncState.collectAsStateWithLifecycle()
+            LyricFlowScreen(
+                vm = vm,
+                state = sync,
+                playback = playbackState,
+                accent = accent,
+                onBack = { navController.popBackStack() },
+                onSwitchStage = { navController.navigate(Routes.LYRIC_STAGE) },
+            )
+        }
+
+        composable(Routes.LYRIC_STAGE) {
+            val vm: LyricsViewModel = hiltViewModel()
+            val sync by vm.syncState.collectAsStateWithLifecycle()
+            LyricStageScreen(
+                vm = vm,
+                state = sync,
+                playback = playbackState,
+                onTogglePlay = { playback.toggle() },
+                onBack = { navController.navigate(Routes.LYRIC_FLOW) },
+            )
         }
     }
 }
-

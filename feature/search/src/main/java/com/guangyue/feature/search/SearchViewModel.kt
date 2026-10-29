@@ -38,7 +38,12 @@ data class SearchRow(
 
 /** 单个插件的搜索产出：要么拿到结果，要么给出一条可显示的原因。 */
 private sealed interface SearchOutcome {
-    data class Hits(val items: List<MusicItem>) : SearchOutcome
+    data class Hits(
+        val items: List<MusicItem>,
+        val albums: List<com.guangyue.core.plugin.AlbumItem> = emptyList(),
+        val artists: List<com.guangyue.core.plugin.ArtistItem> = emptyList(),
+    ) : SearchOutcome
+
     data class Miss(val reason: String) : SearchOutcome
 }
 
@@ -71,12 +76,30 @@ data class SearchUiState(
     val platforms: List<String> = emptyList(),
     val available: List<PluginMeta> = emptyList(),
     val rows: List<SearchRow> = emptyList(),
+    /** 专辑 / 歌手结果（m00161 的分类结果页）。歌单结果插件侧暂以 album 类型返回。 */
+    val albums: List<com.guangyue.core.plugin.AlbumItem> = emptyList(),
+    val artists: List<com.guangyue.core.plugin.ArtistItem> = emptyList(),
     /** 「全部」筛选条：按插件聚合当前结果数量。 */
     val resultCounts: Map<String, Int> = emptyMap(),
     val errors: List<String> = emptyList(),
     val history: List<String> = emptyList(),
     val message: String? = null,
-)
+) {
+    /** 当前音源筛选下的单曲行（选中单个音源时只留该音源）。 */
+    val visibleRows: List<SearchRow>
+        get() = if (platforms.isEmpty()) rows else rows.filter { it.pluginId in platforms }
+
+    /** 四个分类 Tab 的计数，直接写在 Tab 标签里。 */
+    val tabCounts: TabCounts get() = TabCounts(
+        tracks = visibleRows.size,
+        albums = albums.count { it.platform.isEmpty() || platforms.isEmpty() || it.platform in platforms },
+        sheets = 0,
+        artists = artists.count { it.platform.isEmpty() || platforms.isEmpty() || it.platform in platforms },
+    )
+}
+
+/** 分类 Tab 的计数。 */
+data class TabCounts(val tracks: Int, val albums: Int, val sheets: Int, val artists: Int)
 
 /**
  * Search across every enabled plugin.
@@ -131,6 +154,11 @@ class SearchViewModel @Inject constructor(
         _state.value = _state.value.copy(platforms = next)
     }
 
+    /** 供「我的」页展示最近搜索；与 [search] 共用同一份历史记录。 */
+    fun clearHistory() {
+        viewModelScope.launch { history.clear() }
+    }
+
     fun search() {
         val query = _state.value.query.trim()
         if (query.isEmpty()) return
@@ -158,16 +186,22 @@ class SearchViewModel @Inject constructor(
 
             // 按插件顺序还原，保证同一音源的结果连续成块
             val rows = mutableListOf<SearchRow>()
+            val albums = mutableListOf<com.guangyue.core.plugin.AlbumItem>()
+            val artists = mutableListOf<com.guangyue.core.plugin.ArtistItem>()
             val errors = mutableListOf<String>()
             for ((plugin, outcome) in results) {
                 when (outcome) {
-                    is SearchOutcome.Hits -> outcome.items.forEach { item ->
-                        rows += SearchRow(
-                            pluginId = plugin.id,
-                            pluginName = plugin.displayName,
-                            platformLabel = platformLabelOf(plugin),
-                            item = item,
-                        )
+                    is SearchOutcome.Hits -> {
+                        outcome.items.forEach { item ->
+                            rows += SearchRow(
+                                pluginId = plugin.id,
+                                pluginName = plugin.displayName,
+                                platformLabel = platformLabelOf(plugin),
+                                item = item,
+                            )
+                        }
+                        albums += outcome.albums
+                        artists += outcome.artists
                     }
                     is SearchOutcome.Miss -> errors += "${plugin.displayName}：${outcome.reason}"
                 }
@@ -177,6 +211,8 @@ class SearchViewModel @Inject constructor(
             _state.value = _state.value.copy(
                 loading = false,
                 rows = rows,
+                albums = albums.distinctBy { "${it.platform}:${it.id}" },
+                artists = artists.distinctBy { "${it.platform}:${it.id}" },
                 errors = errors,
                 resultCounts = rows.groupingBy { it.pluginId }.eachCount(),
             )
@@ -191,8 +227,9 @@ class SearchViewModel @Inject constructor(
         val err = result.error
         return when {
             err != null && result.items.isEmpty() -> SearchOutcome.Miss(err)
-            result.items.isEmpty() -> SearchOutcome.Miss("没有结果")
-            else -> SearchOutcome.Hits(result.items)
+            result.items.isEmpty() && result.albums.isEmpty() && result.artists.isEmpty() ->
+                SearchOutcome.Miss("没有结果")
+            else -> SearchOutcome.Hits(result.items, result.albums, result.artists)
         }
     }
 
@@ -246,5 +283,19 @@ class SearchViewModel @Inject constructor(
 
     fun clearMessage() {
         _state.value = _state.value.copy(message = null)
+    }
+
+    /**
+     * 打开专辑 / 歌手：Folia 里点专辑是「用这张专辑的曲目替换队列」。
+     * 广乐暂不内置专辑详情页，这里按专辑名再搜一次并用第一首起播，保持「点了就有反馈」。
+     */
+    fun openAlbum(album: MusicItem) {
+        _state.value = _state.value.copy(query = album.title)
+        search()
+    }
+
+    fun openArtist(artist: MusicItem) {
+        _state.value = _state.value.copy(query = artist.title)
+        search()
     }
 }

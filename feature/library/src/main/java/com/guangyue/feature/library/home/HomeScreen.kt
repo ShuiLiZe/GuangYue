@@ -1,13 +1,11 @@
 package com.guangyue.feature.library.home
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -17,391 +15,432 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.guangyue.feature.library.design.FoliaButton
+import com.guangyue.feature.library.design.FoliaButtonVariant
+import com.guangyue.feature.library.design.FoliaSectionTitle
+import com.guangyue.feature.library.design.FoliaTopBar
 import com.guangyue.feature.library.design.GuangYueDesign
+import com.guangyue.feature.library.design.GyMotion
+import com.guangyue.feature.library.design.GyRadius
+import com.guangyue.feature.library.design.GySpace
+import com.guangyue.feature.library.design.GyText
 import com.guangyue.feature.library.design.Gyp
+import com.guangyue.feature.library.design.glassPanel
+import com.guangyue.feature.library.design.icons.GuangYueIcons
 import com.guangyue.feature.library.design.marbleBackground
-import kotlin.math.abs
 
-/** One card on the home coverflow. */
-data class ShelfCard(
-    val id: Long,
+/** One tile in a home row (歌单 / 专辑 / 最近播放). */
+data class HomeTile(
+    val key: String,
     val title: String,
     val subtitle: String,
-    val artworkUrl: String? = null,
+    val artwork: String? = null,
+    /** 四角标记：歌单/专辑/单曲，决定占位图形。 */
+    val kind: HomeTileKind = HomeTileKind.PLAYLIST,
 )
 
+enum class HomeTileKind { PLAYLIST, ALBUM, TRACK, STATION }
+
 /**
- * 首页 — the light marble landing page.
+ * 首页：只放内容。
  *
- * Layers, bottom to top: liquid-marble gradient → marble veins → fine dot texture → content.
- * Google blue only shows up in the selected tab capsule, the mini progress bar and the play
- * button, exactly as specified.
+ * 结构照 m00161：顶部「广乐」标题（衬线）→ 推荐歌单封面流 → 最近播放 → 热门榜单。
+ * 插件、下载这类管理入口一律不在这里出现；没有任何数据时，每一段都给出占位视觉与
+ * 一句引导（「去添加音源」直接跳插件页），而不是留一片空白。
  */
 @Composable
 fun HomeScreen(
-    cards: List<ShelfCard>,
-    selectedTab: Int,
-    tabs: List<String>,
-    onTabSelected: (Int) -> Unit,
-    onSearch: () -> Unit,
-    onOpenCard: (ShelfCard) -> Unit,
-    onPluginManager: () -> Unit,
-    onDownloads: () -> Unit = {},
+    recommended: List<HomeTile>,
+    recent: List<HomeTile>,
+    charts: List<HomeTile>,
+    hasAnyPlugin: Boolean,
+    onOpenTile: (HomeTile) -> Unit,
+    onOpenPlugins: () -> Unit,
+    onOpenPlayer: () -> Unit,
     playbackTitle: String,
     playbackArtwork: String?,
-    progress: Float,
+    playbackProgress: Float,
     isPlaying: Boolean,
     onTogglePlay: () -> Unit,
-    onOpenNowPlaying: () -> Unit,
     modifier: Modifier = Modifier,
     bottomBar: (@Composable () -> Unit)? = null,
+    miniPlayer: (@Composable () -> Unit)? = null,
 ) {
-    var center by remember(cards) { mutableIntStateOf(0) }
-
-    Box(
-        modifier = modifier
+    Column(
+        modifier
             .fillMaxSize()
             .marbleBackground(),
     ) {
-        Column(Modifier.fillMaxSize()) {
-            Spacer(Modifier.height(44.dp))
+        // 掉帧冒烟：DEBUG 下逐帧采样，logcat（tag GyJank）每 120 帧一行汇总；
+        // release 里 GyJank.Enabled 是常量 false，整段统计被 R8 摘掉。
+        com.guangyue.feature.library.perf.TrackScrollFrames()
+        Column(Modifier.weight(1f).fillMaxWidth()) {
+            FoliaTopBar(
+                title = "广乐",
+                serif = true,
+                actions = {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(GyRadius.fieldShape())
+                            .clickable(onClick = onOpenPlayer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = GuangYueIcons.AudioLines,
+                            contentDescription = "播放页",
+                            tint = Gyp.ink,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                },
+            )
 
-            // ── top bar: app name ←→ search capsule
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 22.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = GySpace.xl),
             ) {
-                Text(
-                    "广乐",
-                    fontSize = 27.sp,
-                    fontFamily = FontFamily.Serif,
-                    fontWeight = FontWeight.Bold,
-                    color = Gyp.ink,
-                    modifier = Modifier.clickable { onPluginManager() },
-                )
-                Spacer(Modifier.weight(1f))
-                DownloadEntry(onClick = onDownloads)
-                Spacer(Modifier.width(10.dp))
-                SearchCapsule(onClick = onSearch)
+                item(key = "recommend-title") {
+                    FoliaSectionTitle("推荐歌单")
+                }
+                item(key = "recommend-row") {
+                    if (recommended.isEmpty()) {
+                        EmptyStrip(
+                            icon = GuangYueIcons.LibraryBig,
+                            text = if (hasAnyPlugin) "还没有推荐，去搜索喜欢的歌吧" else "还没有音源插件",
+                            action = if (hasAnyPlugin) null else "去添加音源",
+                            onAction = onOpenPlugins,
+                        )
+                    } else {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = GySpace.pageH),
+                            horizontalArrangement = Arrangement.spacedBy(GySpace.m),
+                        ) {
+                            items(recommended, key = { it.key }) { tile ->
+                                PosterTile(tile = tile, width = 152.dp, onClick = { onOpenTile(tile) })
+                            }
+                        }
+                    }
+                }
+
+                item(key = "recent-title") {
+                    FoliaSectionTitle("最近播放")
+                }
+                item(key = "recent-row") {
+                    if (recent.isEmpty()) {
+                        EmptyStrip(
+                            icon = GuangYueIcons.History,
+                            text = "还没有播放记录",
+                        )
+                    } else {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = GySpace.pageH),
+                            horizontalArrangement = Arrangement.spacedBy(GySpace.m),
+                        ) {
+                            items(recent, key = { it.key }) { tile ->
+                                SquareTile(tile = tile, size = 112.dp, onClick = { onOpenTile(tile) })
+                            }
+                        }
+                    }
+                }
+
+                item(key = "charts-title") {
+                    FoliaSectionTitle("热门榜单")
+                }
+                if (charts.isEmpty()) {
+                    item(key = "charts-empty") {
+                        EmptyStrip(
+                            icon = GuangYueIcons.LibraryBig,
+                            text = if (hasAnyPlugin) "音源还没有返回榜单" else "添加音源后这里出现榜单",
+                            action = if (hasAnyPlugin) null else "去添加音源",
+                            onAction = onOpenPlugins,
+                        )
+                    }
+                } else {
+                    items(charts, key = { it.key }) { tile ->
+                        ChartRow(tile = tile, onClick = { onOpenTile(tile) })
+                    }
+                }
             }
+        }
 
-            Spacer(Modifier.height(20.dp))
+        // 迷你播放条浮在底栏上方；底栏本身由 App 外壳传入（二级页与播放页不传）。
+        miniPlayer?.invoke()
+        bottomBar?.invoke()
+    }
+}
 
-            // ── segmented capsule tabs: 歌单 / 电台 / 专辑 / 本地
-            SegmentedTabs(tabs = tabs, selected = selectedTab, onSelected = onTabSelected)
-
-            Spacer(Modifier.height(18.dp))
-
-            // ── polaroid coverflow
-            Coverflow(
-                cards = cards,
-                center = center,
-                onCenterChange = { center = it },
-                onOpen = onOpenCard,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(250.dp),
+/** 一段的空状态：一块 4:3 的占位图 + 一行说明（+ 可选引导按钮），不写「暂无内容」这种死文案。 */
+@Composable
+private fun EmptyStrip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    action: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    val hairline = Gyp.hairline
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = GySpace.pageH),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 88.dp, height = 88.dp)
+                .clip(RoundedCornerShape(GyRadius.row))
+                .background(Gyp.tint)
+                .drawBehind {
+                    // Folia 的空态是极简的：只有一层描边和居中的图标，没有插画。
+                    drawRect(
+                        color = hairline,
+                        topLeft = Offset.Zero,
+                        size = Size(size.width, 1f),
+                    )
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Gyp.t3,
+                modifier = Modifier.size(26.dp),
             )
-
-            Spacer(Modifier.height(10.dp))
-
-            // ── big serif headline under the flow
-            val current = cards.getOrNull(center)
+        }
+        Spacer(Modifier.width(GySpace.m))
+        Column(Modifier.weight(1f)) {
             Text(
-                current?.title ?: "还没有歌单",
-                fontSize = 26.sp,
-                fontFamily = FontFamily.Serif,
-                fontWeight = FontWeight.Bold,
-                color = Gyp.ink,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 26.dp),
+                text = text,
+                fontSize = GyText.row,
+                lineHeight = GyText.rowHeight,
+                color = Gyp.t2,
+                fontFamily = GuangYueDesign.Sans,
             )
-            Text(
-                current?.subtitle ?: "从插件搜索一首歌，收藏成自己的歌单",
-                fontSize = 12.sp,
-                color = Gyp.inkSoft,
-                modifier = Modifier.padding(horizontal = 26.dp, vertical = 4.dp),
-            )
-
-            Spacer(Modifier.weight(1f))
-
-            // ── floating capsule mini player
-            MiniPlayerBar(
-                title = playbackTitle,
-                artwork = playbackArtwork,
-                progress = progress,
-                isPlaying = isPlaying,
-                onTogglePlay = onTogglePlay,
-                onOpen = onOpenNowPlaying,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
-            )
-
-            // ── 底部导航（由 App 外壳传入；单独预览/截图时不传，页面自身仍然完整）
-            bottomBar?.invoke()
+            if (action != null && onAction != null) {
+                Spacer(Modifier.height(GySpace.xs))
+                FoliaButton(
+                    text = action,
+                    onClick = onAction,
+                    variant = FoliaButtonVariant.Fill,
+                )
+            }
         }
     }
 }
 
+/**
+ * 海报卡：Folia `Lattice` 的拍立得质感 —— 圆角 4dp、内侧描边 `--st-line`、
+ * 封面按 3:4，标题 13/18、副标题 12/18 色 `--st-t2`。
+ */
 @Composable
-private fun SearchCapsule(onClick: () -> Unit) {
-    Row(
-        Modifier
-            .width(168.dp)
-            .height(40.dp)
-            .clip(CircleShape)
-            .background(Gyp.card.copy(alpha = if (Gyp.isDark) 0.10f else 0.72f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun PosterTile(tile: HomeTile, width: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(width)
+            .clip(RoundedCornerShape(GyRadius.field))
+            .clickable(onClick = onClick),
     ) {
-        Icon(
-            Icons.Filled.Search,
-            contentDescription = "搜索",
-            tint = Gyp.ink.copy(alpha = 0.45f),
-            modifier = Modifier.size(18.dp),
+        ArtworkFrame(
+            artwork = tile.artwork,
+            title = tile.title,
+            kind = tile.kind,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(width * 1.32f),
         )
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.height(GySpace.s))
         Text(
-            "搜索歌曲、歌手",
-            fontSize = 12.sp,
-            color = Gyp.ink.copy(alpha = 0.4f),
+            text = tile.title,
+            fontSize = GyText.label,
+            lineHeight = GyText.labelHeight,
+            fontWeight = FontWeight.Medium,
+            color = Gyp.ink,
+            fontFamily = GuangYueDesign.Sans,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = tile.subtitle,
+            fontSize = GyText.hint,
+            lineHeight = GyText.hintHeight,
+            color = Gyp.t2,
+            fontFamily = GuangYueDesign.Sans,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
     }
 }
 
-/** 顶栏的下载入口：圆角方块 + 云下载图标，作为「下载管理」页的常驻入口。 */
+/** 方图卡（最近播放/专辑）：封面 1:1、圆角 8dp，标题在下方两行内。 */
 @Composable
-private fun DownloadEntry(onClick: () -> Unit) {
-    Box(
-        Modifier
-            .size(40.dp)
-            .clip(CircleShape)
-            .background(Gyp.card.copy(alpha = if (Gyp.isDark) 0.10f else 0.72f))
+private fun SquareTile(tile: HomeTile, size: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(size)
+            .clip(RoundedCornerShape(GyRadius.field))
             .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            Icons.Filled.CloudDownload,
-            contentDescription = "下载管理",
-            tint = GuangYueDesign.Blue,
-            modifier = Modifier.size(20.dp),
+        ArtworkFrame(
+            artwork = tile.artwork,
+            title = tile.title,
+            kind = tile.kind,
+            modifier = Modifier.size(size),
+        )
+        Spacer(Modifier.height(GySpace.xs))
+        Text(
+            text = tile.title,
+            fontSize = GyText.hint,
+            lineHeight = GyText.hintHeight,
+            color = Gyp.ink,
+            fontFamily = GuangYueDesign.Sans,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
 
+/** 榜单行：左侧 56dp 封面，右侧标题 + 说明，最右一个 chevron。 */
 @Composable
-private fun SegmentedTabs(tabs: List<String>, selected: Int, onSelected: (Int) -> Unit) {
+private fun ChartRow(tile: HomeTile, onClick: () -> Unit) {
     Row(
-        Modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 22.dp)
-            .height(44.dp)
-            .clip(RoundedCornerShape(GuangYueDesign.RadiusTab.dp))
-            .background(Gyp.card.copy(alpha = if (Gyp.isDark) 0.08f else 0.55f))
-            .padding(4.dp),
+            .clickable(onClick = onClick)
+            .padding(horizontal = GySpace.pageH, vertical = GySpace.xs)
+            .height(GySpace.rowMin),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        tabs.forEachIndexed { index, label ->
-            val active = index == selected
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(GuangYueDesign.RadiusTabItem.dp))
-                    .background(if (active) GuangYueDesign.Blue else Color.Transparent)
-                    .clickable { onSelected(index) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label,
-                    fontSize = 13.sp,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (active) Color.White else Gyp.ink.copy(alpha = 0.65f),
-                )
-            }
+        ArtworkFrame(
+            artwork = tile.artwork,
+            title = tile.title,
+            kind = tile.kind,
+            modifier = Modifier.size(48.dp),
+        )
+        Spacer(Modifier.width(GySpace.m))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = tile.title,
+                fontSize = GyText.row,
+                lineHeight = GyText.rowHeight,
+                fontWeight = FontWeight.Medium,
+                color = Gyp.ink,
+                fontFamily = GuangYueDesign.Sans,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = tile.subtitle,
+                fontSize = GyText.hint,
+                lineHeight = GyText.hintHeight,
+                color = Gyp.t2,
+                fontFamily = GuangYueDesign.Sans,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
+        Icon(
+            imageVector = GuangYueIcons.ChevronRight,
+            contentDescription = null,
+            tint = Gyp.t3,
+            modifier = Modifier.size(16.dp),
+        )
     }
 }
 
 /**
- * Hand-rolled coverflow: no pager, so we get the exact Folia look — the middle polaroid is
- * scaled up with a long soft shadow, neighbours shrink, tilt and fade outwards.
+ * 封面框：有图就裁切显示；没图就画 Folia 的占位——底色 `--st-fill` 加一个居中图标，
+ * 歌单类再加顶部两条「卡片条」（`Lattice.css` 里 stack 的 76%/88% 两条 5px 高）。
  */
 @Composable
-private fun Coverflow(
-    cards: List<ShelfCard>,
-    center: Int,
-    onCenterChange: (Int) -> Unit,
-    onOpen: (ShelfCard) -> Unit,
+private fun ArtworkFrame(
+    artwork: String?,
+    title: String,
+    kind: HomeTileKind,
     modifier: Modifier = Modifier,
+    fallbackIcon: androidx.compose.ui.graphics.vector.ImageVector = GuangYueIcons.Music,
 ) {
-    if (cards.isEmpty()) {
-        // 没有歌单时不画空盒子：下面的「还没有歌单 / 从插件搜索一首歌…」两行大字就是这一块的
-        // 空状态，再叠一个「暂无内容」只会重复。
-        Box(modifier)
-        return
-    }
-
-    BoxWithTap(
-        modifier = modifier,
-        onTap = { onOpen(cards[center.coerceIn(0, cards.lastIndex)]) },
-        onSwipeLeft = { onCenterChange((center + 1).coerceAtMost(cards.lastIndex)) },
-        onSwipeRight = { onCenterChange((center - 1).coerceAtLeast(0)) },
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(GyRadius.field))
+            .background(Gyp.fill2),
     ) {
-        cards.forEachIndexed { index, card ->
-            val offset = index - center
-            val distance = abs(offset).coerceAtMost(3)
-            val scale by animateFloatAsState(
-                targetValue = when (distance) {
-                    0 -> 1.25f
-                    1 -> 0.9f
-                    2 -> 0.74f
-                    else -> 0.62f
-                },
-                label = "scale",
+        if (artwork != null) {
+            AsyncImage(
+                model = artwork,
+                contentDescription = title,
+                modifier = Modifier.fillMaxSize(),
             )
-            val alpha = when (distance) {
-                0 -> 1f
-                1 -> 0.88f
-                2 -> 0.55f
-                else -> 0.3f
+        } else {
+            val icon = when (kind) {
+                HomeTileKind.PLAYLIST -> GuangYueIcons.ListMusic
+                HomeTileKind.ALBUM -> GuangYueIcons.Disc3
+                HomeTileKind.TRACK -> GuangYueIcons.Music
+                HomeTileKind.STATION -> GuangYueIcons.Radio
             }
-            val shiftPx = offset * 118
-
-            Box(
-                Modifier
+            if (kind == HomeTileKind.PLAYLIST || kind == HomeTileKind.ALBUM) {
+                PlaylistStack()
+            }
+            Icon(
+                imageVector = if (kind == HomeTileKind.PLAYLIST || kind == HomeTileKind.ALBUM) icon else fallbackIcon,
+                contentDescription = null,
+                tint = Gyp.t3,
+                modifier = Modifier
                     .align(Alignment.Center)
-                    .graphicsLayer {
-                        translationX = shiftPx.dp.toPx()
-                        translationY = distance * 6f
-                        rotationZ = when (distance) {
-                            0 -> 0f
-                            1 -> if (offset < 0) -7f else 7f
-                            else -> if (offset < 0) -13f else 13f
-                        }
-                        scaleX = scale
-                        scaleY = scale
-                        this.alpha = alpha
-                    }
-                    .width(150.dp)
-                    .height(196.dp)
-                    .then(
-                        if (distance == 0) {
-                            Modifier.shadow(
-                                elevation = 22.dp,
-                                shape = RoundedCornerShape(GuangYueDesign.RadiusPolaroid.dp),
-                                ambientColor = Color(0x55244872),
-                                spotColor = Color(0x66244872),
-                            )
-                        } else {
-                            Modifier
-                        },
-                    )
-                    .clip(RoundedCornerShape(GuangYueDesign.RadiusPolaroid.dp))
-                    .background(Color.White)
-                    .padding(8.dp)
-                    .clickable { onCenterChange(index) },
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(Brush.linearGradient(listOf(Color(0xFFDCE5F3), Color(0xFFF0E8E0)))),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (card.artworkUrl != null) {
-                        AsyncImage(
-                            model = card.artworkUrl,
-                            contentDescription = card.title,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        Text(
-                            card.title.take(1),
-                            fontFamily = FontFamily.Serif,
-                            fontSize = 42.sp,
-                            color = Gyp.ink.copy(alpha = 0.35f),
-                        )
-                    }
-                }
-            }
+                    .size(28.dp),
+            )
         }
     }
 }
 
-/** Tap = open, horizontal drag = move the coverflow. */
+/** Folia 歌单占位：顶部两条错位卡片条（5px 高，宽 76% / 88%）。 */
 @Composable
-private fun BoxWithTap(
-    modifier: Modifier = Modifier,
-    onTap: () -> Unit,
-    onSwipeLeft: () -> Unit,
-    onSwipeRight: () -> Unit,
-    content: @Composable BoxScope.() -> Unit,
-) {
-    Box(
-        modifier = modifier
-            .pointerInput(onTap, onSwipeLeft, onSwipeRight) {
-                val threshold = 60.dp.toPx()
-                var dragged = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { dragged = 0f },
-                    onDragEnd = {
-                        if (dragged < -threshold) onSwipeLeft()
-                        if (dragged > threshold) onSwipeRight()
-                        dragged = 0f
-                    },
-                    onDragCancel = { dragged = 0f },
-                    onHorizontalDrag = { _, dragAmount ->
-                        dragged = if (dragged * dragAmount > 0f) dragged + dragAmount else dragAmount
-                    },
-                )
-            }
-            .pointerInput(onTap) { detectTapGestures { onTap() } },
-        contentAlignment = Alignment.Center,
-        content = content,
-    )
+private fun PlaylistStack() {
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxWidth(0.76f)
+                .height(5.dp)
+                .align(Alignment.TopCenter)
+                .background(Gyp.t3.copy(alpha = 0.34f)),
+        )
+        Box(
+            Modifier
+                .fillMaxWidth(0.88f)
+                .height(5.dp)
+                .align(Alignment.TopCenter)
+                .padding(top = 5.dp)
+                .background(Gyp.t3.copy(alpha = 0.58f)),
+        )
+    }
 }
 
+/**
+ * 迷你播放条：Folia 的悬浮胶囊（`LatticeChrome.css` 移动端：高 86dp 太厚，这里按手机
+ * 习惯取 56dp；圆角走 pill、底为磨砂玻璃、进度线 2dp、时间 12sp 等宽）。
+ */
 @Composable
-private fun MiniPlayerBar(
+fun FoliaMiniPlayer(
     title: String,
+    subtitle: String,
     artwork: String?,
     progress: Float,
     isPlaying: Boolean,
@@ -410,82 +449,107 @@ private fun MiniPlayerBar(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier
+        modifier = modifier
             .fillMaxWidth()
-            .height(64.dp)
-            .shadow(
-                elevation = 14.dp,
-                shape = RoundedCornerShape(GuangYueDesign.RadiusCapsule.dp),
-                ambientColor = Color(0x88244872),
-                spotColor = Color(0x88244872),
-            )
-            .clip(RoundedCornerShape(GuangYueDesign.RadiusCapsule.dp))
-            .background(Gyp.card.copy(alpha = if (Gyp.isDark) 0.10f else 0.68f))
-            .clickable { onOpen() }
-            .padding(horizontal = 10.dp),
+            .padding(horizontal = GySpace.m, vertical = GySpace.xs)
+            .height(56.dp)
+            .clip(RoundedCornerShape(GyRadius.capsule))
+            .glassPanel(corner = GyRadius.capsule)
+            .clickable(onClick = onOpen)
+            .padding(horizontal = GySpace.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(Color(0xFFDCE5F3)),
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(GyRadius.field))
+                .background(Gyp.fill2),
             contentAlignment = Alignment.Center,
         ) {
             if (artwork != null) {
                 AsyncImage(model = artwork, contentDescription = title, modifier = Modifier.fillMaxSize())
             } else {
-                Text("♪", color = Gyp.ink.copy(alpha = 0.4f))
+                Icon(
+                    imageVector = GuangYueIcons.Music,
+                    contentDescription = null,
+                    tint = Gyp.t3,
+                    modifier = Modifier.size(16.dp),
+                )
             }
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(GySpace.m))
         Column(Modifier.weight(1f)) {
             Text(
-                title,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
+                text = title,
+                fontSize = GyText.label,
+                lineHeight = GyText.labelHeight,
+                fontWeight = FontWeight.Medium,
                 color = Gyp.ink,
+                fontFamily = GuangYueDesign.Sans,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(6.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(2.5.dp)
-                    .clip(CircleShape)
-                    .background(Gyp.ink.copy(alpha = 0.12f)),
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(progress.coerceIn(0f, 1f))
-                        .height(2.5.dp)
-                        .background(GuangYueDesign.Blue),
-                )
-            }
+            Text(
+                text = subtitle,
+                fontSize = GyText.hint,
+                lineHeight = GyText.hintHeight,
+                color = Gyp.t2,
+                fontFamily = GuangYueDesign.Sans,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(GySpace.xxs))
+            ProgressLine(progress = progress)
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(GySpace.s))
         Box(
-            Modifier
-                .size(42.dp)
+            modifier = Modifier
+                .size(36.dp)
                 .clip(CircleShape)
-                .background(GuangYueDesign.Blue),
+                .background(Gyp.accent)
+                .clickable(onClick = onTogglePlay),
             contentAlignment = Alignment.Center,
         ) {
-            IconButton(onClick = onTogglePlay) {
-                Icon(
-                    if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = "播放/暂停",
-                    tint = Color.White,
-                )
-            }
+            Icon(
+                imageVector = if (isPlaying) GuangYueIcons.Pause else GuangYueIcons.Play,
+                contentDescription = if (isPlaying) "暂停" else "播放",
+                tint = Gyp.onAccent,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }
 
-/**
- * The signature home background: five stacked soft radial washes (white / ice blue / warm sand)
- * over a diagonal gradient, then SVG-style marble veins, then a 1px every-7px dot grid.
- */
+/** 一条 2dp 的进度线（Folia 进度条高 2px，圆角 4px，底 `--st-track`、前景强调色）。 */
+@Composable
+fun ProgressLine(progress: Float, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(2.dp)
+            .clip(CircleShape)
+            .background(Gyp.track),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(progress.coerceIn(0f, 1f))
+                .fillMaxHeight()
+                .clip(CircleShape)
+                .background(Gyp.accent),
+        )
+    }
+}
 
+/** Folia 顶栏在深色下需要一点分隔：1dp 发丝线。 */
+@Composable
+internal fun TopHairline(modifier: Modifier = Modifier) {
+    val color = Gyp.hairline
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .drawBehind { drawRect(color) },
+    )
+}
 
+internal val FoliaMotionEase = GyMotion.easeOut

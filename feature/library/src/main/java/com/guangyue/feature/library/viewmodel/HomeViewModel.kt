@@ -8,10 +8,14 @@ import com.guangyue.core.data.model.TrackEntity
 import com.guangyue.core.data.repository.PlaylistRepository
 import com.guangyue.core.data.repository.TrackRepository
 import com.guangyue.core.plugin.InstallResult
+import com.guangyue.core.plugin.MusicItem
+import com.guangyue.core.plugin.MusicPluginBridge
 import com.guangyue.core.plugin.PluginManager
 import com.guangyue.core.plugin.PluginMeta
+import com.guangyue.core.plugin.SearchType
 import com.guangyue.core.plugin.UpdateCheck
-import com.guangyue.feature.library.home.ShelfCard
+import com.guangyue.feature.library.home.HomeTile
+import com.guangyue.feature.library.home.HomeTileKind
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,62 +27,157 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Home tab order: 歌单 / 电台 / 专辑 / 本地. */
-enum class HomeTab(val label: String) {
-    SHELF("歌单"),
-    RADIO("电台"),
-    ALBUM("专辑"),
-    LOCAL("本地"),
-}
-
+/**
+ * 首页的数据：三段内容（推荐 / 最近 / 榜单）+ 是否装过插件。
+ *
+ * 内容全部来自本地库与已启用插件；插件、下载这类管理入口不进首页（m00161）。
+ */
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val playlists: PlaylistRepository,
     private val tracks: TrackRepository,
+    private val plugins: PluginManager,
+    private val bridge: MusicPluginBridge,
     db: GuangYueDatabase,
 ) : ViewModel() {
 
-    private val stationDao = db.stationDao()
+    /** 已启用的插件，供「推荐/榜单」去拉数据，也用来决定空状态文案。 */
+    val enabledPlugins: StateFlow<List<PluginMeta>> =
+        plugins.plugins.map { list -> list.filter { it.enabled } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val _tab = MutableStateFlow(HomeTab.SHELF)
-    val tab: StateFlow<HomeTab> = _tab.asStateFlow()
+    /** 本地歌单（推荐段的第一来源）。 */
+    val playlistsFlow: StateFlow<List<HomeTile>> = playlists.playlists()
+        .map { list -> list.map { it.toTile() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val cards: StateFlow<List<ShelfCard>> = combine(
-        playlists.playlists(),
-        tracks.recentlyPlayed(20),
-        tracks.localTracks(),
-        stationDao.observeAll(),
-    ) { shelves, recent, local, stations ->
-        when (_tab.value) {
-            HomeTab.SHELF -> shelves.map { it.toCard() }.ifEmpty {
-                recent.map { ShelfCard(it.key.hashCode().toLong(), it.title, it.artist, it.artwork) }
+    /** 最近播放（最多 20 条，按播放时间倒序由 DAO 保证）。 */
+    val recentTiles: StateFlow<List<HomeTile>> = tracks.recentlyPlayed(20)
+        .map { list -> list.map { it.toTile() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** 最近播放的原始曲目，点歌时直接进队列。 */
+    val currentTracks: StateFlow<List<TrackEntity>> = tracks.recentlyPlayed(50)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _charts = MutableStateFlow<List<HomeTile>>(emptyList())
+    val charts: StateFlow<List<HomeTile>> = _charts.asStateFlow()
+
+    private val _loadingCharts = MutableStateFlow(false)
+    val loadingCharts: StateFlow<Boolean> = _loadingCharts.asStateFlow()
+
+    /** 插件返回的榜单条目（按标题缓存），点「热门榜单」时用它播放。 */
+    private val _chartItems = MutableStateFlow<Map<String, MusicItem>>(emptyMap())
+    val chartItems: StateFlow<Map<String, MusicItem>> = _chartItems.asStateFlow()
+
+    private var chartsLoaded = false
+
+    /**
+     * 拉一次榜单：每个已启用插件搜一个通用关键词，取第一页结果做成条目。
+     *
+     * 只在首屏调用一次；失败就保持空列表，让首页显示引导，不弹错误。
+     */
+    fun loadChartsIfNeeded() {
+        if (chartsLoaded) return
+        chartsLoaded = true
+        viewModelScope.launch {
+            val plugins = enabledPlugins.value
+            if (plugins.isEmpty()) return@launch
+            _loadingCharts.value = true
+            val tiles = mutableListOf<HomeTile>()
+            val items = mutableMapOf<String, MusicItem>()
+            plugins.take(6).forEach { plugin ->
+                val hits = runCatching {
+                    bridge.search(plugin.id, "热歌", 1, SearchType.MUSIC).items
+                }.getOrDefault(emptyList())
+                hits.take(6).forEach { item ->
+                    val key = "chart:${plugin.id}:${item.title}:${item.displayArtist}"
+                    if (!items.containsKey(key)) {
+                        items[key] = item
+                        tiles += HomeTile(
+                            key = key,
+                            title = item.title,
+                            subtitle = item.displayArtist.ifBlank { plugin.displayName },
+                            artwork = item.artwork,
+                            kind = HomeTileKind.TRACK,
+                        )
+                    }
+                }
             }
-
-            HomeTab.RADIO -> stations.map { ShelfCard(it.id, it.name, "电台 · ${it.seedType}", null) }
-
-            HomeTab.ALBUM -> recent.filter { it.album.isNotBlank() }
-                .distinctBy { it.album }
-                .map { ShelfCard(it.album.hashCode().toLong(), it.album, it.artist, it.artwork) }
-
-            HomeTab.LOCAL -> local.map { ShelfCard(it.key.hashCode().toLong(), it.title, it.artist, it.artwork) }
+            _chartItems.value = items
+            _charts.value = tiles
+            _loadingCharts.value = false
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    /** Tracks of the currently focused tab, used when the user taps "play". */
-    val currentTracks: StateFlow<List<TrackEntity>> = combine(
-        playlists.playlists(),
-        tracks.recentlyPlayed(50),
-        tracks.localTracks(),
-    ) { _, recent, local ->
-        if (_tab.value == HomeTab.LOCAL) local else recent
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    fun selectTab(tab: HomeTab) {
-        _tab.value = tab
     }
 
-    private fun PlaylistEntity.toCard() =
-        ShelfCard(id = id, title = name, subtitle = description ?: "歌单", artworkUrl = artwork)
+    /** 推荐段：本地歌单优先，没有歌单时用最近播放补齐，保证首屏不空。 */
+    fun recommended(playlists: List<HomeTile>, recent: List<HomeTile>): List<HomeTile> =
+        if (playlists.isNotEmpty()) playlists else recent
+
+    /** 「我的」页的计数：我喜欢 / 本地下载。 */
+    val likedCount: StateFlow<Int> = tracks.favorites()
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    val downloadedCount: StateFlow<Int> = tracks.localTracks()
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /**
+     * 点开一个首页 / 歌单卡片后播放它。
+     *
+     * 歌单卡片取该歌单的曲目；单曲卡片（榜单、最近播放）从榜单缓存里补齐来源信息。
+     * 拿不到曲目时不回调，由界面保持原状。
+     */
+    fun playTracksOf(tile: HomeTile, onReady: (List<TrackEntity>, Int) -> Unit) {
+        viewModelScope.launch {
+            val list = when (tile.kind) {
+                HomeTileKind.PLAYLIST -> {
+                    val id = tile.key.substringAfter("playlist:").toLongOrNull()
+                    if (id == null) {
+                        emptyList()
+                    } else {
+                        runCatching { playlists.snapshot(id) }.getOrDefault(emptyList())
+                    }
+                }
+                HomeTileKind.TRACK, HomeTileKind.ALBUM, HomeTileKind.STATION -> {
+                    val item = _chartItems.value[tile.key]
+                    if (item == null) {
+                        val key = tile.key.removePrefix("track:")
+                        runCatching { listOfNotNull(tracks.byKey(key)) }.getOrDefault(emptyList())
+                    } else {
+                        listOf(
+                            TrackEntity(
+                                key = "${item.platform}:${item.id}",
+                                title = item.title,
+                                artist = item.displayArtist,
+                                album = item.album.orEmpty(),
+                                artwork = item.artwork,
+                                source = item.platform,
+                            ),
+                        )
+                    }
+                }
+            }
+            if (list.isNotEmpty()) onReady(list, 0)
+        }
+    }
+
+    private fun PlaylistEntity.toTile() = HomeTile(
+        key = "playlist:$id",
+        title = name,
+        subtitle = description?.takeIf { it.isNotBlank() } ?: "本地歌单",
+        artwork = artwork,
+        kind = HomeTileKind.PLAYLIST,
+    )
+
+    private fun TrackEntity.toTile() = HomeTile(
+        key = "track:$key",
+        title = title,
+        subtitle = artist,
+        artwork = artwork,
+        kind = HomeTileKind.TRACK,
+    )
 }
 
 @HiltViewModel

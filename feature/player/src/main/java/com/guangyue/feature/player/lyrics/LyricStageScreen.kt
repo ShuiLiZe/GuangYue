@@ -14,11 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -49,6 +44,7 @@ import com.guangyue.core.data.lyrics.LyricLine
 import com.guangyue.core.data.lyrics.LyricUiState
 import com.guangyue.core.player.PlaybackState
 import com.guangyue.feature.player.viewmodel.LyricsViewModel
+import com.guangyue.feature.library.design.icons.GuangYueIcons
 import com.guangyue.feature.library.design.GuangYueDesign.Blue as GuangYueBlue
 import kotlin.math.cos
 import kotlin.math.sin
@@ -223,7 +219,7 @@ private fun StagePlayerBar(playback: PlaybackState) {
             }
             Spacer(Modifier.width(10.dp))
             IconButton(onClick = { }) {
-                Icon(Icons.Filled.SkipPrevious, null, tint = Color.White.copy(alpha = 0.75f))
+                Icon(GuangYueIcons.ChevronLeft, null, tint = Color.White.copy(alpha = 0.75f))
             }
             Box(
                 Modifier
@@ -233,13 +229,13 @@ private fun StagePlayerBar(playback: PlaybackState) {
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    if (playback.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    if (playback.isPlaying) GuangYueIcons.Pause else GuangYueIcons.Play,
                     contentDescription = "播放/暂停",
                     tint = Color.White,
                 )
             }
             IconButton(onClick = { }) {
-                Icon(Icons.Filled.SkipNext, null, tint = Color.White.copy(alpha = 0.75f))
+                Icon(GuangYueIcons.ChevronRight, null, tint = Color.White.copy(alpha = 0.75f))
             }
         }
     }

@@ -68,8 +68,8 @@ android {
         targetSdk = 36
         // 版本号按 0.x 小步走：0.0.1 → 0.0.2 → …（tag 与 versionName 一致，不带 v 前缀）。
         // versionCode 必须始终大于上一版，否则装不上去覆盖。
-        versionCode = 5
-        versionName = "0.0.5"
+        versionCode = 6
+        versionName = "0.0.6"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -143,13 +143,13 @@ android {
             isIncludeAndroidResources = true
             isReturnDefaultValues = true
             all { test ->
-                // Roborazzi：截图写到仓库里的 docs/ui-0.0.5/。只在显式传入
+                // Roborazzi：截图写到仓库里的 docs/ui-0.0.6/。只在显式传入
                 // GUANGYUE_RECORD_SCREENSHOTS=true 时录制，平时跑测试不会改仓库文件。
                 test.systemProperty(
                     "roborazzi.test.record",
                     System.getenv("GUANGYUE_RECORD_SCREENSHOTS") ?: "false",
                 )
-                test.systemProperty("roborazzi.output.dir", "${rootDir}/docs/ui-0.0.5")
+                test.systemProperty("roborazzi.output.dir", "${rootDir}/docs/ui-0.0.6")
                 test.maxHeapSize = "3g"
             }
         }
@@ -183,7 +183,8 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.animation)
     implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material.icons.extended)
+    // 0.0.6：图标全部换成 Folia 同款 Lucide 矢量（feature/library 的 GuangYueIcons），
+    // material-icons-core/extended 依赖已移除，不再往包里塞一套 Material 图标。
     debugImplementation(libs.androidx.compose.ui.tooling)
     implementation(libs.androidx.palette.ktx)
 

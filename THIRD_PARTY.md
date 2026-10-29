@@ -1,4 +1,4 @@
-# NOTICE
+# NOTICE ｜ 广乐 GuangYue 版权与致谢
 
 广乐 GuangYue
 Copyright (C) 2026 GuangYue contributors
@@ -11,7 +11,7 @@ Copyright (C) 2026 GuangYue contributors
 
 ## 界面设计来源：Folia
 
-0.0.5 起，广乐的界面层（布局层级、配色、字号字距、圆角与间距、图标与交互动效）改写自
+广乐的界面层（布局层级、配色、字号字距、圆角与间距、图标与交互动效）逐项改写自
 **Folia** 的界面实现。原项目以 AGPL-3.0 授权，与本项目许可一致。
 
 - 项目名：Folia
@@ -21,7 +21,18 @@ Copyright (C) 2026 GuangYue contributors
 
 改写方式：把 Folia 的 React + CSS 组件（`web/.work/folia/src` 下的 `styles/`、`components/`、
 `library/suites/*`）逐一翻译为 Jetpack Compose 组件，保留其视觉规格与交互逻辑；未复制其业务
-代码、插件运行时或文案。
+代码、插件运行时或文案。0.0.6 起对照的具体文件与数值（`baseThemes.ts`、`kitTheme.ts`、
+`kit.css`、`motion.ts`、`kit/*.tsx`、`Segments.tsx`、`LatticeChrome.css`）在
+`docs/ui-0.0.6/REPORT.md` 里逐页列出。
+
+## 随包资源
+
+| 资源 | 用途 | 来源 | 许可 |
+| --- | --- | --- | --- |
+| Lucide 图标（169 枚，转成 `VectorDrawable`/`ImageVector`） | 全应用图标 | https://lucide.dev （Folia 亦用此图标集） | ISC，见 `feature/library/src/main/res/raw/license_lucide.txt` |
+| Noto Serif SC 子集 400/500（`noto_serif_sc_subset_400/500.ttf`） | 「广乐」「我的」等衬线标题 | Google Noto Fonts / SIL | SIL Open Font License 1.1，见 `feature/library/src/main/res/raw/license_noto_serif_sc.txt` |
+
+字体子集只含本应用实际用到的字形（约 0.94 MB，两档合计），未整体打包原字体。
 
 ---
 

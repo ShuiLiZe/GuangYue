@@ -1,10 +1,10 @@
 package com.guangyue.feature.search
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,44 +15,53 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.guangyue.core.plugin.AlbumItem
+import com.guangyue.core.plugin.ArtistItem
+import com.guangyue.core.plugin.MusicItem
+import com.guangyue.core.plugin.PluginMeta
+import com.guangyue.feature.library.design.FoliaSegmented
+import com.guangyue.feature.library.design.FoliaTextField
+import com.guangyue.feature.library.design.FoliaTopBar
+import com.guangyue.feature.library.design.GuangYueDesign
 import com.guangyue.feature.library.design.GyRadius
+import com.guangyue.feature.library.design.GySpace
+import com.guangyue.feature.library.design.GyText
 import com.guangyue.feature.library.design.Gyp
+import com.guangyue.feature.library.design.clickableNoRipple
+import com.guangyue.feature.library.design.icons.GuangYueIcons
 import com.guangyue.feature.library.design.marbleBackground
 
+/** 搜索结果的四个分类（m00161：单曲 / 专辑 / 歌单 / 歌手）。 */
+enum class SearchTab(val label: String) {
+    TRACKS("单曲"),
+    ALBUMS("专辑"),
+    SHEETS("歌单"),
+    ARTISTS("歌手"),
+}
+
 /**
- * Search across plugins.
+ * 搜索页（m00161）。
  *
- * 顶部是一条可横向滑动的音源筛选条（「全部」+ 每个已启用插件），不再把插件数量截断在 4 个；
- * 每张结果卡片右上角带一个显眼的音源角标（[酷我] [QQ] [B站] …），并直接提供下载入口。
+ * 上：搜索框 + 音源切换（横向 chip，含「全部」）；下：结果按四个分类分段展示。
+ * 未搜索时给出搜索历史与推荐关键词。
  */
 @Composable
 fun SearchScreen(
@@ -62,229 +71,511 @@ fun SearchScreen(
     onPickAll: () -> Unit,
     onPickPlatform: (String) -> Unit,
     onPlay: (Int) -> Unit,
-    onAddToSheet: (com.guangyue.core.plugin.MusicItem) -> Unit,
-    onDownload: (com.guangyue.core.plugin.MusicItem) -> Unit,
-    onBack: () -> Unit,
+    onAddToSheet: (MusicItem) -> Unit,
+    onDownload: (MusicItem) -> Unit,
+    onPickHistory: (String) -> Unit,
+    onOpenAlbum: (MusicItem) -> Unit,
+    onOpenArtist: (MusicItem) -> Unit,
+    tab: SearchTab,
+    onTabChange: (SearchTab) -> Unit,
     modifier: Modifier = Modifier,
+    bottomBar: (@Composable () -> Unit)? = null,
+    miniPlayer: (@Composable () -> Unit)? = null,
 ) {
-    Column(
-        modifier
-            .fillMaxSize()
-            .marbleBackground()
-            .padding(horizontal = 18.dp),
-    ) {
-        Spacer(Modifier.height(48.dp))
+    val counts = state.tabCounts
+    Box(modifier.fillMaxSize().marbleBackground()) {
+        Column(Modifier.fillMaxSize()) {
+            FoliaTopBar(title = "搜索")
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, "返回", tint = Gyp.ink)
-            }
-            Row(
-                Modifier
-                    .weight(1f)
-                    .height(44.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(Gyp.cardTranslucent)
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Search, null, tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Box(Modifier.weight(1f)) {
-                    if (state.query.isEmpty()) {
-                        Text("搜索歌曲、歌手", color = Gyp.inkSoft, fontSize = 14.sp)
-                    }
-                    BasicTextField(
-                        value = state.query,
-                        onValueChange = onQueryChange,
-                        singleLine = true,
-                        textStyle = TextStyle(color = Gyp.ink, fontSize = 14.sp),
-                        cursorBrush = SolidColor(Gyp.accent),
-                        modifier = Modifier.fillMaxWidth(),
+            FoliaTextField(
+                value = state.query,
+                onValueChange = onQueryChange,
+                placeholder = "搜索歌曲、歌手、专辑",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = GySpace.pageH),
+                leading = {
+                    Icon(
+                        GuangYueIcons.Search,
+                        null,
+                        tint = Gyp.t3,
+                        modifier = Modifier.size(16.dp),
                     )
-                }
-                Text(
-                    "搜索",
-                    color = Gyp.accent,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable { onSearch() },
-                )
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        if (state.available.isEmpty()) {
-            Spacer(Modifier.height(40.dp))
-            Text(
-                "还没有可用的插件。先去「插件管理」安装一个插件，再回来搜索。",
-                color = Gyp.inkSoft,
-                fontSize = 13.sp,
-            )
-            return@Column
-        }
-
-        // ---- 音源筛选条：横向滑动，不截断，"全部" 常驻第一格
-        LazyRow(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            item(key = "__all__") {
-                SourceChip(
-                    label = "全部",
-                    count = state.resultCounts.values.sum(),
-                    selected = state.platforms.isEmpty(),
-                    onClick = onPickAll,
-                )
-            }
-            items(state.available, key = { it.id }) { plugin ->
-                SourceChip(
-                    label = platformLabelOf(plugin),
-                    count = state.resultCounts[plugin.id] ?: 0,
-                    selected = state.platforms.contains(plugin.id),
-                    onClick = { onPickPlatform(plugin.id) },
-                )
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        if (state.loading) {
-            Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Gyp.accent, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
-            }
-        }
-
-        // 选中单个音源时只展示该音源的结果
-        val visibleRows = if (state.platforms.isEmpty()) {
-            state.rows
-        } else {
-            state.rows.filter { it.pluginId in state.platforms }
-        }
-
-        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-            itemsIndexed(visibleRows) { index, row ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                        .clickable { onPlay(index) },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AsyncImage(
-                        model = row.item.artwork,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Gyp.tint),
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            // 醒目的音源角标
-                            Box(
-                                Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Gyp.tint)
-                                    .padding(horizontal = 5.dp, vertical = 1.dp),
-                            ) {
-                                Text(
-                                    "[${row.platformLabel}]",
-                                    color = Gyp.accentText,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                            }
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                row.item.title,
-                                color = Gyp.ink,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                },
+                trailing = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (state.query.isNotEmpty()) {
+                            Icon(
+                                GuangYueIcons.X,
+                                "清空",
+                                tint = Gyp.t3,
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clickableNoRipple { onQueryChange("") },
                             )
+                            Spacer(Modifier.width(GySpace.s))
                         }
                         Text(
-                            row.item.displayArtist,
-                            color = Gyp.inkSoft,
-                            fontSize = 11.sp,
+                            text = "搜索",
+                            fontSize = GyText.label,
+                            color = Gyp.ink,
+                            fontFamily = GuangYueDesign.Sans,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.clickableNoRipple { onSearch() },
+                        )
+                    }
+                },
+            )
+
+            Spacer(Modifier.height(GySpace.m))
+
+            if (state.available.isEmpty()) {
+                Spacer(Modifier.height(GySpace.xl))
+                com.guangyue.feature.library.design.FoliaEmptyState(
+                    title = "还没有可用的音源",
+                    subtitle = "先在「我的 · 音源插件管理」里安装一个插件",
+                    modifier = Modifier.padding(horizontal = GySpace.xl),
+                )
+                MiniSlot(bottomBar, miniPlayer)
+                return@Column
+            }
+
+            // 音源切换：全部 + 每个已启用插件
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = GySpace.pageH),
+                horizontalArrangement = Arrangement.spacedBy(GySpace.xs),
+            ) {
+                item(key = "__all__") {
+                    SourcePill(
+                        label = "全部",
+                        selected = state.platforms.isEmpty(),
+                        onClick = onPickAll,
+                    )
+                }
+                items(state.available, key = { it.id }) { plugin ->
+                    SourcePill(
+                        label = platformLabelOf(plugin),
+                        selected = state.platforms.contains(plugin.id),
+                        onClick = { onPickPlatform(plugin.id) },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(GySpace.m))
+
+            if (state.loading) {
+                Box(
+                    Modifier.fillMaxWidth().height(2.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.LinearProgressIndicator(
+                        color = Gyp.ink,
+                        trackColor = Gyp.tint,
+                        modifier = Modifier.fillMaxWidth().height(2.dp),
+                    )
+                }
+            }
+
+            if (state.rows.isEmpty() && state.albums.isEmpty() && state.artists.isEmpty()) {
+                SearchDiscovery(
+                    history = state.history,
+                    onPickHistory = onPickHistory,
+                    onPickKeyword = { onQueryChange(it); onSearch() },
+                    query = state.query,
+                    loading = state.loading,
+                    errors = state.errors,
+                )
+            } else {
+                FoliaSegmented(
+                    value = tab,
+                    options = listOf(
+                        SearchTab.TRACKS to "单曲 ${counts.tracks}",
+                        SearchTab.ALBUMS to "专辑 ${counts.albums}",
+                        SearchTab.SHEETS to "歌单 ${counts.sheets}",
+                        SearchTab.ARTISTS to "歌手 ${counts.artists}",
+                    ),
+                    onSelect = onTabChange,
+                    modifier = Modifier.padding(horizontal = GySpace.pageH),
+                )
+                Spacer(Modifier.height(GySpace.s))
+
+                Box(Modifier.weight(1f)) {
+                    when (tab) {
+                        SearchTab.TRACKS -> TrackResults(state, onPlay, onDownload, onAddToSheet)
+                        SearchTab.ALBUMS -> AlbumGrid(state.albums, onOpenAlbum)
+                        SearchTab.ARTISTS -> ArtistGrid(state.artists, onOpenArtist)
+                        SearchTab.SHEETS -> SheetGrid(state.albums, onOpenAlbum)
+                    }
+                }
+            }
+        }
+        MiniSlot(bottomBar, miniPlayer, alignBottom = true)
+    }
+}
+
+/** 底栏与迷你播放条（同一容器，迷你条悬浮在上）。 */
+@Composable
+private fun MiniSlot(
+    bottomBar: (@Composable () -> Unit)?,
+    miniPlayer: (@Composable () -> Unit)?,
+    alignBottom: Boolean = false,
+) {
+    if (bottomBar == null && miniPlayer == null) return
+    Column(
+        modifier = if (alignBottom) Modifier
+            .fillMaxSize()
+            .padding(top = 0.dp) else Modifier.fillMaxWidth(),
+    ) {
+        if (alignBottom) {
+            Spacer(Modifier.weight(1f))
+        }
+        Column(Modifier.fillMaxWidth()) {
+            miniPlayer?.invoke()
+            bottomBar?.invoke()
+        }
+    }
+}
+
+/** 单曲结果列表。 */
+@Composable
+private fun TrackResults(
+    state: SearchUiState,
+    onPlay: (Int) -> Unit,
+    onDownload: (MusicItem) -> Unit,
+    onAddToSheet: (MusicItem) -> Unit,
+) {
+    val visible = state.visibleRows
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 96.dp),
+    ) {
+        itemsIndexed(visible, key = { _, row -> "${row.pluginId}:${row.item.id}" }) { index, row ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickableNoRipple { onPlay(index) }
+                    .padding(horizontal = GySpace.pageH, vertical = GySpace.s),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Artwork(url = row.item.artwork, size = 44)
+                Spacer(Modifier.width(GySpace.m))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = row.item.title,
+                        fontSize = GyText.row,
+                        lineHeight = GyText.rowHeight,
+                        color = Gyp.ink,
+                        fontFamily = GuangYueDesign.Sans,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "[${row.platformLabel}]",
+                            fontSize = GyText.hint,
+                            color = Gyp.t3,
+                            fontFamily = GuangYueDesign.Sans,
+                        )
+                        Spacer(Modifier.width(GySpace.xxs))
+                        Text(
+                            text = row.item.displayArtist,
+                            fontSize = GyText.hint,
+                            lineHeight = GyText.hintHeight,
+                            color = Gyp.t2,
+                            fontFamily = GuangYueDesign.Sans,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    IconButton(onClick = { onDownload(row.item) }) {
-                        Icon(
-                            Icons.Filled.Download,
-                            "下载",
-                            tint = Gyp.inkSoft,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                    IconButton(onClick = { onAddToSheet(row.item) }) {
-                        Icon(Icons.Filled.Add, "收藏", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
-                    }
-                    Icon(
-                        Icons.Filled.PlayArrow,
-                        "播放",
-                        tint = Gyp.accent,
-                        modifier = Modifier.size(22.dp),
-                    )
                 }
+                Icon(
+                    GuangYueIcons.Download,
+                    "下载",
+                    tint = Gyp.t3,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(GyRadius.fieldShape())
+                        .clickableNoRipple { onDownload(row.item) }
+                        .padding(GySpace.s),
+                )
+                Icon(
+                    GuangYueIcons.Plus,
+                    "加入歌单",
+                    tint = Gyp.t3,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(GyRadius.fieldShape())
+                        .clickableNoRipple { onAddToSheet(row.item) }
+                        .padding(GySpace.s),
+                )
             }
-
-            if (visibleRows.isEmpty() && !state.loading && state.query.isNotEmpty()) {
-                item {
-                    Text(
-                        "没有找到结果。换首歌名试试，或检查插件是否已启用。",
-                        color = Gyp.inkSoft,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(vertical = 24.dp),
-                    )
-                }
+        }
+        if (visible.isEmpty()) {
+            item(key = "__empty__") {
+                com.guangyue.feature.library.design.FoliaEmptyState(
+                    title = "没有单曲结果",
+                    subtitle = "换首歌名，或换一个音源",
+                    modifier = Modifier.padding(vertical = GySpace.xl, horizontal = GySpace.xl),
+                )
             }
+        }
+        items(state.errors, key = { "err:$it" }) { err ->
+            Text(
+                text = err,
+                color = Gyp.danger,
+                fontSize = GyText.hint,
+                fontFamily = GuangYueDesign.Sans,
+                modifier = Modifier.padding(horizontal = GySpace.pageH, vertical = 2.dp),
+            )
+        }
+    }
+}
 
-            state.errors.forEach { err ->
-                item {
-                    Text(err, color = Gyp.danger, fontSize = 11.sp, modifier = Modifier.padding(vertical = 2.dp))
+/** 专辑网格（两列，Folia 海报比例 1:1 + 两行文字）。 */
+@Composable
+private fun AlbumGrid(albums: List<AlbumItem>, onOpen: (MusicItem) -> Unit) {
+    if (albums.isEmpty()) {
+        com.guangyue.feature.library.design.FoliaEmptyState(
+            title = "没有专辑结果",
+            subtitle = "换个关键词试试",
+            modifier = Modifier.padding(vertical = GySpace.xl, horizontal = GySpace.xl),
+        )
+        return
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        contentPadding = PaddingValues(
+            start = GySpace.pageH,
+            end = GySpace.pageH,
+            bottom = 96.dp,
+        ),
+        horizontalArrangement = Arrangement.spacedBy(GySpace.m),
+        verticalArrangement = Arrangement.spacedBy(GySpace.m),
+    ) {
+        items(albums, key = { "${it.platform}:${it.id}" }) { album ->
+            Column(Modifier.clickableNoRipple { onOpen(album.asMusicItem()) }) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(148.dp)
+                        .clip(RoundedCornerShape(GyRadius.field))
+                        .background(Gyp.tint),
+                ) {
+                    Artwork(url = album.artwork, fill = true)
                 }
+                Spacer(Modifier.height(GySpace.s))
+                Text(
+                    text = album.title,
+                    fontSize = GyText.label,
+                    lineHeight = GyText.labelHeight,
+                    color = Gyp.ink,
+                    fontFamily = GuangYueDesign.Sans,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = album.artist,
+                    fontSize = GyText.hint,
+                    lineHeight = GyText.hintHeight,
+                    color = Gyp.t2,
+                    fontFamily = GuangYueDesign.Sans,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
 }
 
+/** 歌手网格。 */
 @Composable
-private fun SourceChip(
-    label: String,
-    count: Int,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = {
-            Text(
-                if (count > 0) "$label · $count" else label,
-                fontSize = 12.sp,
-                maxLines = 1,
-            )
-        },
-        shape = RoundedCornerShape(16.dp),
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = Gyp.cardTranslucent,
-            labelColor = Gyp.inkSoft,
-            selectedContainerColor = Gyp.accent,
-            selectedLabelColor = Color.White,
+private fun ArtistGrid(artists: List<ArtistItem>, onOpen: (MusicItem) -> Unit) {
+    if (artists.isEmpty()) {
+        com.guangyue.feature.library.design.FoliaEmptyState(
+            title = "没有歌手结果",
+            subtitle = "换个关键词试试",
+            modifier = Modifier.padding(vertical = GySpace.xl, horizontal = GySpace.xl),
+        )
+        return
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        contentPadding = PaddingValues(
+            start = GySpace.pageH,
+            end = GySpace.pageH,
+            bottom = 96.dp,
         ),
-        border = FilterChipDefaults.filterChipBorder(
-            enabled = true,
-            selected = selected,
-            borderColor = Color.Transparent,
-            selectedBorderColor = Color.Transparent,
-        ),
-    )
+        horizontalArrangement = Arrangement.spacedBy(GySpace.m),
+        verticalArrangement = Arrangement.spacedBy(GySpace.m),
+    ) {
+        items(artists, key = { "${it.platform}:${it.id}" }) { artist ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.clickableNoRipple { onOpen(artist.asMusicItem()) },
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(88.dp)
+                        .clip(RoundedCornerShape(44.dp))
+                        .background(Gyp.tint),
+                ) {
+                    Artwork(url = artist.avatar, fill = true)
+                }
+                Spacer(Modifier.height(GySpace.xs))
+                Text(
+                    text = artist.name,
+                    fontSize = GyText.label,
+                    lineHeight = GyText.labelHeight,
+                    color = Gyp.ink,
+                    fontFamily = GuangYueDesign.Sans,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
 }
+
+/** 歌单网格（沿用专辑网格的版式；插件返回的歌单与专辑同构）。 */
+@Composable
+private fun SheetGrid(sheets: List<AlbumItem>, onOpen: (MusicItem) -> Unit) {
+    if (sheets.isEmpty()) {
+        com.guangyue.feature.library.design.FoliaEmptyState(
+            title = "没有歌单结果",
+            subtitle = "换个关键词试试",
+            modifier = Modifier.padding(vertical = GySpace.xl, horizontal = GySpace.xl),
+        )
+        return
+    }
+    AlbumGrid(sheets, onOpen)
+}
+
+/** 未搜索时的探索区：搜索历史 + 推荐关键词。 */
+@Composable
+private fun SearchDiscovery(
+    history: List<String>,
+    onPickHistory: (String) -> Unit,
+    onPickKeyword: (String) -> Unit,
+    query: String,
+    loading: Boolean,
+    errors: List<String>,
+) {
+    if (query.isNotEmpty() && !loading && errors.isEmpty()) {
+        com.guangyue.feature.library.design.FoliaEmptyState(
+            title = "没有结果",
+            subtitle = "换个关键词，或换一个音源",
+            modifier = Modifier.padding(top = GySpace.xl, start = GySpace.xl, end = GySpace.xl),
+        )
+        return
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 96.dp),
+    ) {
+        if (history.isNotEmpty()) {
+            item(key = "history-title") {
+                com.guangyue.feature.library.design.FoliaSectionTitle(text = "搜索历史")
+            }
+            item(key = "history") {
+                com.guangyue.feature.library.design.FlowChips(
+                    labels = history,
+                    onClick = onPickHistory,
+                )
+            }
+        }
+        item(key = "hot-title") {
+            com.guangyue.feature.library.design.FoliaSectionTitle(text = "推荐搜索")
+        }
+        item(key = "hot") {
+            com.guangyue.feature.library.design.FlowChips(
+                labels = listOf("热歌", "华语流行", "摇滚", "纯音乐", "粤语", "爵士", "OST"),
+                onClick = onPickKeyword,
+            )
+        }
+        items(errors, key = { "err:$it" }) { err ->
+            Text(
+                text = err,
+                color = Gyp.danger,
+                fontSize = GyText.hint,
+                fontFamily = GuangYueDesign.Sans,
+                modifier = Modifier.padding(horizontal = GySpace.pageH, vertical = 2.dp),
+            )
+        }
+    }
+}
+
+/** 音源切换胶囊（Folia 分段控件的单选形态）。 */
+@Composable
+private fun SourcePill(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .height(28.dp)
+            .clip(RoundedCornerShape(GyRadius.field))
+            .background(if (selected) Gyp.raise else Gyp.tint, RoundedCornerShape(GyRadius.field))
+            .clickableNoRipple(onClick)
+            .padding(horizontal = GySpace.m),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            fontSize = GyText.hint,
+            color = if (selected) Gyp.ink else Gyp.t2,
+            fontFamily = GuangYueDesign.Sans,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            maxLines = 1,
+        )
+    }
+}
+
+/** 方形封面（无图时画一层 tint 底）。 */
+@Composable
+private fun Artwork(url: String?, size: Int = 44, fill: Boolean = false) {
+    val shape = RoundedCornerShape(GyRadius.field)
+    Box(
+        modifier = Modifier
+            .then(if (fill) Modifier.fillMaxSize() else Modifier.size(size.dp))
+            .clip(if (fill) RoundedCornerShape(0.dp) else shape)
+            .background(Gyp.tint),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (url != null) {
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Icon(
+                GuangYueIcons.Music,
+                null,
+                tint = Gyp.t3,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+/** 把专辑结果转成可点击的 [MusicItem]（进专辑详情时复用同一套打开逻辑）。 */
+internal fun AlbumItem.asMusicItem(): MusicItem = MusicItem(
+    platform = platform,
+    id = id,
+    title = title,
+    artist = artist,
+    album = title,
+    artwork = artwork,
+    albumId = id,
+    type = "album",
+)
+
+/** 把歌手结果转成可点击的 [MusicItem]。 */
+internal fun ArtistItem.asMusicItem(): MusicItem = MusicItem(
+    platform = platform,
+    id = id,
+    title = name,
+    artist = name,
+    artwork = avatar,
+    artistId = id,
+    type = "artist",
+)

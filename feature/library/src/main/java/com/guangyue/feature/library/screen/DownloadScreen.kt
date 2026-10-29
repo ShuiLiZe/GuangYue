@@ -17,14 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -44,8 +36,17 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.guangyue.core.download.DownloadProgress
 import com.guangyue.core.download.DownloadedTrack
+import com.guangyue.feature.library.design.FoliaButton
+import com.guangyue.feature.library.design.FoliaButtonVariant
+import com.guangyue.feature.library.design.FoliaEmptyState
+import com.guangyue.feature.library.design.FoliaSectionTitle
+import com.guangyue.feature.library.design.FoliaTopBar
+import com.guangyue.feature.library.design.GuangYueDesign
 import com.guangyue.feature.library.design.GyRadius
+import com.guangyue.feature.library.design.GySpace
+import com.guangyue.feature.library.design.GyText
 import com.guangyue.feature.library.design.Gyp
+import com.guangyue.feature.library.design.icons.GuangYueIcons
 import com.guangyue.feature.library.design.marbleBackground
 import com.guangyue.feature.library.viewmodel.DownloadViewModel
 
@@ -68,45 +69,38 @@ fun DownloadScreen(
 
     Surface(color = Color.Transparent, modifier = Modifier.fillMaxSize().marbleBackground()) {
         Column(Modifier.fillMaxSize()) {
-            // ---- 顶栏
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", tint = Gyp.ink)
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "下载管理",
-                        fontSize = 21.sp,
-                        fontFamily = FontFamily.Serif,
-                        fontWeight = FontWeight.Bold,
-                        color = Gyp.ink,
-                    )
-                    Text(
-                        buildString {
-                            val running = state.active.count { it.stage == com.guangyue.core.download.DownloadStage.DOWNLOADING }
-                            if (running > 0) append("$running 个任务下载中")
-                            if (state.speedText.isNotBlank() && state.speedText != "0 B") {
-                                if (isNotEmpty()) append(" · ")
-                                append(state.speedText).append("/s")
-                            }
-                            if (isEmpty()) append("已完成 ").append(state.done.size).append(" 首 · ").append(state.totalSizeText)
-                        },
-                        fontSize = 11.sp,
-                        color = Gyp.inkSoft,
-                    )
-                }
-                if (state.active.isNotEmpty()) {
-                    TextAction("全部暂停") { vm.cancelAll() }
-                }
-                if (state.failed.isNotEmpty()) {
-                    TextAction("清理") { vm.clearFinished() }
-                }
-            }
+            // ---- 顶栏：Folia PageHeader（标题 20/32 semibold + 摘要 13px）
+            FoliaTopBar(
+                title = "下载管理",
+                onBack = onBack,
+                actions = {
+                    if (state.active.isNotEmpty()) {
+                        TextAction("全部暂停") { vm.cancelAll() }
+                    }
+                    if (state.failed.isNotEmpty()) {
+                        TextAction("清理") { vm.clearFinished() }
+                    }
+                },
+            )
+            Text(
+                text = buildString {
+                    val running = state.active.count { it.stage == com.guangyue.core.download.DownloadStage.DOWNLOADING }
+                    if (running > 0) append("$running 个任务下载中")
+                    if (state.speedText.isNotBlank() && state.speedText != "0 B") {
+                        if (isNotEmpty()) append(" · ")
+                        append(state.speedText).append("/s")
+                    }
+                    if (isEmpty()) append("已完成 ").append(state.done.size).append(" 首 · ").append(state.totalSizeText)
+                },
+                fontSize = GyText.label,
+                lineHeight = GyText.labelHeight,
+                color = Gyp.inkSoft,
+                fontFamily = GuangYueDesign.Sans,
+                modifier = Modifier.padding(
+                    start = GySpace.pageH + GySpace.xxs,
+                    bottom = GySpace.s,
+                ),
+            )
 
             if (toast != null) {
                 Box(
@@ -198,7 +192,7 @@ private fun ActiveRow(progress: DownloadProgress, onPause: () -> Unit) {
                     .background(Gyp.tint, GyRadius.fieldShape()),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.MusicNote, null, tint = Gyp.accent, modifier = Modifier.size(20.dp))
+                Icon(GuangYueIcons.Music, null, tint = Gyp.accent, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
@@ -246,7 +240,7 @@ private fun ActiveRow(progress: DownloadProgress, onPause: () -> Unit) {
                 )
             }
             IconButton(onClick = onPause) {
-                Icon(Icons.Filled.Pause, "暂停", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
+                Icon(GuangYueIcons.Pause, "暂停", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -257,7 +251,7 @@ private fun FailedRow(progress: DownloadProgress, onRetry: () -> Unit, onRemove:
     Card {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                Icons.Filled.ErrorOutline,
+                GuangYueIcons.AlertCircle,
                 null,
                 tint = Gyp.danger,
                 modifier = Modifier.size(22.dp),
@@ -280,10 +274,10 @@ private fun FailedRow(progress: DownloadProgress, onRetry: () -> Unit, onRemove:
                 )
             }
             IconButton(onClick = onRetry) {
-                Icon(Icons.Filled.Refresh, "重试", tint = Gyp.accent, modifier = Modifier.size(18.dp))
+                Icon(GuangYueIcons.RefreshCw, "重试", tint = Gyp.accent, modifier = Modifier.size(18.dp))
             }
             IconButton(onClick = onRemove) {
-                Icon(Icons.Filled.Delete, "删除", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
+                Icon(GuangYueIcons.Trash2, "删除", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -299,7 +293,7 @@ private fun DoneRow(track: DownloadedTrack, onPlay: () -> Unit, onRemove: () -> 
                     .background(Gyp.tint, GyRadius.fieldShape()),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.MusicNote, null, tint = Gyp.accent, modifier = Modifier.size(20.dp))
+                Icon(GuangYueIcons.Music, null, tint = Gyp.accent, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
@@ -333,7 +327,7 @@ private fun DoneRow(track: DownloadedTrack, onPlay: () -> Unit, onRemove: () -> 
                 )
             }
             IconButton(onClick = onRemove) {
-                Icon(Icons.Filled.Delete, "删除本地文件", tint = Gyp.inkSoft, modifier = Modifier.size(17.dp))
+                Icon(GuangYueIcons.Trash2, "删除本地文件", tint = Gyp.inkSoft, modifier = Modifier.size(17.dp))
             }
         }
     }
@@ -354,7 +348,7 @@ private fun EmptyDownloads() {
                 .background(Gyp.card, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Download, null, tint = Gyp.accent, modifier = Modifier.size(30.dp))
+            Icon(GuangYueIcons.Download, null, tint = Gyp.accent, modifier = Modifier.size(30.dp))
         }
         Spacer(Modifier.height(14.dp))
         Text(

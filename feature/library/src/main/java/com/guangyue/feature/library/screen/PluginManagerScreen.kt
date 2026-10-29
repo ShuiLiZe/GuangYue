@@ -24,16 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -63,9 +53,14 @@ import androidx.compose.ui.unit.sp
 import com.guangyue.core.plugin.PluginFunctions
 import com.guangyue.core.plugin.PluginMeta
 import com.guangyue.core.plugin.Subscription
+import com.guangyue.feature.library.design.FoliaToggle
+import com.guangyue.feature.library.design.FoliaTopBar
+import com.guangyue.feature.library.design.GuangYueDesign
 import com.guangyue.feature.library.design.GyRadius
 import com.guangyue.feature.library.design.GySpace
 import com.guangyue.feature.library.design.Gyp
+import com.guangyue.feature.library.design.GyText
+import com.guangyue.feature.library.design.icons.GuangYueIcons
 import com.guangyue.feature.library.design.marbleBackground
 import com.guangyue.feature.library.viewmodel.PluginViewModelDefaults
 
@@ -166,61 +161,26 @@ fun PluginManagerScreen(
     Column(
         modifier
             .fillMaxSize()
-            .marbleBackground()
-            .padding(horizontal = GySpace.pageH),
+            .marbleBackground(),
     ) {
-        Spacer(Modifier.height(GySpace.topSafe))
-
-        // ---- 顶部：返回 + 标题 + 全选
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(Gyp.cardTranslucent)
-                    .border(1.dp, Gyp.hairline, CircleShape)
-                    .clickable { onBack() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
-                    tint = Gyp.ink,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            Spacer(Modifier.width(GySpace.m))
-            Text(
-                "插件",
-                fontSize = 26.sp,
-                fontFamily = FontFamily.Serif,
-                fontWeight = FontWeight.Bold,
-                color = Gyp.ink,
-            )
-            Spacer(Modifier.weight(1f))
-            Text("全选", fontSize = 12.sp, color = Gyp.inkSoft)
-            Spacer(Modifier.width(GySpace.xs))
-            Switch(
-                checked = allOn,
-                onCheckedChange = { onSetAllEnabled(it) },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = Gyp.accent,
-                    uncheckedThumbColor = Gyp.inkSoft,
-                    uncheckedTrackColor = Gyp.tint,
-                    uncheckedBorderColor = Color.Transparent,
-                ),
-            )
-        }
-
-        Spacer(Modifier.height(GySpace.s))
+        // ---- 顶部：Folia PageHeader（标题 20/32 semibold + 右侧全选开关）
+        FoliaTopBar(
+            title = "音源插件",
+            onBack = onBack,
+            actions = {
+                Text("全选", fontSize = GyText.hint, color = Gyp.t2)
+                Spacer(Modifier.width(GySpace.xs))
+                FoliaToggle(checked = allOn, onChange = { onSetAllEnabled(it) })
+            },
+        )
         Text(
             "广乐只提供插件运行时，音源由你自己从订阅源或文件安装。",
-            fontSize = 12.sp,
-            color = Gyp.inkSoft,
+            fontSize = GyText.hint,
+            lineHeight = GyText.hintHeight,
+            color = Gyp.t2,
+            fontFamily = GuangYueDesign.Sans,
+            modifier = Modifier.padding(horizontal = GySpace.pageH, vertical = GySpace.m),
         )
-
-        Spacer(Modifier.height(GySpace.l))
 
         // ---- 常驻的一键安装 / 更新条
         OfficialSourceBar(
@@ -246,10 +206,10 @@ fun PluginManagerScreen(
 
         Spacer(Modifier.height(GySpace.l))
         Row(horizontalArrangement = Arrangement.spacedBy(GySpace.m)) {
-            PillButton("从文件安装", Icons.Filled.Add) {
+            PillButton("从文件安装", GuangYueIcons.Plus) {
                 if (!busy) picker.launch(arrayOf("*/*"))
             }
-            PillButton("从链接安装", Icons.Filled.Link, filled = false) {
+            PillButton("从链接安装", GuangYueIcons.Link2, filled = false) {
                 if (!busy) urlDialog = true
             }
         }
@@ -340,7 +300,7 @@ private fun MessageCard(
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
                 Icon(
-                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    if (expanded) GuangYueIcons.ChevronUp else GuangYueIcons.ChevronDown,
                     contentDescription = if (expanded) "收起" else "详情",
                     tint = Gyp.inkSoft,
                     modifier = Modifier.size(14.dp),
@@ -419,7 +379,7 @@ private fun OfficialSourceBar(
                         modifier = Modifier.size(14.dp),
                     )
                 } else {
-                    Icon(Icons.Filled.Download, null, tint = Color.White, modifier = Modifier.size(15.dp))
+                    Icon(GuangYueIcons.Download, null, tint = Color.White, modifier = Modifier.size(15.dp))
                 }
                 Spacer(Modifier.width(6.dp))
                 Text(
@@ -438,7 +398,7 @@ private fun OfficialSourceBar(
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Refresh, null, tint = Gyp.accentText, modifier = Modifier.size(15.dp))
+                Icon(GuangYueIcons.RefreshCw, null, tint = Gyp.accentText, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("检查更新", color = Gyp.accentText, fontSize = 12.sp)
             }
@@ -468,7 +428,7 @@ private fun SubscriptionRow(sub: Subscription, onForget: () -> Unit) {
             .padding(start = GySpace.m, top = 10.dp, bottom = 10.dp, end = GySpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.Check, null, tint = Gyp.accent, modifier = Modifier.size(14.dp))
+        Icon(GuangYueIcons.Check, null, tint = Gyp.accent, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(GySpace.s))
         Column(Modifier.weight(1f)) {
             Text(
@@ -487,7 +447,7 @@ private fun SubscriptionRow(sub: Subscription, onForget: () -> Unit) {
             )
         }
         IconButton(onClick = onForget) {
-            Icon(Icons.Filled.Delete, "移除订阅", tint = Gyp.inkSoft, modifier = Modifier.size(16.dp))
+            Icon(GuangYueIcons.Trash2, "移除订阅", tint = Gyp.inkSoft, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -556,10 +516,10 @@ private fun PluginRow(
                 )
             }
             IconButton(onClick = onCheckUpdate) {
-                Icon(Icons.Filled.Refresh, "检查更新", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
+                Icon(GuangYueIcons.RefreshCw, "检查更新", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, "删除", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
+                Icon(GuangYueIcons.Trash2, "删除", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
             }
             Switch(
                 checked = plugin.enabled,
@@ -595,7 +555,7 @@ private fun PluginRow(
                 )
                 if (err.contains('\n')) {
                     Icon(
-                        if (showError) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        if (showError) GuangYueIcons.ChevronUp else GuangYueIcons.ChevronDown,
                         contentDescription = if (showError) "收起" else "详情",
                         tint = Gyp.inkSoft,
                         modifier = Modifier.size(14.dp),

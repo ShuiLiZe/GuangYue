@@ -20,13 +20,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,7 +48,15 @@ import com.guangyue.core.data.lyrics.Lyric
 import com.guangyue.core.data.lyrics.LyricUiState
 import com.guangyue.core.player.PlaybackState
 import com.guangyue.feature.player.viewmodel.LyricsViewModel
-import com.guangyue.feature.library.design.GuangYueDesign.Blue as GuangYueBlue
+import com.guangyue.feature.library.design.GuangYueDesign
+import com.guangyue.feature.library.design.GyRadius
+import com.guangyue.feature.library.design.GySpace
+import com.guangyue.feature.library.design.GyText
+import com.guangyue.feature.library.design.Gyp
+import com.guangyue.feature.library.design.canBlur
+import com.guangyue.feature.library.design.clickableNoRipple
+import com.guangyue.feature.library.design.icons.GuangYueIcons
+import com.guangyue.feature.library.design.marbleBackground
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 
@@ -94,32 +96,37 @@ fun LyricFlowScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .lyricFlowBackground(accent)
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.changes.any { it.pressed }) {
-                            // single tap area: toggle controls
-                        }
-                    }
-                }
-            },
+            .marbleBackground(),
     ) {
         Column(Modifier.fillMaxSize()) {
             Spacer(Modifier.height(48.dp))
-            // Cover + title block, left aligned like the design.
+            // 顶部：收起 + 封面标题（对应 LatticeChrome 的曲目头）
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 28.dp),
+                    .padding(horizontal = GySpace.xl),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
                     Modifier
-                        .size(58.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White.copy(alpha = 0.55f)),
+                        .size(32.dp)
+                        .clip(GyRadius.fieldShape())
+                        .clickableNoRipple(onBack),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        GuangYueIcons.ChevronDown,
+                        "收起",
+                        tint = Gyp.ink,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Spacer(Modifier.width(GySpace.m))
+                Box(
+                    Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(GyRadius.field))
+                        .background(Gyp.tint),
                 ) {
                     CoverImage(
                         url = playback.item?.artworkUri,
@@ -127,40 +134,57 @@ fun LyricFlowScreen(
                         accent = accent,
                     )
                 }
-                Spacer(Modifier.width(14.dp))
-                Column {
+                Spacer(Modifier.width(GySpace.m))
+                Column(Modifier.weight(1f)) {
                     Text(
                         playback.item?.title ?: "未在播放",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF0F1A2B),
-                        fontFamily = FontFamily.Serif,
+                        fontSize = GyText.emptyTitle,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Gyp.ink,
+                        fontFamily = GuangYueDesign.Serif,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                     Text(
                         playback.item?.artist ?: "广乐",
-                        fontSize = 13.sp,
-                        color = Color(0xFF0F1A2B).copy(alpha = 0.55f),
+                        fontSize = GyText.hint,
+                        lineHeight = GyText.hintHeight,
+                        color = Gyp.t2,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+                Box(
+                    Modifier
+                        .size(32.dp)
+                        .clip(GyRadius.fieldShape())
+                        .clickableNoRipple { controlsVisible = !controlsVisible },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        GuangYueIcons.LayoutGrid,
+                        if (controlsVisible) "隐藏控件" else "显示控件",
+                        tint = Gyp.t2,
+                        modifier = Modifier.size(16.dp),
                     )
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(GySpace.xl))
 
             Box(Modifier.weight(1f)) {
                 if (state.lyric.isEmpty) {
-                    Text(
-                        if (vm.loading.value) "歌词加载中…" else "这首歌还没有歌词",
-                        color = Color(0xFF0F1A2B).copy(alpha = 0.45f),
-                        fontSize = 15.sp,
+                    com.guangyue.feature.library.design.FoliaEmptyState(
+                        title = if (vm.loading.value) "歌词加载中" else "还没有歌词",
+                        subtitle = "换一个音源或稍后再试",
                         modifier = Modifier
                             .align(Alignment.Center)
-                            .padding(32.dp),
-                        textAlign = TextAlign.Center,
+                            .padding(GySpace.xl),
                     )
                 } else {
                     LazyColumn(
                         state = listState,
-                        contentPadding = PaddingValues(vertical = 180.dp, horizontal = 28.dp),
+                        contentPadding = PaddingValues(vertical = 180.dp, horizontal = GySpace.xl),
                         verticalArrangement = Arrangement.spacedBy(18.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
@@ -178,7 +202,6 @@ fun LyricFlowScreen(
                 }
             }
 
-            // Floating capsule player bar (only the lyric view hides it).
             if (controlsVisible) {
                 FlowPlayerBar(
                     playback = playback,
@@ -187,24 +210,15 @@ fun LyricFlowScreen(
                 )
             }
         }
-
-        // Tap "hide controls" affordance at top-right.
-        IconButton(
-            onClick = { controlsVisible = !controlsVisible },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(12.dp),
-        ) {
-            Icon(
-                Icons.Filled.KeyboardArrowDown,
-                contentDescription = if (controlsVisible) "隐藏控件" else "显示控件",
-                tint = Color(0xFF0F1A2B).copy(alpha = 0.6f),
-            )
-        }
     }
 }
 
-/** One line in the flow: 800 weight, sized + blurred by distance from the sung line. */
+/**
+ * 一行歌词：字号/不透明度/模糊随与当前行的距离衰减。
+ *
+ * 模糊只在「非当前行」用，且取决于设备能力（Android 12+ 且非低内存），否则只用透明度区分，
+ * 与 Folia 在低端机上的降级一致。
+ */
 @Composable
 private fun LyricFlowLine(
     text: String,
@@ -214,11 +228,11 @@ private fun LyricFlowLine(
     accent: Color,
 ) {
     val fontSize = when (distance) {
-        0 -> 36
-        1 -> 30
-        2 -> 26
-        3 -> 23
-        else -> 20
+        0 -> 32
+        1 -> 26
+        2 -> 22
+        3 -> 19
+        else -> 17
     }
     val alpha = when (distance) {
         0 -> 1f
@@ -227,6 +241,7 @@ private fun LyricFlowLine(
         3 -> 0.12f
         else -> 0.07f
     }
+    val blurAllowed = canBlur()
     val blurRadius = when (distance) {
         0 -> 0f
         1 -> 0.6f
@@ -240,26 +255,36 @@ private fun LyricFlowLine(
             text = text.ifBlank { " " },
             fontSize = fontSize.sp,
             lineHeight = (fontSize * 1.28).sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = if (active) accent.copy(alpha = 0.92f) else Color(0xFF0F1A2B).copy(alpha = alpha),
+            fontWeight = FontWeight.SemiBold,
+            color = if (active) accent.copy(alpha = 0.92f) else Gyp.ink.copy(alpha = alpha),
             textAlign = TextAlign.Start,
+            fontFamily = GuangYueDesign.Serif,
             modifier = Modifier
                 .fillMaxWidth()
-                .graphicsLayer { this.alpha = 1f }
-                .blur(blurRadius.dp, edgeTreatment = androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded),
+                .then(
+                    if (blurAllowed && blurRadius > 0f) {
+                        Modifier.blur(
+                            blurRadius.dp,
+                            edgeTreatment = androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded,
+                        )
+                    } else {
+                        Modifier
+                    }
+                ),
         )
         if (active && !translation.isNullOrBlank()) {
             Text(
                 translation,
-                fontSize = 14.sp,
-                color = Color(0xFF0F1A2B).copy(alpha = 0.55f),
-                modifier = Modifier.padding(top = 6.dp),
+                fontSize = GyText.label,
+                color = Gyp.t2,
+                fontFamily = GuangYueDesign.Sans,
+                modifier = Modifier.padding(top = GySpace.xs),
             )
         }
     }
 }
 
-/** Bottom capsule with cover, progress and transport. */
+/** 底部悬浮播放条（Folia LatticeChrome：2dp 进度线 + 等宽时间）。 */
 @Composable
 private fun FlowPlayerBar(
     playback: PlaybackState,
@@ -269,80 +294,53 @@ private fun FlowPlayerBar(
     Box(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 18.dp)
-            .height(66.dp)
-            .clip(RoundedCornerShape(30.dp))
-            .background(Color(0xFF101828).copy(alpha = 0.86f))
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = GySpace.pageH, vertical = GySpace.pageH)
+            .height(56.dp)
+            .clip(RoundedCornerShape(GyRadius.card))
+            .background(Gyp.card)
+            .padding(horizontal = GySpace.l),
         contentAlignment = Alignment.CenterStart,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { }) {
-                Icon(Icons.Filled.SkipNext, null, tint = Color.White.copy(alpha = 0.8f))
+            Box(
+                Modifier
+                    .size(32.dp)
+                    .clip(GyRadius.fieldShape())
+                    .clickableNoRipple { },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    GuangYueIcons.ChevronRight,
+                    null,
+                    tint = Gyp.t2,
+                    modifier = Modifier.size(16.dp),
+                )
             }
+            Spacer(Modifier.width(GySpace.m))
             Box(Modifier.weight(1f)) {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(3.dp)
+                        .height(2.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.18f)),
+                        .background(Gyp.track),
                 )
                 Box(
                     Modifier
                         .fillMaxWidth(playback.progress)
-                        .height(3.dp)
+                        .height(2.dp)
                         .clip(CircleShape)
-                        .background(GuangYueBlue),
+                        .background(Gyp.ink),
                 )
             }
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(GySpace.m))
             Text(
                 formatTime(playback.positionMs),
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 11.sp,
+                color = Gyp.t3,
+                fontSize = GyText.hint,
+                fontFamily = FontFamily.Monospace,
             )
         }
-    }
-}
-
-private fun Modifier.lyricFlowBackground(accent: Color): Modifier = this.drawBehind {
-    drawRect(
-        Brush.linearGradient(
-            listOf(Color(0xFFF3E4D6), Color(0xFFECE7E4), Color(0xFFDFD7D2)),
-            start = Offset.Zero,
-            end = Offset(size.width, size.height),
-        ),
-    )
-    // Album-colour haze: big soft radial blobs, no blur() needed (gradients are free).
-    drawCircle(
-        Brush.radialGradient(
-            listOf(accent.copy(alpha = 0.34f), Color.Transparent),
-            center = Offset(size.width * 0.18f, size.height * 0.16f),
-            radius = size.width * 0.55f,
-        ),
-        radius = size.width * 0.55f,
-        center = Offset(size.width * 0.18f, size.height * 0.16f),
-    )
-    drawCircle(
-        Brush.radialGradient(
-            listOf(Color(0xFF9FB6D9).copy(alpha = 0.22f), Color.Transparent),
-            center = Offset(size.width * 0.9f, size.height * 0.55f),
-            radius = size.width * 0.6f,
-        ),
-        radius = size.width * 0.6f,
-        center = Offset(size.width * 0.9f, size.height * 0.55f),
-    )
-    // 5px dot texture.
-    val step = 5.dp.toPx()
-    var y = 0f
-    while (y < size.height) {
-        var x = 0f
-        while (x < size.width) {
-            drawCircle(Color(0xFF0F1A2B).copy(alpha = 0.05f), radius = 0.6f, center = Offset(x, y))
-            x += step
-        }
-        y += step
     }
 }
 
