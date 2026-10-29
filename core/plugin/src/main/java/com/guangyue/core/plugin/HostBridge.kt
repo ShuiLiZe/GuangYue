@@ -40,11 +40,115 @@ internal object HostBridge {
   };
 
   // The plugin wrapper calls this with the plugin source turned into a factory.
+  // `__gy_state` records what the *last statement* of the plugin actually evaluated to, so the
+  // host can fall back to it when the wrapper expression itself yields a non-string value
+  // (see PluginRuntime.evalBlocking — that is the bug that broke 0.0.1 under R8).
+  G.__gy_state = function (v) { G.__gy_last = v; return v; };
   G.__gy_boot = function (factory) {
     __modules[MAIN_ID] = factory;
     var exported = G.__gy_require(MAIN_ID);
     G.__plugin = exported;
     return typeof exported === 'object' && exported !== null;
+  };
+
+  // ---------------------------------------------------------------- Buffer (MusicFree plugins)
+  // MusicFree runs on QuickJS with a partial Node surface; plugins use Buffer for base64 and
+  // UTF-8 conversions. We implement just the parts a plugin realistically touches.
+  function BufferArg(v, enc) {
+    if (typeof v === 'number') return new Uint8Array(v);
+    if (typeof v === 'string') {
+      if (enc === 'base64') {
+        var bin = G.__gy_atob(v);
+        var out = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i) & 0xff;
+        return out;
+      }
+      return G.__gy_utf8Encode(v);
+    }
+    if (v && typeof v.length === 'number') {
+      var arr = new Uint8Array(v.length);
+      for (var j = 0; j < v.length; j++) arr[j] = v[j] & 0xff;
+      return arr;
+    }
+    return new Uint8Array(0);
+  }
+
+  function BufferShim(v, enc) { return BufferArg(v, enc); }
+  BufferShim.from = function (v, enc) { return BufferArg(v, enc); };
+  BufferShim.alloc = function (n, fill) {
+    var a = new Uint8Array(n || 0);
+    if (fill !== undefined && fill !== 0) a.fill(typeof fill === 'number' ? fill : 0);
+    return a;
+  };
+  BufferShim.isBuffer = function (v) {
+    return !!v && typeof v === 'object' && typeof v.length === 'number' &&
+      (v instanceof Uint8Array);
+  };
+  BufferShim.concat = function (list) {
+    var total = 0, i;
+    for (i = 0; i < list.length; i++) total += list[i].length;
+    var out = new Uint8Array(total), at = 0;
+    for (i = 0; i < list.length; i++) { out.set(list[i], at); at += list[i].length; }
+    return out;
+  };
+  G.Buffer = BufferShim;
+
+  // btoa/atob on top of the host's Base64 (kept in Kotlin-free JS so it also works in tests).
+  G.__gy_utf8Encode = function (str) {
+    var bytes = [];
+    for (var i = 0; i < str.length; i++) {
+      var c = str.codePointAt(i);
+      if (c > 0xffff) i++;
+      if (c < 0x80) bytes.push(c);
+      else if (c < 0x800) bytes.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
+      else if (c < 0x10000) bytes.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
+      else bytes.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 0x3f),
+        0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
+    }
+    return new Uint8Array(bytes);
+  };
+  G.__gy_utf8Decode = function (bytes) {
+    var out = '', i = 0;
+    while (i < bytes.length) {
+      var b = bytes[i++];
+      if (b < 0x80) out += String.fromCharCode(b);
+      else if (b < 0xe0) out += String.fromCharCode(((b & 0x1f) << 6) | (bytes[i++] & 0x3f));
+      else if (b < 0xf0) out += String.fromCharCode(((b & 0x0f) << 12) |
+        ((bytes[i++] & 0x3f) << 6) | (bytes[i++] & 0x3f));
+      else {
+        var cp = ((b & 0x07) << 18) | ((bytes[i++] & 0x3f) << 12) |
+          ((bytes[i++] & 0x3f) << 6) | (bytes[i++] & 0x3f);
+        cp -= 0x10000;
+        out += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 0x3ff));
+      }
+    }
+    return out;
+  };
+  G.__gy_atob = function (s) {
+    var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    var clean = String(s || '').replace(/[^A-Za-z0-9+\/]/g, '');
+    var out = '', buf = 0, bits = 0;
+    for (var i = 0; i < clean.length; i++) {
+      var v = alphabet.indexOf(clean.charAt(i));
+      if (v < 0) continue;
+      buf = (buf << 6) | v; bits += 6;
+      if (bits >= 8) { bits -= 8; out += String.fromCharCode((buf >> bits) & 0xff); }
+    }
+    return out;
+  };
+  G.atob = function (s) { return G.__gy_atob(s); };
+  G.btoa = function (s) {
+    var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    var str = String(s || ''), out = '';
+    for (var i = 0; i < str.length; i += 3) {
+      var c1 = str.charCodeAt(i), c2 = str.charCodeAt(i + 1), c3 = str.charCodeAt(i + 2);
+      var has2 = i + 1 < str.length, has3 = i + 2 < str.length;
+      out += alphabet.charAt(c1 >> 2);
+      out += alphabet.charAt(((c1 & 3) << 4) | (has2 ? c2 >> 4 : 0));
+      out += has2 ? alphabet.charAt(((c2 & 15) << 2) | (has3 ? c3 >> 6 : 0)) : '=';
+      out += has3 ? alphabet.charAt(c3 & 63) : '=';
+    }
+    return out;
   };
 
   // ---------------------------------------------------------------- console
@@ -220,7 +324,22 @@ internal object HostBridge {
   // ---------------------------------------------------------------- utils
   G.module = { exports: {} };
   G.exports = G.module.exports;
-  G.require = G.__gy_require;
+  G.require.cache = __cache;
+  // `require('buffer').Buffer` / `require('util')` … are common in MusicFree plugins.
+  var __builtinModules = {
+    buffer: { Buffer: BufferShim },
+    util: { format: fmt, inspect: fmt },
+    path: { join: function () {
+      var parts = Array.prototype.slice.call(arguments).filter(function (p) { return p; });
+      return parts.join('/').replace(/\/+/g, '/');
+    } }
+  };
+  var __gy_requireRaw = G.__gy_require;
+  G.require = function (id) {
+    if (Object.prototype.hasOwnProperty.call(__builtinModules, id)) return __builtinModules[id];
+    return __gy_requireRaw(id);
+  };
+  G.__gy_require = G.require;
   G.process = {
     env: { NODE_ENV: 'production' },
     platform: 'android',
@@ -251,11 +370,40 @@ internal object HostBridge {
      *
      * Return convention (always a JSON string, never an exception):
      *   {"ok":true,"data":<json>} | {"ok":false,"error":"message","stack":"..."}
+     *
+     * Async plugins: MusicFree itself requires synchronous handlers, but a lot of shipped
+     * plugins are `async function` and simply resolve immediately. Instead of rejecting the
+     * whole plugin we accept an already-settled Promise (`thenable`), which the host can read
+     * synchronously without an event loop. A *pending* Promise still fails loudly — silently
+     * returning `undefined` would corrupt search results.
      */
     const val CALL_DISPATCHER: String = """
 (function(){
   'use strict';
   var G = globalThis;
+  var SETTLED = { __gySettled: true };
+
+  function settle(result, fnName) {
+    if (!result || typeof result.then !== 'function') {
+      return { ok: true, value: result };
+    }
+    var state = { done: false, ok: false, value: undefined, error: null };
+    try {
+      result.then(function (v) { state.done = true; state.ok = true; state.value = v; },
+                  function (e) { state.done = true; state.ok = false; state.error = e; });
+    } catch (e) {
+      return { ok: false, error: 'function ' + fnName + ' returned a broken Promise: ' + describe(e) };
+    }
+    if (!state.done) {
+      return {
+        ok: false,
+        error: 'function ' + fnName + ' returned a Promise that has not settled; ' +
+               'MusicFree plugins must return synchronously (use axios with a sync bridge)'
+      };
+    }
+    return state.ok ? { ok: true, value: state.value } : { ok: false, error: describe(state.error) };
+  }
+
   G.__gy_call = function (fnName, argsJson) {
     var args;
     try { args = argsJson ? JSON.parse(argsJson) : []; } catch (e) { args = []; }
@@ -267,21 +415,18 @@ internal object HostBridge {
       if (typeof fn !== 'function') {
         return JSON.stringify({ ok: false, missing: true, error: 'function ' + fnName + ' not implemented' });
       }
-      var result = fn.apply(plugin, args);
-      try {
-        if (typeof G.__gy_flushTimers === 'function') G.__gy_flushTimers();
-        if (result && typeof result.then === 'function') {
-          return JSON.stringify({ ok: false, error: 'function ' + fnName + ' returned a Promise; MusicFree plugins must be synchronous' });
-        }
-        // Serialising the payload twice keeps the envelope safe against any plugin data:
-        // `data` carries the JSON *text* of the result, the host parses it a second time.
-        // Nothing the plugin returns (toJSON hooks, getters, cycles) can corrupt the envelope.
-        var payload = JSON.stringify(result === undefined ? null : result);
-        if (payload === undefined) payload = 'null';
-        return JSON.stringify({ ok: true, data: payload });
-      } catch (e2) {
-        return JSON.stringify({ ok: false, error: describe(e2), stack: e2 && e2.stack ? String(e2.stack) : '' });
+      var raw = fn.apply(plugin, args);
+      if (typeof G.__gy_flushTimers === 'function') G.__gy_flushTimers();
+      var s = settle(raw, fnName);
+      if (!s.ok) {
+        return JSON.stringify({ ok: false, error: s.error });
       }
+      // Serialising the payload twice keeps the envelope safe against any plugin data:
+      // `data` carries the JSON *text* of the result, the host parses it a second time.
+      // Nothing the plugin returns (toJSON hooks, getters, cycles) can corrupt the envelope.
+      var payload = JSON.stringify(s.value === undefined ? null : s.value);
+      if (payload === undefined) payload = 'null';
+      return JSON.stringify({ ok: true, data: payload });
     } catch (e) {
       return JSON.stringify({ ok: false, error: describe(e), stack: e && e.stack ? String(e.stack) : '' });
     }

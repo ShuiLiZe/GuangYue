@@ -50,6 +50,39 @@
 -keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
 -dontwarn kotlin.**
 
+# ---------------------------------------------------------------- kotlin-reflect（第二道保险）
+# quickjs-kt 的 `Bindings_dslKt.adaptedCall` 每次都走
+#   canConvertReturnInternally() → castValueOr(value, expectedType, fallback)
+# 而 castValueOr 第一步就是 `expectedType.classifier as KClass` + `isInstance(value)`。
+# 一旦 kotlin-reflect 被 R8 裁掉，KType 退化成 stub，isInstance 恒 false，于是去查
+# TypeConverters.classTypeMap 并抛：
+#   No such type converter to convert 'boolean (Kotlin reflection is not available)'
+#   to 'java.lang.String'
+# 0.0.1 的 release 包就是这样让 57 个插件在**加载阶段**全部失败的（`module.exports` 里
+# `platform: true`、`version: 1` 之类的字段让求值结果不是 String）。
+#
+# 代码层已经不再依赖反射转换（PluginRuntime.evalBlocking 一律 `__gy_text(...)`，
+# 宿主函数收 Array<Any?>、返回 String），这里把反射本身也保住，两条腿都站着。
+-keep class kotlin.reflect.** { *; }
+-keep interface kotlin.reflect.** { *; }
+-keep class kotlin.reflect.jvm.internal.** { *; }
+-keepclassmembers class kotlin.reflect.jvm.internal.impl.** { *; }
+-dontwarn kotlin.reflect.**
+
+# Kotlin 标准库里的反射入口（KType / KClass / KCallable 的实现类）不能混淆
+-keep class kotlin.KotlinNullPointerException { *; }
+-keepclassmembers class kotlin.** {
+    @kotlin.Metadata <methods>;
+}
+-keep,allowoptimization,allowshrinking class kotlin.Unit
+-keep,allowoptimization,allowshrinking class kotlin.jvm.internal.** { *; }
+
 # ---------------------------------------------------------------- OkHttp
 -dontwarn okhttp3.**
 -dontwarn okio.**
+
+# ---------------------------------------------------------------- jaudiotagger (封面写入)
+# jaudiotagger 的 StandardArtwork.getImage() 引用了 java.awt / javax.imageio —— 这些类在
+# Android 上不存在，只有真正去读封面图片时才会走到。之前 release 没有开 R8，所以从没暴露。
+-dontwarn java.awt.**
+-dontwarn javax.imageio.**

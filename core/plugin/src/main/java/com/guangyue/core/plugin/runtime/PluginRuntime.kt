@@ -77,7 +77,7 @@ class PluginRuntime(
                 val msg = args.getOrNull(1)?.let(::asBridgeText) ?: ""
                 onLog?.invoke(level, msg)
                 Log.d(TAG, "[${meta.platform}] $level: $msg")
-                null
+                ""
             }
 
             runtime.function("__gy_http") { args ->
@@ -94,8 +94,11 @@ class PluginRuntime(
             evalBlocking(runtime, "globalThis.__gy_boot($wrapped);", "plugin.js")
             // 4) the call dispatcher the host uses
             evalBlocking(runtime, HostBridge.CALL_DISPATCHER, "dispatcher.js")
+            // 5) `__gy_text()` —— 宿主从沙箱里读值的**唯一**通道：JS 侧先转成字符串，
+            //    Kotlin 侧永远只要 `String`。原因见 [evalBlocking] 上的注释。
+            evalBlocking(runtime, PluginMetaProbe.TEXT_HELPER, "text.js")
 
-            if (runtime.evaluateBlocking("typeof globalThis.__plugin === 'object' && globalThis.__plugin !== null") != "true") {
+            if (evalBlocking(runtime, PROBE_EXPORTED, "probe.js").trim() != "true") {
                 throw PluginRuntimeException("插件未导出 module.exports 对象")
             }
             qjs = runtime
@@ -340,21 +343,55 @@ class PluginRuntime(
         }
     }
 
+    /**
+     * **全仓唯一的 QuickJS 求值出口。**
+     *
+     * 0.0.1 的 release 包在这里翻车：原实现是
+     * `evaluate<String>(source, "inline.js")`，返回值声明成 `String?`。
+     * quickjs-kt 1.0.15 的 `Bindings_dslKt.adaptedCall` 对**任何**非 null 返回值都会走
+     * `canConvertReturnInternally() → castValueOr(value, expectedType, fallback)`，而
+     * `castValueOr` 第一步就是 `expectedType.classifier as KClass` + `isInstance(value)`。
+     * R8 把 `kotlin-reflect`（`kotlin.reflect.jvm.internal.*`）剥掉以后，`KType` 退化成 stub，
+     * `isInstance` 一直返回 false，于是回落去查 `TypeConverters.classTypeMap`，
+     * 结果抛：
+     *
+     * ```
+     * No such type converter to convert 'boolean (Kotlin reflection is not available)'
+     * to 'java.lang.String'      // ← 注意被转换的竟然是 JS 的 boolean，目标却是 String
+     * ```
+     *
+     * 因为 `module.exports.platform = true` 这种写法会导致 `__gy_boot(...)` 这条表达式本身
+     * 的求值结果不是字符串，R8 包里的每一个插件都在**加载阶段**就撞死在这条上。
+     *
+     * 现在做两件事：
+     *  1. 表达式一律包一层 `__gy_text(...)`（见 [PluginMetaProbe.TEXT_HELPER]），
+     *     求值结果必定是 JS 字符串 → 落到 Kotlin 的 `String` 分支；
+     *  2. 返回值显式 `?: ""`，永远不给 quickjs-kt 一个 `null`。
+     * 再配合 proguard 里对 `kotlin.reflect.**` 的 keep，双重保险。
+     */
     private fun evalBlocking(runtime: QuickJs, source: String, filename: String): String {
-        val result: String? = runCatching { runtime.evaluateBlocking(source) }
-            .getOrElse { throw asRuntimeException(it) }
+        val result: String? = runCatching {
+            runtime.evaluateBlocking("__gy_text(" + source + ")", filename)
+        }.getOrElse { throw asRuntimeException(it) }
         return result ?: ""
     }
 
     /** `QuickJs.evaluate` is suspending; the runtime always runs on a worker thread. */
-    private fun QuickJs.evaluateBlocking(source: String): String? = kotlinx.coroutines.runBlocking {
-        withContext(Dispatchers.IO) { evaluate<String>(source, "inline.js") }
-    }
+    private fun QuickJs.evaluateBlocking(source: String, filename: String = "inline.js"): String? =
+        kotlinx.coroutines.runBlocking {
+            withContext(Dispatchers.IO) { evaluate<String>(source, filename) }
+        }
 
     private fun asRuntimeException(t: Throwable): PluginRuntimeException = when (t) {
         is PluginRuntimeException -> t
-        is InterruptedException -> PluginRuntimeException("插件执行超时（${CALL_TIMEOUT_MS / 1000}s），已中断")
-        else -> PluginRuntimeException(t.message ?: t::class.simpleName ?: "plugin error")
+        is InterruptedException -> PluginRuntimeException(
+            message = "插件执行超时（${CALL_TIMEOUT_MS / 1000}s），已中断",
+            original = t,
+        )
+        else -> PluginRuntimeException(
+            message = t.message ?: t::class.simpleName ?: "plugin error",
+            original = t,
+        )
     }
 
     /**
@@ -375,6 +412,10 @@ class PluginRuntime(
     companion object {
         private const val TAG = "GuangYuePlugin"
         const val UA = "GuangYue/1.0 (Android)"
+
+        /** 「插件是否导出了对象」的探针表达式；结果照样过 `__gy_text`。 */
+        private const val PROBE_EXPORTED =
+            "typeof globalThis.__plugin === 'object' && globalThis.__plugin !== null"
 
         /**
          * Module loader for `require()` of npm packages (top-level await is rejected — MusicFree
@@ -439,7 +480,16 @@ class PluginRuntime(
     }
 }
 
-class PluginRuntimeException(message: String) : Exception(message) {
+class PluginRuntimeException(
+    message: String,
+    /** 原始异常：类名 + message + 前 15 行堆栈，供「展开详情」原样展示。 */
+    val original: Throwable? = null,
+) : Exception(message, original) {
+    /** 现场取证文本；没有原始异常时退回本异常的 message。 */
+    val detailText: String
+        get() = original?.let { ErrorDetail.of(it).format() }
+            ?: ErrorDetail.of(this).format()
+
     /** Thrown when the plugin simply does not implement the requested MusicFree function. */
     class Missing(val fn: String, message: String) : Exception(message)
 }

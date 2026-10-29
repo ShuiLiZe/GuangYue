@@ -28,6 +28,10 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     implementation(libs.quickjs.android)
+    // quickjs-kt 的返回值转换走 KType / TypeConverter 反射；R8 剥掉 kotlin-reflect 之后就会抛
+    // "No such type converter ... (Kotlin reflection is not available)" —— 0.0.1 的 release 包
+    // 因此让 57 个插件全部导入失败。代码层已改成纯 JSON 文本桥接，这里再补依赖做双保险。
+    implementation(libs.kotlin.reflect)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 

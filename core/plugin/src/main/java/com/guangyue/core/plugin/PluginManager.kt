@@ -4,6 +4,7 @@ import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.guangyue.core.plugin.runtime.ErrorDetail
 import com.guangyue.core.plugin.runtime.PluginRuntime
 import com.guangyue.core.plugin.runtime.PluginRuntimeException
 import com.guangyue.core.plugin.runtime.PreludeProvider
@@ -178,7 +179,11 @@ class PluginManager @Inject constructor(
         source: String,
         fallbackName: String? = null,
     ): InstallResult = withContext(Dispatchers.IO) {
-        if (code.isBlank()) return@withContext InstallResult.Failure("插件内容为空")
+        if (code.isBlank()) {
+            val msg = "插件内容为空"
+            recordDetail(source, msg)
+            return@withContext InstallResult.Failure(msg)
+        }
 
         val runtime = PluginRuntime(
             meta = PluginMeta(id = "", platform = "probe", name = "probe", version = "0", source = source),
@@ -197,7 +202,12 @@ class PluginManager @Inject constructor(
                 fallbackPlatform = fallbackName,
             )
             val probed = decoded.meta ?: return@withContext InstallResult.Failure(
-                shortReason(decoded.error, metaJson),
+                shortReason(decoded.error, metaJson).also {
+                    recordDetail(source, buildString {
+                        append(decoded.error ?: "插件元信息不完整")
+                        append("\nmeta = ").append(metaJson.take(1500))
+                    })
+                },
             )
             val id = store.idFor(probed.platform, source)
 
@@ -221,8 +231,10 @@ class PluginManager @Inject constructor(
             upsert(finalMeta)
             InstallResult.Success(finalMeta)
         } catch (e: PluginRuntimeException) {
+            recordDetail(source, failureDetail(e, e.message))
             InstallResult.Failure(shortReason(e.message, null))
         } catch (t: Throwable) {
+            recordDetail(source, failureDetail(t, t.message))
             InstallResult.Failure(shortReason(t.message, null))
         } finally {
             runtime.close()
@@ -245,7 +257,7 @@ class PluginManager @Inject constructor(
         return when {
             message.isEmpty() -> "插件加载失败"
             message.contains("No such type converter", ignoreCase = true) ->
-                "插件返回了无法识别的数据类型（内部桥接已改为 JSON 解析，如仍报此错请反馈）"
+                "插件返回了无法识别的数据类型（内部桥接已改为纯 JSON 解析）"
             message.contains("platform", ignoreCase = true) -> "插件没有声明 platform 字段"
             message.contains("module.exports", ignoreCase = true) -> "插件没有导出 module.exports 对象"
             message.contains("超时", ignoreCase = true) -> message
@@ -253,6 +265,54 @@ class PluginManager @Inject constructor(
             else -> message.lineSequence().first().take(120)
         }
     }
+
+    // ---------------------------------------------------------------- failure forensics (0.0.2)
+
+    /**
+     * 失败详情：**原始异常类名 + message + 前 15 行堆栈**。
+     *
+     * 0.0.1 只给用户一句友好文案，用户反馈问题时什么都拿不到。现在：
+     *  - [detailFor] 按插件（URL / 文件名）返回完整现场，UI「展开详情」直接原样显示；
+     *  - [lastErrorDetails] 保留兼容，兼容旧调用方与日志面板。
+     *
+     * 详情只存最近 [DETAIL_LIMIT] 条，键是安装源，不会把批量导入 57 个插件的内存撑爆。
+     */
+    private val _errorDetails = java.util.Collections.synchronizedMap(
+        object : LinkedHashMap<String, String>(32, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) =
+                size > DETAIL_LIMIT
+        },
+    )
+
+    /** 取某个安装源（URL / 文件名 / 插件显示名）的失败详情；查不到返回 null。 */
+    fun detailFor(source: String?): String? {
+        val key = source?.trim().orEmpty()
+        if (key.isEmpty()) return lastErrorDetails
+        _errorDetails[key]?.let { return it }
+        // 同一插件可能因「重复平台」等原因以别名失败，退回最近一条。
+        return lastErrorDetails
+    }
+
+    /** 记录一条失败现场。 */
+    private fun recordDetail(source: String?, detail: String) {
+        lastErrorDetails = detail
+        val key = source?.trim().orEmpty().ifEmpty { "<unknown>" }
+        _errorDetails[key] = detail
+    }
+
+    /**
+     * 组装失败现场文本：优先用原始异常（[PluginRuntimeException.detailText]），
+     * 拿不到原始异常时退回当前异常的 [ErrorDetail]。
+     */
+    private fun failureDetail(t: Throwable?, fallbackMessage: String?): String {
+        val detail = when (t) {
+            is PluginRuntimeException -> t.detailText
+            null -> return fallbackMessage?.trim().orEmpty().ifEmpty { "插件加载失败" }
+            else -> ErrorDetail.of(t).format()
+        }
+        return detail.ifBlank { fallbackMessage?.trim().orEmpty().ifEmpty { "插件加载失败" } }
+    }
+
     // ------------------------------------------------------------------ subscription
 
     /** 记录 / 刷新一条订阅源。 */
@@ -705,6 +765,9 @@ class PluginManager @Inject constructor(
 
         /** 一批同时下载多少个插件。 */
         const val BATCH_SIZE = 4
+
+        /** 最多保留多少条「失败详情」现场。 */
+        private const val DETAIL_LIMIT = 64
     }
 }
 

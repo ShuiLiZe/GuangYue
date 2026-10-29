@@ -54,8 +54,8 @@ android {
         targetSdk = 36
         // 版本号按 0.x 小步走：0.0.1 → 0.0.2 → …（tag 与 versionName 一致，不带 v 前缀）。
         // versionCode 必须始终大于上一版，否则装不上去覆盖。
-        versionCode = 2
-        versionName = "0.0.1"
+        versionCode = 3
+        versionName = "0.0.2"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -103,7 +103,10 @@ android {
         // 两个构建类型共用同一个签名配置对象：有发布密钥就套发布密钥，
         // 没密钥时该对象为空，Gradle 自动使用默认调试签名。
         release {
-            isMinifyEnabled = false
+            // 0.0.1 的 bug 只在开 R8 的真机包上暴露（JVM 单测不走 R8），所以 release 必须真的开 R8，
+            // 否则「修好了」只是又一次自欺。keep 规则见 proguard-rules.pro。
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
         }
