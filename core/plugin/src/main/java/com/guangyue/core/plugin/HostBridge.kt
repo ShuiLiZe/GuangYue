@@ -163,6 +163,130 @@ internal object HostBridge {
     return out;
   };
 
+  // ------------------------------------------------------------ URLSearchParams
+  // QuickJS 没有 URLSearchParams / URL（浏览器/Node 才有）。0.0.7 体检里「快音」「36DJ」
+  // 直接在 search 阶段报 `'URLSearchParams' is not defined` —— 它们拿它拼 POST 表单。
+  // 这里给一个够用的实现：append/delete/get/getAll/has/set/sort/toString/forEach/keys/values/entries
+  // 以及 Symbol.iterator，并让 axios 的 params 也认它（String(obj) 走 toString）。
+  function GyURLSearchParams(init) {
+    var list = [];
+    var self = this;
+    function appendPair(k, v) { list.push([String(k), v === undefined || v === null ? '' : String(v)]); }
+    function fromString(text) {
+      var q = String(text || '').replace(/^[?#]/, '');
+      if (!q) return;
+      var parts = q.split('&');
+      for (var i = 0; i < parts.length; i++) {
+        if (!parts[i]) continue;
+        var idx = parts[i].indexOf('=');
+        var k = idx < 0 ? parts[i] : parts[i].slice(0, idx);
+        var v = idx < 0 ? '' : parts[i].slice(idx + 1);
+        try { appendPair(decodeURIComponent(k.replace(/\+/g, ' ')), decodeURIComponent(v.replace(/\+/g, ' '))); }
+        catch (e) { appendPair(k, v); }
+      }
+    }
+    function fromObject(obj) {
+      if (!obj) return;
+      if (obj instanceof GyURLSearchParams) {
+        var pairs = obj.__gyPairs();
+        for (var j = 0; j < pairs.length; j++) appendPair(pairs[j][0], pairs[j][1]);
+        return;
+      }
+      if (typeof obj === 'string') { fromString(obj); return; }
+      if (Object.prototype.toString.call(obj) === '[object Array]') {
+        for (var i = 0; i < obj.length; i++) {
+          var pair = obj[i];
+          if (pair && pair.length >= 2) appendPair(pair[0], pair[1]);
+        }
+        return;
+      }
+      for (var k in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, k) && obj[k] !== undefined) appendPair(k, obj[k]);
+      }
+    }
+    this.__gyPairs = function () { return list; };
+    this.append = function (k, v) { appendPair(k, v); };
+    this.delete = function (k) {
+      var key = String(k);
+      for (var i = list.length - 1; i >= 0; i--) if (list[i][0] === key) list.splice(i, 1);
+    };
+    this.get = function (k) {
+      var key = String(k);
+      for (var i = 0; i < list.length; i++) if (list[i][0] === key) return list[i][1];
+      return null;
+    };
+    this.getAll = function (k) {
+      var key = String(k), out = [];
+      for (var i = 0; i < list.length; i++) if (list[i][0] === key) out.push(list[i][1]);
+      return out;
+    };
+    this.has = function (k) {
+      var key = String(k);
+      for (var i = 0; i < list.length; i++) if (list[i][0] === key) return true;
+      return false;
+    };
+    this.set = function (k, v) {
+      var key = String(k), found = -1;
+      for (var i = list.length - 1; i >= 0; i--) {
+        if (list[i][0] !== key) continue;
+        if (found < 0) { found = i; list[i][1] = v === undefined || v === null ? '' : String(v); }
+        else list.splice(i, 1);
+      }
+      if (found < 0) appendPair(k, v);
+    };
+    this.sort = function () {
+      list.sort(function (a, b) { return a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0); });
+    };
+    this.toString = function () {
+      var out = [];
+      for (var i = 0; i < list.length; i++) {
+        out.push(encodeURIComponent(list[i][0]) + '=' + encodeURIComponent(list[i][1]));
+      }
+      return out.join('&');
+    };
+    this.forEach = function (fn, thisArg) {
+      for (var i = 0; i < list.length; i++) fn.call(thisArg, list[i][1], list[i][0], self);
+    };
+    this.keys = function () {
+      var i = 0;
+      return { next: function () { return i < list.length ? { value: list[i++][0], done: false } : { value: undefined, done: true }; } };
+    };
+    this.values = function () {
+      var i = 0;
+      return { next: function () { return i < list.length ? { value: list[i++][1], done: false } : { value: undefined, done: true }; } };
+    };
+    this.entries = function () {
+      var i = 0;
+      return { next: function () { return i < list.length ? { value: [list[i][0], list[i++][1]], done: false } : { value: undefined, done: true }; } };
+    };
+    if (typeof Symbol !== 'undefined' && Symbol.iterator) {
+      this[Symbol.iterator] = this.entries;
+    }
+    fromObject(init);
+  }
+  G.URLSearchParams = GyURLSearchParams;
+  G.__gy_makeSearchParams = function (init) { return new GyURLSearchParams(init); };
+
+  // 极简 URL：插件有时 `new URL(url)` 取 searchParams / host / pathname。
+  function GyURL(input, base) {
+    var raw = String(input === undefined || input === null ? '' : input);
+    var abs = raw;
+    if (base && !/^[a-zA-Z][a-zA-Z0-9+.\-]*:/.test(raw)) {
+      abs = String(base).replace(/[^/]*$/, '') + raw;
+    }
+    var m = /^([a-zA-Z][a-zA-Z0-9+.\-]*:)(\/\/([^/?#]*))?([^?#]*)(\?[^#]*)?(#.*)?$/.exec(abs);
+    this.href = abs;
+    this.protocol = m ? m[1] : '';
+    this.host = m && m[3] ? m[3] : '';
+    this.hostname = this.host.replace(/:\d+$/, '');
+    this.search = m && m[5] ? m[5] : '';
+    this.hash = m && m[6] ? m[6] : '';
+    this.pathname = m && m[4] ? m[4] : '';
+    this.searchParams = new GyURLSearchParams(this.search);
+    this.toString = function () { return this.href; };
+  }
+  G.URL = GyURL;
+
   // ---------------------------------------------------------------- console
   function fmt(args) {
     var out = [];
@@ -235,8 +359,9 @@ internal object HostBridge {
       config: {},
       request: {}
     };
-    attachChain(out);
-    return out;
+    // gyChain 会返回**新的**链对象（浅拷贝），必须把它的返回值交给插件，
+    // 否则插件拿到的原始对象没有 `.then` → `TypeError: ... is not a function`。
+    return attachChain(out);
   }
 
   /**
@@ -249,47 +374,75 @@ internal object HostBridge {
    * 而我们的 axios 桥是**同步**的（QuickJS 里没有事件循环可阻塞），返回的是一个普通对象。
    * 于是 `.then` 本身就是 `undefined` → `TypeError: ... is not a function`，整类插件在调用阶段死掉。
    *
-   * 这里给响应对象 + 包装后的 Promise 挂一条**已经结算**的最小 then 链：`.then` 立刻同步执行回调，
-   * `.catch` 对成功响应是空操作（返回自身），`.finally` 立刻执行。语义与「已 resolve 的 Promise」
-   * 一致，且不依赖微任务队列。
+   * 这里给「已结算的值」挂一条 Promise 语义的同步链。0.0.6 的早期版本只在
+   * 「回调返回 undefined」时把链续上，`axios.post(...).then(f).then(g)`、
+   * `axios.post(...).then(f).catch(g)`、回调返回普通对象后继续链的写法全部
+   * 落到 `TypeError: ... is not a function` —— 这才是 0.0.4 体检 43 个「导入成功」的
+   * 插件装机后大面积搜不到的真因（QQ音乐/酷我/酷狗/咪咕/网易云/汽水 全中）。
+   *
+   * 现在：`.then/.catch/.finally` **恒返回可继续链的已结算对象**，回调返回值无论是
+   * undefined、普通对象、数组还是基本类型，都会被打包成下一环；回调抛异常则转成
+   * rejected 环，交给后面的 `.catch`；回调返回 thenable 时同步吸收其状态。
    */
-  function attachChain(obj, err) {
-    if (!obj || typeof obj !== 'object') return obj;
-    if (obj.__gyChain) return obj;
-    Object.defineProperty(obj, '__gyChain', { value: true, enumerable: false });
-    obj.then = function (onOk, onErr) {
-      if (err) {
-        if (typeof onErr === 'function') {
-          try {
-            var r = onErr(err);
-            return r === undefined ? attachChain({}, null) : r;
-          } catch (e) { return attachChain({}, e); }
-        }
-        return attachChain({}, err);
+  function gyChain(value, error) {
+    // 已经是链：拆成「干净值 + 状态」，绝不让链套链（await 一个 thenable 会自解析成死循环）
+    if (value && typeof value === 'object' && value.__gyChain) {
+      var inner = value.__gyState;
+      // 显式传入的 error（例如 HTTP 非 2xx）优先于链上原状态
+      return gyChain(inner.value, error || inner.error);
+    }
+    var state = { ok: !error, value: value, error: error || null };
+    var target;
+    if (value instanceof Array) {
+      // 数组：浅拷贝后挂链，回调 / await 拿到的仍是**普通数组**（不带 then）
+      target = value.slice();
+    } else if (value && typeof value === 'object') {
+      // 响应对象 / 普通对象：浅拷贝字段，保住 res.status / res.data 这类直读
+      target = {};
+      for (var k in value) {
+        if (Object.prototype.hasOwnProperty.call(value, k)) target[k] = value[k];
       }
-      if (typeof onOk !== 'function') return obj;
-      try {
-        var v = onOk(obj);
-        return v === undefined ? obj : v;
-      } catch (e) {
-        return attachChain({}, e);
-      }
-    };
-    obj.catch = function (onErr) {
-      if (err && typeof onErr === 'function') {
-        try {
-          var r = onErr(err);
-          return r === undefined ? attachChain({}, null) : r;
-        } catch (e) { return attachChain({}, e); }
-      }
-      return obj;
-    };
-    obj.finally = function (fn) {
+    } else {
+      // 基本类型装进盒子，仍然可链
+      target = {};
+      target.__gyBox = true;
+      target.valueOf = function () { return state.value; };
+      target.toString = function () { return state.value === undefined ? '' : String(state.value); };
+    }
+    Object.defineProperty(target, '__gyChain', { value: true, enumerable: false });
+    Object.defineProperty(target, '__gyState', { value: state, enumerable: false, configurable: true });
+    target.then = function (onOk, onErr) { return gySettle(state, onOk, onErr); };
+    target.catch = function (onErr) { return gySettle(state, null, onErr); };
+    target.finally = function (fn) {
       if (typeof fn === 'function') { try { fn(); } catch (e) { /* ignore */ } }
-      return obj;
+      return target;
     };
-    return obj;
+    return target;
   }
+
+  function gySettle(state, onOk, onErr) {
+    if (!state.ok) {
+      if (typeof onErr === 'function') {
+        try { return gyChain(onErr(state.error), null); }
+        catch (e) { return gyChain(null, e); }
+      }
+      return gyChain({}, state.error);
+    }
+    if (typeof onOk !== 'function') return gyChain(state.value, null);
+    var out;
+    try { out = onOk(state.value); }
+    catch (e) { return gyChain(null, e); }
+    // 回调又返回了一条链 / 原生 Promise（已结算的 Promise 由宿主 drainJobs 驱动）
+    if (out && typeof out === 'object') {
+      if (out.__gyState) {
+        return out.__gyState.ok ? gyChain(out.__gyState.value, null) : gyChain({}, out.__gyState.error);
+      }
+      if (out.__gyChain) return out;
+    }
+    return gyChain(out, null);
+  }
+
+  function attachChain(obj, err) { return gyChain(obj, err || null); }
   G.__gy_attachChain = attachChain;
 
   function request(config) {
@@ -300,6 +453,12 @@ internal object HostBridge {
     if (!url) throw new Error('axios: url is required');
 
     var params = config.params;
+    // 插件常把 URLSearchParams 实例当 params/data 传（快音、36DJ 就这样）
+    if (params instanceof GyURLSearchParams) {
+      var qs = params.toString();
+      if (qs) url += (url.indexOf('?') >= 0 ? '&' : '?') + qs;
+      params = null;
+    }
     if (params && typeof params === 'object') {
       var pairs = [];
       for (var k in params) {
@@ -461,6 +620,14 @@ internal object HostBridge {
   var G = globalThis;
   var SETTLED = { __gySettled: true };
 
+  // 待结算的 async 调用槽位。settle() 只**登记** Promise 状态，绝不在这里驱动 job 队列：
+  // 从 JS host 回调里驱动 QuickJS 的 executePendingJob，会把「一个微任务里再起微任务」的链
+  // 全部压在**同一次 native 调用**内，墙钟预算只在每轮之间检查 → 真机上实测把
+  // DefaultDispatch 钉在 Java_com_dokar_quickjs_QuickJs_executePendingJob 里 100% CPU
+  // 空转数分钟（B站/清风DJ/好听轻音乐「搜周杰伦」永远不出结果、也不报错的真因）。
+  // 现在由 Kotlin 侧在**顶层**（不在任何 JS 回调里）一次推一个 job，逐步推进 + 逐步检查时限。
+  G.__gy_pending = null;
+
   function settle(result, fnName) {
     if (!result || typeof result.then !== 'function') {
       return { ok: true, value: result };
@@ -472,30 +639,44 @@ internal object HostBridge {
     } catch (e) {
       return { ok: false, error: 'function ' + fnName + ' returned a broken Promise: ' + describe(e) };
     }
-    // `async function` 的续体挂在 job 队列上：只挂 then 不驱动 job，`state.done` 永远是 false。
-    // 这里把已入队的微任务跑掉（`__gy_drainJobs` 由宿主注入，内部调用 QuickJS 的
-    // executePendingJob 直到队列空）。await 的续体可能是**几段**：跑一轮只推进到下一个
-    // await 点，所以循环 drain 直到结算，或某一轮没有任何推进为止。
-    var rounds = 0;
-    while (!state.done && rounds++ < 64) {
-      // 定时器要在每一轮再兑现一次：`__gy_call` 只在函数返回后 flush 一轮，
-      // 而 `await sleep()`（先 await、再在续体里 setTimeout）把定时器注册在第一次 flush 之后，
-      // 不在这里补 flush，那个 Promise 永远不会有 resolve 的机会 → 死等到超时。
-      if (typeof G.__gy_flushTimers === 'function') { try { G.__gy_flushTimers(); } catch (e) { /* ignore */ } }
-      if (typeof G.__gy_drainJobs !== 'function') break;
-      var progressed = false;
-      try { progressed = G.__gy_drainJobs() > 0; } catch (e) { break; }
-      if (!progressed) break;
-    }
-    if (!state.done) {
-      return {
-        ok: false,
-        error: 'function ' + fnName + ' returned a Promise that has not settled; ' +
-               'MusicFree plugins must return synchronously (use axios with a sync bridge)'
-      };
-    }
-    return state.ok ? { ok: true, value: state.value } : { ok: false, error: describeWithStack(state.error) };
+    G.__gy_pending = state;
+    return { pending: true };
   }
+
+  // 顶层轮询入口（Kotlin 侧每推一个 job 之后调用一次）：
+  //   { pending: true } → 还没结算，宿主继续 drain
+  //   { pending: false, result: <envelope json text> } → 已结算，result 就是 __gy_call 的返回值
+  G.__gy_poll = function () {
+    var state = G.__gy_pending;
+    if (!state) return { pending: false, result: JSON.stringify({ ok: false, error: 'pending call lost' }) };
+    if (!state.done) return { pending: true };
+    G.__gy_pending = null;
+    if (!state.ok) return { pending: false, result: JSON.stringify({ ok: false, error: describeWithStack(state.error) }) };
+    var payload = JSON.stringify(state.value === undefined ? null : state.value);
+    if (payload === undefined) payload = 'null';
+    return { pending: false, result: JSON.stringify({ ok: true, data: payload }) };
+  };
+
+  // 宿主在**顶层**驱动 Promise 队列的入口：每次 evaluate 调用一次，最多跑 ms 毫秒。
+  // 每次推进都走 `__gy_drainOneJob` —— 那是 Kotlin 注入的 host 函数，内部在 binding 回调里
+  // 调 `JS_ExecutePendingJob`（只有这个上下文才能安全推进，直接调会卡死运行时锁）。
+  // 到时限或结算就返回，把控制权交回 Kotlin，由 Kotlin 检查总预算。
+  G.__gy_pump = function (ms) {
+    var started = (typeof Date !== 'undefined' && Date.now) ? Date.now() : 0;
+    var advanced = 0;
+    while (true) {
+      if (G.__gy_pending && G.__gy_pending.done) break;
+      if (started && Date.now() - started >= ms) break;
+      if (typeof G.__gy_flushTimers === 'function') { try { G.__gy_flushTimers(); } catch (e) { /* ignore */ } }
+      if (typeof G.__gy_drainOneJob !== 'function') break;
+      var moved = false;
+      try { moved = G.__gy_drainOneJob() > 0; } catch (e) { break; }
+      if (!moved) break;
+      advanced++;
+      if (advanced > 20000) break;
+    }
+    return G.__gy_poll();
+  };
 
   G.__gy_call = function (fnName, argsJson) {
     var args;
@@ -511,6 +692,10 @@ internal object HostBridge {
       var raw = fn.apply(plugin, args);
       if (typeof G.__gy_flushTimers === 'function') G.__gy_flushTimers();
       var s = settle(raw, fnName);
+      if (s.pending) {
+        // 结果还没到：让 Kotlin 侧在顶层推 job 队列，再用 __gy_poll 取结果。
+        return JSON.stringify({ ok: false, pending: true });
+      }
       if (!s.ok) {
         return JSON.stringify({ ok: false, error: s.error });
       }

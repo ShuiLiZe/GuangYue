@@ -65,19 +65,31 @@ class MusicPluginBridge @Inject constructor(
 
     private fun lockOf(id: String): Any = synchronized(locks) { locks.getOrPut(id) { Any() } }
 
+    /**
+     * 把「插件 id 或 platform」统一解析成 [PluginMeta]。
+     *
+     * 为什么两种都要收：安装后的 id 形如 `36dj-2d5f50a470`，而**歌曲里带的是 platform**
+     * （`MusicItem.platform` 是插件声明的 platform，`TrackEntity.platform` 原样存下来，
+     * `MediaOrigin.pluginId` 又是从它来的）。0.0.7 装机实测：搜索正常，点播放却报
+     * 「插件不存在或未启用：36DJ」—— 就是因为播放链路拿 platform 当 id 去 find()。
+     */
+    private fun resolveMeta(pluginId: String): PluginMeta? =
+        manager.find(pluginId) ?: manager.findByPlatform(pluginId)
+
     private suspend fun runtimeFor(pluginId: String): PluginRuntime = withContext(Dispatchers.IO) {
         manager.load()
-        val meta = manager.find(pluginId) ?: throw PluginRuntimeException("插件不存在或未启用：$pluginId")
+        val meta = resolveMeta(pluginId) ?: throw PluginRuntimeException("插件不存在或未启用：$pluginId")
+        val key = meta.id
         if (!meta.enabled) throw PluginRuntimeException("插件已禁用：${meta.displayName}")
 
         synchronized(runtimes) {
-            runtimes[pluginId]?.takeIf { it.isAlive }?.let { return@withContext it }
+            runtimes[key]?.takeIf { it.isAlive }?.let { return@withContext it }
             val code = readCode(meta.id) ?: throw PluginRuntimeException("插件文件缺失，请重新安装")
 
             val rt = PluginRuntime(meta, code, http, preludeProvider)
-            rt.onLog = { level, msg -> onLog?.invoke(pluginId, level, msg) }
+            rt.onLog = { level, msg -> onLog?.invoke(key, level, msg) }
             rt.install()
-            runtimes[pluginId] = rt
+            runtimes[key] = rt
             rt
         }
     }
@@ -97,7 +109,7 @@ class MusicPluginBridge @Inject constructor(
         withContext(Dispatchers.IO) {
             val cacheKey = "search|$pluginId|$type|$keyword|$page"
             cache.get(cacheKey)?.let { return@withContext it as SearchResult }
-            val meta = manager.find(pluginId)
+            val meta = resolveMeta(pluginId)
             val fn = when (type) {
                 SearchType.ALBUM -> "searchAlbum"
                 SearchType.ARTIST -> "searchArtist"
@@ -121,27 +133,8 @@ class MusicPluginBridge @Inject constructor(
             result
         }
 
-    private fun parseSearch(raw: JsonElement, platform: String, type: String): SearchResult {
-        val o = raw.asObj()
-        // MusicFree returns { isEnd, data: [...] } but some plugins return the array directly.
-        val arr = raw.asArr() ?: o?.get("data").asArr()
-            ?: return SearchResult(isEnd = true)
-        val isEnd = o?.get("isEnd").asBool() ?: arr.isEmpty()
-        return when (type) {
-            SearchType.ALBUM -> SearchResult(
-                albums = arr.mapNotNull { AlbumItem.from(it.asObj(), platform) },
-                isEnd = isEnd,
-            )
-            SearchType.ARTIST -> SearchResult(
-                artists = arr.mapNotNull { ArtistItem.from(it.asObj(), platform) },
-                isEnd = isEnd,
-            )
-            else -> SearchResult(
-                items = arr.mapNotNull { MusicItem.from(it.asObj(), platform) },
-                isEnd = isEnd,
-            )
-        }
-    }
+    private fun parseSearch(raw: JsonElement, platform: String, type: String): SearchResult =
+        SearchParser.parse(raw, platform, type)
 
     /** Search every enabled plugin in parallel and merge, tagged by platform. */
     suspend fun searchAll(keyword: String, page: Int = 1, type: String = SearchType.MUSIC): List<SearchResult> =
@@ -197,11 +190,7 @@ class MusicPluginBridge @Inject constructor(
         payload ?: return@withContext null
         try {
             val raw = invoke(pluginId) { call("getMediaSource", payload, JsonPrimitive(quality)) }
-            val o = raw.asObj() ?: return@withContext null
-            val url = o["url"].asStr()?.takeIf { it.isNotBlank() } ?: return@withContext null
-            val headers = LinkedHashMap<String, String>()
-            o["headers"].asObj()?.forEach { (k, v) -> v.asStr()?.let { headers[k] = it } }
-            MediaSourceResult(url, headers, o["mimeType"].asStr())
+            SearchParser.mediaSource(raw)
         } catch (e: PluginRuntimeException) {
             android.util.Log.w("GuangYuePlugin", "getMediaSource failed for $pluginId: ${e.message}")
             null

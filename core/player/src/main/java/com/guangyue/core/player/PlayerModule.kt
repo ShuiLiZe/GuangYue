@@ -47,12 +47,13 @@ class PluginMediaSourceResolver @Inject constructor(
                 ).toJson()
             }
 
+        val label = row?.title?.takeIf { it.isNotBlank() } ?: "这首歌"
         val result = bridge.getMediaSource(
             pluginId = origin.pluginId,
             musicItemRaw = payload,
             item = pluginItem,
             quality = origin.quality.wire,
-        ) ?: throw ResolutionException("插件「${origin.pluginId}」未能返回播放地址")
+        ) ?: throw ResolutionException("这个音源取不到「$label」的播放地址")
 
         ResolvedSource(result.url, result.headers, volatile = true)
     }

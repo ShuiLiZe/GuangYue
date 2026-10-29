@@ -28,6 +28,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * One sandboxed QuickJS runtime per plugin.
@@ -53,6 +54,11 @@ class PluginRuntime(
     @Volatile private var qjs: QuickJs? = null
     private var installed = false
 
+    /** 见 [drainJobs]：保证 job 队列的推进永不递归重入。 */
+    private val drainLatch = AtomicBoolean(false)
+
+
+
     /** Called for anything the plugin logs through `console.*`. */
     var onLog: ((level: String, message: String) -> Unit)? = null
 
@@ -76,6 +82,14 @@ class PluginRuntime(
                 // 以前这里返回 args.size（恒 0），JS 侧第一轮就判无进展退出，多层 await 的
                 // 插件于是永远停在 "Promise that has not settled"。
                 if (drainJobs(runtime)) 1 else 0
+            }
+
+            runtime.function("__gy_drainOneJob") { args ->
+                // 只推进一个 job。由 JS 侧 `G.__gy_pump(ms)` 在**自己的循环里**调用 ——
+                // 此时本函数正运行在 QuickJS 的 binding 回调上下文里，运行时锁是递归持有的，
+                // `JS_ExecutePendingJob` 才能安全推进。若从普通 Kotlin 线程直接调 native
+                // （0.0.7 试过的方案），会永久卡在 `NonPI::MutexLockWithTimeout` 的 futex 上。
+                if (drainOneJob(runtime)) 1 else 0
             }
 
             runtime.function("__gy_log") { args ->
@@ -149,8 +163,20 @@ class PluginRuntime(
             withWatchdog(runtime) {
                 // dispatcher 已经返回 JSON **文本**，[read] 会再 JSON.stringify 一次把它包成
                 // JSON 字符串字面量，所以这里要 `JSON.parse` 还原成原来的文本。
-                val text = read(runtime, "JSON.parse(" + expr + ")", "call.js")
-                if (text == "null" || text.isEmpty()) "{\"ok\":false,\"error\":\"empty result\"}" else text            }
+                var text = read(runtime, "JSON.parse(" + expr + ")", "call.js")
+                // Promise 未结算时 dispatcher 返回 {"pending":true}，把结果留在 __gy_pending，
+                // 由这里在**顶层**（不在任何 JS 回调里）逐 job 推进直到结算。
+                //
+                // 为什么还要单独线程 + Future 超时：真机上 `JS_ExecutePendingJob` 会卡在
+                // QuickJS 运行时锁的 futex 上不返回（native 栈
+                // `NonPI::MutexLockWithTimeout ← Java_com_dokar_quickjs_QuickJs_executePendingJob`），
+                // 这种 native 阻塞既不在 `evaluate` 的字节码检查点里（`interruptEvaluation()`
+                // 管不到），也无法用「每轮之间看 nanoTime」的预算打断。因此把推进会话放到
+                // 独占线程上，主流程只用 `Future.get(超时)` 等它：等不到就如实报
+                // 「异步结果没结算」，UI 立刻有明确提示，而不是空白。
+                if (isPending(text)) text = drivePending(runtime)
+                if (text == "null" || text.isEmpty()) "{\"ok\":false,\"error\":\"empty result\"}" else text
+            }
         } catch (e: PluginRuntimeException) {
             throw e
         } catch (t: Throwable) {
@@ -455,16 +481,83 @@ class PluginRuntime(
      * 用 JNI 反射而不是新加依赖：这个符号是同库里导出的 C 函数，quickjs-kt 的 so 一定带它。
      * 任何一步失败都静默降级（返回 false），调用方会照旧报「Promise 未结算」——不会伪装成功。
      */
-    private fun drainJobs(runtime: QuickJs): Boolean = runCatching {
-        var drained = false
-        runtime.withNativeContext { native ->
-            var guard = 0
-            // 返回 true = 真的推进了一个 job；false = 队列已空（或出错），停下。
-            while (guard++ < MAX_PENDING_JOBS && PendingJobDrainer.next(runtime, native.contextAddress, native.runtimeAddress)) {
-                drained = true
+    private fun drainJobs(runtime: QuickJs): Boolean {
+        // **重入闩**：JS 侧 `settle()` 调 `__gy_drainJobs` → JVM 调 `executePendingJob` → 执行到的
+        // 微任务里又可能再调 `__gy_drainJobs`。没有闩时它是**递归重入**：每层还能跑
+        // MAX_PENDING_JOBS 个 job，真机上实测把线程钉在 `JS_ExecutePendingJob` 里 100% CPU 空转
+        // 三分钟以上（0.0.7 装机后「搜周杰伦」永远不出结果的真因）。嵌套调用直接返回 false
+        // 表示「外层已经在推队列了」，语义正确且立刻解除递归。
+        if (!drainLatch.compareAndSet(false, true)) return false
+        return try {
+            var drained = false
+            val deadline = System.nanoTime() + DRAIN_BUDGET_NANOS
+            runtime.withNativeContext { native ->
+                var guard = 0
+                // 返回 true = 真的推进了一个 job；false = 队列已空（或出错），停下。
+                // 双重闸门：job 条数上限 + 墙钟预算 —— 插件写出自我续期的微任务链时，
+                // 预算到点就收工，让上层如实报「Promise 未结算」，而不是无限空转。
+                while (guard++ < MAX_PENDING_JOBS &&
+                    System.nanoTime() < deadline &&
+                    PendingJobDrainer.next(runtime, native.contextAddress, native.runtimeAddress)
+                ) {
+                    drained = true
+                }
             }
+            drained
+        } catch (t: Throwable) {
+            false
+        } finally {
+            drainLatch.set(false)
         }
-        drained
+    }
+
+
+    /** dispatcher 在 Promise 未结算时返回的就是这个形状（见 HostBridge.CALL_DISPATCHER）。 */
+    private fun isPending(text: String): Boolean = text.contains("\"pending\":true")
+
+    /**
+     * 推进 Promise 队列直到结算，超过 [PENDING_BUDGET_NANOS] 如实报「没结算」。
+     *
+     * 这是 0.0.7 修的第三处根因。真机 trace 证明：`JS_ExecutePendingJob` **只能在 binding
+     * 回调里**被调用。从普通线程直接调，`withNativeContext` 会先抢 QuickJS 的 jsMutex，
+     * 然后 native 里的 `JS_LockRuntime` 又去抢同一把不可重入锁 → 线程永久卡在
+     * `NonPI::MutexLockWithTimeout` 的 futex 上；watchdog 的 `interruptEvaluation()` 与
+     * `Thread.interrupt()` 都救不了（它们只在 `evaluate` 的字节码检查点生效，管不到
+     * host 回调里的 native 循环）。B站 / 清风DJ / 好听轻音乐「搜周杰伦」永远不出结果、
+     * 也不报错，就是这么来的。
+     *
+     * 所以改成：JS 只**登记** Promise 状态（`G.__gy_pending`），Kotlin 在顶层反复发
+     * **有界的** `evaluate("__gy_pump(ms)")`。JS 侧循环调 `__gy_drainOneJob()`（宿主注入，
+     * 内部就是 executePendingJob，执行时天然处于 binding 回调上下文）推进队列，到时限或
+     * 结算就返回；每轮之间回到 Kotlin 才检查总预算。既能持续推进，也不会在一次 native
+     * 调用里跑成分钟级空转。
+     */
+    private fun drivePending(runtime: QuickJs): String {
+        val deadline = System.nanoTime() + PENDING_BUDGET_NANOS
+        while (System.nanoTime() < deadline) {
+            val state = runCatching {
+                read(runtime, "__gy_pump(1200)", "pump.js")
+            }.getOrNull() ?: break
+            val obj = Json2.parse(state).asObj() ?: break
+            val result = obj["result"].asStr()
+            if (obj["pending"].asBool() != true && result != null) return result
+        }
+        throw PluginRuntimeException(
+            "插件返回的异步结果没结算（超过 ${PENDING_BUDGET_NANOS / 1_000_000_000}s）"
+        )
+    }
+
+    /**
+     * 推进一个 job；返回是否真的推进了。
+     *
+     * 只在 `__gy_pump` 的 JS 循环里被调用 —— 那是 binding 回调上下文，runtime 锁递归持有，
+     * 所以能安全推进（见 [drivePending] 的说明）。[drainJobs] 保留给旧的 `__gy_drainJobs`
+     * 回调（`G.__gy_pump` 之前的老路径），带重入闩。
+     */
+    private fun drainOneJob(runtime: QuickJs): Boolean = runCatching {
+        runtime.withNativeContext { native ->
+            PendingJobDrainer.next(runtime, native.contextAddress, native.runtimeAddress)
+        }
     }.getOrDefault(false)
 
     /**
@@ -595,6 +688,19 @@ class PluginRuntime(
          * 给 10 万是为了容错，同时防止插件写出自我续接的死循环把调用线程钉死。
          */
         const val MAX_PENDING_JOBS = 100_000
+
+        /**
+         * 单次 [drainJobs] 的墙钟预算（1.5s）。
+         *
+         * 没有它的时候，插件里「一起微任务就再发一次 HTTP」的自我续期链会让
+         * `JS_ExecutePendingJob` 一直在 native 里跑，JVM 线程 100% CPU 打转几分钟，
+         * 30s watchdog 的 `Thread.interrupt()` 对 native 循环无效。给它一个上限，
+         * 到点就收工，上层如实报「Promise 未结算」，用户看到的是明确错误而不是空转。
+         */
+        private val DRAIN_BUDGET_NANOS = 1_500_000_000L
+
+    /** 顶层推 Promise 队列的总预算；到点如实报「异步结果没结算」。 */
+    private val PENDING_BUDGET_NANOS = 12_000_000_000L
 
         private const val EVAL_TIMEOUT_MS = CALL_TIMEOUT_MS
 

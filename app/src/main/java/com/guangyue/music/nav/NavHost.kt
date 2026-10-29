@@ -6,9 +6,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -38,7 +35,6 @@ import com.guangyue.feature.player.lyrics.LyricStageScreen
 import com.guangyue.feature.player.screen.IPlayerRoute
 import com.guangyue.feature.player.viewmodel.LyricsViewModel
 import com.guangyue.feature.search.SearchScreen
-import com.guangyue.feature.search.SearchTab
 import com.guangyue.feature.search.SearchViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -142,15 +138,14 @@ fun GuangYueNavHost(
         composable(Routes.SEARCH) {
             val vm: SearchViewModel = hiltViewModel()
             val state by vm.state.collectAsStateWithLifecycle()
-            var tab by remember { mutableStateOf(SearchTab.TRACKS) }
             ShellColumn(
                 content = {
                     SearchScreen(
                         state = state,
                         onQueryChange = vm::onQueryChange,
                         onSearch = vm::search,
-                        onPickAll = { vm.selectPlatform("") },
-                        onPickPlatform = { id -> vm.selectPlatform(id) },
+                        // 0.0.7：音源单选，只用用户选中的那一个插件搜
+                        onPickSource = { id -> vm.selectSource(id) },
                         onPlay = { index ->
                             vm.playFrom(index) { items, at ->
                                 playback.setQueue(items, at, true)
@@ -165,8 +160,7 @@ fun GuangYueNavHost(
                         },
                         onOpenAlbum = { item -> vm.openAlbum(item) },
                         onOpenArtist = { item -> vm.openArtist(item) },
-                        tab = tab,
-                        onTabChange = { tab = it },
+                        onTabChange = { vm.onTabChange(it) },
                     )
                 },
                 miniPlayer = miniPlayer,
@@ -250,6 +244,9 @@ fun GuangYueNavHost(
                 onSetAllEnabled = { vm.setAllEnabled(it) },
                 onForgetSubscription = { vm.forgetSubscription(it) },
                 errorDetails = messageDetails,
+                onEnableHealthyOnly = { vm.enableHealthyOnly() },
+                onRecheckAll = { vm.recheckAll() },
+                onMove = { plugin, to -> vm.moveTo(plugin.id, to) },
             )
         }
 

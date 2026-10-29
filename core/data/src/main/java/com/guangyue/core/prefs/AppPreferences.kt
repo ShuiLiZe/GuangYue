@@ -22,8 +22,19 @@ class AppPreferences @Inject constructor(
         get() = prefs.getBoolean(KEY_DARK, false)
         set(value) = prefs.edit().putBoolean(KEY_DARK, value).apply()
 
+    /**
+     * 搜索页上次选中的音源（插件 id）。
+     *
+     * 空串 = 从未选过，搜索页会落到可选音源里的第一个。
+     * 0.0.7 的搜索**只**打这一个插件，所以「上次选的」必须记住：不然每次进搜索页都得重选。
+     */
+    var lastSourceId: String
+        get() = prefs.getString(KEY_LAST_SOURCE, "").orEmpty()
+        set(value) = prefs.edit().putString(KEY_LAST_SOURCE, value).apply()
+
     private companion object {
         const val FILE = "guangyue_prefs"
         const val KEY_DARK = "ui_dark_mode"
+        const val KEY_LAST_SOURCE = "search_last_source"
     }
 }

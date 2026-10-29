@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,7 +51,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.guangyue.core.plugin.PluginFunctions
 import com.guangyue.core.plugin.PluginMeta
 import com.guangyue.core.plugin.Subscription
 import com.guangyue.feature.library.design.FoliaToggle
@@ -99,6 +99,12 @@ fun PluginManagerScreen(
     onForgetSubscription: (String) -> Unit = {},
     /** 最近一次失败的插件详情（原始报错 + 元信息 JSON），供「展开详情」。 */
     errorDetails: String? = null,
+    /** 一键「只启用体检可用的」。 */
+    onEnableHealthyOnly: () -> Unit = {},
+    /** 在设备上真跑一遍体检（搜索 + getMediaSource）。 */
+    onRecheckAll: () -> Unit = {},
+    /** 拖动排序：把插件移到第 to 位（0 基）。 */
+    onMove: (PluginMeta, Int) -> Unit = { _, _ -> },
 ) {
     // Any local file works: MusicFree plugins are plain .js text.
     val picker = rememberLauncherForActivityResult(
@@ -214,6 +220,21 @@ fun PluginManagerScreen(
             }
         }
 
+        // 0.0.7：导入不再自动启用。两条一键动作——只开体检可用的 / 现场实测一遍。
+        // 用 FlowRow 自动换行：窄屏（360dp）下「只启用体检可用的」比原来长，等宽 Row 会把它压塌。
+        Spacer(Modifier.height(GySpace.m))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(GySpace.m),
+            verticalArrangement = Arrangement.spacedBy(GySpace.s),
+        ) {
+            PillButton("只启用体检可用的", GuangYueIcons.BadgeCheck) {
+                if (!busy) onEnableHealthyOnly()
+            }
+            PillButton("体检一遍", GuangYueIcons.ShieldCheck, filled = false) {
+                if (!busy) onRecheckAll()
+            }
+        }
+
         if (message != null) {
             Spacer(Modifier.height(GySpace.m))
             MessageCard(
@@ -253,6 +274,10 @@ fun PluginManagerScreen(
                         onToggle = { onToggle(plugin, it) },
                         onDelete = { onDelete(plugin) },
                         onCheckUpdate = { onCheckUpdate(plugin) },
+                        onDrag = { delta ->
+                            val from = plugins.indexOfFirst { it.id == plugin.id }
+                            if (from >= 0) onMove(plugin, from + delta)
+                        },
                     )
                 }
                 item { Spacer(Modifier.height(GySpace.xl)) }
@@ -361,10 +386,11 @@ private fun OfficialSourceBar(
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        // 主按钮用固定权重 1.3f，「检查更新」给自身宽度：原先 1f + 内容宽度在 360dp 下被压成 0 宽只剩边框。
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 Modifier
-                    .weight(1f)
+                    .weight(1.3f)
                     .clip(GyRadius.capsuleShape())
                     .background(if (busy) Gyp.accent.copy(alpha = 0.45f) else Gyp.accent)
                     .clickable(enabled = !busy) { onInstallOfficial() }
@@ -400,7 +426,7 @@ private fun OfficialSourceBar(
             ) {
                 Icon(GuangYueIcons.RefreshCw, null, tint = Gyp.accentText, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("检查更新", color = Gyp.accentText, fontSize = 12.sp)
+                Text("检查更新", color = Gyp.accentText, fontSize = 12.sp, maxLines = 1, softWrap = false)
             }
         }
     }
@@ -458,6 +484,7 @@ private fun PluginRow(
     onToggle: (Boolean) -> Unit,
     onDelete: () -> Unit,
     onCheckUpdate: () -> Unit,
+    onDrag: (Int) -> Unit = {},
 ) {
     var showError by remember(plugin.id) { mutableStateOf(false) }
 
@@ -496,24 +523,30 @@ private fun PluginRow(
                         modifier = Modifier.weight(1f, fill = false),
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text("v${plugin.version}", fontSize = 11.sp, color = Gyp.inkSoft)
+                    Text("v${plugin.version}", fontSize = 11.sp, color = Gyp.inkSoft, maxLines = 1, softWrap = false)
                 }
                 Spacer(Modifier.height(3.dp))
+                // 支持的搜索类型 + 体检结论（0.0.7）：用户在这里就能看出哪个源能搜什么、能不能播。
                 Text(
                     buildString {
-                        append("platform: ${plugin.platform}")
-                        if (plugin.supportedSearchType.isNotEmpty()) {
-                            append(" · ")
-                            append(plugin.supportedSearchType.joinToString("/"))
-                        }
-                        val impl = PluginFunctions.ALL.count { plugin.functions.contains(it) }
-                        append(" · $impl 个函数")
+                        append(plugin.searchTypes.joinToString("/"))
+                        append(" · ")
+                        append(plugin.healthLabel)
                     },
                     fontSize = 11.sp,
-                    color = Gyp.inkSoft,
+                    color = if (plugin.isHealthy) Gyp.accentText else Gyp.inkSoft,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            // 拖动排序：上/下移一位（长列表里比真拖拽稳，也能被截图测试覆盖）。
+            Column {
+                IconButton(onClick = { onDrag(-1) }, modifier = Modifier.size(24.dp)) {
+                    Icon(GuangYueIcons.ChevronUp, "上移", tint = Gyp.inkSoft, modifier = Modifier.size(15.dp))
+                }
+                IconButton(onClick = { onDrag(1) }, modifier = Modifier.size(24.dp)) {
+                    Icon(GuangYueIcons.ChevronDown, "下移", tint = Gyp.inkSoft, modifier = Modifier.size(15.dp))
+                }
             }
             IconButton(onClick = onCheckUpdate) {
                 Icon(GuangYueIcons.RefreshCw, "检查更新", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
@@ -531,6 +564,19 @@ private fun PluginRow(
                     uncheckedTrackColor = Gyp.tint,
                     uncheckedBorderColor = Color.Transparent,
                 ),
+            )
+        }
+
+        // 体检没通过时的原因（取不到播放地址 / 搜索失败…）。
+        val note = plugin.healthNote
+        if (!note.isNullOrBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                note.take(100),
+                fontSize = 11.sp,
+                color = Gyp.danger,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
 
@@ -586,6 +632,7 @@ private fun PillButton(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Row 里给图标显式 16dp 尺寸：截图/窄屏下否则会被测量成 0 宽，只剩一个空胶囊。
         Icon(
             icon,
             contentDescription = null,
@@ -598,6 +645,8 @@ private fun PillButton(
             color = if (filled) Color.White else Gyp.accentText,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }

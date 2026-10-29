@@ -67,6 +67,11 @@ class PluginManager @Inject constructor(
 
     @Volatile private var loaded = false
 
+    init {
+        // 让出厂体检基线（assets/plugin-health.json）能在没有 Context 的代码里被读到
+        PluginAssetContext.install(context)
+    }
+
     /** 最近一次失败插件的原始报错（含元信息 JSON），供「展开详情」显示。 */
     @Volatile
     var lastErrorDetails: String? = null
@@ -74,7 +79,7 @@ class PluginManager @Inject constructor(
 
     suspend fun load() = withContext(Dispatchers.IO) {
         if (loaded) return@withContext
-        _plugins.value = store.readIndex().sortedBy { it.name }
+        _plugins.value = store.readIndex().ordered()
         _subscriptions.value = store.readSubscriptions().sortedByDescending { it.checkedAt }
         loaded = true
         if (_catalog.value.isEmpty()) {
@@ -222,7 +227,17 @@ class PluginManager @Inject constructor(
             val finalMeta = probed.copy(
                 id = id,
                 srcUrl = probed.srcUrl ?: source.takeIf { it.startsWith("http") },
-                enabled = existing?.enabled ?: true,
+                // 0.0.7：导入不再自动启用。批量导入 57 个插件时全部启用会让搜索页把每个音源
+                // 都打一遍（还会被源站限流），用户根本不知道该用哪个。现在导入只代表「已安装」，
+                // 出现在搜索页的可选列表里需要用户自己打开，或用「只启用体检可用的」一键打开。
+                enabled = existing?.enabled ?: false,
+                sortOrder = existing?.sortOrder ?: (_plugins.value.maxOfOrNull { it.sortOrder } ?: 0) + 1,
+                health = existing?.health
+                    // 没体检过就用打包的出厂体检基线（真机实测结果），否则保持「未体检」
+                    ?: PluginHealthBaseline.lookup(probed.platform)?.first
+                    ?: PluginHealth.UNKNOWN,
+                healthNote = existing?.healthNote ?: PluginHealthBaseline.lookup(probed.platform)?.second,
+                healthAt = existing?.healthAt ?: 0L,
                 installedAt = existing?.installedAt ?: System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis(),
             )
@@ -566,10 +581,83 @@ class PluginManager @Inject constructor(
             if (it.enabled == enabled) it else it.copy(enabled = enabled, updatedAt = now)
         }
         next.forEach { store.writeMeta(it) }
-        _plugins.value = next.sortedBy { it.name }
+        _plugins.value = next.ordered()
         store.writeIndex(_plugins.value)
         notifyReload(null)
     }
+
+    /**
+     * 0.0.7「只启用体检可用的」：把 [PluginHealth.OK] 的插件打开、其余关掉。
+     *
+     * 导入后 57 个插件全部处于「已安装未启用」，用户点这一下就能得到一份真能搜能播的列表，
+     * 而不必逐个试错。返回 (启用数, 总插件数)。
+     */
+    suspend fun enableHealthyOnly(): Pair<Int, Int> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val next = _plugins.value.map { meta ->
+            val wanted = meta.isHealthy
+            if (meta.enabled == wanted) meta else meta.copy(enabled = wanted, updatedAt = now)
+        }
+        next.forEach { store.writeMeta(it) }
+        _plugins.value = next.ordered()
+        store.writeIndex(_plugins.value)
+        notifyReload(null)
+        _plugins.value.count { it.enabled } to _plugins.value.size
+    }
+
+    /** 体检结论落盘（复检结束时批量写一次，避免逐个写 index）。 */
+    suspend fun recordHealth(
+        results: Map<String, Pair<String, String?>>,
+        markEnabled: Boolean = false,
+    ) = withContext(Dispatchers.IO) {
+        if (results.isEmpty()) return@withContext
+        val now = System.currentTimeMillis()
+        val next = _plugins.value.map { meta ->
+            val hit = results[meta.id] ?: return@map meta
+            meta.copy(
+                health = hit.first,
+                healthNote = hit.second,
+                healthAt = now,
+                enabled = if (markEnabled) hit.first == PluginHealth.OK else meta.enabled,
+            )
+        }
+        next.forEach { store.writeMeta(it) }
+        _plugins.value = next.ordered()
+        store.writeIndex(_plugins.value)
+        notifyReload(null)
+    }
+
+    /**
+     * 拖动排序：把 [id] 挪到 [to] 位置，重排后写回 [PluginMeta.sortOrder]。
+     *
+     * 管理页和搜索页的音源顺序都按它显示，用户把常用的音源拖到最上面即可。
+     */
+    suspend fun moveTo(id: String, to: Int) = withContext(Dispatchers.IO) {
+        val list = _plugins.value.toMutableList()
+        val from = list.indexOfFirst { it.id == id }
+        if (from < 0 || list.size < 2) return@withContext
+        val target = to.coerceIn(0, list.lastIndex)
+        if (from == target) return@withContext
+        val item = list.removeAt(from)
+        list.add(target, item)
+        val next = list.mapIndexed { index, meta ->
+            if (meta.sortOrder == index) meta else meta.copy(sortOrder = index)
+        }
+        next.forEach { store.writeMeta(it) }
+        _plugins.value = next
+        store.writeIndex(_plugins.value)
+    }
+
+    /**
+     * 搜索页需要的那份「可选音源」列表：只含已启用、无安装错误、真的声明了 search 的插件。
+     *
+     * 0.0.7 的硬要求是绝不一次并发打所有插件，所以这份列表只作为**选择器的候选**，
+     * 真正发请求的永远只有用户选中的那一个。
+     */
+    fun selectable(): List<PluginMeta> =
+        _plugins.value
+            .filter { it.enabled && it.error == null && it.hasSearch && it.supportsMusic }
+            .ordered()
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
         store.delete(id)
@@ -694,10 +782,14 @@ class PluginManager @Inject constructor(
         val list = _plugins.value.toMutableList()
         val at = list.indexOfFirst { it.id == meta.id }
         if (at >= 0) list[at] = meta else list.add(meta)
-        _plugins.value = list.sortedBy { it.name }
+        _plugins.value = list.ordered()
         store.writeIndex(_plugins.value)
         notifyReload(meta.platform)
     }
+
+    /** 用户排序优先，[PluginMeta.sortOrder] 相同（全 0 的老数据）时按名称。 */
+    private fun List<PluginMeta>.ordered(): List<PluginMeta> =
+        sortedWith(compareBy({ it.sortOrder }, { it.name }))
 
     private fun readText(uri: Uri): String? = runCatching {
         val path = uri.path

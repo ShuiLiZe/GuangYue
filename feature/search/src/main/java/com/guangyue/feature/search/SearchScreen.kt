@@ -37,6 +37,7 @@ import com.guangyue.core.plugin.AlbumItem
 import com.guangyue.core.plugin.ArtistItem
 import com.guangyue.core.plugin.MusicItem
 import com.guangyue.core.plugin.PluginMeta
+import com.guangyue.core.plugin.SearchType
 import com.guangyue.feature.library.design.FoliaSegmented
 import com.guangyue.feature.library.design.FoliaTextField
 import com.guangyue.feature.library.design.FoliaTopBar
@@ -49,40 +50,39 @@ import com.guangyue.feature.library.design.clickableNoRipple
 import com.guangyue.feature.library.design.icons.GuangYueIcons
 import com.guangyue.feature.library.design.marbleBackground
 
-/** 搜索结果的四个分类（m00161：单曲 / 专辑 / 歌单 / 歌手）。 */
-enum class SearchTab(val label: String) {
-    TRACKS("单曲"),
-    ALBUMS("专辑"),
-    SHEETS("歌单"),
-    ARTISTS("歌手"),
+/** 搜索结果的四个分类（单曲 / 专辑 / 歌单 / 歌手），[type] 是插件侧的搜索类型。 */
+enum class SearchTab(val label: String, val type: String) {
+    TRACKS("单曲", SearchType.MUSIC),
+    ALBUMS("专辑", SearchType.ALBUM),
+    SHEETS("歌单", SearchType.SHEET),
+    ARTISTS("歌手", SearchType.ARTIST),
 }
 
 /**
- * 搜索页（m00161）。
+ * 搜索页（0.0.7）。
  *
- * 上：搜索框 + 音源切换（横向 chip，含「全部」）；下：结果按四个分类分段展示。
- * 未搜索时给出搜索历史与推荐关键词。
+ * 上：搜索框 + **音源选择器**（用户自选，只用一个插件搜）；下：结果按插件支持的分类展示。
+ * 未搜索时给出搜索历史与推荐关键词。搜索失败会把原因写成一整句提示，不会只剩空白。
  */
 @Composable
 fun SearchScreen(
     state: SearchUiState,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
-    onPickAll: () -> Unit,
-    onPickPlatform: (String) -> Unit,
+    onPickSource: (String) -> Unit,
     onPlay: (Int) -> Unit,
     onAddToSheet: (MusicItem) -> Unit,
     onDownload: (MusicItem) -> Unit,
     onPickHistory: (String) -> Unit,
     onOpenAlbum: (MusicItem) -> Unit,
     onOpenArtist: (MusicItem) -> Unit,
-    tab: SearchTab,
     onTabChange: (SearchTab) -> Unit,
     modifier: Modifier = Modifier,
     bottomBar: (@Composable () -> Unit)? = null,
     miniPlayer: (@Composable () -> Unit)? = null,
 ) {
     val counts = state.tabCounts
+    val tab = state.tab
     Box(modifier.fillMaxSize().marbleBackground()) {
         Column(Modifier.fillMaxSize()) {
             FoliaTopBar(title = "搜索")
@@ -140,24 +140,42 @@ fun SearchScreen(
                 return@Column
             }
 
-            // 音源切换：全部 + 每个已启用插件
+            // 音源选择：用户自选一个，只有选中的那一个会被调用。
+            // 0.0.6 这里是「全部 + 每个插件」的多选，后果是一次搜索并发打所有插件。 
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = GySpace.pageH),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "音源",
+                    fontSize = GyText.hint,
+                    color = Gyp.t3,
+                    fontFamily = GuangYueDesign.Sans,
+                )
+                Spacer(Modifier.width(GySpace.s))
+                Text(
+                    text = state.sourceLabel,
+                    fontSize = GyText.hint,
+                    color = Gyp.t2,
+                    fontFamily = GuangYueDesign.Sans,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(GySpace.xs))
+
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = GySpace.pageH),
                 horizontalArrangement = Arrangement.spacedBy(GySpace.xs),
             ) {
-                item(key = "__all__") {
-                    SourcePill(
-                        label = "全部",
-                        selected = state.platforms.isEmpty(),
-                        onClick = onPickAll,
-                    )
-                }
                 items(state.available, key = { it.id }) { plugin ->
                     SourcePill(
                         label = platformLabelOf(plugin),
-                        selected = state.platforms.contains(plugin.id),
-                        onClick = { onPickPlatform(plugin.id) },
+                        selected = plugin.id == state.sourceId,
+                        onClick = { onPickSource(plugin.id) },
                     )
                 }
             }
@@ -177,35 +195,35 @@ fun SearchScreen(
                 }
             }
 
-            if (state.rows.isEmpty() && state.albums.isEmpty() && state.artists.isEmpty()) {
+            val hasResults = state.rows.isNotEmpty() || state.albums.isNotEmpty() || state.artists.isNotEmpty()
+            if (!hasResults) {
                 SearchDiscovery(
                     history = state.history,
                     onPickHistory = onPickHistory,
                     onPickKeyword = { onQueryChange(it); onSearch() },
                     query = state.query,
                     loading = state.loading,
-                    errors = state.errors,
+                    failure = state.failure,
+                    searched = state.searched,
                 )
             } else {
+                // 只显示当前音源 supportedSearchType 里有的分类
                 FoliaSegmented(
                     value = tab,
-                    options = listOf(
-                        SearchTab.TRACKS to "单曲 ${counts.tracks}",
-                        SearchTab.ALBUMS to "专辑 ${counts.albums}",
-                        SearchTab.SHEETS to "歌单 ${counts.sheets}",
-                        SearchTab.ARTISTS to "歌手 ${counts.artists}",
-                    ),
+                    options = state.availableTypes.map { it to "${it.label} ${counts.of(it)}" },
                     onSelect = onTabChange,
                     modifier = Modifier.padding(horizontal = GySpace.pageH),
                 )
                 Spacer(Modifier.height(GySpace.s))
+
+                FailureBanner(state.failure)
 
                 Box(Modifier.weight(1f)) {
                     when (tab) {
                         SearchTab.TRACKS -> TrackResults(state, onPlay, onDownload, onAddToSheet)
                         SearchTab.ALBUMS -> AlbumGrid(state.albums, onOpenAlbum)
                         SearchTab.ARTISTS -> ArtistGrid(state.artists, onOpenArtist)
-                        SearchTab.SHEETS -> SheetGrid(state.albums, onOpenAlbum)
+                        SearchTab.SHEETS -> SheetGrid(state.sheets, onOpenAlbum)
                     }
                 }
             }
@@ -245,7 +263,7 @@ private fun TrackResults(
     onDownload: (MusicItem) -> Unit,
     onAddToSheet: (MusicItem) -> Unit,
 ) {
-    val visible = state.visibleRows
+    val visible = state.rows
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 96.dp),
@@ -319,15 +337,6 @@ private fun TrackResults(
                     modifier = Modifier.padding(vertical = GySpace.xl, horizontal = GySpace.xl),
                 )
             }
-        }
-        items(state.errors, key = { "err:$it" }) { err ->
-            Text(
-                text = err,
-                color = Gyp.danger,
-                fontSize = GyText.hint,
-                fontFamily = GuangYueDesign.Sans,
-                modifier = Modifier.padding(horizontal = GySpace.pageH, vertical = 2.dp),
-            )
         }
     }
 }
@@ -451,7 +460,7 @@ private fun SheetGrid(sheets: List<AlbumItem>, onOpen: (MusicItem) -> Unit) {
     AlbumGrid(sheets, onOpen)
 }
 
-/** 未搜索时的探索区：搜索历史 + 推荐关键词。 */
+/** 未搜索时的探索区：搜索历史 + 推荐关键词；有失败原因时把那一句话顶在最上面。 */
 @Composable
 private fun SearchDiscovery(
     history: List<String>,
@@ -459,9 +468,10 @@ private fun SearchDiscovery(
     onPickKeyword: (String) -> Unit,
     query: String,
     loading: Boolean,
-    errors: List<String>,
+    failure: String?,
+    searched: Boolean,
 ) {
-    if (query.isNotEmpty() && !loading && errors.isEmpty()) {
+    if (query.isNotBlank() && !loading && failure == null && searched) {
         com.guangyue.feature.library.design.FoliaEmptyState(
             title = "没有结果",
             subtitle = "换个关键词，或换一个音源",
@@ -473,6 +483,9 @@ private fun SearchDiscovery(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 96.dp),
     ) {
+        if (failure != null) {
+            item(key = "failure") { FailureBanner(failure) }
+        }
         if (history.isNotEmpty()) {
             item(key = "history-title") {
                 com.guangyue.feature.library.design.FoliaSectionTitle(text = "搜索历史")
@@ -493,16 +506,44 @@ private fun SearchDiscovery(
                 onClick = onPickKeyword,
             )
         }
-        items(errors, key = { "err:$it" }) { err ->
-            Text(
-                text = err,
-                color = Gyp.danger,
-                fontSize = GyText.hint,
-                fontFamily = GuangYueDesign.Sans,
-                modifier = Modifier.padding(horizontal = GySpace.pageH, vertical = 2.dp),
-            )
-        }
     }
+}
+
+/**
+ * 单音源失败提示条。
+ *
+ * 0.0.7 的硬要求：搜索失败/超时不能只剩一片空白。这里固定把【原因 + 换音源建议】显示出来，
+ * 文案由 ViewModel 拼好（「xx 音源搜索失败：原因，换个音源试试」）。
+ */
+@Composable
+internal fun FailureBanner(failure: String?) {
+    if (failure.isNullOrBlank()) return
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = GySpace.pageH, vertical = GySpace.s)
+            .clip(RoundedCornerShape(GyRadius.field))
+            .background(Gyp.danger.copy(alpha = 0.12f), RoundedCornerShape(GyRadius.field))
+            .padding(horizontal = GySpace.m, vertical = GySpace.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = failure,
+            fontSize = GyText.hint,
+            lineHeight = GyText.hintHeight,
+            color = Gyp.danger,
+            fontFamily = GuangYueDesign.Sans,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/** 当前分类的计数（按 tab 取对应列表的长度）。 */
+internal fun TabCounts.of(tab: SearchTab): Int = when (tab) {
+    SearchTab.TRACKS -> tracks
+    SearchTab.ALBUMS -> albums
+    SearchTab.SHEETS -> sheets
+    SearchTab.ARTISTS -> artists
 }
 
 /** 音源切换胶囊（Folia 分段控件的单选形态）。 */

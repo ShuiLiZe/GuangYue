@@ -183,6 +183,7 @@ class HomeViewModel @Inject constructor(
 @HiltViewModel
 class PluginViewModel @Inject constructor(
     private val manager: PluginManager,
+    private val checker: com.guangyue.core.plugin.PluginHealthChecker,
 ) : ViewModel() {
 
     val plugins: StateFlow<List<PluginMeta>> = manager.plugins
@@ -342,6 +343,77 @@ class PluginViewModel @Inject constructor(
     /** 全选 / 全不选。 */
     fun setAllEnabled(enabled: Boolean) {
         viewModelScope.launch { manager.setAllEnabled(enabled) }
+    }
+
+    /**
+     * 一键「只启用体检可用的」。
+     *
+     * 只用打包进来的出厂体检基线（[com.guangyue.core.plugin.PluginHealthBaseline]）判断，
+     * 不在这里联网跑 57 个插件——那是 [recheckAll] 的事。
+     */
+    fun enableHealthyOnly() = run {
+        _busy.value = true
+        viewModelScope.launch {
+            try {
+                val (on, total) = manager.enableHealthyOnly()
+                say(
+                    if (on == 0) {
+                        "没有体检通过的音源。点「体检」实测一遍，或先安装官方音源"
+                    } else {
+                        "已启用 $on 个体检可用的音源（共 $total 个）"
+                    }
+                )
+            } catch (t: Throwable) {
+                say("操作失败：" + (t.message ?: t.javaClass.simpleName))
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    /** 拖动排序：把插件拖到第 [to] 位（0 基）。 */
+    fun moveTo(id: String, to: Int) {
+        viewModelScope.launch { manager.moveTo(id, to) }
+    }
+
+    /** 在设备上实测所有已启用插件（真搜一次 + 真取一次播放地址）。 */
+    fun recheckAll(markEnabled: Boolean = false) = run {
+        requireIdle() ?: return@run
+        _busy.value = true
+        viewModelScope.launch {
+            try {
+                val targets = manager.plugins.value.count { it.enabled && it.error == null }
+                if (targets == 0) {
+                    say("没有已启用的插件可以体检，先打开几个音源")
+                    return@launch
+                }
+                say("正在体检 $targets 个音源…")
+                val reports = checker.checkAll(markEnabled = markEnabled) { done, total, report ->
+                    _message.value = "体检中 $done/$total：${report.name} → ${healthText(report.health)}"
+                }
+                val ok = reports.count { it.health == com.guangyue.core.plugin.PluginHealth.OK }
+                val failed = reports.filter { it.health != com.guangyue.core.plugin.PluginHealth.OK }
+                say(
+                    if (ok > 0) "体检完成：$ok/${reports.size} 个音源真能搜能播"
+                    else "体检完成：${reports.size} 个音源都没通过",
+                    failed.takeIf { it.isNotEmpty() }
+                        ?.joinToString("\n") { "· ${it.name}：${healthText(it.health)}${it.note?.let { n -> "（$n）" }.orEmpty()}" },
+                )
+            } catch (t: Throwable) {
+                say("体检失败：" + (t.message ?: t.javaClass.simpleName))
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    private fun healthText(health: String): String = when (health) {
+        com.guangyue.core.plugin.PluginHealth.OK -> "可用"
+        com.guangyue.core.plugin.PluginHealth.NO_RESULT -> "搜索无结果"
+        com.guangyue.core.plugin.PluginHealth.NO_MEDIA -> "取不到播放地址"
+        com.guangyue.core.plugin.PluginHealth.SEARCH_FAILED -> "搜索失败"
+        com.guangyue.core.plugin.PluginHealth.UNSUPPORTED -> "未声明 search"
+        else -> "未体检"
     }
 
     fun forgetSubscription(url: String) {

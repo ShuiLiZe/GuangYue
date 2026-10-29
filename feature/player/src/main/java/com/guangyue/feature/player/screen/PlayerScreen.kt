@@ -249,6 +249,34 @@ fun IPlayerRoute(
                 overflow = TextOverflow.Ellipsis,
             )
 
+            // 0.0.7：取不到播放地址不能再沉默。错误来自 PlaybackController（getMediaSource 返回空 /
+            // 两次重试都失败），这里直接告诉用户下一步该做什么——换一个音源搜同名歌曲。
+            val failure = playback.error
+            if (!failure.isNullOrBlank()) {
+                Spacer(Modifier.height(GySpace.m))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(GyRadius.row))
+                        .background(Gyp.danger.copy(alpha = 0.10f))
+                        .padding(horizontal = GySpace.m, vertical = 8.dp),
+                ) {
+                    Text(
+                        text = failure,
+                        fontSize = GyText.hint,
+                        color = Gyp.danger,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "用其他音源搜同名歌曲",
+                        fontSize = GyText.hint,
+                        color = Gyp.t2,
+                    )
+                }
+            }
+
             Spacer(Modifier.height(GySpace.l))
 
             // 进度条：Folia LatticeChrome 的 2dp 细线
