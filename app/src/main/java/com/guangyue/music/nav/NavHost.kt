@@ -1,13 +1,12 @@
 package com.guangyue.music.nav
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
@@ -28,7 +27,9 @@ import com.guangyue.feature.player.screen.IPlayerRoute
 import com.guangyue.feature.player.viewmodel.LyricsViewModel
 import com.guangyue.feature.search.SearchScreen
 import com.guangyue.feature.search.SearchViewModel
-import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 object Routes {
     const val HOME = "home"
@@ -37,20 +38,24 @@ object Routes {
     const val LYRIC_FLOW = "lyricFlow"
     const val LYRIC_STAGE = "lyricStage"
     const val PLUGINS = "plugins"
-        const val DOWNLOADS = "downloads"
+    const val DOWNLOADS = "downloads"
+    const val SETTINGS = "settings"
+    const val LICENSES = "licenses"
 }
 
 /**
- * Root navigation.
+ * 根导航。
  *
- * Every screen shares [PlaybackController] and [LyricsViewModel]-backed state, so the mini bar
- * on the home screen and the full controls always agree.
+ * 所有页面共享同一个 [PlaybackController] 与歌词状态，所以首页迷你播放条和全屏播放页永远一致。
+ * 播放页 / 歌词页是全屏路由（[GuangYueRoot] 会在这些路由下隐藏底部导航）。
  */
 @Composable
 fun GuangYueNavHost(
     darkMode: Boolean,
+    onDarkModeChange: (Boolean) -> Unit = {},
     playback: PlaybackController,
     navController: NavHostController = rememberNavController(),
+    rootBar: (@Composable () -> Unit)? = null,
 ) {
     val accent: Color = GuangYueDesign.Blue
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -70,7 +75,7 @@ fun GuangYueNavHost(
                 tabs = HomeTab.entries.map { it.label },
                 onTabSelected = { vm.selectTab(HomeTab.entries[it]) },
                 onSearch = { navController.navigate(Routes.SEARCH) },
-                onOpenCard = { card: ShelfCard ->
+                onOpenCard = { _: ShelfCard ->
                     if (tracks.isNotEmpty()) {
                         playback.setQueueFromTracks(tracks, 0, true)
                         navController.navigate(Routes.PLAYER)
@@ -86,12 +91,14 @@ fun GuangYueNavHost(
                 onOpenNowPlaying = {
                     if (playbackState.item != null) navController.navigate(Routes.PLAYER)
                 },
+                bottomBar = rootBar,
             )
         }
 
         composable(Routes.SEARCH) {
             val vm: SearchViewModel = hiltViewModel()
             val state by vm.state.collectAsStateWithLifecycle()
+            Column(Modifier.fillMaxSize()) {
             SearchScreen(
                 state = state,
                 onQueryChange = vm::onQueryChange,
@@ -108,6 +115,26 @@ fun GuangYueNavHost(
                 onDownload = { item -> vm.download(item, playback.defaultQuality.wire) },
                 onBack = { navController.popBackStack() },
             )
+            rootBar?.invoke()
+            }
+        }
+
+        composable(Routes.SETTINGS) {
+            Column(Modifier.fillMaxSize()) {
+                com.guangyue.feature.library.screen.SettingsScreen(
+                    darkMode = darkMode,
+                    onDarkModeChange = onDarkModeChange,
+                    onOpenLicenses = { navController.navigate(Routes.LICENSES) },
+                    onBack = { navController.popBackStack() },
+                )
+                rootBar?.invoke()
+            }
+        }
+
+        composable(Routes.LICENSES) {
+            com.guangyue.feature.library.screen.LicensesScreen(
+                onBack = { navController.popBackStack() },
+            )
         }
 
         composable(Routes.PLAYER) {
@@ -122,7 +149,7 @@ fun GuangYueNavHost(
                 onCycleRepeat = { playback.cycleRepeat() },
                 onToggleShuffle = { playback.setShuffle(!playbackState.shuffle) },
                 onQuality = {
-                    // 播放页的音质按钮按「插件支持的档位」循环切换；没有插件档位时退回内置全集
+                    // 音质按钮按「插件支持的档位」循环切换；没有插件档位时退回内置全集。
                     val current = playbackState.item?.origin?.quality ?: playback.defaultQuality
                     val ladder = com.guangyue.core.player.QualityLadder.of(
                         playbackState.item?.origin?.availableQualities,
@@ -183,6 +210,7 @@ fun GuangYueNavHost(
 
         composable(Routes.PLUGINS) {
             val vm: PluginViewModel = hiltViewModel()
+            Column(Modifier.fillMaxSize()) {
             val plugins by vm.plugins.collectAsStateWithLifecycle()
             val busy by vm.busy.collectAsStateWithLifecycle()
             val message by vm.message.collectAsStateWithLifecycle()
@@ -220,6 +248,9 @@ fun GuangYueNavHost(
                 onForgetSubscription = { vm.forgetSubscription(it) },
                 errorDetails = messageDetails,
             )
+            rootBar?.invoke()
+            }
         }
     }
 }
+

@@ -7,3 +7,11 @@ plugins {
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.hilt) apply false
 }
+
+/**
+ * Compose 编译器跳过策略。
+ *
+ * 0.0.5 使用的是 Kotlin 2.4 与 Compose 编译器 1.12.x，强跳过（StrongSkipping）已经是默认
+ * 开启的特性，不需要再显式加 `-P plugin:...:featureFlag=StrongSkipping`（加了只会得到
+ * 「已默认开启」的告警）。这一层留作将来需要覆盖编译器参数时的落点。
+ */

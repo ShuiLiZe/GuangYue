@@ -1,3 +1,17 @@
+/**
+ * 广乐 0.0.5 —— 界面从 WebView 换成原生 Jetpack Compose。
+ *
+ * 这个模块现在只剩「壳」的职责：
+ *  * 应用版本号与签名；
+ *  * 把各 feature 模块的 Compose 页面挂到 [com.guangyue.music.MainActivity] 的导航图上；
+ *  * release 包开 R8 + 资源压缩。
+ *
+ * 0.0.4 之前这里有两条和 Folia Web 有关的东西，已整块删除：
+ *  1. `foliaWeb` Exec 任务（node build-folia-web.mjs --build → app/src/main/assets/folia）；
+ *  2. `implementation(project(":core:web"))`。WebView、WebViewAssetLoader、JS 桥、
+ *     打包进去的 20.9MB 前端产物都不再参与构建，APK 因此显著变小。
+ *  `web/` 与 `core/web/` 目录仍留在仓库里，只是不参与构建（历史与对照用）。
+ */
 import java.io.File
 import java.util.Base64
 
@@ -12,8 +26,8 @@ plugins {
 /**
  * 把构建脚本找到的密钥文件变成可用的二进制 keystore。
  *
- * 仓库里放的是 base64 文本版（.jks 二进制被 .gitignore 挡掉），必须解码后
- * 才能交给签名器，否则会报 toDerInputStream rejects tag type 77（首字符 M）。
+ * 仓库里放的是 base64 文本版（.jks 二进制被 .gitignore 挡掉），必须解码后才能交给签名器，
+ * 否则会报 toDerInputStream rejects tag type 77（首字符 M）。
  * 已经解码过的结果写到同目录 signing/ 下并复用，避免每次配置都写盘。
  */
 fun resolveKeystore(src: File): File {
@@ -54,8 +68,8 @@ android {
         targetSdk = 36
         // 版本号按 0.x 小步走：0.0.1 → 0.0.2 → …（tag 与 versionName 一致，不带 v 前缀）。
         // versionCode 必须始终大于上一版，否则装不上去覆盖。
-        versionCode = 4
-        versionName = "0.0.3"
+        versionCode = 5
+        versionName = "0.0.5"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -71,8 +85,6 @@ android {
         create("release") {
             val declared = System.getenv("GUANGYUE_KEYSTORE")?.takeIf { it.isNotBlank() }
                 ?: (project.findProperty("guangyue.keystore") as String?)?.takeIf { it.isNotBlank() }
-            // 声明的相对路径（如 CI 里写的 build/keystore/guangyue-release.jks.base64）
-            // 按 rootDir 解析；同时把默认位置一并作为兜底，避免口令文件写错路径就整体失败。
             val declaredFile = declared?.let { file(if (File(it).isAbsolute) it else "${rootDir}/$it") }
             val candidates = listOfNotNull(
                 declaredFile,
@@ -103,15 +115,14 @@ android {
         // 两个构建类型共用同一个签名配置对象：有发布密钥就套发布密钥，
         // 没密钥时该对象为空，Gradle 自动使用默认调试签名。
         release {
-            // 0.0.1 的 bug 只在开 R8 的真机包上暴露（JVM 单测不走 R8），所以 release 必须真的开 R8，
-            // 否则「修好了」只是又一次自欺。keep 规则见 proguard-rules.pro。
+            // 0.0.1 的 bug 只在开 R8 的真机包上暴露（JVM 单测不走 R8），所以 release 必须真的开 R8。
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
         }
         debug {
-            // 调试包也套用同一把发布密钥，避免 debug 装过之后正式包覆盖不上
+            // 调试包也套同一把发布密钥，避免 debug 装过之后正式包覆盖不上。
             signingConfig = signingConfigs.getByName("release")
         }
     }
@@ -123,43 +134,33 @@ android {
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "META-INF/LICENSE*", "META-INF/NOTICE*")
     }
-}
 
-/**
- * Folia Web 产物（`app/src/main/assets/folia`）是生成物，不入库。
- *
- * 它来自 web/：`build-folia-web.mjs` 按 `web/folia-overlay/manifest.json` 里钉死的
- * 上游 commit 取源码，套上 overlay，再交给 Vite 构建。这里把它挂进 Gradle，
- * 这样任何一次 `assembleDebug/assembleRelease` 都不会拿到空目录（WebView 白屏）。
- *
- * 环境变量：
- *   GUANGYUE_SKIP_FOLIA_WEB=1  跳过（本地已有产物、或只跑单测时用）
- *   FOLIA_OFFLINE=1            离线：只用 web/.work 里已有的源码，不去拉 GitHub
- */
-val foliaWebDir = file("src/main/assets/folia")
-val foliaWeb = tasks.register<Exec>("foliaWeb") {
-    group = "build"
-    description = "用 Vite 从 Folia 上游源码构建 app/src/main/assets/folia"
-    workingDir = rootProject.file("web")
-    val isWin = System.getProperty("os.name").lowercase().contains("win")
-    commandLine(if (isWin) "cmd.exe" else "sh", if (isWin) "/c" else "-c", "node build-folia-web.mjs --build")
-    environment("FOLIA_OFFLINE", System.getenv("FOLIA_OFFLINE") ?: "")
-    inputs.file(rootProject.file("web/build-folia-web.mjs"))
-    inputs.dir(rootProject.file("web/folia-overlay"))
-    outputs.dir(foliaWebDir)
-    onlyIf { System.getenv("GUANGYUE_SKIP_FOLIA_WEB") != "1" }
+    /**
+     * UI 截图用例在 JVM 上跑真 Compose 渲染（Robolectric + Roborazzi），需要读资源与 assets。
+     */
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+            all { test ->
+                // Roborazzi：截图写到仓库里的 docs/ui-0.0.5/。只在显式传入
+                // GUANGYUE_RECORD_SCREENSHOTS=true 时录制，平时跑测试不会改仓库文件。
+                test.systemProperty(
+                    "roborazzi.test.record",
+                    System.getenv("GUANGYUE_RECORD_SCREENSHOTS") ?: "false",
+                )
+                test.systemProperty("roborazzi.output.dir", "${rootDir}/docs/ui-0.0.5")
+                test.maxHeapSize = "3g"
+            }
+        }
+    }
 }
-
-// 产物缺失时必须先构建；已有产物时 Gradle 按 inputs/outputs 判断是否过期。
-tasks.matching { it.name == "preBuild" || it.name.startsWith("merge") && it.name.endsWith("Assets") }
-    .configureEach { dependsOn(foliaWeb) }
 
 dependencies {
     implementation(project(":core:data"))
     implementation(project(":core:download"))
     implementation(project(":core:player"))
     implementation(project(":core:plugin"))
-    implementation(project(":core:web"))
     implementation(project(":feature:search"))
     implementation(project(":feature:player"))
     implementation(project(":feature:library"))
@@ -195,4 +196,12 @@ dependencies {
     ksp(libs.hilt.compiler)
 
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.junit)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

@@ -5,8 +5,6 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-
-
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,6 +86,7 @@ fun HomeScreen(
     onTogglePlay: () -> Unit,
     onOpenNowPlaying: () -> Unit,
     modifier: Modifier = Modifier,
+    bottomBar: (@Composable () -> Unit)? = null,
 ) {
     var center by remember(cards) { mutableIntStateOf(0) }
 
@@ -171,6 +170,9 @@ fun HomeScreen(
                 onOpen = onOpenNowPlaying,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
             )
+
+            // ── 底部导航（由 App 外壳传入；单独预览/截图时不传，页面自身仍然完整）
+            bottomBar?.invoke()
         }
     }
 }
@@ -182,7 +184,7 @@ private fun SearchCapsule(onClick: () -> Unit) {
             .width(168.dp)
             .height(40.dp)
             .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.72f))
+            .background(Gyp.card.copy(alpha = if (Gyp.isDark) 0.10f else 0.72f))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -194,7 +196,13 @@ private fun SearchCapsule(onClick: () -> Unit) {
             modifier = Modifier.size(18.dp),
         )
         Spacer(Modifier.width(8.dp))
-        Text("搜索歌曲 / 专辑 / 歌单", fontSize = 12.sp, color = Gyp.ink.copy(alpha = 0.4f))
+        Text(
+            "搜索歌曲、歌手",
+            fontSize = 12.sp,
+            color = Gyp.ink.copy(alpha = 0.4f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -205,7 +213,7 @@ private fun DownloadEntry(onClick: () -> Unit) {
         Modifier
             .size(40.dp)
             .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.72f))
+            .background(Gyp.card.copy(alpha = if (Gyp.isDark) 0.10f else 0.72f))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -226,7 +234,7 @@ private fun SegmentedTabs(tabs: List<String>, selected: Int, onSelected: (Int) -
             .padding(horizontal = 22.dp)
             .height(44.dp)
             .clip(RoundedCornerShape(GuangYueDesign.RadiusTab.dp))
-            .background(Color.White.copy(alpha = 0.55f))
+            .background(Gyp.card.copy(alpha = if (Gyp.isDark) 0.08f else 0.55f))
             .padding(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -265,9 +273,9 @@ private fun Coverflow(
     modifier: Modifier = Modifier,
 ) {
     if (cards.isEmpty()) {
-        Box(modifier, contentAlignment = Alignment.Center) {
-            Text("暂无内容", color = Gyp.inkSoft, fontSize = 13.sp)
-        }
+        // 没有歌单时不画空盒子：下面的「还没有歌单 / 从插件搜索一首歌…」两行大字就是这一块的
+        // 空状态，再叠一个「暂无内容」只会重复。
+        Box(modifier)
         return
     }
 
@@ -412,7 +420,7 @@ private fun MiniPlayerBar(
                 spotColor = Color(0x88244872),
             )
             .clip(RoundedCornerShape(GuangYueDesign.RadiusCapsule.dp))
-            .background(Color.White.copy(alpha = 0.68f))
+            .background(Gyp.card.copy(alpha = if (Gyp.isDark) 0.10f else 0.68f))
             .clickable { onOpen() }
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,

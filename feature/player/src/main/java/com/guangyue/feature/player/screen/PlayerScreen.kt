@@ -42,8 +42,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.guangyue.core.player.PlaybackState
@@ -68,6 +68,7 @@ fun IPlayerRoute(
     onToggleShuffle: () -> Unit,
     onQuality: () -> Unit,
     onOpenLyrics: () -> Unit,
+    lyricPreview: String = "",
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -179,7 +180,38 @@ fun IPlayerRoute(
             Text(formatTime(playback.durationMs), fontSize = 11.sp, color = ink.copy(alpha = 0.5f))
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(14.dp))
+
+        // 歌词占位：真正的歌词在歌词页，这里只留一条"下一句"预览，不占用封面尺寸。
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(ink.copy(alpha = 0.04f))
+                .clickable { onOpenLyrics() }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Outlined.Lyrics,
+                contentDescription = null,
+                tint = ink.copy(alpha = 0.35f),
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.size(10.dp))
+            Text(
+                text = lyricPreview,
+                fontSize = 13.sp,
+                color = ink.copy(alpha = 0.55f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.size(10.dp))
+            Text("歌词", fontSize = 11.sp, color = GuangYueBlue.copy(alpha = 0.9f))
+        }
+
+        Spacer(Modifier.height(10.dp))
 
         Row(
             Modifier.fillMaxWidth(),
