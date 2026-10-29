@@ -72,9 +72,10 @@ class PluginRuntime(
 
             runtime.function("__gy_drainJobs") { args ->
                 // 驱动 QuickJS 的 job 队列（微任务）。`async function` 的续体挂在这里，
-                // 不驱动的话 `settle()` 永远看不到 Promise 结算。
-                drainJobs(runtime)
-                args.size
+                // 必须把「这一轮有没有推进」如实返回：settle() 靠它决定继续 drain 还是收工。
+                // 以前这里返回 args.size（恒 0），JS 侧第一轮就判无进展退出，多层 await 的
+                // 插件于是永远停在 "Promise that has not settled"。
+                if (drainJobs(runtime)) 1 else 0
             }
 
             runtime.function("__gy_log") { args ->
@@ -175,9 +176,12 @@ class PluginRuntime(
         return Json2.parse(text) ?: JsonNull
     }
 
-    /** Probe which MusicFree functions the plugin implements. */
     fun probeFunctions(): Set<String> {
         val names = JsonArray(PluginFunctions.ALL.map { JsonPrimitive(it) }).toString()
+        // 注意：`read()` 会把这个表达式的**结果**再 JSON.stringify 一次，所以这里必须是
+        // 一个完整的 IIFE 表达式。0.0.3 拆分时丢了开头的 `(function(){` 与 `var out = [];`，
+        // 表达式成了悬空片段 —— 解析失败被 runCatching 吞掉，probe 恒返回空集，
+        // 于是所有插件都被判成「exports 里没有 search」。
         val expr = """
             (function(){
               var out = [];
@@ -188,6 +192,7 @@ class PluginRuntime(
               return out;
             })()
         """.trimIndent()
+
         val runtime = qjs ?: return emptySet()
         val raw = runCatching { read(runtime, expr, "probe-functions.js") }.getOrNull() ?: return emptySet()
         val parsed = Json2.parse(raw)
@@ -570,9 +575,15 @@ class PluginRuntime(
             "axios" to "__gy_empty__",
         )
 
-        /** 15s per single plugin call, per spec. */
-        const val CALL_TIMEOUT_MS = 15_000L
-
+        /**
+         * 单次插件调用预算。
+         *
+         * 原来写 15s，实测不够：B站 / 火龙DJ / DJ串烧集 / 蜻蜓FM / 皮狗DJ / 喜马拉雅
+         * 这类插件一次 search 要串行打 5~15 个 HTTP 请求（QuickJS 里没有事件循环，
+         * 全部同步阻塞），首屏冷启动经常 16~30s。15s 会把「慢」误判成「坏」。
+         * 30s 只放宽预算，不改语义；真挂死的插件仍然会被中断。
+         */
+        const val CALL_TIMEOUT_MS = 30_000L
         /** QuickJS heap cap: 48 MiB is generous for cheerio+html parsing, still bounded. */
         const val MEMORY_LIMIT_BYTES = 48L * 1024 * 1024
 
@@ -616,4 +627,5 @@ class PluginRuntimeException(
 
     /** Thrown when the plugin simply does not implement the requested MusicFree function. */
     class Missing(val fn: String, message: String) : Exception(message)
+
 }

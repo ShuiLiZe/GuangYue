@@ -227,7 +227,7 @@ internal object HostBridge {
   function makeResponse(rawJson) {
     var res;
     try { res = JSON.parse(rawJson); } catch (e) { res = { status: 0, data: null, headers: {} }; }
-    return {
+    var out = {
       status: res.status || 0,
       statusText: res.statusText || '',
       headers: res.headers || {},
@@ -235,7 +235,62 @@ internal object HostBridge {
       config: {},
       request: {}
     };
+    attachChain(out);
+    return out;
   }
+
+  /**
+   * MusicFree 的插件大量把 axios 当 Promise 用：
+   *
+   * ```
+   * axios.get(url).then(function (r) { ... }).catch(function (e) { ... })
+   * ```
+   *
+   * 而我们的 axios 桥是**同步**的（QuickJS 里没有事件循环可阻塞），返回的是一个普通对象。
+   * 于是 `.then` 本身就是 `undefined` → `TypeError: ... is not a function`，整类插件在调用阶段死掉。
+   *
+   * 这里给响应对象 + 包装后的 Promise 挂一条**已经结算**的最小 then 链：`.then` 立刻同步执行回调，
+   * `.catch` 对成功响应是空操作（返回自身），`.finally` 立刻执行。语义与「已 resolve 的 Promise」
+   * 一致，且不依赖微任务队列。
+   */
+  function attachChain(obj, err) {
+    if (!obj || typeof obj !== 'object') return obj;
+    if (obj.__gyChain) return obj;
+    Object.defineProperty(obj, '__gyChain', { value: true, enumerable: false });
+    obj.then = function (onOk, onErr) {
+      if (err) {
+        if (typeof onErr === 'function') {
+          try {
+            var r = onErr(err);
+            return r === undefined ? attachChain({}, null) : r;
+          } catch (e) { return attachChain({}, e); }
+        }
+        return attachChain({}, err);
+      }
+      if (typeof onOk !== 'function') return obj;
+      try {
+        var v = onOk(obj);
+        return v === undefined ? obj : v;
+      } catch (e) {
+        return attachChain({}, e);
+      }
+    };
+    obj.catch = function (onErr) {
+      if (err && typeof onErr === 'function') {
+        try {
+          var r = onErr(err);
+          return r === undefined ? attachChain({}, null) : r;
+        } catch (e) { return attachChain({}, e); }
+      }
+      return obj;
+    };
+    obj.finally = function (fn) {
+      if (typeof fn === 'function') { try { fn(); } catch (e) { /* ignore */ } }
+      return obj;
+    };
+    return obj;
+  }
+  G.__gy_attachChain = attachChain;
 
   function request(config) {
     if (typeof config === 'string') config = { url: config };
@@ -287,18 +342,22 @@ internal object HostBridge {
     try {
       raw = G.__gy_http(payload);
     } catch (e) {
-      var err = new Error('Network Error: ' + (e && e.message ? e.message : String(e)));
-      err.config = config;
-      throw err;
+      // 网络层失败也要变成**可 catch 的链对象**：插件写的是
+      // `axios.get(url).then(...).catch(...)`。throw 出来的异常接不上任何链，
+      // `.catch` 就形同虚设 —— 0.0.1 那批插件大量这么写，全挂在这里。
+      var netErr = new Error('Network Error: ' + (e && e.message ? e.message : String(e)));
+      netErr.config = config;
+      return attachChain({ status: 0, headers: {}, data: null, config: config }, netErr);
     }
     var response = makeResponse(raw);
     var status = response.status;
     if (status >= 200 && status < 300) return response;
     if (status >= 300 && status < 400) return response;
-    var e2 = new Error('Request failed with status code ' + status);
-    e2.response = response;
-    e2.config = config;
-    throw e2;
+    // HTTP 非 2xx/3xx 同理：回一个带错误链的响应，让插件的 .catch 能处理。
+    var httpErr = new Error('Request failed with status code ' + status);
+    httpErr.response = response;
+    httpErr.config = config;
+    return attachChain(response, httpErr);
   }
 
   function axios(config) { return request(config); }
@@ -414,10 +473,19 @@ internal object HostBridge {
       return { ok: false, error: 'function ' + fnName + ' returned a broken Promise: ' + describe(e) };
     }
     // `async function` 的续体挂在 job 队列上：只挂 then 不驱动 job，`state.done` 永远是 false。
-    // 这里主动把已入队的微任务跑掉（`__gy_drainJobs` 由宿主注入，内部调用 QuickJS 的
-    // executePendingJob 直到队列空），于是「声明成 async、但同步返回」的插件能正常拿到值。
-    if (typeof G.__gy_drainJobs === 'function') {
-      try { G.__gy_drainJobs(); } catch (e) { /* 驱动失败就走下面的未结算分支 */ }
+    // 这里把已入队的微任务跑掉（`__gy_drainJobs` 由宿主注入，内部调用 QuickJS 的
+    // executePendingJob 直到队列空）。await 的续体可能是**几段**：跑一轮只推进到下一个
+    // await 点，所以循环 drain 直到结算，或某一轮没有任何推进为止。
+    var rounds = 0;
+    while (!state.done && rounds++ < 64) {
+      // 定时器要在每一轮再兑现一次：`__gy_call` 只在函数返回后 flush 一轮，
+      // 而 `await sleep()`（先 await、再在续体里 setTimeout）把定时器注册在第一次 flush 之后，
+      // 不在这里补 flush，那个 Promise 永远不会有 resolve 的机会 → 死等到超时。
+      if (typeof G.__gy_flushTimers === 'function') { try { G.__gy_flushTimers(); } catch (e) { /* ignore */ } }
+      if (typeof G.__gy_drainJobs !== 'function') break;
+      var progressed = false;
+      try { progressed = G.__gy_drainJobs() > 0; } catch (e) { break; }
+      if (!progressed) break;
     }
     if (!state.done) {
       return {
@@ -426,7 +494,7 @@ internal object HostBridge {
                'MusicFree plugins must return synchronously (use axios with a sync bridge)'
       };
     }
-    return state.ok ? { ok: true, value: state.value } : { ok: false, error: describe(state.error) };
+    return state.ok ? { ok: true, value: state.value } : { ok: false, error: describeWithStack(state.error) };
   }
 
   G.__gy_call = function (fnName, argsJson) {
@@ -461,6 +529,14 @@ internal object HostBridge {
     if (!e) return 'unknown error';
     if (typeof e === 'string') return e;
     return (e.message ? String(e.message) : String(e));
+  }
+
+  // 只把「类型错误的拒绝值」（字符串 / null / 数字）也补上现场：插件里 Promise.reject(x)
+  // 很常见，丢掉 x 的类型就只有一句 "not a function"，根本看不出它从哪来。
+  function describeWithStack(e) {
+    var msg = describe(e);
+    if (e && typeof e === 'object' && e.stack) return msg + '\n' + String(e.stack);
+    return msg + '\n(no stack: rejected with ' + (e === null ? 'null' : typeof e) + ')';
   }
 
   G.__gy_describe = describe;

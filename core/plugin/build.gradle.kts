@@ -47,6 +47,9 @@ tasks.withType<Test>().configureEach {
     // 测试要读 app/src/main/assets/prelude.js 这份真产物（cheerio/CryptoJS 都在里面），
     // 统一把工作目录钉在模块目录，避免受 daemon / IDE 的 cwd 影响。
     workingDir = projectDir
+    // 体检用例要定位仓库根的 build/plugin-cache-0.0.4；测试 JVM 的 cwd 在部分环境里会被
+    // 改写成「<模块>/."」，相对路径不可靠，这里显式把仓库根也传进去兜底。
+    systemProperty("guangyue.rootDir", rootProject.projectDir.absolutePath)
     // prelude 有 54 万字符，QuickJS 冷启动要几百毫秒；给足余量。
     maxHeapSize = "2g"
 }
