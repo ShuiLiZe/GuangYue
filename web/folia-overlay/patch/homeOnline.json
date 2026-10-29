@@ -1,0 +1,14 @@
+{
+  "file": "src/library/core/home/online/useLibraryHomeOnline.ts",
+  "why": "广乐：插件源没有账号歌单/电台/每日推荐，首页「歌曲」页签原本永远是空的。这里在「歌曲」页签的卡片前插入一张广乐的「我的歌曲」卡（插件源第一次搜索的结果），让 Folia 原版的拍立得/Bravais 墙有真实内容可画。点卡片后的集合页、播放、加入队列仍走 Folia 原生逻辑。",
+  "edits": [
+    {
+      "find": "    const items = tab === 'playlist' ? playlistCards : tab === 'albums' ? albumCards : tab === 'radio' ? radioCards : NO_CARDS;",
+      "replace": "    const pluginWallCards = usePluginWallCards(online.providerId, tab);\n    const items = tab === 'playlist'\n        ? [...pluginWallCards, ...playlistCards]\n        : tab === 'albums' ? albumCards : tab === 'radio' ? radioCards : NO_CARDS;"
+    },
+    {
+      "find": "import { useLibraryHomeOnlineFeeds } from './useLibraryHomeOnlineFeeds';",
+      "replace": "import { useLibraryHomeOnlineFeeds } from './useLibraryHomeOnlineFeeds';\nimport { usePluginWallCards } from './usePluginWallCards';"
+    }
+  ]
+}

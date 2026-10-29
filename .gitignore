@@ -37,3 +37,8 @@ core/plugin/jsprelude/node_modules/
 # 鏈湴澶嶇幇 CI 鐢ㄧ殑涓存椂鍏嬮殕 + 鎵撳寘浜х墿
 build-gh*/
 dist/
+
+# Folia Web 构建产物（由 :app 的 foliaWeb 任务在构建期生成，不入库）
+/app/src/main/assets/folia/
+# Folia 上游源码与中间产物（构建时按 web/folia-overlay/manifest.json 的 commit 拉取）
+/web/.work/

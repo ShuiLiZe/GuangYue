@@ -1,0 +1,18 @@
+{
+  "file": "src/library/suites/grid/home/Grid3D.tsx",
+  "why": "广乐的插件源是「无账号」平台（requiresAccount: false）。Folia 对这类平台的规则是不显示任何在线列表、只给一个「去搜索」的空面板，结果新装的首页永远是空的。这里让广乐在「歌曲」页签照常渲染列表——那张「我的歌曲」卡就是插件源搜索结果的入口；其他无账号平台（Folium mod 源）保持上游行为。",
+  "edits": [
+    {
+      "find": "                {isOnlineTab && activeAccountView === 'accountless' ? (",
+      "replace": "                {isOnlineTab && activeAccountView === 'accountless' && !isGuangYueSource() ? ("
+    },
+    {
+      "find": "import OnlineProviderAccountlessPanel from '../account/OnlineProviderAccountlessPanel';",
+      "replace": "import OnlineProviderAccountlessPanel from '../account/OnlineProviderAccountlessPanel';\nimport { isGuangYueSource } from '@/services/onlineMusic/guangyue/guangyueHomeWall';"
+    },
+    {
+      "find": "        && activeAccountView !== 'accountless'",
+      "replace": "        // 广乐的插件源没有账号，但它有内容（插件搜索得到的歌），所以这里不把它当成「无歌库」。\n        && (activeAccountView !== 'accountless' || isGuangYueSource())"
+    }
+  ]
+}

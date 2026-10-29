@@ -1,0 +1,82 @@
+/*
+ * 广乐 Android 收口样式。
+ *
+ * 这一份是**唯一**允许出现的视觉改动，而且只做“让桌面版在手机浏览器引擎里站得住”的收口：
+ * - 100dvh：WebView 的地址栏不再展开，但键盘弹出时 vh 会变，Folia 的全屏歌词依赖视口高度。
+ * - 安全区：刘海与手势条通过 env() 让出，不改变任何布局比例。
+ * - 触摸：去掉 300ms 点击延迟、禁止长按选中文本与图片“另存为”、允许纵向滚动。
+ * - 滚动条：桌面版有细滚动条，手机上没有，隐藏避免占位。
+ *
+ * 不改变字号、间距、配色、动画与任何组件结构——与官方 Web 版同一个视觉。
+ */
+
+html,
+body {
+    height: 100%;
+    overscroll-behavior-y: none;
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    /* 刘海 / 挖孔：把安全区交给 CSS env()，缺口区域保持页面底色而不是透出黑边。 */
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    background-color: #09090b;
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* 输入框里必须还能选中与粘贴。 */
+input,
+textarea,
+[contenteditable='true'] {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+img,
+svg {
+    -webkit-touch-callout: none;
+}
+
+/* 隐藏滚动条，但保留滚动能力（桌面版样式里滚动条会占位，手机上显得脏）。 */
+::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    background: transparent;
+}
+
+#root {
+    min-height: 100dvh;
+    /* 顶部安全区不写进 #root：Folia 的播放页/首页背景要铺满到状态栏，内容自己按需让位。 */
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-sizing: border-box;
+}
+
+/* 沉浸式播放页：全屏歌词时把安全区也吃掉，避免歌词被刘海裁掉。 */
+[data-folia-immersive='true'] #root {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+/* WebView 里点击要有主动作反馈（桌面版靠 hover，手机没有 hover）。 */
+@media (hover: none) {
+    button:active,
+    [role='button']:active {
+        filter: brightness(1.15);
+        transition: filter 90ms ease;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}

@@ -1,0 +1,10 @@
+{
+  "file": "src/types/onlineMusic.ts",
+  "why": "默认 provider 换成广乐：上游默认 'netease'，切到 Android 后那个 id 已经不存在，回落会抛 unavailable。",
+  "edits": [
+    {
+      "find": "export const DEFAULT_ONLINE_PROVIDER_ID: OnlineProviderId = 'netease';",
+      "replace": "export const DEFAULT_ONLINE_PROVIDER_ID: OnlineProviderId = 'guangyue';"
+    }
+  ]
+}

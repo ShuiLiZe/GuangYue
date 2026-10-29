@@ -1,0 +1,11 @@
+{
+  "file": "src/bootstrap.tsx",
+  "why": "上游的 bootstrap 只渲染主 App，而 Folia 的「在线平台」被广乐换成了插件源：这里在挂载前把当前账号 store 的 activeProviderId 固定成 guangyue，并把在线平台改成不需要登录（否则 Folia 会一直显示“连接在线平台”并把页面挡在登录引导后面）。",
+  "edits": [
+    {
+      "find": "import { noteFoliumFirstScreenMounted, startFoliumForMainWindow } from './mods/runtime/mainWindowStart';",
+      "replace": "import { noteFoliumFirstScreenMounted, startFoliumForMainWindow } from './mods/runtime/mainWindowStart';\nimport { installGuangYueSource } from './services/native/installGuangYueSource';"
+    }
+  ],
+  "append": "\n// 广乐：把在线平台的默认值与账号状态改成“无需登录的插件源”。\n// 必须在 React 首次渲染之前完成，否则「连接在线平台」的空态会先闪一下。\ninstallGuangYueSource();\n"
+}

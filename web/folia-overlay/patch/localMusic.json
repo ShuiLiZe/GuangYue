@@ -1,0 +1,18 @@
+{
+  "file": "src/services/localMusicService.ts",
+  "why": "Android WebView 里没有 showDirectoryPicker，也没有持久化的 FileSystem 句柄。把「选目录」与「恢复文件句柄」两个出口换成 MediaStore 的虚拟句柄（见 services/native/mediastoreLibrary.ts），Folia 的导入/增量比对/封面/歌词逻辑一行都不用改。",
+  "edits": [
+    {
+      "find": "    const availability = getLocalLibraryAvailability();\n    if (!availability.supported) throw new Error(`Local library unavailable: ${availability.reason}`);\n\n    // @ts-ignore - showDirectoryPicker is not in all TypeScript definitions\n    return await window.showDirectoryPicker();",
+      "replace": "    // 广乐：Android WebView 没有目录选择器。本地音乐由原生 MediaStore 提供，这里返回一个\n    // 满足 FileSystemDirectoryHandle 子集的虚拟句柄，导入流程照常遍历它。\n    if (!getLocalLibraryAvailability().supported || isMediastoreLibrary()) {\n        const root = await openMediastoreRoot();\n        if (root) return root as unknown as FileSystemDirectoryHandle;\n    }\n\n    const availability = getLocalLibraryAvailability();\n    if (!availability.supported) throw new Error(`Local library unavailable: ${availability.reason}`);\n\n    // @ts-ignore - showDirectoryPicker is not in all TypeScript definitions\n    return await window.showDirectoryPicker();"
+    },
+    {
+      "find": "async function getAccessibleFileHandle(song: LocalSong): Promise<FileSystemFileHandle | null> {\n    let fileHandle = fileHandleMap.get(song.id);",
+      "replace": "async function getAccessibleFileHandle(song: LocalSong): Promise<FileSystemFileHandle | null> {\n    // 广乐：MediaStore 歌曲只有虚拟句柄，按 filePath（即 mediastore:<id>）重建。\n    if (isMediastoreLibrary() && song.filePath?.startsWith('mediastore:')) {\n        const recovered = await recoverMediastoreFile(song.filePath.replace(/^mediastore:/, ''));\n        if (recovered) {\n            fileHandleMap.set(song.id, recovered as unknown as FileSystemFileHandle);\n            return recovered as unknown as FileSystemFileHandle;\n        }\n    }\n    let fileHandle = fileHandleMap.get(song.id);"
+    },
+    {
+      "find": "import { getLocalLibraryAvailability } from './localLibraryAvailability';",
+      "replace": "import { getLocalLibraryAvailability } from './localLibraryAvailability';\nimport { isMediastoreLibrary, openMediastoreRoot, recoverMediastoreFile } from './native/mediastoreLibrary';"
+    }
+  ]
+}
