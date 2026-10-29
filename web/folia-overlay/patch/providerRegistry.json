@@ -1,0 +1,14 @@
+{
+  "file": "src/services/onlineMusic/providerRegistry.ts",
+  "why": "删掉 7 个直连网易云/酷狗/QQ/波点/YouTube Music/Spotify/汽水的内置 provider，换成广乐自己的插件数据源。Folia 的这些适配器会直连第三方平台 API 并带登录态，广乐不接、不打包、不调用。",
+  "edits": [
+    {
+      "find": "import { neteaseProvider } from './netease/neteaseProvider';\nimport { kugouProvider } from './kugou/kugouProvider';\nimport { qqProvider } from './qq/qqProvider';\nimport { bodianProvider } from './bodian/bodianProvider';\nimport { ytmProvider } from './ytm/ytmProvider';\nimport { spotifyProvider } from './spotify/spotifyProvider';\nimport { qishuiProvider } from './qishui/qishuiProvider';",
+      "replace": "import { guangyueProvider } from './guangyue/guangyueProvider';"
+    },
+    {
+      "find": "registerOnlineMusicProvider(neteaseProvider);\nregisterOnlineMusicProvider(kugouProvider);\nregisterOnlineMusicProvider(qqProvider);\nregisterOnlineMusicProvider(bodianProvider);\nregisterOnlineMusicProvider(ytmProvider);\nregisterOnlineMusicProvider(spotifyProvider);\n\nregisterOnlineMusicProvider(qishuiProvider);",
+      "replace": "// 广乐：唯一的数据源是插件运行时（MusicFree 格式），见 guangyue/guangyueProvider.ts。\n// 上游此处依次注册 netease / kugou / qq / bodian / ytm / spotify / qishui 七个直连平台的\n// provider —— 它们会向后端服务或平台 API 发请求，广乐不接入也不打包。\nregisterOnlineMusicProvider(guangyueProvider);"
+    }
+  ]
+}

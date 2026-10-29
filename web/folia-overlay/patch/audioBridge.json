@@ -1,0 +1,14 @@
+{
+  "file": "src/components/app/playback/bridges/usePlaybackAudioBridge.ts",
+  "why": "原生播放模式下 <audio> 只是给 WebAudio 取样的影子牌（见 services/native/shadowPlayer.ts）。它的 src 被改写成中转地址后不可能等于插件直链 audioSrc，若继续用 src 字符串比对，自启动分支永远不跑；这里让原生模式下改判「元素已有源」，并把权威时钟交给原生。",
+  "edits": [
+    {
+      "find": "            if (audioRef.current.getAttribute('src') !== audioSrc) return;",
+      "replace": "            // 广乐：原生播放时 src 已被换成 /media 中转地址，与 audioSrc（插件直链）必然不等。\n            // 改成“元素上已经有源”，起播交给原生 ExoPlayer，影子牌只负责给频谱供流。\n            if (isNativePlaybackActive() && hasShadowSource(audioRef.current)) {\n                if (shouldAutoPlayRef.current && !isLyricsLoading) {\n                    shouldAutoPlayRef.current = false;\n                    syncOutputGain(getTargetPlaybackVolume(), 0);\n                    setupAudioAnalyzer();\n                    setPlayerState(PlayerState.PLAYING);\n                }\n                return;\n            }\n            if (audioRef.current.getAttribute('src') !== audioSrc) return;"
+    },
+    {
+      "find": "import { resolveHeardAudioEqualizerSettings } from '../../../../utils/audioEqualizerModCurve';",
+      "replace": "import { resolveHeardAudioEqualizerSettings } from '../../../../utils/audioEqualizerModCurve';\nimport { hasShadowSource, isNativePlaybackActive } from '../../../../services/native/shadowPlayer';"
+    }
+  ]
+}

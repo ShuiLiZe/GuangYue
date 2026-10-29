@@ -1,0 +1,14 @@
+{
+  "folia": {
+    "repo": "https://github.com/chthollyphile/folia-major.git",
+    "commit": "f96c65b",
+    "version": "0.7.23",
+    "license": "AGPL-3.0"
+  },
+  "notes": [
+    "commit 是 2026-10 时 folia-major 的 HEAD（feat/remote-queue 合并点）。上游一改，patch/ 下的指纹会失效并报错，届时同步更新本文件。",
+    "replace/ 覆盖整份文件：只放广乐确实要换掉逻辑的文件。",
+    "patch/ 做文本级替换：只改一处、其余保持上游原样，是用来删掉内置平台注册、接上原生桥的。",
+    "extra/ 是广乐新增的文件，上游没有。"
+  ]
+}

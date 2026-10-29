@@ -1,0 +1,14 @@
+{
+  "file": "vite.config.ts",
+  "why": "两处：① 广乐打成 Android 包，资源必须走相对路径（WebViewAssetLoader 域名根）；② 只构建移动端入口，上游的 stage-client / mod-export 是桌面与 OBS 用的调试页，不进 APK。",
+  "edits": [
+    {
+      "find": "    base: process.env.ELECTRON === 'true' ? './' : '/',",
+      "replace": "    // 广乐：index.html 由 WebViewAssetLoader 以 https://appassets.androidplatform.net/ 提供，\n    // 相对路径在这里同样解析到该域名根，但更不容易被任何子路径部署弄坏。\n    base: './',"
+    },
+    {
+      "find": "        input: {\n          main: 'index.html',\n          stageClient: 'stage-client.html',\n          modExport: 'mod-export.html',\n        },",
+      "replace": "        // 广乐：只打 Mobile 主入口。stage-client / mod-export 是桌面 Stage API 文档页与\n        // OBS 导出页，APK 里用不到，留在包里只是白白占体积与攻击面。\n        input: {\n          main: 'index.html',\n        },"
+    }
+  ]
+}
