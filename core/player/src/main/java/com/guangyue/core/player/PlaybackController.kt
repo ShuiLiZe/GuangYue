@@ -1,4 +1,4 @@
-﻿package com.guangyue.core.player
+package com.guangyue.core.player
 
 import android.content.Context
 import android.net.Uri
@@ -242,6 +242,24 @@ class PlaybackController @Inject constructor(
     }
 
     fun next() = player.seekToNextMediaItem()
+
+    /**
+     * 从队列里删掉第一项（Folia 的「移除」按钮走这里）。
+     *
+     * 删除当前项时 Media3 会自动顺延到下一首；删到空就停播，避免留下
+     * 「播放器还挂着一条已经不在队列里的 mediaItem」的鬼状态。
+     */
+    fun removeAt(index: Int) {
+        if (index !in queue.indices) return
+        queue.removeAt(index)
+        if (queue.isEmpty()) {
+            player.stop()
+            player.clearMediaItems()
+        } else {
+            player.removeMediaItem(index)
+        }
+        publish()
+    }
 
     fun previous() {
         if (player.currentPosition > 3_000L) player.seekTo(0L) else player.seekToPreviousMediaItem()

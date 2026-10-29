@@ -125,11 +125,41 @@ android {
     }
 }
 
+/**
+ * Folia Web 产物（`app/src/main/assets/folia`）是生成物，不入库。
+ *
+ * 它来自 web/：`build-folia-web.mjs` 按 `web/folia-overlay/manifest.json` 里钉死的
+ * 上游 commit 取源码，套上 overlay，再交给 Vite 构建。这里把它挂进 Gradle，
+ * 这样任何一次 `assembleDebug/assembleRelease` 都不会拿到空目录（WebView 白屏）。
+ *
+ * 环境变量：
+ *   GUANGYUE_SKIP_FOLIA_WEB=1  跳过（本地已有产物、或只跑单测时用）
+ *   FOLIA_OFFLINE=1            离线：只用 web/.work 里已有的源码，不去拉 GitHub
+ */
+val foliaWebDir = file("src/main/assets/folia")
+val foliaWeb = tasks.register<Exec>("foliaWeb") {
+    group = "build"
+    description = "用 Vite 从 Folia 上游源码构建 app/src/main/assets/folia"
+    workingDir = rootProject.file("web")
+    val isWin = System.getProperty("os.name").lowercase().contains("win")
+    commandLine(if (isWin) "cmd.exe" else "sh", if (isWin) "/c" else "-c", "node build-folia-web.mjs --build")
+    environment("FOLIA_OFFLINE", System.getenv("FOLIA_OFFLINE") ?: "")
+    inputs.file(rootProject.file("web/build-folia-web.mjs"))
+    inputs.dir(rootProject.file("web/folia-overlay"))
+    outputs.dir(foliaWebDir)
+    onlyIf { System.getenv("GUANGYUE_SKIP_FOLIA_WEB") != "1" }
+}
+
+// 产物缺失时必须先构建；已有产物时 Gradle 按 inputs/outputs 判断是否过期。
+tasks.matching { it.name == "preBuild" || it.name.startsWith("merge") && it.name.endsWith("Assets") }
+    .configureEach { dependsOn(foliaWeb) }
+
 dependencies {
     implementation(project(":core:data"))
     implementation(project(":core:download"))
     implementation(project(":core:player"))
     implementation(project(":core:plugin"))
+    implementation(project(":core:web"))
     implementation(project(":feature:search"))
     implementation(project(":feature:player"))
     implementation(project(":feature:library"))
