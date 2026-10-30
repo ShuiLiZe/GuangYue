@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -36,6 +37,7 @@ import com.guangyue.feature.library.viewmodel.LxViewModel
 import com.guangyue.feature.library.viewmodel.PluginViewModel
 import com.guangyue.feature.player.lyrics.LyricFlowScreen
 import com.guangyue.feature.player.lyrics.LyricStageScreen
+import com.guangyue.feature.player.lyrics.LyricStringHost
 import com.guangyue.feature.player.screen.IPlayerRoute
 import com.guangyue.feature.player.viewmodel.LyricsViewModel
 import com.guangyue.feature.search.FoliaSearchScreen
@@ -367,17 +369,39 @@ fun GuangYueNavHost(
             )
         }
 
+        // U5：歌词页。数据仍是既有 LyricsViewModel（插件查词 + LRC 解析 + 逐行同步），
+        // 文案/空态/点行跳转由新的 LyricFlowScreen 负责；stage（全屏舞台）路由保持原样。
         composable(Routes.LYRIC_FLOW) {
             val vm: LyricsViewModel = hiltViewModel()
+            val lyric by vm.lyric.collectAsStateWithLifecycle()
             val sync by vm.syncState.collectAsStateWithLifecycle()
-            LyricFlowScreen(
-                vm = vm,
-                state = sync,
-                playback = playbackState,
-                accent = accent,
-                onBack = { navController.popBackStack() },
-                onSwitchStage = { navController.navigate(Routes.LYRIC_STAGE) },
-            )
+            val loading by vm.loading.collectAsStateWithLifecycle()
+            val message by vm.message.collectAsStateWithLifecycle()
+            val lyricContext = LocalContext.current
+            CompositionLocalProvider(LyricStringHost provides { id -> lyricContext.getString(id) }) {
+                LyricFlowScreen(
+                    lyrics = lyric.lines,
+                    currentIndex = sync.index,
+                    strings = lyricStrings(),
+                    playback = playbackState,
+                    accent = accent,
+                    onBack = { navController.popBackStack() },
+                    onSeekToLine = { index ->
+                        vm.seekToLine(index)
+                        vm.resumeAutoScroll()
+                    },
+                    onManualScroll = { vm.onManualScroll() },
+                    onTogglePlay = { playback.toggle() },
+                    onSeek = { fraction ->
+                        playback.seekTo((fraction * playbackState.durationMs).toLong())
+                    },
+                    artist = playbackState.item?.artist ?: lyric.artist,
+                    source = playbackState.item?.origin?.pluginId,
+                    loading = loading,
+                    failure = message,
+                    darkMode = darkMode,
+                )
+            }
         }
 
         composable(Routes.LYRIC_STAGE) {

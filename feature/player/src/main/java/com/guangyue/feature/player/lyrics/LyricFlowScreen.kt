@@ -1,6 +1,5 @@
 package com.guangyue.feature.player.lyrics
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,17 +20,19 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -39,21 +40,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.guangyue.core.data.lyrics.Lyric
-import com.guangyue.core.data.lyrics.LyricUiState
+import com.guangyue.core.data.lyrics.LyricLine
 import com.guangyue.core.player.PlaybackState
-import com.guangyue.feature.player.viewmodel.LyricsViewModel
+import com.guangyue.feature.library.design.FoliaEmptyState
 import com.guangyue.feature.library.design.GuangYueDesign
 import com.guangyue.feature.library.design.GyRadius
 import com.guangyue.feature.library.design.GySpace
@@ -62,187 +63,282 @@ import com.guangyue.feature.library.design.Gyp
 import com.guangyue.feature.library.design.canBlur
 import com.guangyue.feature.library.design.clickableNoRipple
 import com.guangyue.feature.library.design.icons.GuangYueIcons
-import com.guangyue.feature.library.design.marbleBackground
-import kotlin.math.abs
-import kotlinx.coroutines.delay
+import com.guangyue.feature.player.screen.PlayerBackdrop
+import com.guangyue.feature.player.screen.backdropUsesDarkInk
+import com.guangyue.feature.player.screen.playerBackdrop
 
 /**
- * 歌词流（浅色）—— big bold left-aligned lines, the sung line crisp + blue, neighbours blurred
- * and faded. Dragging the list pauses auto-scroll for 3 seconds (handled by the synchronizer),
- * and every control can be hidden with one tap so only the words remain.
+ * U5 歌词页（Compose 版，取代 U2 的 `LyricFlowScreen`）。
+ *
+ * 三块，从上到下：
+ *  1. 顶栏：返回圆钮 + 「歌词」标题 + 一句「歌手 · 来源」；
+ *  2. 歌词列表：逐行随播放高亮，正在唱的那句最大、最近、带强调色，越远越小越淡越糊
+ *     （档位与旧 `LyricFlowScreen` 的 `LyricFlowLine` 一致：32/26/22/19/17sp、
+ *     1/.34/.20/.12/.07、0/.6/1.6/2.6/3.6dp）；**点任意一行跳到那一句**；
+ *  3. 底部胶囊：2dp 进度轨 + 等宽时间，与播放页 [com.guangyue.feature.player.screen.FoliaPlayerPage]
+ *     的 `PlaybackPill` 同一套观感。
+ *
+ * 空态（无歌词 / 加载中 / 失败）走 [FoliaEmptyState]，文案全中文、由 [LyricStrings] 注入；
+ * 失败副句优先用数据源给的原始原因（`LyricsViewModel` 的 `message`），这时不显示重试按钮
+ * ——重试要真去请求音源，归外壳管。
+ *
+ * 拖动列表时暂停自动跟随（由 `LyricSynchronizer` 记 3 秒），松手后从头跟回正在唱的那句。
+ * 背景沿用播放页那条封面渐变，深浅色同一套令牌，320dp 与字体 1.3 都不写死宽度。
  */
 @Composable
 fun LyricFlowScreen(
-    vm: LyricsViewModel,
-    state: LyricUiState,
+    lyrics: List<LyricLine>,
+    currentIndex: Int,
+    strings: LyricStrings,
     playback: PlaybackState,
     accent: Color,
     onBack: () -> Unit,
-    onSwitchStage: () -> Unit = {},
+    onSeekToLine: (Int) -> Unit = {},
+    onManualScroll: () -> Unit = {},
+    onTogglePlay: () -> Unit = {},
+    onSeek: (Float) -> Unit = {},
+    onSeekPreview: ((Float) -> Unit)? = null,
+    artist: String? = playback.item?.artist,
+    source: String? = null,
+    loading: Boolean = false,
+    failure: String? = null,
+    pureMusic: Boolean = false,
+    darkMode: Boolean = false,
+    coverColor: Color? = null,
     modifier: Modifier = Modifier,
 ) {
-    val listState = rememberLazyListState()
-    var controlsVisible by remember { mutableStateOf(true) }
+    val backLabel = str(strings.back)
+    val emptyKind = lyricEmptyKind(lineCount = lyrics.size, loading = loading, failed = failure != null)
 
-    // Follow the music unless the user is manually browsing the lyric.
-    LaunchedEffect(state.index, state.manual) {
-        if (!state.manual && state.index >= 0) {
-            listState.animateScrollToItem(state.index.coerceAtLeast(0))
-        }
+    // 顶栏与胶囊的墨色跟着背景亮暗走，跟播放页判据一致。
+    val backdrop = remember(coverColor, accent, darkMode) {
+        playerBackdrop(coverColor = coverColor, seed = accent, dark = darkMode)
+    }
+    val onBackdrop = if (backdropUsesDarkInk(backdrop)) Color(0xFF1C1917) else Color(0xFFF7F5F2)
+    val pillInk = if (darkMode) Color(0xFFF4F4F5) else Color(0xFF1C1917)
+
+    val listState = rememberLazyListState()
+
+    // 自动跟随：只有同步器没被判为「手动浏览」时才滚。
+    LaunchedEffect(currentIndex) {
+        if (currentIndex >= 0) listState.animateScrollToItem(currentIndex)
+    }
+    // 手指一碰列表就算手动浏览（同步器记 3 秒，之后自己回自动）。
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) onManualScroll()
     }
 
-    // Any drag freezes auto-scroll for 3 s (spec) and reveals the controls again.
-    LaunchedEffect(listState.isScrollInProgress) {
-        if (listState.isScrollInProgress) {
-            vm.onManualScroll()
-            controlsVisible = true
-        }
+    var scrubbing by remember { mutableStateOf(false) }
+    var scrubValue by remember { mutableFloatStateOf(0f) }
+    val progress = if (scrubbing) scrubValue else playback.progress
+    val positionMs = if (scrubbing) {
+        (scrubValue * playback.durationMs).toLong()
+    } else {
+        playback.positionMs
     }
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .marbleBackground(),
+            .background(Brush.verticalGradient(backdrop.colors))
+            .testTag(LyricRootTag),
     ) {
         Column(
             Modifier
                 .fillMaxSize()
-                // 0.0.8：收起按钮与曲目头必须整体下移到状态栏/刘海以下。
-                .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout)),
+                .windowInsetsPadding(
+                    WindowInsets.statusBars
+                        .union(WindowInsets.displayCutout)
+                        .union(WindowInsets.navigationBars),
+                )
+                .padding(horizontal = GySpace.pageH),
         ) {
-            Spacer(Modifier.height(48.dp))
-            // 顶部：收起 + 封面标题（对应 LatticeChrome 的曲目头）
+            // ---------------- 顶栏 ----------------
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = GySpace.xl),
+                    .height(56.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
-                    Modifier
-                        .size(32.dp)
-                        .clip(GyRadius.fieldShape())
-                        .clickableNoRipple(onBack),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(onBackdrop.copy(alpha = 0.12f))
+                        .clickableNoRipple(onBack)
+                        .semantics { contentDescription = backLabel },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        GuangYueIcons.ChevronDown,
-                        "收起",
-                        tint = Gyp.ink,
-                        modifier = Modifier.size(18.dp),
+                        GuangYueIcons.ChevronLeft,
+                        null,
+                        tint = onBackdrop,
+                        modifier = Modifier.size(22.dp),
                     )
                 }
-                Spacer(Modifier.width(GySpace.m))
-                Box(
-                    Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(GyRadius.field))
-                        .background(Gyp.tint),
-                ) {
-                    CoverImage(
-                        url = playback.item?.artworkUri,
-                        modifier = Modifier.fillMaxSize(),
-                        accent = accent,
-                    )
-                }
-                Spacer(Modifier.width(GySpace.m))
+                Spacer(Modifier.width(GySpace.l))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        playback.item?.title ?: "未在播放",
-                        fontSize = GyText.emptyTitle,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Gyp.ink,
-                        fontFamily = GuangYueDesign.Serif,
+                        text = str(strings.title),
+                        fontSize = GyText.title,
+                        lineHeight = GyText.titleHeight,
+                        fontWeight = FontWeight.Bold,
+                        color = onBackdrop,
+                        fontFamily = GuangYueDesign.Sans,
                         maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
-                    Text(
-                        playback.item?.artist ?: "广乐",
-                        fontSize = GyText.hint,
-                        lineHeight = GyText.hintHeight,
-                        color = Gyp.t2,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    )
-                }
-                Box(
-                    Modifier
-                        .size(32.dp)
-                        .clip(GyRadius.fieldShape())
-                        .clickableNoRipple { controlsVisible = !controlsVisible },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        GuangYueIcons.LayoutGrid,
-                        if (controlsVisible) "隐藏控件" else "显示控件",
-                        tint = Gyp.t2,
-                        modifier = Modifier.size(16.dp),
-                    )
+                    val sub = lyricSourceLine(artist = artist, source = source)
+                    if (sub.isNotEmpty()) {
+                        Text(
+                            text = sub,
+                            fontSize = GyText.hint,
+                            lineHeight = GyText.hintHeight,
+                            color = onBackdrop.copy(alpha = 0.62f),
+                            fontFamily = GuangYueDesign.Sans,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
 
-            Spacer(Modifier.height(GySpace.xl))
-
+            // ---------------- 歌词列表 / 空态 ----------------
             Box(
                 Modifier
                     .weight(1f)
-                    // 0.0.8：底部悬浮播放条要躲开手势条。
-                    .windowInsetsPadding(WindowInsets.navigationBars),
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center,
             ) {
-                if (state.lyric.isEmpty) {
-                    com.guangyue.feature.library.design.FoliaEmptyState(
-                        title = if (vm.loading.value) "歌词加载中" else "还没有歌词",
-                        subtitle = "换一个音源或稍后再试",
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(GySpace.xl),
+                if (emptyKind != null) {
+                    LyricEmpty(
+                        kind = emptyKind,
+                        strings = strings,
+                        pureMusic = pureMusic,
+                        failure = failure,
+                        onRetry = null,
                     )
                 } else {
+                    // 正在唱的那句尽量停在竖直中线：上下各留半屏空白，当前句才不会被顶栏/胶囊挤到边上。
+                    // 高度取列表自己的（`onSizeChanged`），不能拿整屏高度——顶栏与胶囊是兄弟节点。
+                    var listHeightPx by remember { mutableIntStateOf(0) }
+                    val verticalPad = with(LocalDensity.current) { (listHeightPx * 0.32f).toDp() }
                     LazyColumn(
                         state = listState,
-                        contentPadding = PaddingValues(vertical = 180.dp, horizontal = GySpace.xl),
-                        verticalArrangement = Arrangement.spacedBy(18.dp),
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .onSizeChanged { listHeightPx = it.height }
+                            .testTag(LyricListTag),
+                        contentPadding = PaddingValues(vertical = verticalPad),
                     ) {
-                        itemsIndexed(state.lyric.lines) { index, line ->
-                            val distance = if (state.index < 0) index else abs(index - state.index)
-                            LyricFlowLine(
-                                text = line.text,
-                                translation = line.translation,
-                                distance = distance,
-                                active = index == state.index,
+                        itemsIndexed(lyrics) { index, line ->
+                            val visual = lyricRowVisual(index, currentIndex)
+                            LyricLineRow(
+                                line = line,
+                                visual = visual,
                                 accent = accent,
+                                onClick = { onSeekToLine(index) },
                             )
                         }
                     }
                 }
             }
 
-            if (controlsVisible) {
-                FlowPlayerBar(
-                    playback = playback,
-                    onSeek = vm::seekToLine,
-                    lyric = state.lyric,
-                )
-            }
+            // ---------------- 底部播放胶囊 ----------------
+            LyricBar(
+                positionMs = positionMs,
+                durationMs = playback.durationMs,
+                progress = progress,
+                playing = playback.isPlaying,
+                pillInk = pillInk,
+                dark = darkMode,
+                labels = strings,
+                onTogglePlay = onTogglePlay,
+                onScrub = { scrubbing = true; scrubValue = it },
+                onScrubPreview = onSeekPreview,
+            )
         }
     }
 }
 
 /**
- * 一行歌词：字号/不透明度/模糊随与当前行的距离衰减。
+ * 空态：加载中 / 失败 / 没有歌词，文案走 [LyricStrings]。
  *
- * 模糊只在「非当前行」用，且取决于设备能力（Android 12+ 且非低内存），否则只用透明度区分，
- * 与 Folia 在低端机上的降级一致。
+ * 纯音乐是「没有歌词」里的一种特例，Folia 单独给了一句话（`bestLyricsPureMusic`），照搬。
  */
 @Composable
-private fun LyricFlowLine(
-    text: String,
-    translation: String?,
-    distance: Int,
-    active: Boolean,
-    accent: Color,
+internal fun LyricEmpty(
+    kind: LyricEmptyKind,
+    strings: LyricStrings,
+    pureMusic: Boolean,
+    failure: String?,
+    onRetry: (() -> Unit)?,
 ) {
+    // 先把三句话都取成字符串（str 是 @Composable），再按三态挑一句。
+    val loadingText = str(strings.loading)
+    val failedText = str(strings.loadFailed)
+    val pureMusicText = str(strings.pureMusic)
+    val emptyText = str(strings.empty)
+    val failedHintText = str(strings.failedHint)
+    val emptyHintText = str(strings.emptyHint)
+    val retryText = str(strings.retry)
+
+    val title = if (kind == LyricEmptyKind.Loading) {
+        loadingText
+    } else if (kind == LyricEmptyKind.Failed) {
+        failedText
+    } else if (pureMusic) {
+        pureMusicText
+    } else {
+        emptyText
+    }
+    val subtitle = if (kind == LyricEmptyKind.Loading) {
+        null
+    } else if (kind == LyricEmptyKind.Failed) {
+        failureText(failure, failedHintText)
+    } else if (pureMusic) {
+        // 纯音乐是明确的终态（Folia `bestLyricsPureMusic`），再挂「换一个音源」会自相矛盾。
+        null
+    } else {
+        emptyHintText
+    }
+    FoliaEmptyState(
+        title = title,
+        subtitle = subtitle,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = GySpace.pageH)
+            .testTag(LyricEmptyTag),
+        action = onRetry?.let { retry ->
+            {
+                Text(
+                    text = retryText,
+                    fontSize = GyText.label,
+                    lineHeight = GyText.labelHeight,
+                    color = Gyp.accent,
+                    fontFamily = GuangYueDesign.Sans,
+                    modifier = Modifier
+                        .height(48.dp)
+                        .clickableNoRipple(retry)
+                        .padding(horizontal = GySpace.l, vertical = GySpace.m),
+                )
+            }
+        },
+    )
+}
+
+/**
+ * 一行歌词：距离档位决定字号 / 不透明度 / 模糊，当前句用强调色。
+ *
+ * 点击区整行填满且最小 48dp（无障碍触控目标），点一下就 seek 到这一句。
+ */
+@Composable
+private fun LyricLineRow(
+    line: LyricLine,
+    visual: LyricRowVisual,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    val distance = visual.distance
     val fontSize = when (distance) {
         0 -> 32
         1 -> 26
@@ -257,7 +353,6 @@ private fun LyricFlowLine(
         3 -> 0.12f
         else -> 0.07f
     }
-    val blurAllowed = canBlur()
     val blurRadius = when (distance) {
         0 -> 0f
         1 -> 0.6f
@@ -265,14 +360,20 @@ private fun LyricFlowLine(
         3 -> 2.6f
         else -> 3.6f
     }
+    val blurAllowed = canBlur()
 
-    Column(Modifier.fillMaxWidth()) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickableNoRipple(onClick)
+            .padding(vertical = GySpace.xs),
+    ) {
         Text(
-            text = text.ifBlank { " " },
+            text = line.text.ifBlank { " " },
             fontSize = fontSize.sp,
             lineHeight = (fontSize * 1.28).sp,
             fontWeight = FontWeight.SemiBold,
-            color = if (active) accent.copy(alpha = 0.92f) else Gyp.ink.copy(alpha = alpha),
+            color = if (visual.active) accent.copy(alpha = 0.92f) else Gyp.ink.copy(alpha = alpha),
             textAlign = TextAlign.Start,
             fontFamily = GuangYueDesign.Serif,
             modifier = Modifier
@@ -285,83 +386,120 @@ private fun LyricFlowLine(
                         )
                     } else {
                         Modifier
-                    }
+                    },
                 ),
         )
-        if (active && !translation.isNullOrBlank()) {
+        // 译文只在当前句露出来（跟旧页面一致），避免了整屏双语糊在一起。
+        if (visual.active && !line.translation.isNullOrBlank()) {
             Text(
-                translation,
+                text = line.translation.orEmpty(),
                 fontSize = GyText.label,
+                lineHeight = GyText.labelHeight,
                 color = Gyp.t2,
                 fontFamily = GuangYueDesign.Sans,
-                modifier = Modifier.padding(top = GySpace.xs),
+                modifier = Modifier.padding(top = GySpace.xxs),
             )
         }
     }
 }
 
-/** 底部悬浮播放条（Folia LatticeChrome：2dp 进度线 + 等宽时间）。 */
+/** 底部胶囊：播放键 + 2dp 进度轨 + 两端等宽时间（跟播放页同观感）。 */
 @Composable
-private fun FlowPlayerBar(
-    playback: PlaybackState,
-    onSeek: (Int) -> Unit,
-    lyric: Lyric,
+private fun LyricBar(
+    positionMs: Long,
+    durationMs: Long,
+    progress: Float,
+    playing: Boolean,
+    pillInk: Color,
+    dark: Boolean,
+    labels: LyricStrings,
+    onTogglePlay: () -> Unit,
+    onScrub: (Float) -> Unit,
+    onScrubPreview: ((Float) -> Unit)?,
 ) {
-    Box(
+    val seekBarLabel = str(labels.seekBar)
+    val playLabel = str(labels.play)
+    val pauseLabel = str(labels.pause)
+    val pill = if (dark) Color(0xFF17171A).copy(alpha = 0.55f) else Color.White.copy(alpha = 0.62f)
+    Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = GySpace.pageH, vertical = GySpace.pageH)
+            .padding(vertical = GySpace.l)
             .height(56.dp)
-            .clip(RoundedCornerShape(GyRadius.card))
-            .background(Gyp.card)
+            .clip(RoundedCornerShape(GyRadius.capsule))
+            .background(pill)
             .padding(horizontal = GySpace.l),
-        contentAlignment = Alignment.CenterStart,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(32.dp)
-                    .clip(GyRadius.fieldShape())
-                    .clickableNoRipple { },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    GuangYueIcons.ChevronRight,
-                    null,
-                    tint = Gyp.t2,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-            Spacer(Modifier.width(GySpace.m))
-            Box(Modifier.weight(1f)) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .clip(CircleShape)
-                        .background(Gyp.track),
-                )
-                Box(
-                    Modifier
-                        .fillMaxWidth(playback.progress)
-                        .height(2.dp)
-                        .clip(CircleShape)
-                        .background(Gyp.ink),
-                )
-            }
-            Spacer(Modifier.width(GySpace.m))
-            Text(
-                formatTime(playback.positionMs),
-                color = Gyp.t3,
-                fontSize = GyText.hint,
-                fontFamily = FontFamily.Monospace,
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .clickableNoRipple(onTogglePlay)
+                .semantics {
+                    contentDescription = if (playing) pauseLabel else playLabel
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (playing) GuangYueIcons.Pause else GuangYueIcons.Play,
+                null,
+                tint = pillInk,
+                modifier = Modifier.size(20.dp),
             )
         }
+        Spacer(Modifier.width(GySpace.xs))
+        Text(
+            text = formatTime(positionMs),
+            fontSize = 11.sp,
+            color = pillInk.copy(alpha = 0.7f),
+            fontFamily = FontFamily.Monospace,
+        )
+        Spacer(Modifier.width(GySpace.s))
+        Box(
+            Modifier
+                .weight(1f)
+                .height(48.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Slider(
+                value = progress.coerceIn(0f, 1f),
+                onValueChange = { onScrub(it); onScrubPreview?.invoke(it) },
+                onValueChangeFinished = {},
+                colors = SliderDefaults.colors(
+                    thumbColor = Color.Transparent,
+                    activeTrackColor = pillInk.copy(alpha = 0.85f),
+                    inactiveTrackColor = pillInk.copy(alpha = 0.22f),
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .semantics { contentDescription = seekBarLabel },
+            )
+        }
+        Spacer(Modifier.width(GySpace.s))
+        Text(
+            text = formatTime(durationMs),
+            fontSize = 11.sp,
+            color = pillInk.copy(alpha = 0.7f),
+            fontFamily = FontFamily.Monospace,
+        )
     }
 }
 
+/** 截图测试用的稳定锚点。 */
+const val LyricRootTag = "u5-lyrics"
+const val LyricListTag = "u5-lyrics-list"
+const val LyricEmptyTag = "u5-lyrics-empty"
+
+/** 毫秒 → `mm:ss`（Folia LatticeChrome 的等宽时间；小时数并进分钟）。 */
 internal fun formatTime(ms: Long): String {
-    if (ms <= 0) return "0:00"
-    val total = ms / 1000
-    return "%d:%02d".format(total / 60, total % 60)
+    val safe = if (ms < 0L) 0L else ms
+    val totalSeconds = safe / 1000L
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    return "%02d:%02d".format(minutes, seconds)
 }
+/** 取文案：外壳注入的 [LyricStrings] 只带资源 id，这里统一翻成字符串。 */
+@Composable
+private fun str(id: Int): String = LyricStringHost.current(id)

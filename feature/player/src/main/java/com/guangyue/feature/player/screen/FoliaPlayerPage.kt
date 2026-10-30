@@ -576,15 +576,9 @@ private fun PlayerCard(
                     onClick = onOpenLyrics,
                 )
             }
-            Text(
-                text = str(res.lyricsSoon),
-                fontSize = 10.sp,
-                color = cardInkSoft.copy(alpha = 0.6f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-                textAlign = TextAlign.End,
-            )
+            // U5：原先这里挂着「歌词功能即将上线」的小字占位；歌词页落地后撤掉，
+            // 入口只剩上面那颗「歌词」按钮，右侧留白顶住动作行。
+            Spacer(Modifier.weight(1f))
         }
 
         Spacer(Modifier.height(GySpace.s))

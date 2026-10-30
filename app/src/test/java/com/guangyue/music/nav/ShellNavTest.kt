@@ -85,6 +85,19 @@ class ShellNavTest {
         assertEquals(null, ShellNav.backTarget(Routes.PLAYER, isTopLevel = false))
     }
 
+    // ---------- U5：歌词页是播放页的下级页面 ----------
+
+    @Test
+    fun backFromLyricsPagePopsToPlayerFirst() {
+        // 歌词页非顶层：返回先由 NavController pop 回播放页，不跳到首页 Tab。
+        assertEquals(null, ShellNav.backTarget(Routes.LYRIC_FLOW, isTopLevel = false))
+    }
+
+    @Test
+    fun lyricsPageDoesNotCarryTheBottomBar() {
+        assertEquals(null, ShellNav.backTarget(Routes.LYRIC_FLOW, ShellNav.showsBottomBar(Routes.LYRIC_FLOW)))
+    }
+
     @Test
     fun backBeforeFirstDestinationResolvesIsNotIntercepted() {
         assertEquals(null, ShellNav.backTarget(null, isTopLevel = ShellNav.showsBottomBar(null)))

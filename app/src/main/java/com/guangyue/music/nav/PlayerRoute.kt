@@ -27,6 +27,7 @@ import com.guangyue.core.player.PlaybackState
 import com.guangyue.core.player.QualityLadder
 import com.guangyue.music.R
 import com.guangyue.feature.library.design.GuangYueDesign
+import com.guangyue.feature.player.lyrics.LyricStrings
 import com.guangyue.feature.player.screen.FoliaPlayerPage
 import com.guangyue.feature.player.screen.LikeState
 import com.guangyue.feature.player.screen.PlayerQueueRow
@@ -195,7 +196,8 @@ internal fun playerStrings(): PlayerStrings = PlayerStrings(
     addToPlaylist = R.string.player_add_to_playlist,
     queue = R.string.player_queue,
     lyrics = R.string.player_lyrics,
-    lyricsSoon = R.string.player_lyrics_soon,
+    // U5：歌词页落地，占位小字撤掉；这里给「歌词」本身，外壳的 strings 包保持定长。
+    lyricsSoon = R.string.player_lyrics,
     queueCount = R.string.player_queue_count,
     queueEmpty = R.string.player_queue_empty,
     noSong = R.string.player_no_song,
@@ -205,5 +207,28 @@ internal fun playerStrings(): PlayerStrings = PlayerStrings(
     closeQueue = R.string.player_close_queue,
     seekBar = R.string.player_seek_bar,
     coverOf = R.string.player_cover_of,
+)
+
+/**
+ * U5：把 `strings.xml` 里的「U5 歌词页」段交给 `feature:player` 的歌词视图。
+ *
+ * 跟 [playerStrings] 同一个套路：feature 模块没有 `R`，只能拿资源 id，文案真值在这儿取齐。
+ */
+@Composable
+internal fun lyricStrings(): LyricStrings = LyricStrings(
+    back = R.string.lyrics_back,
+    title = R.string.lyrics_title,
+    play = R.string.player_play,
+    pause = R.string.player_pause,
+    empty = R.string.lyrics_empty,
+    emptyHint = R.string.lyrics_empty_hint,
+    loading = R.string.lyrics_loading,
+    loadFailed = R.string.lyrics_load_failed,
+    failedHint = R.string.lyrics_failed_hint,
+    retry = R.string.lyrics_retry,
+    pureMusic = R.string.lyrics_pure_music,
+    seekBar = R.string.lyrics_seek_bar,
+    sourceLabel = R.string.lyrics_source,
+    sourceNone = R.string.lyrics_source_none,
 )
 

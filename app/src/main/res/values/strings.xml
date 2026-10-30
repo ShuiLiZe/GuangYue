@@ -269,4 +269,29 @@
     <string name="player_seek_bar">播放进度</string>
     <!-- 自拟：封面图无障碍名模板 -->
     <string name="player_cover_of">%1$s 的封面</string>
+    <!-- ===== U5 歌词页（Folia LatticeLyrics / Lattice.css 空态） ===== -->
+    <!-- zh-CN.ts: "collapse"（「收起」）压成返回圆钮的无障碍名 -->
+    <string name="lyrics_back">返回</string>
+    <!-- zh-CN.ts: 2124 "lyrics"（「歌词」） -->
+    <string name="lyrics_title">歌词</string>
+    <!-- zh-CN.ts: 354 "matchingBestLyrics"（「正在匹配最佳歌词...」）压成加载中空态的主句 -->
+    <string name="lyrics_loading">正在匹配最佳歌词…</string>
+    <!-- zh-CN.ts: 890 "noLyricsAvailable"（「无可用歌词」） -->
+    <string name="lyrics_empty">无可用歌词</string>
+    <!-- zh-CN.ts: 1747 "noLyrics"（「播放一首带歌词的歌曲即可实时预览」）压成副句 -->
+    <string name="lyrics_empty_hint">换一个音源或稍后再试</string>
+    <!-- zh-CN.ts: 361 "bestLyricsMatchFailed"（「匹配最佳歌词失败」） -->
+    <string name="lyrics_load_failed">匹配最佳歌词失败</string>
+    <!-- 自拟：Folia 失败时只弹 toast，没有常驻空态，这里给一句出路 -->
+    <string name="lyrics_failed_hint">稍后再试，或在设置里换一个音源</string>
+    <!-- zh-CN.ts: "retry"（「重试」） -->
+    <string name="lyrics_retry">重试</string>
+    <!-- zh-CN.ts: 358 "bestLyricsPureMusic"（「纯音乐，无需匹配歌词」） -->
+    <string name="lyrics_pure_music">纯音乐，无需匹配歌词</string>
+    <!-- 自拟：歌词页底部进度条的无障碍名（Folia 无 aria） -->
+    <string name="lyrics_seek_bar">播放进度</string>
+    <!-- zh-CN.ts: 3861 "lyrics"（localMusic 段「歌词」），与来源名拼成「歌词 · 网易云」 -->
+    <string name="lyrics_source">歌词</string>
+    <!-- zh-CN.ts: 3869 "statusNone"（「无」） -->
+    <string name="lyrics_source_none">无</string>
 </resources>
