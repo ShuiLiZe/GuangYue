@@ -14,6 +14,7 @@ import dagger.hilt.components.SingletonComponent
 import com.guangyue.core.plugin.di.PlaybackHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -27,6 +28,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class PluginMediaSourceResolver @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val app: android.content.Context,
     private val bridge: MusicPluginBridge,
     private val tracks: TrackRepository,
     private val lx: LxSourceManager,
@@ -70,14 +72,23 @@ class PluginMediaSourceResolver @Inject constructor(
             }
 
         val label = row?.title?.takeIf { it.isNotBlank() } ?: "这首歌"
-        val result = bridge.getMediaSource(
-            pluginId = origin.pluginId,
-            musicItemRaw = payload,
-            item = pluginItem,
-            quality = origin.quality.wire,
-        )
+        // 插件取链通常 5~15s（慢网/聚合源更久）。洛雪取链源（自带五源脚本）在 PC 上实测 1 秒级，
+        // 所以把插件取链压到较短预算：超时就直接落到洛雪源，别让用户等一分钟。
+        val result = runCatching {
+            withTimeoutOrNull(PLUGIN_RESOLVE_BUDGET_MS) {
+                bridge.getMediaSource(
+                    pluginId = origin.pluginId,
+                    musicItemRaw = payload,
+                    item = pluginItem,
+                    quality = origin.quality.wire,
+                )
+            }
+        }.onFailure { android.util.Log.w("GYHOME", "plugin getMediaSource threw: " + it.message) }
+            .getOrNull()
 
         if (result != null) {
+            // 拿到播放地址就把播放服务拉起来，这样一开播就有 media session（通知栏/锁屏/媒体键）。
+            GuangYuePlaybackService.start(app)
             return@withContext ResolvedSource(result.url, result.headers, volatile = true)
         }
 
@@ -106,6 +117,16 @@ class PluginMediaSourceResolver @Inject constructor(
         }
 
         throw ResolutionException("这个音源取不到「$label」的播放地址")
+    }
+
+    private companion object {
+        /**
+         * 插件 getMediaSource 的时间预算。
+         *
+         * 第三方聚合插件在弱网/挂掉时要几十秒才超时，而超时后还必须再等洛雪源取一次，
+         * 用户看到的就是「点播放一直转、进度不动」。8 秒没回来就跳到洛雪取链源。
+         */
+        const val PLUGIN_RESOLVE_BUDGET_MS = 8_000L
     }
 }
 

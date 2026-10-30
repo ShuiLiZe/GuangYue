@@ -15,7 +15,9 @@
 const lxApi = globalThis.lx || {}
 const EVENT_NAMES = lxApi.EVENT_NAMES || { request: 'request', inited: 'inited' }
 const request = lxApi.request || globalThis.request
-const md5 = (s) => (globalThis.lxUtils && lxUtils.crypto ? lxUtils.crypto.md5(String(s)) : '')
+// lx 运行时把 crypto 放在 globalThis.lx.utils 下（不是全局 lxUtils）
+const lxUtils = (globalThis.lx && globalThis.lx.utils) || globalThis.lxUtils || {}
+const md5 = (s) => (lxUtils.crypto ? lxUtils.crypto.md5(String(s)) : '')
 
 function req (url, options) {
   return new Promise((resolve, reject) => {
@@ -100,7 +102,9 @@ async function mgUrl (song, quality) {
 
 // ---------------------------------------------------------------- kg (kugou)
 async function kgUrl (song, quality) {
-  const hash = String((song && (song.hash || song.fileHash)) || '')
+  const raw = String((song && (song.hash || song.fileHash)) || '')
+  // 第三方插件给的 hash 常带来源前缀（`kugou_<hash>` / `kg_<hash>`），先剥离再校验
+  const hash = (raw.replace(/^[a-z]+_/i, '') || raw)
   need(/^[0-9a-fA-F]{32}$/.test(hash), 'kugou: bad hash')
   for (const br of ['hq', 'free']) {
     const key = md5(hash + 'kgcloudv2')

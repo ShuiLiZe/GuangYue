@@ -75,6 +75,12 @@ class GuangYuePlaybackService : MediaLibraryService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
         mediaLibrarySession
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 只是把服务拉起来（让 MediaLibrarySession 存在），播放由 PlaybackController 驱动。
+        // START_NOT_STICKY：进程被杀后不靠旧广播复活；真正在播时 media3 自己会转前台服务。
+        return START_NOT_STICKY
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
         val player = playback.player
         if (!player.playWhenReady || player.mediaItemCount == 0 ||
@@ -95,5 +101,22 @@ class GuangYuePlaybackService : MediaLibraryService() {
 
     companion object {
         const val NOTIFICATION_CHANNEL = "guangyue.playback"
+
+        /**
+         * 点播放时把本服务拉起来。
+         *
+         * MediaSessionService 只有被 start/bind 之后才有会话：不拉的话虽然在放歌，
+         * 系统里却没有 media session，没有通知栏/锁屏控制，
+         * dumpsys media_session 里也查不到 state=PLAYING，系统媒体键也按不动。
+         */
+        fun start(context: android.content.Context) {
+            val intent = Intent(context, GuangYuePlaybackService::class.java)
+            // 用 startService：media3 在会话连上后自己走 startForeground；
+            // 用 startForegroundService 会触发 did not then call startForeground 的崩溃。
+            runCatching { context.startService(intent) }
+                .onFailure {
+                    android.util.Log.w("GYHOME", "start playback service failed: " + it.message)
+                }
+        }
     }
 }

@@ -1,0 +1,33 @@
+0.0.8 M1d 真实播放取证（emulator-5554 / 720x1600 / Android 14）
+================================================================
+设备时间 2026-10-30（Asia/Shanghai），包 com.guangyue.music 0.0.8(8)，release 签名包。
+曲目：星晴 / 周杰伦 / 专辑「寂寞边境 月光爱人 情歌精选」，来源 咪咕（搜索 zhoujielun，结果第 5 条 [咪咕]）。
+曲目总时长 4:19 = 259 秒 ≥ 120 秒（播放页右侧时长，两帧一致）→ 不是试听片段。
+
+帧 A：docs/ui-0.0.8/m1c/01-play-a.png   抓图时刻 2026-10-30 23:03:37 +08:00
+     界面 0:40 / 4:19，中间为暂停按钮（=正在播放）
+帧 B：docs/ui-0.0.8/m1c/02-play-b.png   抓图时刻 2026-10-30 23:04:22 +08:00
+     界面 1:25 / 4:19，中间为暂停按钮
+两帧间隔 45 秒（≥20s），进度 0:40 → 1:25 不同。
+
+A 时刻 `adb shell dumpsys media_session`（归档 .cli/m1d/ms-proof-a.txt）：
+  Media button session is com.guangyue.music/androidx.media3.session.id. (userId=0)
+  androidx.media3.session.id. com.guangyue.music/androidx.media3.session.id. (userId=0)
+  package=com.guangyue.music
+  state=PlaybackState {state=PLAYING(3), position=39918, buffered position=131030, speed=1.0, updated=5873840, actions=7340027, custom actions=[], active item id=4, error=null}
+  metadata: size=10, description=星晴, 周杰伦, 寂寞边境 月光爱人 情歌精选
+
+B 时刻 `adb shell dumpsys media_session`（归档 .cli/m1d/ms-proof-b.txt）：
+  state=PlaybackState {state=PLAYING(3), position=87337, buffered position=196571, speed=1.0, updated=5921293, actions=7340027, custom actions=[], active item id=4, error=null}
+position 39918ms → 87337ms，真实推进 +47419ms，state 两次都是 PLAYING(3)。
+
+同一时刻 `adb shell dumpsys audio`（.cli/m1d/au-proof-a.txt / au-proof-b.txt）：
+  AudioPlaybackConfiguration piid:271 deviceId:2 type:android.media.AudioTrack u/pid:10198/13149 state:started
+  attr: usage=USAGE_MEDIA content=CONTENT_TYPE_MUSIC sessionId:201 mutedState:none FormatInfo{sampleRate=44100}
+（两帧都是 state:started，音频真的在出声）
+  audio focus: pack: com.guangyue.music gain: GAIN loss: none
+
+补充：本项验收过程中发现并修复了一个真缺陷 —— GuangYuePlaybackService（Media3
+MediaLibrarySession）从未被 start，导致放歌时系统里没有 media session（无通知栏/锁屏控制、
+媒体键无效、dumpsys media_session 查不到 state=PLAYING）。修复见 report.md「代码改动」。
+修复后点播放即能在此处看到 state=PLAYING(3)。
