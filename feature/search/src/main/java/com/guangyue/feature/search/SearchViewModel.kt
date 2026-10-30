@@ -132,6 +132,27 @@ class SearchViewModel @Inject constructor(
 
     private var job: Job? = null
 
+    /** 输入即搜的防抖（U3）：停止输入 400ms 后才真正发请求。 */
+    private val debounce: DebounceScheduler = object : DebounceScheduler(SEARCH_DEBOUNCE_MS) {
+        private var waiter: Job? = null
+
+        override fun enqueue(delayMs: Long, block: () -> Unit) {
+            waiter = viewModelScope.launch {
+                kotlinx.coroutines.delay(delayMs)
+                block()
+            }
+        }
+
+        override fun onCancel() {
+            waiter?.cancel()
+            waiter = null
+        }
+
+        override fun onFire() {
+            search()
+        }
+    }
+
     /** 已加载过结果的 Tab（懒加载判断：切到这个 Tab 时 query 没变就不再请求）。 */
     private val loadedTypes = mutableSetOf<String>()
     private var loadedQuery: String = ""
@@ -170,8 +191,44 @@ class SearchViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 输入即搜（U3）。
+     *
+     * Folia 桌面是回车 / 点放大镜提交（`SearchWorkspace.tsx` 的 `onSubmit`），手机没有回车这个习惯，
+     * 所以改成「输入停手 400ms 就搜」。三条规则：
+     *  1. 每次输入都先撤掉上一次的防抖，再排新的 —— 连打不会连发请求；
+     *  2. 真正发请求时 [search] 里的 `job?.cancel()` 会取消上一次在途请求，结果只认最后一个；
+     *  3. 输入被清空 = 回到初始态（历史 / 推荐），不发请求。
+     */
     fun onQueryChange(text: String) {
-        _state.value = _state.value.copy(query = text)
+        val previous = _state.value
+        if (text.trim().isEmpty()) {
+            debounce.cancel()
+            job?.cancel()
+            job = null
+            _state.value = previous.copy(
+                query = text,
+                loading = false,
+                failure = null,
+                searched = false,
+                rows = emptyList(),
+                albums = emptyList(),
+                artists = emptyList(),
+                sheets = emptyList(),
+            )
+            forgetLoaded()
+            return
+        }
+        val shouldSearch = shouldSearchOnInput(previous, text)
+        _state.value = previous.copy(query = text)
+        if (!shouldSearch) return
+        debounce.schedule()
+    }
+
+    /** 立即搜（点键盘上的「搜索」键 / 点搜索框右侧的搜索字样）。 */
+    fun searchNow() {
+        debounce.cancel()
+        search()
     }
 
     /** 选中一个音源：只用它搜，并记住选择（下次进搜索页默认还是它）。 */
@@ -193,7 +250,9 @@ class SearchViewModel @Inject constructor(
         // 0.0.8：音源是全局单选——搜索页换音源要同时切换「当前音源」，
         // 这样首页榜单、插件页的单选圈、取链都跟着变。
         viewModelScope.launch { manager.setCurrentSource(id) }
-        // 已经搜过就立刻用新音源重搜，避免用户以为「换了音源没反应」
+        // 已经搜过就立刻用新音源重搜，避免用户以为「换了音源没反应」；
+        // U3：先撤掉待发的防抖，免得多发一次。
+        debounce.cancel()
         if (_state.value.query.isNotBlank()) search()
     }
 
@@ -291,6 +350,7 @@ class SearchViewModel @Inject constructor(
      * 拿到同一条失败结果——不真重发就永远修不好。正常搜索路径不受影响，缓存语义不变。
      */
     fun retry() {
+        debounce.cancel()
         val plugin = _state.value.selected
         if (plugin != null) {
             runCatching { manager.notifyReload(plugin.platform) }
@@ -304,11 +364,20 @@ class SearchViewModel @Inject constructor(
     fun onTabChange(tab: SearchTab) {
         if (tab !in _state.value.availableTypes) return
         _state.value = _state.value.copy(tab = tab)
+        debounce.cancel()
         val query = _state.value.query.trim()
         if (query.isEmpty()) return
         if (tab.type == SearchType.MUSIC && _state.value.rows.isNotEmpty()) return
         if (tab.type in loadedTypes && loadedQuery == query) return
         search()
+    }
+
+    /**
+     * U3 清空输入：回到初始态（搜索历史 / 推荐），同时撤掉待发与在途的请求。
+     * 与「用户手动删光输入框」等价，单独给搜索框的 × 按钮用。
+     */
+    fun clearQuery() {
+        onQueryChange("")
     }
 
     /** 下载一条搜索结果。 */
@@ -357,11 +426,13 @@ class SearchViewModel @Inject constructor(
      * 广乐暂不内置专辑详情页，这里按专辑名再搜一次并用第一首起播，保持「点了就有反馈」。
      */
     fun openAlbum(album: MusicItem) {
+        debounce.cancel()
         _state.value = _state.value.copy(query = album.title)
         search()
     }
 
     fun openArtist(artist: MusicItem) {
+        debounce.cancel()
         _state.value = _state.value.copy(query = artist.title)
         search()
     }
@@ -369,6 +440,7 @@ class SearchViewModel @Inject constructor(
     private fun forgetLoaded() {
         loadedTypes.clear()
         loadedQuery = ""
+        debounce.cancel()
     }
 
     private fun tabsOf(plugin: PluginMeta?): List<SearchTab> {

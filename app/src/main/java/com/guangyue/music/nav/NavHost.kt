@@ -1,4 +1,4 @@
-package com.guangyue.music.nav
+﻿package com.guangyue.music.nav
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,7 +38,8 @@ import com.guangyue.feature.player.lyrics.LyricFlowScreen
 import com.guangyue.feature.player.lyrics.LyricStageScreen
 import com.guangyue.feature.player.screen.IPlayerRoute
 import com.guangyue.feature.player.viewmodel.LyricsViewModel
-import com.guangyue.feature.search.SearchScreen
+import com.guangyue.feature.search.FoliaSearchScreen
+import com.guangyue.feature.search.SearchStrings
 import com.guangyue.feature.search.SearchViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -163,10 +164,11 @@ fun GuangYueNavHost(
             val state by vm.state.collectAsStateWithLifecycle()
             ShellColumn(
                 content = {
-                    SearchScreen(
+                    FoliaSearchScreen(
+                        res = searchStrings(),
                         state = state,
                         onQueryChange = vm::onQueryChange,
-                        onSearch = vm::search,
+                        onSearch = vm::searchNow,
                         // 0.0.7：音源单选，只用用户选中的那一个插件搜
                         onPickSource = { id -> vm.selectSource(id) },
                         onPlay = { index ->
@@ -179,13 +181,14 @@ fun GuangYueNavHost(
                         onDownload = { item -> vm.download(item, playback.defaultQuality.wire) },
                         onPickHistory = { q ->
                             vm.onQueryChange(q)
-                            vm.search()
+                            vm.searchNow()
                         },
                         onOpenAlbum = { item -> vm.openAlbum(item) },
                         onOpenArtist = { item -> vm.openArtist(item) },
                         onTabChange = { vm.onTabChange(it) },
                         // 0.0.9 a-1：失败提示条里的「重试」——清该插件缓存后真重发一次请求。
                         onRetry = { vm.retry() },
+                        onOpenSourceManager = { navController.navigate(Routes.PLUGINS) },
                     )
                 },
                 miniPlayer = miniPlayer,
@@ -401,3 +404,31 @@ fun GuangYueNavHost(
         }
     }
 }
+
+/**
+ * U3：把 `strings.xml` 里的 14 条搜索页文案交给 feature 模块。
+ *
+ * 文案本体在 `app/src/main/res/values/strings.xml`（feature 模块没有 R，只能拿 id），
+ * 这里一次取齐，避免 Composable 里散着 `stringResource(R.string.…)` 十几处。
+ */
+@Composable
+internal fun searchStrings(): SearchStrings {
+    return SearchStrings(
+        placeholder = R.string.search_placeholder_folia,
+        clear = R.string.search_clear,
+        searching = R.string.search_searching,
+        noResults = R.string.search_no_results,
+        emptySubtitle = R.string.search_empty_subtitle,
+        emptyCategory = R.string.search_empty_category,
+        retry = R.string.search_retry,
+        history = R.string.search_history,
+        suggestions = R.string.search_suggestions,
+        addToPlaylist = R.string.search_add_to_playlist,
+        download = R.string.search_download,
+        noSource = R.string.search_no_source,
+        noSourceHint = R.string.search_no_source_hint,
+        openPlugins = R.string.search_open_plugins,
+    )
+}
+
+
