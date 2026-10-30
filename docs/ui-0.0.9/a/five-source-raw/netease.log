@@ -1,0 +1,174 @@
+# netease 网易云音乐 1.9.27
+# phase=before
+# file=2026-10-31 02:11:55
+# fileName=netease-source.plugin.v1.9.27.js
+# url=https://raw.githubusercontent.com/hebijunge/musicfree-plugins/master/plugins/netease-source.plugin.v1.9.27.js
+# prelude=542691 chars
+# jdk=21.0.12.1
+# os=Windows 10
+# cwd=D:\workspaces\GuangYue\core\plugin\.
+# cacheDir=D:\workspaces\GuangYue\core\plugin\..\..\build\plugin-cache-0.0.4
+# cacheCandidates=../build/plugin-cache-0.0.4 | build/plugin-cache-0.0.4 | ../../build/plugin-cache-0.0.4 | D:\workspaces\GuangYue/build/plugin-cache-0.0.4
+
+## meta
+{"platform":"netease","name":"网易云音乐","version":"1.9.27","srcUrl":"https://raw.githubusercontent.com/hebijunge/musicfree-plugins/master/plugins/netease-source.plugin.v1.9.27.js","author":"研发2号","description":"网易云音乐独立源插件 v1.9.8（v1.9.8 版本号统一 + 封面 https 升级版：导出边界把封面/头像类字段 http→https（白名单 *.126.net，安卓 cleartext 兼容）；v1.9.5 MV 画质表修复版：官方 MV 通道改以 api/mv/detail brs 上游实档构建 availableVideoQualities，宿主画质菜单可按实档切档；v1.9.3 WebView 短链跟随修复版：followRedirects 非 3xx 分支新增 responseURL 自动跟随检测——真机 WebView 下 XHR 自动跟随 302（axios maxRedirects:0 仅 Node 生效），短链解析拿到最终 URL 而非原始短链，修复真机导入 SHEET_URL_UNRECOGNIZED，详见头部 changelog；上一版 v1.9.2 为分享链接文本自动提取 URL 版；v1.9.1 随包升版：歌单对象补 author 别名字段，详见头部 v1.9.1 changelog；v1.9.0 BakaMusic 高价值音源接入版：零代码增量随包升版——BakaMusic 确认的次合代/ikun 网易云通道本插件 v1.3.1/v1.1.0 起已竞速接入（ikun atmos 实测 fLaC ~92MB ≈2740kbps 全场最高音质），全豆要 wy 实测虚标 128k 不接入，详见头部 v1.9.0 changelog；v1.8.4 歌单导入元数据版：importMusicSheet 返回完整 IMusicSheetItem 歌单对象——标题/介绍/封面/作者随 v6/playlist/detail 响应零额外请求回传，介绍字段 description 对齐宿主 v1.0.0 契约；v1.8.3 质检遗留优化版：错误消息统一 [netease] 前缀 + 兜底分支 code 统一为 SHEET_URL_UNRECOGNIZED；v1.8.2 歌单解析修复版：P0-1 移动端 m/playlist 链接导入修复 + P1-3 短链路径形态支持 + 歌单条目 platform 字段 + 歌单导入错误码统一；v1.8.0 MV 参数对齐基线：getMvSourceImpl 顶层守卫字段兜底（musicItem.mv
+## functions
+getAlbumInfo,getArtistWorks,getLyric,getMediaSource,getMusicComments,getMusicInfo,getMusicSheetInfo,getRecommendSheetTags,getRecommendSheetsByTag,getTopListDetail,getTopLists,importMusicSheet,search
+
+## search 原始返回（前 2000 字）
+{"isEnd":false,"data":[{"id":"netease_210049","title":"布拉格广场","artist":"蔡依林, 周杰伦","album":"看我72变","artwork":"https://p1.music.126.net/8D2Pd7EuvGboMyE2xWc47A==/109951172453712025.jpg","duration":295,"_src":{"netease":{"id":"210049","mv":"186025"}},"_srcOrder":["netease"],"qualities":{"128k":{"size":4714623,"bitrate":128000},"192k":{"size":7071913,"bitrate":192000},"320k":{"size":11786493,"bitrate":320000},"flac":{"size":34918981,"bitrate":948239}},"mv":"186025","alias":"单元剧《上班女郎》主题曲"},{"id":"netease_255020","title":"刀马旦","artist":"李玟, 周杰伦","album":"Promise","artwork":"https://p1.music.126.net/dDgHDWlJAFwkMNrjbQExIA==/109951165959446596.jpg","duration":192,"_src":{"netease":{"id":"255020","mv":"5287134"}},"_srcOrder":["netease"],"qualities":{"128k":{"size":3074133,"bitrate":128002},"192k":{"size":4611178,"bitrate":192002},"320k":{"size":7685268,"bitrate":320002},"flac":{"size":23842778,"bitrate":993056}},"mv":"5287134"},{"id":"netease_210062","title":"骑士精神","artist":"蔡依林, 周杰伦","album":"看我72变","artwork":"https://p1.music.126.net/8D2Pd7EuvGboMyE2xWc47A==/109951172453712025.jpg","duration":258,"_src":{"netease":{"id":"210062","mv":"186031"}},"_srcOrder":["netease"],"qualities":{"128k":{"size":4122375,"bitrate":128000},"192k":{"size":6183541,"bitrate":192000},"320k":{"size":10305872,"bitrate":320000},"flac":{"size":31875167,"bitrate":990015}},"mv":"186031"},{"id":"netease_209917","title":"海盗","artist":"蔡依林, 周杰伦","album":"城堡","artwork":"https://p1.music.126.net/lKIkniPBdOWqZzl1yvgz9g==/109951170708258712.jpg","duration":277,"_src":{"netease":{"id":"209917","mv":"185048"}},"_srcOrder":["netease"],"qualities":{"128k":{"size":4438770,"bitrate":128000},"192k":{"size":6658133,"bitrate":192000},"320k":{"size":11096860,"bitrate":320000},"flac":{"size":32461751,"bitrate":936350}},"mv":"185048"},{"id":"netease_5257138","title":"屋顶","artist":"周杰伦, 温岚, 吴宗宪","album":"男女情歌对唱冠军全记录","artwork":"https://p1.music.126.net/81BsxxhomJ4aJZYvEbyPkw==/109951165671182684.jpg","duration":319,"_src"
+
+## 第一条
+{"id":"netease_210049","title":"布拉格广场","artist":"蔡依林, 周杰伦","album":"看我72变","artwork":"https://p1.music.126.net/8D2Pd7EuvGboMyE2xWc47A==/109951172453712025.jpg","duration":295,"_src":{"netease":{"id":"210049","mv":"186025"}},"_srcOrder":["netease"],"qualities":{"128k":{"size":4714623,"bitrate":128000},"192k":{"size":7071913,"bitrate":192000},"320k":{"size":11786493,"bitrate":320000},"flac":{"size":34918981,"bitrate":948239}},"mv":"186025","alias":"单元剧《上班女郎》主题曲"}
+
+## getMediaSource(quality=standard) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：所有可用源均未取得播放链接
+    at _0x248639 (plugin.js:2:219268)
+    at JNQdi (plugin.js:2:216727)
+    at <anonymous> (plugin.js:2:222249)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## getMediaSource(quality=high) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：所有可用源均未取得播放链接
+    at _0x248639 (plugin.js:2:219268)
+    at JNQdi (plugin.js:2:216727)
+    at <anonymous> (plugin.js:2:222249)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## getMediaSource(quality=320k) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：聚合取链失败：所有可用源均未取得播放链接（负缓存 60s）
+    at resolveWithFallback (plugin.js:2:216502)
+    at getMediaSource (plugin.js:2:316471)
+    at apply (native)
+    at <anonymous> (plugin.js:2:329186)
+    at apply (native)
+    at <anonymous> (dispatcher.js:76:25)
+    at <eval> (call.js:1:65)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## getMediaSource(quality=flac) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：所有可用源均未取得播放链接
+    at _0x248639 (plugin.js:2:219268)
+    at JNQdi (plugin.js:2:216727)
+    at <anonymous> (plugin.js:2:222249)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## getMediaSource(quality=low) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：聚合取链失败：所有可用源均未取得播放链接（负缓存 60s）
+    at resolveWithFallback (plugin.js:2:216502)
+    at getMediaSource (plugin.js:2:316471)
+    at apply (native)
+    at <anonymous> (plugin.js:2:329186)
+    at apply (native)
+    at <anonymous> (dispatcher.js:76:25)
+    at <eval> (call.js:1:65)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## HTTP 记录（20 条）
+  HTTP GET 200 247ms https://music.163.com/api/cloudsearch/pc?s=%E5%91%A8%E6%9D%B0%E4%BC%A6&type=1&limit=20&offset=0
+  HTTP GET 200 39ms https://music.163.com/api/song/enhance/player/url?ids=%5B210049%5D&br=128000
+  HTTP POST 200 194ms https://interface3.music.163.com/eapi/api/song/enhance/player/url/v1
+  HTTP POST 200 175ms https://c.wwwweb.top/music/url
+  HTTP POST 200 43ms https://interface3.music.163.com/eapi/api/song/enhance/player/url/v1
+  HTTP POST 200 62ms https://c.wwwweb.top/music/url
+  HTTP GET 200 366ms https://yy.zddyr.top/lx/api/?source=netease&songmid=210049&quality=320k
+  HTTP POST 200 126ms https://musicserver.haitangw.cc/v1/music/resolve-url
+  HTTP GET 521 747ms https://api.cenguigui.cn/api/netease/music_v1.php?id=210049&type=json&level=exhigh
+  HTTP GET 200 14030ms https://music-api.gdstudio.xyz/api.php?types=url&source=netease&id=210049&br=320
+  HTTP GET 200 1366ms https://api.cxzja.cn/api/wyymusic?token=api-isgzr1qfmdw7ka&type=flac&id=210049
+  HTTP GET 200 321ms https://music.163.com/song/media/outer/url?id=210049.mp3
+  HTTP POST 200 180ms https://interface3.music.163.com/eapi/api/song/enhance/player/url/v1
+  HTTP POST 200 159ms https://c.wwwweb.top/music/url
+  HTTP GET 200 405ms https://yy.zddyr.top/lx/api/?source=netease&songmid=210049&quality=flac
+  HTTP GET 404 254ms https://yinyue.haitangw.net/wy/wy.php?type=mp3&id=210049&level=lossless
+  HTTP POST 200 125ms https://musicserver.haitangw.cc/v1/music/resolve-url
+  HTTP ? -1 2912ms https://api.cenguigui.cn/api/netease/music_v1.php?id=210049&type=json&level=lossless
+  HTTP GET 200 2467ms https://music-api.gdstudio.xyz/api.php?types=url&source=netease&id=210049&br=740
+  HTTP GET 206 109ms https://m701.music.126.net/20261031023818/a0d926f2db75968f03335596cfac9d8f/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/22259947907/f0fb/a2c1/e86c/9092405ea985a394a4af69d32dd32fc9.flac
+
+## console 记录（0 条）
+（无）
+
+## 结论
+ stage=getMediaSource
+ searchOk=true
+ mediaOk=false
+ okQuality=
+ verdict=(b)
+ needed=对齐源站当前请求头/Cookie/UA（见 raw log 的 HTTP 记录与插件内常量）
+ totalMs=25095

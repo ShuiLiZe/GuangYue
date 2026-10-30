@@ -1,4 +1,4 @@
-﻿package com.guangyue.music.ui
+package com.guangyue.music.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,6 +37,7 @@ import com.guangyue.feature.search.SearchScreen
 import com.guangyue.feature.search.SearchTab
 import com.guangyue.feature.search.SearchUiState
 import com.guangyue.music.theme.GuangYueTheme
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -56,6 +57,25 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ScreenshotTest {
+
+    /**
+     * JVM 截图里没有网络：Coil 用内存里预先画好的本地图标作答，好让「插件列表图标」
+     * 这张验收图能看到真图标而不是首字占位。真机（gy34）上的图标仍走真网络，见 report.md。
+     */
+    private fun fakeIcons(): coil3.SingletonImageLoader.Factory = object : coil3.SingletonImageLoader.Factory {
+        override fun newImageLoader(context: android.content.Context): coil3.ImageLoader =
+            coil3.ImageLoader.Builder(context)
+                .memoryCache { coil3.memory.MemoryCache.Builder().maxSizePercent(context, 0.05).build() }
+                .components {
+                    add(FakePluginIconFetcherFactory())
+                }
+                .build()
+    }
+
+    @Before
+    fun installFakeIcons() {
+        coil3.SingletonImageLoader.setSafe(fakeIcons())
+    }
 
     @get:Rule
     val compose = createComposeRule()
@@ -212,7 +232,14 @@ class ScreenshotTest {
         source("kuwo-1", "酷我音乐", "kuwo", listOf("music"), PluginHealth.NO_MEDIA, 4),
     )
 
-    private fun plugin(id: String, order: Int, health: String, enabled: Boolean) = PluginMeta(
+    private fun plugin(
+        id: String,
+        order: Int,
+        health: String,
+        enabled: Boolean,
+        srcUrl: String? = null,
+        iconUrl: String? = null,
+    ) = PluginMeta(
         id = id,
         platform = id.substringBefore('-'),
         name = id.substringBefore('-'),
@@ -222,6 +249,10 @@ class ScreenshotTest {
         health = health,
         sortOrder = order,
         functions = setOf("search", "getMediaSource"),
+        srcUrl = srcUrl,
+        iconUrl = iconUrl,
+        installedAt = 0L,
+        updatedAt = 0L,
     )
 
     private fun emptySearchState() = SearchUiState(
@@ -480,7 +511,7 @@ class ScreenshotTest {
         )
     }
 
-    /** 必交图 ⑥：插件管理页每行有搜索类型 + 健康状态，可开关 / 排序 / 卸载。 */
+    /** 必交图 ⑥：插件管理页每行有图标 + 搜索类型 + 健康状态，可开关 / 排序 / 卸载。 */
     @Test
     fun pluginsList() = shoot("plugins-list") {
         PluginManagerScreen(
@@ -498,6 +529,80 @@ class ScreenshotTest {
             onSelectSource = {},
             onDelete = {},
             onCheckUpdate = {},
+        )
+    }
+
+    /**
+     * 0.0.9 a 第 3 项：图标走「元数据 iconUrl → 平台站点图标 → 首字占位」三级。
+     * 这里用真 srcUrl（GitHub 托管，确保不会被当成图标源）+ 真实站点图标地址，
+     * 覆盖 QQ/网易云/酷狗/酷我/汽水 5 个源的图标，最后一行的「某某音源」走首字占位。
+     */
+    private fun iconDemoPlugins(): List<PluginMeta> = listOf(
+        plugin(
+            "qq-1", 1, PluginHealth.NO_MEDIA, true,
+            srcUrl = GH_RAW + "qq-source.plugin.v1.9.26.js",
+            iconUrl = "https://y.qq.com/favicon.ico",
+        ).copy(name = "QQ音乐"),
+        plugin(
+            "netease-1", 2, PluginHealth.OK, true,
+            srcUrl = GH_RAW + "netease-source.plugin.v1.9.27.js",
+            iconUrl = "https://music.163.com/favicon.ico",
+        ).copy(name = "网易云音乐"),
+        plugin(
+            "kugou-1", 3, PluginHealth.NO_RESULT, false,
+            srcUrl = GH_RAW + "kugou-source.plugin.v1.9.24.js",
+            iconUrl = "https://www.kugou.com/favicon.ico",
+        ).copy(name = "酷狗音乐"),
+        plugin(
+            "kuwo-1", 4, PluginHealth.NO_MEDIA, false,
+            srcUrl = GH_RAW + "kuwo-source.plugin.v1.9.24.js",
+            iconUrl = "https://www.kuwo.cn/static/image/logo.png",
+        ).copy(name = "酷我音乐"),
+        plugin(
+            "qishui-1", 5, PluginHealth.NO_MEDIA, false,
+            srcUrl = GH_RAW + "qishui-source.plugin.v1.9.23.js",
+            iconUrl = "https://www.douyin.com/favicon.ico",
+        ).copy(name = "汽水音乐"),
+        plugin(
+            "fanqie-1", 6, PluginHealth.SEARCH_FAILED, false,
+            srcUrl = GH_RAW + "fanqie-source.plugin.v1.2.2.js",
+        ).copy(name = "番茄畅听", healthNote = "源站返回错误码 6000"),
+    )
+
+    private companion object {
+        const val GH_RAW =
+            "https://raw.githubusercontent.com/hebijunge/musicfree-plugins/master/plugins/"
+    }
+
+    @Test
+    fun pluginsListIconsLight() = shoot("plugins-list-icons-light") {
+        PluginManagerScreen(
+            plugins = iconDemoPlugins(),
+            busy = false,
+            message = "正在用「QQ音乐」搜索和取播放地址。装多个音源不会同时运行，换一个才切过去。",
+            onBack = {},
+            onInstallUri = {},
+            onInstallUrl = {},
+            onSelectSource = {},
+            onDelete = {},
+            onCheckUpdate = {},
+            currentSourceId = "qq-1",
+        )
+    }
+
+    @Test
+    fun pluginsListIconsDark() = shoot("plugins-list-icons-dark", dark = true) {
+        PluginManagerScreen(
+            plugins = iconDemoPlugins(),
+            busy = false,
+            message = "正在用「QQ音乐」搜索和取播放地址。装多个音源不会同时运行，换一个才切过去。",
+            onBack = {},
+            onInstallUri = {},
+            onInstallUrl = {},
+            onSelectSource = {},
+            onDelete = {},
+            onCheckUpdate = {},
+            currentSourceId = "qq-1",
         )
     }
 

@@ -113,31 +113,14 @@ class PluginHealthChecker @Inject constructor(
      * 把插件抛出的原始异常压成一句中文短原因。
      *
      * 0.0.7 直接把 `com.guangyue.core.plugin.runtime.PluginRuntimeException at _0x3846` 这种栈
-     * 摊在插件行里，用户看不懂也帮不上忙。这里只输出「人话」；原始异常仍保留在
-     * [PluginManager.lastErrorDetails] 里，点开详情才看。
+     * 摊在插件行里，用户看不懂也帮不上忙。
+     *
+     * 0.0.9 a-1：措辞统一收口到 [PluginFailureText]，这里只做薄壳——体检结果（插件页
+     * 行内状态、首页「体检完成」明细）与搜索页失败提示从此共用同一套中文映射，不会
+     * 再出现同一个错因两处说法不一致、或英文类名漏到界面上。
+     * 原始异常仍保留在 [PluginManager.lastErrorDetails] 里，点开详情才看。
      */
-    private fun short(raw: String): String {
-        val text = raw.replace(Regex("\\s+"), " ").trim()
-        return when {
-            text.contains("Promise that has not settled") -> "插件返回的异步结果没结算"
-            text.contains("超时") || text.contains("InterruptedException") -> "插件超时没返回"
-            text.contains("not a function") -> "插件内部报错（函数不存在）"
-            text.contains("UnknownHost") || text.contains("Unable to resolve host") -> "连不上源站"
-            text.contains("status code -1") || text.contains("Request failed with status code -1") ->
-                "网络请求失败（重定向或 TLS 被源站拒）"
-            text.contains("429") -> "请求被源站限流（429）"
-            text.contains("403") -> "源站拒绝访问（403）"
-            text.contains("404") -> "接口不存在（404）"
-            text.contains("timeout", ignoreCase = true) -> "源站响应超时"
-            text.contains("SocketTimeout") -> "源站响应超时"
-            text.contains("SSL") || text.contains("Certificate") -> "证书校验失败"
-            text.contains("url is required") -> "插件请求没给地址"
-            text.contains("Missing") -> "插件缺少接口实现"
-            text.contains("unsupported") || text.contains("Unsupported") -> "插件不支持这个操作"
-            text.length > 60 -> text.take(60) + "…"
-            else -> text
-        }
-    }
+    private fun short(raw: String): String = PluginFailureText.reason(raw)
 
     companion object {
         const val KEYWORD = "周杰伦"

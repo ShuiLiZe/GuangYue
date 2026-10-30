@@ -277,9 +277,11 @@ class PluginManager @Inject constructor(
                 "插件返回了无法识别的数据类型（内部桥接已改为纯 JSON 解析）"
             message.contains("platform", ignoreCase = true) -> "插件没有声明 platform 字段"
             message.contains("module.exports", ignoreCase = true) -> "插件没有导出 module.exports 对象"
-            message.contains("超时", ignoreCase = true) -> message
+            message.contains("超时", ignoreCase = true) ->
+                "插件超时没返回（30 秒）"
             message.contains("无法加载模块", ignoreCase = true) -> "插件依赖的模块无法加载"
-            else -> message.lineSequence().first().take(120)
+            // 0.0.9 a：最后一道兜底也走统一收口，避免异常类名/原始栈漏到界面。
+            else -> PluginFailureText.reason(message)
         }
     }
 

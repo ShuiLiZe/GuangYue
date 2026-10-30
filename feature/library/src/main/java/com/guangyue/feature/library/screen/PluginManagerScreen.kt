@@ -10,14 +10,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
@@ -48,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.guangyue.core.plugin.PluginFailureText
 import com.guangyue.core.plugin.PluginHealth
 import com.guangyue.core.plugin.PluginMeta
 import com.guangyue.core.plugin.Subscription
@@ -291,7 +295,10 @@ fun PluginManagerScreen(
                 }
             }
 
+            // 0.0.9 a：edge-to-edge 下最后一项会被系统手势条 / 导航栏切掉。
+            // 二级页没有自己的窗口 inset，这里显式补齐「手势条高度 + 尾部呼吸位」。
             Spacer(Modifier.height(GySpace.xl))
+            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
         }
     }
 
@@ -344,21 +351,9 @@ private fun SourceRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             RadioMark(selected = selected, enabled = selectable)
             Spacer(Modifier.width(GySpace.m))
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(Gyp.tint),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    plugin.displayName.take(1),
-                    fontSize = 13.sp,
-                    color = Gyp.accentText,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GuangYueDesign.Sans,
-                )
-            }
+            // 0.0.9 a：不再用首字当图标。优先插件自带 iconUrl，其次源站点 favicon，
+            // 都取不到才回退首字占位（见 PluginIcon.kt）。
+            PluginIcon(plugin)
             Spacer(Modifier.width(GySpace.m))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -520,11 +515,11 @@ private fun statusOf(plugin: PluginMeta): Pair<FoliaTone, String> {
     }
 }
 
-private fun firstSentence(raw: String): String {
-    val line = raw.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().trim()
-    val cut = line.substringBefore(" at ").substringBefore('\n')
-    return if (cut.length > 60) cut.take(60) + "…" else cut
-}
+/**
+ * 行内一句话：交给统一收口点 [PluginFailureText]（0.0.9 a-1）。
+ * 以前这里只切 ` at `，异常类名（`com.guangyue...PluginRuntimeException`）会一路漏到插件行里。
+ */
+private fun firstSentence(raw: String): String = PluginFailureText.firstSentence(raw)
 
 /** 行顶部发丝线：首行不画；起 16dp（对应 `kit.css` 的 `.st-row::before`）。 */
 @Composable

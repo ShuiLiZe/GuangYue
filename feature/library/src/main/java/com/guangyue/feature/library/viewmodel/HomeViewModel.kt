@@ -10,6 +10,7 @@ import com.guangyue.core.data.repository.TrackRepository
 import com.guangyue.core.plugin.InstallResult
 import com.guangyue.core.plugin.MusicItem
 import com.guangyue.core.plugin.MusicPluginBridge
+import com.guangyue.core.plugin.PluginFailureText
 import com.guangyue.core.plugin.PluginManager
 import com.guangyue.core.plugin.PluginMeta
 import com.guangyue.core.plugin.SearchType
@@ -416,7 +417,8 @@ class PluginViewModel @Inject constructor(
             try {
                 say(manager.installCode(code, "local-file").describe(), lastDetails)
             } catch (t: Throwable) {
-                say("安装失败：" + (t.message ?: t.javaClass.simpleName), lastDetails)
+                logRaw("install", t)
+                say(PluginFailureText.installFailed(t.message), lastDetails)
             } finally {
                 _busy.value = false
             }
@@ -434,7 +436,8 @@ class PluginViewModel @Inject constructor(
             try {
                 say(manager.installFromUrl(url.trim()).describe(), lastDetails)
             } catch (t: Throwable) {
-                say("安装失败：" + (t.message ?: t.javaClass.simpleName), lastDetails)
+                logRaw("install", t)
+                say(PluginFailureText.installFailed(t.message), lastDetails)
             } finally {
                 _busy.value = false
             }
@@ -459,10 +462,11 @@ class PluginViewModel @Inject constructor(
                     if (result is InstallResult.Success) {
                         "「${plugin.displayName}」已更新到 v${r.latest}"
                     } else {
-                        "更新失败：" + ((result as? InstallResult.Failure)?.message ?: "未知原因")
+                        // 0.0.9 a-1：Failure.message 可能是原始异常（含类名/栈帧），过一遍收口。
+                        "更新失败：" + PluginFailureText.reason((result as? InstallResult.Failure)?.message)
                     }
                 }
-                is UpdateCheck.Error -> "检查更新失败：${r.message}"
+                is UpdateCheck.Error -> "检查更新失败：${PluginFailureText.reason(r.message)}"
                 UpdateCheck.NoSource -> "该插件没有 srcUrl，无法检查更新"
                 UpdateCheck.Unknown -> "无法检查更新"
             }
@@ -485,7 +489,8 @@ class PluginViewModel @Inject constructor(
         }
         is InstallResult.Failure -> {
             lastDetails = null
-            "安装失败：$message"
+            // 0.0.9 a-1：安装失败原因统一过一遍中文收口（防 installCode 内部把异常原文带出来）。
+            "安装失败：${PluginFailureText.reason(message)}"
         }
         is InstallResult.BatchInstalled -> {
             lastDetails = result.details()
@@ -506,7 +511,8 @@ class PluginViewModel @Inject constructor(
             try {
                 say(manager.installFromUrl(PluginViewModelDefaults.OFFICIAL_SOURCE).describe(), lastDetails)
             } catch (t: Throwable) {
-                say("安装失败：" + (t.message ?: t.javaClass.simpleName), lastDetails)
+                logRaw("install", t)
+                say(PluginFailureText.installFailed(t.message), lastDetails)
             } finally {
                 _busy.value = false
             }
@@ -520,9 +526,14 @@ class PluginViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val r = manager.checkUpdates(installDiscovered = true)
-                say(r.summary(), r.failed.takeIf { it.isNotEmpty() }?.joinToString("\n") { (n, m) -> "· $n：${m.lineSequence().first()}" })
+                say(
+                    r.summary(),
+                    r.failed.takeIf { it.isNotEmpty() }
+                        ?.joinToString("\n") { (n, m) -> "· $n：${PluginFailureText.reason(m)}" },
+                )
             } catch (t: Throwable) {
-                say("检查更新失败：" + (t.message ?: t.javaClass.simpleName))
+                logRaw("checkUpdates", t)
+                say(PluginFailureText.updateFailed(t.message))
             } finally {
                 _busy.value = false
             }
@@ -560,10 +571,14 @@ class PluginViewModel @Inject constructor(
                     if (ok > 0) "体检完成：$ok/${reports.size} 个音源真能搜能播"
                     else "体检完成：${reports.size} 个音源都没通过",
                     failed.takeIf { it.isNotEmpty() }
-                        ?.joinToString("\n") { "· ${it.name}：${healthText(it.health)}${it.note?.let { n -> "（$n）" }.orEmpty()}" },
+                        ?.joinToString("\n") {
+                            // 0.0.9 a-1：体检明细里的原因也走统一收口，不会再带异常类名/栈帧。
+                            "· ${it.name}：${healthText(it.health)}（${PluginFailureText.reason(it.note)}）"
+                        },
                 )
             } catch (t: Throwable) {
-                say("体检失败：" + (t.message ?: t.javaClass.simpleName))
+                logRaw("health check", t)
+                say(PluginFailureText.healthFailed(t.message))
             } finally {
                 _busy.value = false
             }
@@ -592,6 +607,19 @@ class PluginViewModel @Inject constructor(
             return null
         }
         return Unit
+    }
+
+    /**
+     * 0.0.9 a-1：安装/更新/体检失败时，原始异常（异常类名 + 插件中文原因 + JS 栈帧）
+     * 只写日志，界面一律走 [PluginFailureText] 的中文人话。
+     */
+    private fun logRaw(what: String, t: Throwable) {
+        android.util.Log.w(TAG, "$what failed: ${t.message ?: t.javaClass.name}")
+    }
+
+    private companion object {
+        /** 与 [MusicPluginBridge] / 搜索页共用同一个日志 tag。 */
+        const val TAG = "GuangYuePlugin"
     }
 }
 

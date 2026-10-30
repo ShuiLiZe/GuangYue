@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 广乐 0.0.5 —— 界面从 WebView 换成原生 Jetpack Compose。
  *
  * 这个模块现在只剩「壳」的职责：
@@ -68,8 +68,8 @@ android {
         targetSdk = 36
         // 版本号按 0.x 小步走：0.0.1 → 0.0.2 → …（tag 与 versionName 一致，不带 v 前缀）。
         // versionCode 必须始终大于上一版，否则装不上去覆盖。
-        versionCode = 8
-        versionName = "0.0.8"
+        versionCode = 9
+        versionName = "0.0.9"
         vectorDrawables { useSupportLibrary = true }
     }
 

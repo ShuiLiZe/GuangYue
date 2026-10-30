@@ -172,6 +172,8 @@ fun GuangYueNavHost(
                         onOpenAlbum = { item -> vm.openAlbum(item) },
                         onOpenArtist = { item -> vm.openArtist(item) },
                         onTabChange = { vm.onTabChange(it) },
+                        // 0.0.9 a-1：失败提示条里的「重试」——清该插件缓存后真重发一次请求。
+                        onRetry = { vm.retry() },
                     )
                 },
                 miniPlayer = miniPlayer,

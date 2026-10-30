@@ -11,6 +11,7 @@ import com.guangyue.core.plugin.AlbumItem
 import com.guangyue.core.plugin.ArtistItem
 import com.guangyue.core.plugin.MusicItem
 import com.guangyue.core.plugin.MusicPluginBridge
+import com.guangyue.core.plugin.PluginFailureText
 import com.guangyue.core.plugin.PluginManager
 import com.guangyue.core.plugin.PluginMeta
 import com.guangyue.core.plugin.SearchType
@@ -239,12 +240,17 @@ class SearchViewModel @Inject constructor(
             val albums = result?.albums.orEmpty()
             val artists = result?.artists.orEmpty()
             val error = result?.error
-                ?: outcome.exceptionOrNull()?.let { it.message?.take(80) ?: "未知错误" }
+                ?: outcome.exceptionOrNull()?.let { it.message ?: "未知错误" }
+
+            if (error != null) {
+                // 0.0.9 a-1：原始异常（含异常类名与插件栈帧）只进日志，绝不进 UI state。
+                android.util.Log.w(TAG, "search failed plugin=${plugin.id} keyword=$query: $error")
+            }
 
             val empty = items.isEmpty() && albums.isEmpty() && artists.isEmpty()
             val failure = when {
                 error != null && empty ->
-                    "$label 音源搜索失败：${shortReason(error)}，换个音源试试"
+                    PluginFailureText.searchFailed(label, error)
                 empty ->
                     "$label 音源里没有「$query」的结果，换个关键词或音源试试"
                 else -> null
@@ -274,6 +280,24 @@ class SearchViewModel @Inject constructor(
                 searched = true,
             )
         }
+    }
+
+    /**
+     * 用户点了失败提示里的「重试」。
+     *
+     * 与 [search] 的唯一区别：先让 [PluginManager.notifyReload] 把该插件的 runtime 与
+     * [MusicPluginBridge] 的查询缓存丢掉，再重新发请求。
+     * 0.0.8 的桥会把「失败」的结果也按 cacheControl 的 TTL 缓存起来，直接重搜只会
+     * 拿到同一条失败结果——不真重发就永远修不好。正常搜索路径不受影响，缓存语义不变。
+     */
+    fun retry() {
+        val plugin = _state.value.selected
+        if (plugin != null) {
+            runCatching { manager.notifyReload(plugin.platform) }
+                .onFailure { android.util.Log.w(TAG, "retry reload failed plugin=${plugin.id}: ${it.message}") }
+        }
+        forgetLoaded()
+        search()
     }
 
     /** 切 Tab：该插件不支持的 Tab 不会出现；支持但没加载过的类型按需搜（懒加载）。 */
@@ -347,26 +371,16 @@ class SearchViewModel @Inject constructor(
         loadedQuery = ""
     }
 
-    /** 把插件报错压成一句能塞进提示里的短句。 */
-    private fun shortReason(raw: String): String {
-        val line = raw.lineSequence().firstOrNull()?.trim().orEmpty().ifEmpty { "未知错误" }
-        return when {
-            line.contains("超时", ignoreCase = true) -> "插件超时没返回（30 秒）"
-            line.contains("Promise that has not settled", ignoreCase = true) ->
-                "插件返回的异步结果没结算"
-            line.contains("not a function", ignoreCase = true) -> "插件内部报错（函数不存在）"
-            line.contains("Unable to resolve host", ignoreCase = true) ||
-                line.contains("UnknownHost", ignoreCase = true) -> "连不上源站（网络或域名失效）"
-            line.contains("timeout", ignoreCase = true) -> "源站响应超时"
-            else -> line.take(60)
-        }
-    }
-
     private fun tabsOf(plugin: PluginMeta?): List<SearchTab> {
         if (plugin == null) return listOf(SearchTab.TRACKS)
         val types = plugin.supportedTypes()
         val tabs = SearchTab.entries.filter { it.type in types }
         return tabs.ifEmpty { listOf(SearchTab.TRACKS) }
+    }
+
+    private companion object {
+        /** 与 [MusicPluginBridge] 共用同一个日志 tag，方便 `adb logcat` 一把捞。 */
+        const val TAG = "GuangYuePlugin"
     }
 }
 

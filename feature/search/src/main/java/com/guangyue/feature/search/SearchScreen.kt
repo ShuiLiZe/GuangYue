@@ -38,6 +38,8 @@ import com.guangyue.core.plugin.ArtistItem
 import com.guangyue.core.plugin.MusicItem
 import com.guangyue.core.plugin.PluginMeta
 import com.guangyue.core.plugin.SearchType
+import com.guangyue.feature.library.design.FoliaButton
+import com.guangyue.feature.library.design.FoliaButtonVariant
 import com.guangyue.feature.library.design.FoliaSegmented
 import com.guangyue.feature.library.design.FoliaTextField
 import com.guangyue.feature.library.design.FoliaTopBar
@@ -80,6 +82,7 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
     bottomBar: (@Composable () -> Unit)? = null,
     miniPlayer: (@Composable () -> Unit)? = null,
+    onRetry: () -> Unit = {},
 ) {
     val counts = state.tabCounts
     val tab = state.tab
@@ -205,6 +208,7 @@ fun SearchScreen(
                     loading = state.loading,
                     failure = state.failure,
                     searched = state.searched,
+                    onRetry = onRetry,
                 )
             } else {
                 // 只显示当前音源 supportedSearchType 里有的分类
@@ -216,7 +220,7 @@ fun SearchScreen(
                 )
                 Spacer(Modifier.height(GySpace.s))
 
-                FailureBanner(state.failure)
+                FailureBanner(state.failure, onRetry)
 
                 Box(Modifier.weight(1f)) {
                     when (tab) {
@@ -470,6 +474,7 @@ private fun SearchDiscovery(
     loading: Boolean,
     failure: String?,
     searched: Boolean,
+    onRetry: () -> Unit,
 ) {
     if (query.isNotBlank() && !loading && failure == null && searched) {
         com.guangyue.feature.library.design.FoliaEmptyState(
@@ -484,7 +489,7 @@ private fun SearchDiscovery(
         contentPadding = PaddingValues(bottom = 96.dp),
     ) {
         if (failure != null) {
-            item(key = "failure") { FailureBanner(failure) }
+            item(key = "failure") { FailureBanner(failure, onRetry) }
         }
         if (history.isNotEmpty()) {
             item(key = "history-title") {
@@ -514,9 +519,12 @@ private fun SearchDiscovery(
  *
  * 0.0.7 的硬要求：搜索失败/超时不能只剩一片空白。这里固定把【原因 + 换音源建议】显示出来，
  * 文案由 ViewModel 拼好（「xx 音源搜索失败：原因，换个音源试试」）。
+ *
+ * 0.0.9 a-1：右下角固定给一个「重试」，点它由 [SearchViewModel.retry] 清缓存后真重发一次请求
+ * （0.0.8 的桥会把失败结果也缓存住，不给重试按钮用户就只能干看着）。
  */
 @Composable
-internal fun FailureBanner(failure: String?) {
+internal fun FailureBanner(failure: String?, onRetry: (() -> Unit)? = null) {
     if (failure.isNullOrBlank()) return
     Row(
         modifier = Modifier
@@ -526,6 +534,7 @@ internal fun FailureBanner(failure: String?) {
             .background(Gyp.danger.copy(alpha = 0.12f), RoundedCornerShape(GyRadius.field))
             .padding(horizontal = GySpace.m, vertical = GySpace.s),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(GySpace.s),
     ) {
         Text(
             text = failure,
@@ -535,6 +544,14 @@ internal fun FailureBanner(failure: String?) {
             fontFamily = GuangYueDesign.Sans,
             modifier = Modifier.weight(1f),
         )
+        if (onRetry != null) {
+            FoliaButton(
+                text = "重试",
+                onClick = onRetry,
+                variant = FoliaButtonVariant.Quiet,
+                icon = GuangYueIcons.RefreshCw,
+            )
+        }
     }
 }
 

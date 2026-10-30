@@ -1,0 +1,264 @@
+# kuwo 酷我音乐 1.9.24
+# phase=before
+# file=2026-10-31 02:11:55
+# fileName=kuwo-source.plugin.v1.9.24.js
+# url=https://raw.githubusercontent.com/hebijunge/musicfree-plugins/master/plugins/kuwo-source.plugin.v1.9.24.js
+# prelude=542691 chars
+# jdk=21.0.12.1
+# os=Windows 10
+# cwd=D:\workspaces\GuangYue\core\plugin\.
+# cacheDir=D:\workspaces\GuangYue\core\plugin\..\..\build\plugin-cache-0.0.4
+# cacheCandidates=../build/plugin-cache-0.0.4 | build/plugin-cache-0.0.4 | ../../build/plugin-cache-0.0.4 | D:\workspaces\GuangYue/build/plugin-cache-0.0.4
+
+## meta
+{"platform":"kuwo","name":"酷我音乐","version":"1.9.24","srcUrl":"https://raw.githubusercontent.com/hebijunge/musicfree-plugins/master/plugins/kuwo-source.plugin.v1.9.24.js","author":"研发2号","description":"酷我音乐独立源插件 v1.9.8（v1.9.8 版本号统一版：各源版本号对齐，无代码增量；v1.9.6 MV 画质表修复：availableVideoQualities 改 baka 同款 5 档全 ladder，宿主画质菜单可切档；v1.9.5 全页面音质标识核查 + VIP 标识移除版：榜单页音质补齐（聚合透传 + musicpay 批量兜底，ksong.s 无 N_MINFO）；enrichKuwoQualities 批量补专辑/歌手/榜单页音质；全接口停写 fee（VIP 角标）；v1.9.1 随包升版：歌单对象补 author 别名字段，详见头部 v1.9.1 changelog；v1.9.0 BakaMusic 高价值音源接入版：P0 次合代/ikun 酷我第三方通道加入 standard/high/super 竞速池（4→6 路，错峰 0/250/400/550/700/850ms，全部过 Range 魔数/码率严格校验防假成功，userVariables kwCihedai/kwIkun 默认开）+ P1 全豆要 nmobi 兜底回落；v1.8.4 歌单导入元数据版：importMusicSheet 返回完整 IMusicSheetItem 歌单对象——标题/介绍/封面/作者随 pl.svc getlistinfo 顶层字段零额外请求回传，介绍字段 description 对齐宿主 v1.0.0 契约；v1.8.3 质检遗留优化版：错误前缀与 code 口径复核确认已符合统一标准，随包升版；v1.8.2 歌单解析修复版：歌单歌曲补 qualities（pl.svc 条目自带 N_MINFO 透传+既有 parseKuwoQualityInfo，零额外请求）+ 歌单导入错误统一携带结构化 code；基础 v1.7.1 = 修复与对齐：fix#1 星海 token 改纯 JS UTF-8+base64 编码（复用 utf8Bytes，输出与 btoa 逐字节一致，Hermes 无 btoa 环境通道恢复可用）；fix#2 nmobi/mobi 同 host 双发治理——错峰 0/80/180/300 → 0/250/400/550ms，nmobi 首胜 ~176ms 时 mobi 定时器已封盘清除、不再多发（最坏 +~170ms 由胜出 abort 对
+## functions
+getAlbumInfo,getArtistWorks,getLyric,getMediaSource,getMusicComments,getMusicInfo,getMusicSheetInfo,getRecommendSheetTags,getRecommendSheetsByTag,getTopListDetail,getTopLists,importMusicSheet,search
+
+## search 原始返回（前 2000 字）
+{"isEnd":false,"data":[{"id":"kuwo_228908","title":"晴天","artist":"周杰伦","album":"叶惠美","artwork":"https://img1.kuwo.cn/star/albumcover/120/s3s94/93/211513640.jpg","duration":269,"platform":"kuwo","mv":"8132306","mvId":"8132306","mvSongId":"228908","mvArtwork":"https://img3.kuwo.cn/wmvpic/324/s4s75/52/1458871193.jpg","qualities":{"master":{"size":"178.32MB","bitrate":20900,"format":"mflac"},"atmos":{"size":"76.71MB","bitrate":20501,"format":"mflac"},"hires":{"size":"29.72MB","bitrate":20201,"format":"mflac"},"flac":{"size":"52.83MB","bitrate":2000,"format":"flac"},"320k":{"size":"10.29MB","bitrate":320,"format":"mp3"},"128k":{"size":"4.12MB","bitrate":128,"format":"mp3"}},"_src":{"kuwo":{"rid":"228908","N_MINFO":"level:bcms,bitrate:22000,format:mgg,size:22.11Mb;level:zply,bitrate:20900,format:mflac,size:178.32Mb;level:zpga501,bitrate:20501,format:mflac,size:76.71Mb;level:zpga201,bitrate:20201,format:mflac,size:29.72Mb;level:zpga714,bitrate:24000,format:mgg,size:34.94Mb;level:ff,bitrate:2000,format:flac,size:52.83Mb;level:p,bitrate:192,format:ogg,size:5.59Mb;level:p,bitrate:300,format:ogg,size:9.85Mb;level:h,bitrate:100,format:ogg,size:2.79Mb;level:p,bitrate:320,format:mp3,size:10.29Mb;level:h,bitrate:128,format:mp3,size:4.12Mb;level:s,bitrate:48,format:aac,size:1.57Mb;level:zp,bitrate:20000,format:zp,size:zpMb","mv":"8132306","mvArtwork":"https://img3.kuwo.cn/wmvpic/324/s4s75/52/1458871193.jpg","alias":""}},"_srcOrder":["kuwo"]},{"id":"kuwo_118990","title":"发如雪","artist":"周杰伦","album":"十一月的萧邦","artwork":"https://img1.kuwo.cn/star/albumcover/120/s4s11/89/774616642.jpg","duration":299,"platform":"kuwo","mv":"8108454","mvId":"8108454","mvSongId":"118990","mvArtwork":"https://img3.kuwo.cn/wmvpic/324/66/62/1792509267.jpg","qualities":{"master":{"size":"196.57MB","bitrate":20900,"format":"mflac"},"atmos":{"size":"85.31MB","bitrate":20501,"format":"mflac"},"hires":{"size":"33.34MB","bitrate":20201,"format":"mflac"},"flac":{"size":"34.55MB","bitrate":2000,"format":"flac"},"320
+
+## 第一条
+{"id":"kuwo_228908","title":"晴天","artist":"周杰伦","album":"叶惠美","artwork":"https://img1.kuwo.cn/star/albumcover/120/s3s94/93/211513640.jpg","duration":269,"platform":"kuwo","mv":"8132306","mvId":"8132306","mvSongId":"228908","mvArtwork":"https://img3.kuwo.cn/wmvpic/324/s4s75/52/1458871193.jpg","qualities":{"master":{"size":"178.32MB","bitrate":20900,"format":"mflac"},"atmos":{"size":"76.71MB","bitrate":20501,"format":"mflac"},"hires":{"size":"29.72MB","bitrate":20201,"format":"mflac"},"flac":{"size":"52.83MB","bitrate":2000,"format":"flac"},"320k":{"size":"10.29MB","bitrate":320,"format":"mp3"},"128k":{"size":"4.12MB","bitrate":128,"format":"mp3"}},"_src":{"kuwo":{"rid":"228908","N_MINFO":"level:bcms,bitrate:22000,format:mgg,size:22.11Mb;level:zply,bitrate:20900,format:mflac,size:178.32Mb;level:zpga501,bitrate:20501,format:mflac,size:76.71Mb;level:zpga201,bitrate:20201,format:mflac,size:29.72Mb;level:zpga714,bitrate:24000,format:mgg,size:34.94Mb;level:ff,bitrate:2000,format:flac,size:52.83Mb;level:p,bitrate:192,format:ogg,size:5.59Mb;level:p,bitrate:300,format:ogg,size:9.85Mb;level:h,bitrate:100,format:ogg,size:2.79Mb;level:p,bitrate:320,format:mp3,size:10.29Mb;level:h,bitrate:128,format:mp3,size:4.12Mb;level:s,bitrate:48,format:aac,size:1.57Mb;level:zp,bitrate:20000,format:zp,size:zpMb","mv":"8132306","mvArtwork":"https://img3.kuwo.cn/wmvpic/324/s4s75/52/1458871193.jpg","alias":""}},"_srcOrder":["kuwo"]}
+
+## getMediaSource(quality=standard) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：所有可用源均未取得播放链接
+    at _0x451256 (plugin.js:2:252113)
+    at HtcYc (plugin.js:2:249913)
+    at <anonymous> (plugin.js:2:253929)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## getMediaSource(quality=high) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：所有可用源均未取得播放链接
+    at _0x451256 (plugin.js:2:252113)
+    at HtcYc (plugin.js:2:249913)
+    at <anonymous> (plugin.js:2:253929)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## getMediaSource(quality=320k) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：所有可用源均未取得播放链接
+    at _0x451256 (plugin.js:2:252113)
+    at HtcYc (plugin.js:2:249913)
+    at <anonymous> (plugin.js:2:253929)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## getMediaSource(quality=flac) FAIL
+com.dokar.quickjs.QuickJsException: Error: hyw kw flac24bit not fLaC: empty
+    at <anonymous> (plugin.js:2:189738)
+    at gySettle (bridge.js:450:21)
+    at <anonymous> (bridge.js:431:44)
+    at <anonymous> (plugin.js:2:189373)
+    at gySettle (bridge.js:450:21)
+    at <anonymous> (bridge.js:431:44)
+    at _0x881bd4 (plugin.js:2:187609)
+    at YZnwe (plugin.js:2:185872)
+    at <anonymous> (plugin.js:2:190138)
+    at gySettle (bridge.js:443:35)
+    at <anonymous> (bridge.js:432:39)
+    at _0x881bd4 (plugin.js:2:187222)
+    at kwHywResolve (plugin.js:2:186785)
+    at build (plugin.js:2:221144)
+
+at com.dokar.quickjs.QuickJs.executePendingJob(QuickJs.jni.kt:-2)
+at com.dokar.quickjs.QuickJs.awaitEvaluateResult(QuickJs.jni.kt:590)
+at com.dokar.quickjs.QuickJs.evalInSession(QuickJs.jni.kt:467)
+at com.dokar.quickjs.QuickJs.evalAndAwait(QuickJs.jni.kt:424)
+at com.dokar.quickjs.QuickJs.evaluateInternal(QuickJs.jni.kt:402)
+at com.guangyue.core.plugin.runtime.PluginRuntime$evaluateBlocking$1$1.invokeSuspend(PluginRuntime.kt:804)
+at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)
+at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:798)
+at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+
+## getMediaSource(quality=low) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：所有可用源均未取得播放链接
+    at _0x451256 (plugin.js:2:252113)
+    at HtcYc (plugin.js:2:249913)
+    at <anonymous> (plugin.js:2:253929)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## HTTP 记录（108 条）
+  HTTP GET 200 195ms https://www.kuwo.cn/search/searchMusicBykeyWord?all=%E5%91%A8%E6%9D%B0%E4%BC%A6&pn=0&rn=20&ft=music&client=kt&encoding=utf8&rformat=json&mobi=1&vipver=1&cluster=0&strategy=2012&issubtitle=1&show_copyright_off=1&correct=1&spPrivilege=0&newver=2&p2p=1&notrace=0&searchapi=2&vermerge=1
+  HTTP GET 200 219ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 286ms https://nmsublist.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 204ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=228908&user=C_APK_guanwang_1793383925052&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP GET 200 73ms https://mobi.kuwo.cn/mobi.s?f=kuwo&q=3HxQnWXTNdQ6RbicYxLOyHAu64fVpKoBz43BshH4RFaGBPBi%2B8dZdGuvz4Hu9TAfA75CH9prKR%2FwLP%2FIiYIvJoWxgCvU%2FgETNIqiGvqcuuscRcbgESVmpm7oNjCqzuWEIZJuWAS1Zw6vdYHlcEZ102pjSIhT5B3R
+  HTTP GET 200 103ms https://mobi.kuwo.cn/mobi.s?f=kuwo&q=SDKKpI8vPfYgGOuiJY59OeJBsMU1fC8bqY3loxFmhbwiLdOTmVhKX59ECOPWgPCwAxS7g8uPw%2BObJfrMHBDuZW%2BDIJQWqu48GPMemGPBpdelDceUNCkNLGHsgfu4VcMrdPDeo11cLZsyKEgIuYeFtNc7EoPLqpOTQVhu%2B04UpFvhh9kjX4OLOa0qll1uA5NY
+  HTTP GET 200 135ms http://mobi.kuwo.cn/mobi.s?f=web&user=3229060669&android_id=a2555471e948aac1&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type=convert_url_with_sign&from=PC&rid=228908&br=128kmp3&format=mp3
+  HTTP GET 200 150ms http://antiserver.kuwo.cn/anti.s?type=convert_url&rid=MUSIC_228908&format=mp3&response=url
+  HTTP GET 206 138ms https://kw-bj.kuwo.cn/fa8f704a554b305a41ef6435270f7790/6ae4ddf5/nf/resource/n1/69/32/588957081.mp3
+  HTTP GET 404 161ms https://nmobi.kuwo.cn/mobi.s?type=convert_url3&from=kwplayerhd_9.5.4.2_kw.android&user=0&rid=228908&quality=128kmp3
+  HTTP GET 200 93ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 206 38ms http://car-er.kuwo.cn/1959332ddf781a049efa4ca3ea42976e/6ae4ddf6/resource/30106/trackmedia/M500000bYDlc2XxKLs.mp3?bitrate$128&format$mp3&source$kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&type$convert_url_with_sign&user$0&loginUid$0
+  HTTP GET 404 164ms https://mobi.kuwo.cn/mobi.s?type=convert_url3&from=kwplayerhd_9.5.4.2_kw.android&user=0&rid=228908&quality=128kmp3
+  HTTP GET 200 82ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=228908&user=C_APK_guanwang_1793383926414&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP GET 206 39ms http://kw-er.kuwo.cn/c692a8348dedbdce554b3f0176954dcc/6ae4ddf6/resource/30106/trackmedia/M500000bYDlc2XxKLs.mp3?bitrate$128&format$mp3&source$&type$convert_url_with_sign&user$C_APK_guanwang_1793383926414&loginUid$
+  HTTP POST 200 112ms https://musicserver.haitangw.cc/v1/music/resolve-url
+  HTTP GET 200 187ms https://yy.zddyr.top/ip.php
+  HTTP GET 200 267ms https://yy.zddyr.top/lx/api/?source=kw&name=%E6%99%B4%E5%A4%A9&singer=%E5%91%A8%E6%9D%B0%E4%BC%A6&songmid=228908&interval=269&albumName=%E5%8F%B6%E6%83%A0%E7%BE%8E&quality=128k
+  HTTP GET 206 33ms http://car-er.kuwo.cn/a10566a4e874bc6dea0287bd2283a1ff/6ae4ddae/resource/30106/trackmedia/M500000bYDlc2XxKLs.mp3?bitrate$128&format$mp3&source$kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&type$convert_url2&user$0&loginUid$
+  HTTP POST 200 207ms https://c.wwwweb.top/music/url
+  HTTP GET 206 10ms http://car-er.kuwo.cn/53e808a68facff2518b9e01c4640dd76/6ae4d8b6/resource/30106/trackmedia/M500000bYDlc2XxKLs.mp3
+  HTTP GET 200 1039ms http://103.79.184.97/api/music/url?source=kw&songId=228908&quality=128k&key=6C1F-53W0-GRKI-EVFG
+  HTTP GET 206 9ms http://car-er.kuwo.cn/076c6b1c44f863f2dcc39a8c6c4f69c6/6ae4db76/resource/30106/trackmedia/M500000bYDlc2XxKLs.mp3?bitrate$128&format$mp3&source$kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&type$convert_url_with_sign&user$0&loginUid$
+  HTTP GET 206 488ms http://music.nxinxz.com/kw.php?id=228908&level=standard&type=mp3
+  HTTP GET 200 184ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 196ms https://nmsublist.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 209ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=228908&user=C_APK_guanwang_1793383929294&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP GET 200 92ms https://mobi.kuwo.cn/mobi.s?f=kuwo&q=3HxQnWXTNdQ6RbicYxLOyHAu64fVpKoBz43BshH4RFaGBPBi%2B8dZdGuvz4Hu9TAfA75CH9prKR%2FwLP%2FIiYIvJoWxgCvU%2FgETNIqiGvqcuuscRcbgESVmpm7oNjCqzuWEIZJuWAS1Zw6vdYHlcEZ102pjSIhT5B3R
+  HTTP GET 200 79ms https://mobi.kuwo.cn/mobi.s?f=kuwo&q=SDKKpI8vPfYgGOuiJY59OeJBsMU1fC8biZN9wZbS1C6I0A9sRl4FCZ9ECOPWgPCwAxS7g8uPw%2BObJfrMHBDuZW%2BDIJQWqu48GPMemGPBpdelDceUNCkNLGHsgfu4VcMrdPDeo11cLZsyKEgIuYeFtNc7EoPLqpOTQVhu%2B04UpFvhh9kjX4OLOa0qll1uA5NY
+  HTTP GET 200 117ms http://mobi.kuwo.cn/mobi.s?f=web&user=1527755960&android_id=0ee3c5906867e949&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type=convert_url_with_sign&from=PC&rid=228908&br=320kmp3&format=mp3
+  HTTP GET 404 37ms https://nmobi.kuwo.cn/mobi.s?type=convert_url3&from=kwplayerhd_9.5.4.2_kw.android&user=0&rid=228908&quality=320kmp3
+  HTTP GET 200 76ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 206 24ms http://car-er.kuwo.cn/e89ed98941f2867fba2d237205223c6c/6ae4ddf9/resource/30106/trackmedia/M800000bYDlc2XxKLs.mp3?bitrate$320&format$mp3&source$kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&type$convert_url_with_sign&user$0&loginUid$0
+  HTTP GET 404 40ms https://mobi.kuwo.cn/mobi.s?type=convert_url3&from=kwplayerhd_9.5.4.2_kw.android&user=0&rid=228908&quality=320kmp3
+  HTTP GET 200 88ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=228908&user=C_APK_guanwang_1793383930028&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP GET 206 22ms http://kw-er.kuwo.cn/0d3c4307431379a712a077417803023e/6ae4ddfa/resource/30106/trackmedia/M800000bYDlc2XxKLs.mp3?bitrate$320&format$mp3&source$&type$convert_url_with_sign&user$C_APK_guanwang_1793383930028&loginUid$
+  HTTP POST 200 111ms https://musicserver.haitangw.cc/v1/music/resolve-url
+  HTTP GET 200 378ms https://yy.zddyr.top/lx/api/?source=kw&name=%E6%99%B4%E5%A4%A9&singer=%E5%91%A8%E6%9D%B0%E4%BC%A6&songmid=228908&interval=269&albumName=%E5%8F%B6%E6%83%A0%E7%BE%8E&quality=320k
+  HTTP GET 206 15ms http://car-er.kuwo.cn/a732654f169fc24604982b788d7be698/6ae4ddb1/resource/30106/trackmedia/M800000bYDlc2XxKLs.mp3?bitrate$320&format$mp3&source$kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&type$convert_url2&user$0&loginUid$
+  HTTP POST 200 159ms https://c.wwwweb.top/music/url
+  HTTP GET 206 11ms http://car-er.kuwo.cn/8e9b47c48c973bb34bee84edab9309a6/6ae4d3dd/resource/30106/trackmedia/M800000bYDlc2XxKLs.mp3
+  HTTP GET 200 471ms http://103.79.184.97/api/music/url?source=kw&songId=228908&quality=320k&key=6C1F-53W0-GRKI-EVFG
+  HTTP GET 206 12ms http://car-er.kuwo.cn/2d738cf3635282fa4398f2713efa3096/6ae4dc2b/resource/30106/trackmedia/M800000bYDlc2XxKLs.mp3?bitrate$320&format$mp3&source$kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&type$convert_url_with_sign&user$0&loginUid$
+  HTTP GET 206 471ms http://music.nxinxz.com/kw.php?id=228908&level=exhigh&type=mp3
+  HTTP GET 200 200ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 195ms https://nmsublist.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 190ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=228908&user=C_APK_guanwang_1793383932166&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP GET 200 67ms https://mobi.kuwo.cn/mobi.s?f=kuwo&q=3HxQnWXTNdQ6RbicYxLOyHAu64fVpKoBz43BshH4RFaGBPBi%2B8dZdGuvz4Hu9TAfA75CH9prKR%2FwLP%2FIiYIvJoWxgCvU%2FgETNIqiGvqcuuscRcbgESVmpm7oNjCqzuWEIZJuWAS1Zw6vdYHlcEZ102pjSIhT5B3R
+  HTTP GET 200 76ms https://mobi.kuwo.cn/mobi.s?f=kuwo&q=SDKKpI8vPfYgGOuiJY59OeJBsMU1fC8br2XO6OKjYJH5uZx4r9ialZ9ECOPWgPCwAxS7g8uPw%2BObJfrMHBDuZW%2BDIJQWqu48GPMemGPBpdelDceUNCkNLGHsgfu4VcMrdPDeo11cLZsyKEgIuYeFtNc7EoPLqpOTQVhu%2B04UpFvhh9kjX4OLOa0qll1uA5NY
+  HTTP GET 200 121ms http://mobi.kuwo.cn/mobi.s?f=web&user=3731115797&android_id=846859636069253b&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type=convert_url_with_sign&from=PC&rid=228908&br=320kmp3&format=mp3
+  HTTP GET 404 40ms https://nmobi.kuwo.cn/mobi.s?type=convert_url3&from=kwplayerhd_9.5.4.2_kw.android&user=0&rid=228908&quality=320kmp3
+  HTTP GET 200 90ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 206 22ms http://car-er.kuwo.cn/be08a0614478526afbaa6d06260f3fc5/6ae4ddfc/resource/30106/trackmedia/M800000bYDlc2XxKLs.mp3?bitrate$320&format$mp3&source$kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&type$convert_url_with_sign&user$0&loginUid$0
+  HTTP GET 404 37ms https://mobi.kuwo.cn/mobi.s?type=convert_url3&from=kwplayerhd_9.5.4.2_kw.android&user=0&rid=228908&quality=320kmp3
+  HTTP GET 200 76ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=228908&user=C_APK_guanwang_1793383932866&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP GET 206 22ms http://kw-er.kuwo.cn/dee017e9b415f2d92181032971a4de2a/6ae4ddfc/resource/30106/trackmedia/M800000bYDlc2XxKLs.mp3?bitrate$320&format$mp3&source$&type$convert_url_with_sign&user$C_APK_guanwang_1793383932866&loginUid$
+  HTTP POST 200 111ms https://musicserver.haitangw.cc/v1/music/resolve-url
+  HTTP GET 200 377ms https://yy.zddyr.top/lx/api/?source=kw&name=%E6%99%B4%E5%A4%A9&singer=%E5%91%A8%E6%9D%B0%E4%BC%A6&songmid=228908&interval=269&albumName=%E5%8F%B6%E6%83%A0%E7%BE%8E&quality=320k
+  HTTP GET 206 12ms http://car-er.kuwo.cn/a732654f169fc24604982b788d7be698/6ae4ddb1/resource/30106/trackmedia/M800000bYDlc2XxKLs.mp3?bitrate$320&format$mp3&source$kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&type$convert_url2&user$0&loginUid$
+  HTTP POST 200 135ms https://c.wwwweb.top/music/url
+  HTTP GET 206 11ms http://car-er.kuwo.cn/8e9b47c48c973bb34bee84edab9309a6/6ae4d3dd/resource/30106/trackmedia/M800000bYDlc2XxKLs.mp3
+  HTTP GET 200 388ms http://103.79.184.97/api/music/url?source=kw&songId=228908&quality=320k&key=6C1F-53W0-GRKI-EVFG
+  HTTP GET 206 11ms http://car-er.kuwo.cn/2d738cf3635282fa4398f2713efa3096/6ae4dc2b/resource/30106/trackmedia/M800000bYDlc2XxKLs.mp3?bitrate$320&format$mp3&source$kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&type$convert_url_with_sign&user$0&loginUid$
+  HTTP GET 206 437ms http://music.nxinxz.com/kw.php?id=228908&level=exhigh&type=mp3
+  HTTP GET 200 197ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=2000kflac&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 204ms https://nmsublist.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=2000kflac&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 206ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=2000kflac&rid=228908&user=C_APK_guanwang_1793383934855&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP GET 200 65ms https://mobi.kuwo.cn/mobi.s?f=kuwo&q=3HxQnWXTNdQ6RbicYxLOyHAu64fVpKoBz43BshH4RFaGBPBi%2B8dZdGuvz4Hu9TAfA75CH9prKR%2FwLP%2FIiYIvJoWxgCvU%2FgETNIqiGvqcuuscRcbgESVmpm7oNjCqzuWEy03cbXspfYn4JKO0PWhgLFwgljrDKMsk
+  HTTP GET 200 72ms https://mobi.kuwo.cn/mobi.s?f=kuwo&q=SDKKpI8vPfYgGOuiJY59OeJBsMU1fC8bJEOwp43b3bk6kijSOBOwap9ECOPWgPCwAxS7g8uPw%2BObJfrMHBDuZW%2BDIJQWqu48GPMemGPBpdelDceUNCkNLGHsgfu4VcMrdPDeo11cLZsyKEgIuYeFtNc7EoPLqpOTQVhu%2B04UpFsqiKnCmmRGpK5bY2hoR%2Fqk
+  HTTP GET 200 123ms http://mobi.kuwo.cn/mobi.s?f=web&user=1595547444&android_id=739ba14dad81a121&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type=convert_url_with_sign&from=PC&rid=228908&br=2000kflac&format=flac
+  HTTP GET 404 41ms https://nmobi.kuwo.cn/mobi.s?type=convert_url3&from=kwplayerhd_9.5.4.2_kw.android&user=0&rid=228908&quality=2000kflac
+  HTTP GET 200 86ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=2000kflac&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 206 35ms http://car-er.kuwo.cn/c36cf5f7e39b8518e09224f9f08e5f3b/6ae4ddff/resource/30106/trackmedia/F000000bYDlc2XxKLs.flac?bitrate$2000&format$flac&source$kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&type$convert_url_with_sign&user$0&loginUid$0
+  HTTP GET 404 39ms https://mobi.kuwo.cn/mobi.s?type=convert_url3&from=kwplayerhd_9.5.4.2_kw.android&user=0&rid=228908&quality=2000kflac
+  HTTP GET 200 76ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=2000kflac&rid=228908&user=C_APK_guanwang_1793383935585&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP GET 206 22ms http://kw-er.kuwo.cn/534165763135c9909475c89b6f74324c/6ae4ddff/resource/30106/trackmedia/F000000bYDlc2XxKLs.flac?bitrate$2000&format$flac&source$&type$convert_url_with_sign&user$C_APK_guanwang_1793383935585&loginUid$
+  HTTP POST 200 124ms https://musicserver.haitangw.cc/v1/music/resolve-url
+  HTTP GET 200 367ms https://yy.zddyr.top/lx/api/?source=kw&name=%E6%99%B4%E5%A4%A9&singer=%E5%91%A8%E6%9D%B0%E4%BC%A6&songmid=228908&interval=269&albumName=%E5%8F%B6%E6%83%A0%E7%BE%8E&quality=flac
+  HTTP GET 206 12ms http://car-er.kuwo.cn/d73022ceca98136343a0ec02259c2418/6ae4ddb8/resource/30106/trackmedia/F000000bYDlc2XxKLs.flac?bitrate$2000&format$flac&source$kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&type$convert_url2&user$0&loginUid$
+  HTTP POST 200 172ms https://c.wwwweb.top/music/url
+  HTTP GET 206 59ms http://car-er.kuwo.cn/55ae2fbd8042c7f994f27b482f88d97a/6ae4dc32/resource/30106/trackmedia/F000000bYDlc2XxKLs.flac
+  HTTP GET 200 390ms http://103.79.184.97/api/music/url?source=kw&songId=228908&quality=flac&key=6C1F-53W0-GRKI-EVFG
+  HTTP GET 410 21ms http://kw-er.kuwo.cn/23c14a82f22bcd8a41fc63570e712e3d/6ad8c56e/resource/30106/trackmedia/F000000bYDlc2XxKLs.flac?bitrate$2000&format$flac&source$kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type$convert_url_with_sign&user$0&loginUid$
+  HTTP GET 200 223ms http://103.79.184.97/api/music/url?source=kw&songId=228908&quality=flac24bit&key=6C1F-53W0-GRKI-EVFG
+  HTTP GET 206 12ms http://car-er.kuwo.cn/f5ace6c4c5d7d187fe57b2d0303d6bf7/6ae4ddba/resource/30106/trackmedia/AIM0000bYDlc2XxKLs069a8d106bd032aac82a371799d17445.mflac?bitrate$20900&format$mflac&source$kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&type$convert_url_with_sign&user$0&loginUid$
+  HTTP GET 206 465ms http://music.nxinxz.com/kw.php?id=228908&level=lossless&type=mp3
+  HTTP GET 200 187ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 215ms https://nmsublist.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 197ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=228908&user=C_APK_guanwang_1793383937938&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP GET 200 81ms https://mobi.kuwo.cn/mobi.s?f=kuwo&q=3HxQnWXTNdQ6RbicYxLOyHAu64fVpKoBz43BshH4RFaGBPBi%2B8dZdGuvz4Hu9TAfA75CH9prKR%2FwLP%2FIiYIvJoWxgCvU%2FgETNIqiGvqcuuscRcbgESVmpm7oNjCqzuWEIZJuWAS1Zw6vdYHlcEZ102pjSIhT5B3R
+  HTTP GET 200 83ms https://mobi.kuwo.cn/mobi.s?f=kuwo&q=SDKKpI8vPfYgGOuiJY59OeJBsMU1fC8bQ5w47xM3SDkv2ezo95TA%2F59ECOPWgPCwAxS7g8uPw%2BObJfrMHBDuZW%2BDIJQWqu48GPMemGPBpdelDceUNCkNLGHsgfu4VcMrdPDeo11cLZsyKEgIuYeFtNc7EoPLqpOTQVhu%2B04UpFvhh9kjX4OLOa0qll1uA5NY
+  HTTP GET 200 120ms http://mobi.kuwo.cn/mobi.s?f=web&user=3859761794&android_id=4ea0c75473332e25&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type=convert_url_with_sign&from=PC&rid=228908&br=128kmp3&format=mp3
+  HTTP GET 200 145ms http://antiserver.kuwo.cn/anti.s?type=convert_url&rid=MUSIC_228908&format=mp3&response=url
+  HTTP GET 206 87ms https://kw-bj.kuwo.cn/02a4b15ed8f87b842da3f596d21cd6a3/6ae4de02/nf/resource/n1/69/32/588957081.mp3
+  HTTP GET 404 163ms https://nmobi.kuwo.cn/mobi.s?type=convert_url3&from=kwplayerhd_9.5.4.2_kw.android&user=0&rid=228908&quality=128kmp3
+  HTTP GET 200 79ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=228908&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 206 25ms http://car-er.kuwo.cn/cf21c2710123b611ad6f7e3750c305c5/6ae4de02/resource/30106/trackmedia/M500000bYDlc2XxKLs.mp3?bitrate$128&format$mp3&source$kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&type$convert_url_with_sign&user$0&loginUid$0
+  HTTP GET 404 159ms https://mobi.kuwo.cn/mobi.s?type=convert_url3&from=kwplayerhd_9.5.4.2_kw.android&user=0&rid=228908&quality=128kmp3
+  HTTP GET 200 67ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=228908&user=C_APK_guanwang_1793383939136&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP GET 206 22ms http://kw-er.kuwo.cn/8a1886caa2d3858bcfed0f1fa0f7aa50/6ae4de03/resource/30106/trackmedia/M500000bYDlc2XxKLs.mp3?bitrate$128&format$mp3&source$&type$convert_url_with_sign&user$C_APK_guanwang_1793383939136&loginUid$
+  HTTP POST 200 116ms https://musicserver.haitangw.cc/v1/music/resolve-url
+  HTTP GET 200 349ms https://yy.zddyr.top/lx/api/?source=kw&name=%E6%99%B4%E5%A4%A9&singer=%E5%91%A8%E6%9D%B0%E4%BC%A6&songmid=228908&interval=269&albumName=%E5%8F%B6%E6%83%A0%E7%BE%8E&quality=128k
+  HTTP GET 206 11ms http://car-er.kuwo.cn/a10566a4e874bc6dea0287bd2283a1ff/6ae4ddae/resource/30106/trackmedia/M500000bYDlc2XxKLs.mp3?bitrate$128&format$mp3&source$kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&type$convert_url2&user$0&loginUid$
+  HTTP POST 200 163ms https://c.wwwweb.top/music/url
+  HTTP GET 206 11ms http://car-er.kuwo.cn/53e808a68facff2518b9e01c4640dd76/6ae4d8b6/resource/30106/trackmedia/M500000bYDlc2XxKLs.mp3
+  HTTP GET 200 473ms http://103.79.184.97/api/music/url?source=kw&songId=228908&quality=128k&key=6C1F-53W0-GRKI-EVFG
+  HTTP GET 206 13ms http://car-er.kuwo.cn/076c6b1c44f863f2dcc39a8c6c4f69c6/6ae4db76/resource/30106/trackmedia/M500000bYDlc2XxKLs.mp3?bitrate$128&format$mp3&source$kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&type$convert_url_with_sign&user$0&loginUid$
+  HTTP GET 206 431ms http://music.nxinxz.com/kw.php?id=228908&level=standard&type=mp3
+
+## console 记录（0 条）
+（无）
+
+## 结论
+ stage=getMediaSource
+ searchOk=true
+ mediaOk=false
+ okQuality=
+ verdict=(b)
+ needed=对齐源站当前请求头/Cookie/UA（见 raw log 的 HTTP 记录与插件内常量）
+ totalMs=16909

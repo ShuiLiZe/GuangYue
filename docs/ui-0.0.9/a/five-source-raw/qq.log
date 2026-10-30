@@ -1,0 +1,192 @@
+# qq QQ音乐 1.9.26
+# phase=before
+# file=2026-10-31 02:11:55
+# fileName=qq-source.plugin.v1.9.26.js
+# url=https://raw.githubusercontent.com/hebijunge/musicfree-plugins/master/plugins/qq-source.plugin.v1.9.26.js
+# prelude=542691 chars
+# jdk=21.0.12.1
+# os=Windows 10
+# cwd=D:\workspaces\GuangYue\core\plugin\.
+# cacheDir=D:\workspaces\GuangYue\core\plugin\..\..\build\plugin-cache-0.0.4
+# cacheCandidates=../build/plugin-cache-0.0.4 | build/plugin-cache-0.0.4 | ../../build/plugin-cache-0.0.4 | D:\workspaces\GuangYue/build/plugin-cache-0.0.4
+
+## meta
+{"platform":"qq","name":"QQ音乐","version":"1.9.26","srcUrl":"https://raw.githubusercontent.com/hebijunge/musicfree-plugins/master/plugins/qq-source.plugin.v1.9.26.js","author":"研发2号","description":"QQ音乐独立源插件 v1.9.13（v1.9.13 a.aa.cab/qq.music 虚标修复版·方案A：该端点对高音质/未知音质码一律回落 C400 HQ m4a 虚标，已加音质准入白名单（仅 ≤320k 参与竞速，高音质入口即拒绝）+ 路径前缀/tips 双守门 fail-closed，actualQuality 以前缀实档为准；v1.9.8 版本号统一版：各源版本号对齐，无代码增量；全页面音质标识核查 + VIP 标识移除版：榜单聚合条目补 qualities 音质表透传；全接口停写 fee（VIP 角标），VIP 语义改存 _src.qq.vip 内部字段仅供取链预判；v1.9.4 第三方取链修复 + size 字段版：5 路第三方探针实测 → 失效两通道（Hello World 2026-09-11 改版为云汐 API 主页、念心 2026-09-11 404 站点下线）保留函数体注释从竞速池移除；s01s-mid 扩档（pq 24bit/accom Atmos 直读 song_size_X_str 写回 size）+ 长青守门（仅 128k、解析响应 quality/size 字段）+ 海棠补 Range 0-0 HEAD 探测 size；getMediaSource 返回值补 size 字段（取链直带 > HEAD 探测 > 留空）；v1.9.1 随包升版：歌单对象补 author 别名字段，详见头部 v1.9.1 changelog；v1.9.0 BakaMusic 高价值音源接入版：P0 次合代 s01s mid 直查第三方通道加入竞速池（第三方 6→7 路，免搜索按 mid 精确命中，sq 档实测真 FLAC ~1647kbps，全部过 verifyQualitySize 魔数+大小校验，userVariables.qqS01sMid 默认开）；ikun QQ 通道无卡密返回 10 秒占位 mp3 假成功不接入（宁低勿高）；v1.8.4 歌单导入元数据版：importMusicSheet 返回完整 IMusicSheetItem 歌单对象——标题/介绍/封面随 CgiGetDiss dirinfo 零额外请求回传，介绍字段 description 对齐宿主 v1.0.0 契约；v1.8.3 质检遗留优化版：错误前缀与 code 口径复核确认已符合统一
+## functions
+getAlbumInfo,getArtistWorks,getLyric,getMediaSource,getMusicComments,getMusicInfo,getMusicSheetInfo,getRecommendSheetTags,getRecommendSheetsByTag,getTopListDetail,getTopLists,importMusicSheet,search
+
+## search 原始返回（前 2000 字）
+{"isEnd":false,"data":[{"id":"qq_0027oMO61wWi55","platform":"qq","title":"发如雪","artist":"周杰伦","album":"十一月的萧邦","artwork":"https://y.gtimg.cn/music/photo_new/T002R300x300M0000024bjiL2aocxT.jpg","duration":299,"_src":{"qq":{"mid":"0027oMO61wWi55","mediaMid":"002A6j2q1tdUUP","vid":"p0011tzl846","vip":1}},"_srcOrder":["qq"],"videoId":"p0011tzl846","mv":"p0011tzl846","mvId":"p0011tzl846","mvVid":"p0011tzl846","songmid":"0027oMO61wWi55","qualities":{"128k":{"size":4789176},"320k":{"size":11972641},"flac":{"size":36226753},"master":{"size":206119416}},"primaryKey":"0027oMO61wWi55"},{"id":"qq_003KtYhg4frNXC","platform":"qq","title":"枫","artist":"周杰伦","album":"十一月的萧邦","artwork":"https://y.gtimg.cn/music/photo_new/T002R300x300M0000024bjiL2aocxT.jpg","duration":275,"_src":{"qq":{"mid":"003KtYhg4frNXC","mediaMid":"0044M6Un0RXph2","vid":"a0012fdgwi0","vip":1}},"_srcOrder":["qq"],"videoId":"a0012fdgwi0","mv":"a0012fdgwi0","mvId":"a0012fdgwi0","mvVid":"a0012fdgwi0","songmid":"003KtYhg4frNXC","qualities":{"128k":{"size":4411755},"320k":{"size":11029094},"flac":{"size":30596877},"master":{"size":181682936}},"primaryKey":"003KtYhg4frNXC"},{"id":"qq_0039MnYb0qxYhV","platform":"qq","title":"晴天","artist":"周杰伦","album":"叶惠美","artwork":"https://y.gtimg.cn/music/photo_new/T002R300x300M000000MkMni19ClKG.jpg","duration":269,"_src":{"qq":{"mid":"0039MnYb0qxYhV","mediaMid":"003Qui1q2u1Zho","vid":"w0026q7f01a","vip":1}},"_srcOrder":["qq"],"videoId":"w0026q7f01a","mv":"w0026q7f01a","mvId":"w0026q7f01a","mvVid":"w0026q7f01a","songmid":"0039MnYb0qxYhV","qualities":{"128k":{"size":4317292},"320k":{"size":10792943},"flac":{"size":55397039},"master":{"size":186980254}},"primaryKey":"0039MnYb0qxYhV"},{"id":"qq_0022b7OX2STU86","platform":"qq","title":"我落泪情绪零碎","artist":"周杰伦","album":"跨时代","artwork":"https://y.gtimg.cn/music/photo_new/T002R300x300M000000bviBl4FjTpO.jpg","duration":257,"_src":{"qq":{"mid":"0022b7OX2STU86","mediaMid":"001Zeo1P4a5j0v","vid":"t0019sebzuo","vip":1}},"_srcOrder":["qq"],"video
+
+## 第一条
+{"id":"qq_0027oMO61wWi55","platform":"qq","title":"发如雪","artist":"周杰伦","album":"十一月的萧邦","artwork":"https://y.gtimg.cn/music/photo_new/T002R300x300M0000024bjiL2aocxT.jpg","duration":299,"_src":{"qq":{"mid":"0027oMO61wWi55","mediaMid":"002A6j2q1tdUUP","vid":"p0011tzl846","vip":1}},"_srcOrder":["qq"],"videoId":"p0011tzl846","mv":"p0011tzl846","mvId":"p0011tzl846","mvVid":"p0011tzl846","songmid":"0027oMO61wWi55","qualities":{"128k":{"size":4789176},"320k":{"size":11972641},"flac":{"size":36226753},"master":{"size":206119416}},"primaryKey":"0027oMO61wWi55"}
+
+## getMediaSource(quality=standard) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：所有可用源均未取得播放链接
+    at _0x32ce07 (plugin.js:2:442393)
+    at <anonymous> (plugin.js:2:440919)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## getMediaSource(quality=high) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：所有可用源均未取得播放链接
+    at _0x32ce07 (plugin.js:2:442393)
+    at <anonymous> (plugin.js:2:440919)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## getMediaSource(quality=320k) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：所有可用源均未取得播放链接
+    at _0x32ce07 (plugin.js:2:442393)
+    at <anonymous> (plugin.js:2:440919)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## getMediaSource(quality=flac) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：所有可用源均未取得播放链接
+    at _0x32ce07 (plugin.js:2:442393)
+    at <anonymous> (plugin.js:2:440919)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## getMediaSource(quality=low) FAIL
+com.guangyue.core.plugin.runtime.PluginRuntimeException: 聚合取链失败：所有可用源均未取得播放链接
+    at _0x32ce07 (plugin.js:2:442393)
+    at <anonymous> (plugin.js:2:440919)
+
+at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:201)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probeOne(FiveSourceMediaProbeTest.kt:145)
+at com.guangyue.core.plugin.runtime.FiveSourceMediaProbeTest.probe(FiveSourceMediaProbeTest.kt:42)
+at jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+at java.lang.reflect.Method.invoke(Method.java:580)
+at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+
+## HTTP 记录（51 条）
+  HTTP POST 200 458ms https://u.y.qq.com/cgi-bin/musicu.fcg
+  HTTP POST 200 133ms https://musicserver.haitangw.cc/v1/music/resolve-url
+  HTTP GET 200 195ms https://www.kuwo.cn/search/searchMusicBykeyWord?all=%E5%8F%91%E5%A6%82%E9%9B%AA%20%E5%91%A8%E6%9D%B0%E4%BC%A6&pn=0&rn=20&ft=music&client=kt&encoding=utf8&rformat=json&mobi=1&vipver=1&cluster=0&strategy=2012&issubtitle=1&show_copyright_off=1&correct=1&spPrivilege=0&newver=2&p2p=1&notrace=0&searchapi=2&vermerge=1
+  HTTP GET 200 193ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=118990&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 185ms https://nmsublist.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=118990&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 207ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=118990&user=C_APK_guanwang_1793383943216&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP GET 200 798ms https://a.aa.cab/qq.music?msg=%E5%8F%91%E5%A6%82%E9%9B%AA%20%E5%91%A8%E6%9D%B0%E4%BC%A6&n=1&type=0
+  HTTP GET 206 86ms http://ws.stream.qqmusic.qq.com/M500002A6j2q1tdUUP.mp3?guid=7982463958&vkey=141736FC5A4DE6F387D1D39969B3E812C5F020446B828F0AA86D915E97A4B58B9EFCECBF136ADD71CCAD52B76F40FBE1E4EBA1D7BF29592E__v2b9a899c&uin=1711796009&fromtag=123042
+  HTTP ? -1 2908ms https://tang.api.s01s.cn/music_open_api.php?mid=0027oMO61wWi55
+  HTTP GET 200 1313ms http://175.27.166.236/kgqq1/qq.php?ID=0027oMO61wWi55&q=128k
+  HTTP GET 206 94ms https://car-er.kuwo.cn/99bf46a4248d4bf187d6017cff74278a/6ae4de0c/resource/30106/trackmedia/M500000bYDlc2XxKLs.mp3
+  HTTP POST 200 225ms https://u.y.qq.com/cgi-bin/musicu.fcg
+  HTTP GET 200 304ms https://api.vkeys.cn/music/tencent/song/link?mid=0027oMO61wWi55&quality=6
+  HTTP POST 200 155ms https://musicserver.haitangw.cc/v1/music/resolve-url
+  HTTP GET 200 236ms https://www.kuwo.cn/search/searchMusicBykeyWord?all=%E5%8F%91%E5%A6%82%E9%9B%AA%20%E5%91%A8%E6%9D%B0%E4%BC%A6&pn=0&rn=20&ft=music&client=kt&encoding=utf8&rformat=json&mobi=1&vipver=1&cluster=0&strategy=2012&issubtitle=1&show_copyright_off=1&correct=1&spPrivilege=0&newver=2&p2p=1&notrace=0&searchapi=2&vermerge=1
+  HTTP GET 200 216ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=118990&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 215ms https://nmsublist.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=118990&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 204ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=118990&user=C_APK_guanwang_1793383950021&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP ? -1 2709ms https://tang.api.s01s.cn/music_open_api.php?mid=0027oMO61wWi55
+  HTTP POST 200 191ms https://u.y.qq.com/cgi-bin/musicu.fcg
+  HTTP GET 200 298ms https://api.vkeys.cn/music/tencent/song/link?mid=0027oMO61wWi55&quality=8
+  HTTP POST 200 140ms https://musicserver.haitangw.cc/v1/music/resolve-url
+  HTTP GET 200 177ms https://www.kuwo.cn/search/searchMusicBykeyWord?all=%E5%8F%91%E5%A6%82%E9%9B%AA%20%E5%91%A8%E6%9D%B0%E4%BC%A6&pn=0&rn=20&ft=music&client=kt&encoding=utf8&rformat=json&mobi=1&vipver=1&cluster=0&strategy=2012&issubtitle=1&show_copyright_off=1&correct=1&spPrivilege=0&newver=2&p2p=1&notrace=0&searchapi=2&vermerge=1
+  HTTP GET 200 207ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=118990&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 213ms https://nmsublist.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=118990&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 212ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=118990&user=C_APK_guanwang_1793383954169&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP GET 200 814ms https://a.aa.cab/qq.music?msg=%E5%8F%91%E5%A6%82%E9%9B%AA%20%E5%91%A8%E6%9D%B0%E4%BC%A6&n=1&type=1
+  HTTP GET 206 55ms http://ws.stream.qqmusic.qq.com/M800002A6j2q1tdUUP.mp3?guid=7982463958&vkey=49B17DDC3CC67B937DDAA3138B34CD238B3EAD8AA5DCD908808A7165C3DED3A5128A43B8AD9D8A2AA6CC4B1E1CF1E0C11D28088B8B95DFAB__v2b9ab664&uin=8027027&fromtag=123093
+  HTTP GET 200 1752ms https://tang.api.s01s.cn/music_open_api.php?mid=0027oMO61wWi55
+  HTTP POST 200 173ms https://u.y.qq.com/cgi-bin/musicu.fcg
+  HTTP GET 200 265ms https://api.vkeys.cn/music/tencent/song/link?mid=0027oMO61wWi55&quality=8
+  HTTP POST 200 162ms https://musicserver.haitangw.cc/v1/music/resolve-url
+  HTTP GET 200 203ms https://www.kuwo.cn/search/searchMusicBykeyWord?all=%E5%8F%91%E5%A6%82%E9%9B%AA%20%E5%91%A8%E6%9D%B0%E4%BC%A6&pn=0&rn=20&ft=music&client=kt&encoding=utf8&rformat=json&mobi=1&vipver=1&cluster=0&strategy=2012&issubtitle=1&show_copyright_off=1&correct=1&spPrivilege=0&newver=2&p2p=1&notrace=0&searchapi=2&vermerge=1
+  HTTP GET 200 214ms https://mobi.kuwo.cn/mobi.s?f=kuwo&q=3HxQnWXTNdQ6RbicYxLOyHAu64fVpKoBz43BshH4RFaGBPBi%2B8dZdGuvz4Hu9TAfA75CH9prKR%2FwLP%2FIiYIvJoWxgCvU%2FgETNIqiGvqcuuscRcbgESVmpm7oNjCqzuWEy03cbXspfYlkUvnF5GF9eizByGjijUfs
+  HTTP GET 200 79ms https://mobi.kuwo.cn/mobi.s?f=kuwo&q=SDKKpI8vPfYgGOuiJY59OeJBsMU1fC8b9RzDU6SGd9P5uZx4r9ialZ9ECOPWgPCwAxS7g8uPw%2BObJfrMHBDuZW%2BDIJQWqu48GPMemGPBpdelDceUNCkNLGHsgfu4VcMrdPDeo11cLZsyKEgIuYeFtNc7EoPLqpOTQVhu%2B04UpFsqiKnCmmRGpJTEybEb%2Bw1x
+  HTTP GET 200 187ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=2000kflac&rid=118990&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 222ms https://nmsublist.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=2000kflac&rid=118990&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 81ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=2000kflac&rid=118990&user=C_APK_guanwang_1793383958650&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP GET 200 783ms https://a.aa.cab/qq.music?msg=%E5%8F%91%E5%A6%82%E9%9B%AA%20%E5%91%A8%E6%9D%B0%E4%BC%A6&n=1&type=4
+  HTTP ? -1 3704ms https://tang.api.s01s.cn/music_open_api.php?mid=0027oMO61wWi55
+  HTTP POST 200 312ms https://u.y.qq.com/cgi-bin/musicu.fcg
+  HTTP GET 200 247ms https://api.vkeys.cn/v2/music/tencent/geturl?mid=0027oMO61wWi55&quality=10
+  HTTP GET 200 37ms https://tang.api.s01s.cn/?name=%E5%8F%91%E5%A6%82%E9%9B%AA%20%E5%91%A8%E6%9D%B0%E4%BC%A6&page=1&limit=20
+  HTTP POST 200 101ms https://musicserver.haitangw.cc/v1/music/resolve-url
+  HTTP GET 200 189ms https://www.kuwo.cn/search/searchMusicBykeyWord?all=%E5%8F%91%E5%A6%82%E9%9B%AA%20%E5%91%A8%E6%9D%B0%E4%BC%A6&pn=0&rn=20&ft=music&client=kt&encoding=utf8&rformat=json&mobi=1&vipver=1&cluster=0&strategy=2012&issubtitle=1&show_copyright_off=1&correct=1&spPrivilege=0&newver=2&p2p=1&notrace=0&searchapi=2&vermerge=1
+  HTTP GET 200 201ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=118990&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 269ms https://nmsublist.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=118990&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 200 209ms https://mobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=118990&user=C_APK_guanwang_1793383964593&source=kwplayercar_ar_6.0.0.9_B_jiakong_vh.apk&from=PC
+  HTTP ? -1 2503ms https://tang.api.s01s.cn/music_open_api.php?mid=0027oMO61wWi55
+  HTTP POST 200 175ms https://u.y.qq.com/cgi-bin/musicu.fcg
+  HTTP GET 200 241ms https://api.vkeys.cn/music/tencent/song/link?mid=0027oMO61wWi55&quality=6
+
+## console 记录（0 条）
+（无）
+
+## 结论
+ stage=getMediaSource
+ searchOk=true
+ mediaOk=false
+ okQuality=
+ verdict=(b)
+ needed=对齐源站当前请求头/Cookie/UA（见 raw log 的 HTTP 记录与插件内常量）
+ totalMs=26925

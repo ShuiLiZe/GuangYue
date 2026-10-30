@@ -1,0 +1,97 @@
+# qishui 汽水音乐 1.9.23
+# phase=before
+# file=2026-10-31 02:11:55
+# fileName=qishui-source.plugin.v1.9.23.js
+# url=https://raw.githubusercontent.com/hebijunge/musicfree-plugins/master/plugins/qishui-source.plugin.v1.9.23.js
+# prelude=542691 chars
+# jdk=21.0.12.1
+# os=Windows 10
+# cwd=D:\workspaces\GuangYue\core\plugin\.
+# cacheDir=D:\workspaces\GuangYue\core\plugin\..\..\build\plugin-cache-0.0.4
+# cacheCandidates=../build/plugin-cache-0.0.4 | build/plugin-cache-0.0.4 | ../../build/plugin-cache-0.0.4 | D:\workspaces\GuangYue/build/plugin-cache-0.0.4
+
+## meta
+{"platform":"qishui","name":"汽水音乐","version":"1.9.23","srcUrl":"https://raw.githubusercontent.com/hebijunge/musicfree-plugins/master/plugins/qishui-source.plugin.v1.9.23.js","author":"研发2号","description":"汽水音乐独立源插件 v1.9.8（v1.9.8 菜单 size 诚实性修正版：qualitiesFromBitRates 不再挂上游自有通道标称 size（逐曲 HEAD 探测 8 曲 16 次实测 320k 档偏差 0.99~1.23、128k 档 1.47~2.05，跨源兜底 VBR 无法换算，宁缺毋假），菜单只保留 bitrate，下载面板以 getMediaSource 实测 size 为准；v1.9.5 全页面音质标识核查 + VIP 标识移除版：音质标识各入口核查无缺口；全接口停写 fee（VIP 角标）与聚合/回填链路，feeOfTrack 移除；上一版 v1.9.3 WebView 短链跟随修复版：followRedirects 非 3xx 分支新增 responseURL 自动跟随检测——真机 WebView 下 XHR 自动跟随 302（axios maxRedirects:0 仅 Node 生效），短链解析拿到最终 URL 而非原始短链，修复真机导入 SHEET_URL_UNRECOGNIZED，详见头部 changelog；v1.9.2 分享链接文本自动提取 URL 版：resolveSheetId 入口先 extractShareUrl 提取第一个 http/https URL 再走短链跟随/域名门/id 提取，详见头部 changelog；v1.9.1 随包升版：歌单对象补 author 别名字段，详见头部 v1.9.1 changelog；v1.9.0 BakaMusic 高价值音源接入版：零代码增量随包升版——P1 与 BakaMusic 汽水插件对比评估判定不重复建设（其 SEO 兜底形态实测上限 320k，本插件 PC 三端点 medium/higher/highest 三档 + guardFullAudio 完整性守卫 + 302 解析链覆盖之），详见头部 v1.9.0 changelog；v1.8.4 歌单导入元数据版：importMusicSheet 返回完整 IMusicSheetItem 歌单对象——标题/封面/曲数随 luna/playlist/detail 响应 playlist 对象零额外请求回传，实测无歌单介绍字段故不传 description，介绍字段名对齐宿主 v1.0.0 契约；v1.8.3 质检
+## functions
+getAlbumInfo,getArtistWorks,getLyric,getMediaSource,getMusicComments,getMusicInfo,getMusicSheetInfo,getRecommendSheetTags,getRecommendSheetsByTag,getTopListDetail,getTopLists,importMusicSheet,search
+
+## search 原始返回（前 2000 字）
+{"isEnd":false,"data":[{"id":"qishui_7146240707408168993","platform":"qishui","title":"因为爱情","artist":"周杰伦, 那英","album":"中国新歌声第二季第一期","artwork":"https://p3-luna.douyinpic.com/img/tos-cn-v-2774c002/eeb4857cd3ed402aaf7568d26efa8d3a~noop.image","duration":202,"is_video":false,"_src":{"qishui":{"trackId":"7146240707408168993"}},"_srcOrder":["qishui"],"qualities":{"128k":{"bitrate":66151},"192k":{"bitrate":132188},"320k":{"bitrate":260182}}},{"id":"qishui_6732899843179546625","platform":"qishui","title":"蜗牛","artist":"动力火车, 许茹芸, 熊天平, 齐秦","album":"真爱无敌","artwork":"https://p3-luna.douyinpic.com/img/tos-cn-v-2774c002/ogi2gAZtEBCfvEA1AmAg590tQBiLVkNBZwXeo6~noop.image","duration":308,"is_video":false,"_src":{"qishui":{"trackId":"6732899843179546625"}},"_srcOrder":["qishui"],"qualities":{"128k":{"bitrate":66097},"192k":{"bitrate":132186},"320k":{"bitrate":260214}}},{"id":"qishui_6696823291962722305","platform":"qishui","title":"刀马旦","artist":"CoCo李玟","album":"Promise","artwork":"https://p3-luna.douyinpic.com/img/tos-cn-v-2774c002/ooEtKek9uBAfBGnjEbSuAQAgDl5RsyY4TDVCZX~noop.image","duration":193,"is_video":false,"_src":{"qishui":{"trackId":"6696823291962722305"}},"_srcOrder":["qishui"],"qualities":{"128k":{"bitrate":68177},"192k":{"bitrate":132182},"320k":{"bitrate":324278}}},{"id":"qishui_7678897838486882344","platform":"qishui","title":"晴天（杰伦）","artist":"哇欣","album":"晴天（杰伦）","artwork":"https://p3-luna.douyinpic.com/img/tos-cn-v-2774c002/oAAAY97AQiEsC6lQzaB0ITvuRW4pAD5YrijEp~noop.image","duration":76,"is_video":false,"_src":{"qishui":{"trackId":"7678897838486882344"}},"_srcOrder":["qishui"],"qualities":{"128k":{"bitrate":68371},"192k":{"bitrate":132359},"320k":{"bitrate":260456}}},{"id":"qishui_7681916271849555968","platform":"qishui","title":"告白气球（杰伦）","artist":"哇欣","album":"告白气球（杰伦）","artwork":"https://p3-luna.douyinpic.com/img/tos-cn-v-2774c002/ooBbAhCCEAZTtEiAYfsqWUygSTxGdQk4AXBAi1~noop.image","duration":68,"is_video":false,"_src":{"qishui":{"trackId":"7681916271849555968"
+
+## 第一条
+{"id":"qishui_7146240707408168993","platform":"qishui","title":"因为爱情","artist":"周杰伦, 那英","album":"中国新歌声第二季第一期","artwork":"https://p3-luna.douyinpic.com/img/tos-cn-v-2774c002/eeb4857cd3ed402aaf7568d26efa8d3a~noop.image","duration":202,"is_video":false,"_src":{"qishui":{"trackId":"7146240707408168993"}},"_srcOrder":["qishui"],"qualities":{"128k":{"bitrate":66151},"192k":{"bitrate":132188},"320k":{"bitrate":260182}}}
+
+## getMediaSource(quality=standard) FAIL
+com.dokar.quickjs.QuickJsException: Error: qishui sign 全部端点失败（2 个）
+    at _0x53cbea (plugin.js:2:92844)
+    at xuccH (plugin.js:2:92617)
+    at <anonymous> (plugin.js:2:93261)
+    at gySettle (bridge.js:443:35)
+    at <anonymous> (bridge.js:432:39)
+    at _0x53cbea (plugin.js:2:93155)
+    at xuccH (plugin.js:2:92617)
+    at <anonymous> (plugin.js:2:93261)
+    at gySettle (bridge.js:443:35)
+    at <anonymous> (bridge.js:432:39)
+    at _0x53cbea (plugin.js:2:93155)
+    at MEuJs (plugin.js:2:92323)
+    at signQishuiPcRequest (plugin.js:2:93334)
+    at prepareSignedQishuiPcRequest (plugin.js:2:95209)
+    at fetchPcTrackV2 (plugin.js:2:101554)
+    at resolveQishuiPcTrackV2 (plugin.js:2:103343)
+    at resolveQishui (plugin.js:2:150537)
+    at VNPfH (plugin.js:2:161815)
+    at _0x308df2 (plugin.js:2:164025)
+    at resolveWithFallback (plugin.js:2:165908)
+    at bkrht (plugin.js:2:319726)
+    at build (plugin.js:2:321896)
+
+at com.dokar.quickjs.QuickJs.executePendingJob(QuickJs.jni.kt:-2)
+at com.dokar.quickjs.QuickJs.awaitEvaluateResult(QuickJs.jni.kt:590)
+at com.dokar.quickjs.QuickJs.evalInSession(QuickJs.jni.kt:467)
+at com.dokar.quickjs.QuickJs.evalAndAwait(QuickJs.jni.kt:424)
+at com.dokar.quickjs.QuickJs.evaluateInternal(QuickJs.jni.kt:402)
+at com.guangyue.core.plugin.runtime.PluginRuntime$evaluateBlocking$1$1.invokeSuspend(PluginRuntime.kt:804)
+at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)
+at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:798)
+at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+
+## getMediaSource(quality=high) OK url=http://car-lw.kuwo.cn/a7ecc291560d320e1080ac43555ec454/6ae4de25/resource/30106/trackmedia/M800003hheMJ0AQ9iu.mp3?bitrate$320&format$mp3&source$kwplayerhd_ar_4.3.0.8_tianbao_T1A_qir
+
+## HTTP 记录（19 条）
+  HTTP GET 200 882ms https://api.qishui.com/luna/search/track?aid=386088&app_name=luna_pc&device_id=2170852561392692&version_name=1.7.0&version_code=10070000&ac=wifi&tz_name=Asia%2FShanghai&device_platform=windows&device_type=Windows&os_version=Windows&q=%E5%91%A8%E6%9D%B0%E4%BC%A6&count=20&search_method=history&cursor=0
+  HTTP POST 400 1636ms https://api.vsaa.cn/api/music/soda/sign-pc.php
+  HTTP ? -1 59ms https://211.161.236.45/api/music/soda/sign-pc.php
+  HTTP POST 200 66ms https://api.qishui.com/luna/pc/track_v2?aid=386088&app_name=luna_pc&region=cn&geo_region=cn&os_region=cn&sim_region=&device_id=2081836196178571&cdid=&iid=2081836196182667&version_name=3.8.0&version_code=30080000&channel=official&build_mode=master&network_carrier=&ac=wifi&tz_name=Asia%2FShanghai&resolution=&device_platform=windows&device_type=Windows&os_version=Windows%2011%20Pro%20for%20Workstations&fp=2081836196178571
+  HTTP GET 200 663ms https://music.douyin.com/qishui/share/track?track_id=7146240707408168993
+  HTTP GET 200 547ms https://beta-luna.douyin.com/luna/h5/seo_track?track_id=7146240707408168993&device_platform=web
+  HTTP GET 200 115ms https://vod-luna.douyin.com/?Action=GetPlayInfo&Version=2019-03-15&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKLTNGQxN2RhOWE2Nzc4NDM1Zjk2ZWE4OGFjODFkZDNhM2E%2F20261030%2Fcn-north-1%2Fvod%2Faws4_request&X-Amz-Date=20261030T181251Z&X-Amz-Expires=1793470371&X-Amz-NotSignBody=&X-Amz-Signature=329a1d5473db117d02fc2ad100cb1ce13bfbf99487aa6664ff899aee22e328af&X-Amz-SignedHeaders=&X-Amz-SignedQueries=Action%3BVersion%3BX-Amz-Algorithm%3BX-Amz-Credential%3BX-Amz-Date%3BX-Amz-Expires%3BX-Amz-NotSignBody%3BX-Amz-SignedHeaders%3BX-Amz-SignedQueries%3Baid%3Bcodec_type%3Bformat_type%3Bptoken%3Bssl%3Bstream_type%3Bvideo_id&aid=8478&codec_type=5&format_type=2&ptoken=jvc0smjc&ssl=1&stream_type=eaudio&video_id=v10ad6g50000d3qftsvog65n3seaqimg
+  HTTP GET 200 364ms https://www.kuwo.cn/search/searchMusicBykeyWord?all=%E5%9B%A0%E4%B8%BA%E7%88%B1%E6%83%85%20%E5%91%A8%E6%9D%B0%E4%BC%A6%2C%20%E9%82%A3%E8%8B%B1&pn=0&rn=20&ft=music&client=kt&encoding=utf8&rformat=json&mobi=1&vipver=1&cluster=0&strategy=2012&issubtitle=1&show_copyright_off=1&correct=1&spPrivilege=0&newver=2&p2p=1&notrace=0&searchapi=2&vermerge=1
+  HTTP GET 200 250ms https://qishui.lxmapi.icu/apis/track.php?track_id=7146240707408168993
+  HTTP GET 404 39ms https://api.qishui.com/apis/track.php?track_id=7146240707408168993
+  HTTP GET 200 197ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=128kmp3&rid=26413116&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 206 43ms http://car-bj.kuwo.cn/a79539151ba2c5202ce6f793efe9a789/6ae4de25/lu/resource/a1/15/22/3173847274.aac?bitrate$100&format$aac&source$kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&type$convert_url_with_sign&user$0&loginUid$0
+  HTTP GET 206 18ms http://car-bj.kuwo.cn/a79539151ba2c5202ce6f793efe9a789/6ae4de25/lu/resource/a1/15/22/3173847274.aac?bitrate$100&format$aac&source$kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&type$convert_url_with_sign&user$0&loginUid$0
+  HTTP GET 200 77ms https://www.kuwo.cn/search/searchMusicBykeyWord?all=%E5%9B%A0%E4%B8%BA%E7%88%B1%E6%83%85%20%E5%91%A8%E6%9D%B0%E4%BC%A6%2C%20%E9%82%A3%E8%8B%B1&pn=0&rn=20&ft=music&client=kt&encoding=utf8&rformat=json&mobi=1&vipver=1&cluster=0&strategy=2012&issubtitle=1&show_copyright_off=1&correct=1&spPrivilege=0&newver=2&p2p=1&notrace=0&searchapi=2&vermerge=1
+  HTTP GET 200 83ms https://qishui.lxmapi.icu/apis/track.php?track_id=7146240707408168993
+  HTTP GET 404 48ms https://api.qishui.com/apis/track.php?track_id=7146240707408168993
+  HTTP GET 200 88ms https://nmobi.kuwo.cn/mobi.s?f=web&type=convert_url_with_sign&br=320kmp3&rid=26413116&user=0&android_id=0&prod=kwplayerhd_ar_4.3.0.8&corp=kuwo&vipver=4.3.0.8&source=kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&notrace=0&sig=0&priority=bitrate&loginUid=0&network=WIFI&loginSid=0&mode=down
+  HTTP GET 206 40ms http://car-lw.kuwo.cn/a7ecc291560d320e1080ac43555ec454/6ae4de25/resource/30106/trackmedia/M800003hheMJ0AQ9iu.mp3?bitrate$320&format$mp3&source$kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&type$convert_url_with_sign&user$0&loginUid$0
+  HTTP GET 206 13ms http://car-lw.kuwo.cn/a7ecc291560d320e1080ac43555ec454/6ae4de25/resource/30106/trackmedia/M800003hheMJ0AQ9iu.mp3?bitrate$320&format$mp3&source$kwplayerhd_ar_4.3.0.8_tianbao_T1A_qirui.apk&type$convert_url_with_sign&user$0&loginUid$0
+
+## console 记录（0 条）
+（无）
+
+## 结论
+ stage=null
+ searchOk=true
+ mediaOk=true
+ okQuality=high
+ verdict=(b)
+ needed=对齐源站当前请求头/Cookie/UA（见 raw log 的 HTTP 记录与插件内常量）
+ totalMs=5766
