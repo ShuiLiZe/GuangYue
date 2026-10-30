@@ -7,9 +7,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.guangyue.core.player.PlaybackController
 import com.guangyue.music.nav.GuangYueRoot
@@ -38,9 +41,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 0.0.8：状态栏 / 手势条图标深浅随主题走——浅色主题下用深色图标，深色下用浅色，
+        // 否则「系统栏透明 + 内容下移」之后状态栏文字在白底上会看不见。
         enableEdgeToEdge()
         setContent {
             val dark by shell.darkMode.collectAsStateWithLifecycle()
+            val view = LocalView.current
+            SideEffect {
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
             GuangYueTheme(darkTheme = dark) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),

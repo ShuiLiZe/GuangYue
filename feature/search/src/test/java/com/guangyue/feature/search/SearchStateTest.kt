@@ -1,4 +1,4 @@
-package com.guangyue.feature.search
+﻿package com.guangyue.feature.search
 
 import com.guangyue.core.plugin.MusicItem
 import com.guangyue.core.plugin.PluginHealth
@@ -111,7 +111,7 @@ class SearchStateTest {
         assertFalse(noResult.isHealthy)
         assertFalse(unknown.isHealthy)
         assertEquals("可用", ok.healthLabel)
-        assertEquals("搜索无结果", noResult.healthLabel)
+        assertEquals("只能搜索", noResult.healthLabel)
         assertEquals("未体检", unknown.healthLabel)
     }
 

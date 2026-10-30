@@ -1,4 +1,4 @@
-package com.guangyue.feature.library.design
+﻿package com.guangyue.feature.library.design
 
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -226,8 +226,8 @@ object GyText {
     val label: TextUnit = 13.sp
     val labelHeight: TextUnit = 20.sp
 
-    /** 行标签：14sp / 20sp。 */
-    val row: TextUnit = 14.sp
+    /** 行标签：13sp / 20sp，对应 Folia 的 text-[13px] leading-5。 */
+    val row: TextUnit = 13.sp
     val rowHeight: TextUnit = 20.sp
 
     /** 页面标题：20sp / 32sp。 */

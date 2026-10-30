@@ -5,8 +5,8 @@
 插件源码缓存在 `build/plugin-cache-0.0.4/`（不进仓库，`.gitignore` 的 `/build/*` 覆盖）。
 
 - **总数**：57
-- **通过**：43
-- **失败**：14
+- **通过**：54
+- **失败**：3
 
 | 插件 | 版本 | 平台 | 结果 | 失败阶段 | 报错摘要 |
 | --- | --- | --- | --- | --- | --- |
@@ -16,39 +16,39 @@
 | 咪咕音乐 | 1.9.19 | migu | 通过 | - | - |
 | 网易云音乐 | 1.9.27 | netease | 通过 | - | - |
 | 汽水音乐 | 1.9.23 | qishui | 通过 | - | - |
-| B站 | 1.1.4 | bilibili | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (u |
+| B站 | 1.1.4 | bilibili | 通过 | - | - |
 | 番茄畅听 | 1.2.2 | fanqie | 通过 | - | - |
-| DJ多多 | 1.0.2 | djduoduo | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: not a function at searchImpl (plugin.js:2:82904) at search (plugin.js:2:101446) at apply (native) at <a |
+| DJ多多 | 1.0.2 | djduoduo | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: djduoduo: sch 响应解密失败 at <anonymous> (plugin.js:2:52361) at gySettle (bridge.js:450:21) at <anonymous> ( |
 | 5sing | 1.0.2 | 5sing | 通过 | - | - |
 | 千千音乐 | 1.0.4 | qianqian | 通过 | - | - |
 | Y2002电音 | 1.0.2 | y2002 | 通过 | - | - |
 | 一听音乐 | 1.0.2 | 1ting | 通过 | - | - |
 | 懒人听书 | 1.0.3 | lrts | 通过 | - | - |
 | 博看听书 | 1.0.2 | bookan | 通过 | - | - |
-| 街声 | 1.0.1 | streetvoice | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: not a function at fetchSearchSongs (plugin.js:2:20879) at searchImpl (plugin.js:2:39682) at search (plu |
-| 火龙DJ | 1.0.4 | huole | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (u |
+| 街声 | 1.0.1 | streetvoice | 通过 | - | - |
+| 火龙DJ | 1.0.4 | huole | 通过 | - | - |
 | 快音 | 1.0.2 | 快音 | 通过 | - | - |
 | 猫耳FM | 1.0.3 | 猫耳FM | 通过 | - | - |
-| DJ串烧集 | 1.0.1 | djcsj | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (u |
+| DJ串烧集 | 1.0.1 | djcsj | 通过 | - | - |
 | DJ秀 | 1.0.4 | DJ秀 | 通过 | - | - |
 | Apple Music | 1.0.2 | apple-music | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: apple token step1 failed: index-legacy js not found in homepage at extractJsPath (plugin.js:2:17954) at |
-| 华为音乐 | 1.0.3 | 华为音乐 | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: not a function at searchHuawei (plugin.js:2:42879) at search (plugin.js:2:146741) at apply (native) at  |
-| 蜻蜓FM | 1.0.3 | qingting | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (u |
-| 喜马拉雅 | 1.2.1 | ximalaya | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (u |
+| 华为音乐 | 1.0.3 | 华为音乐 | 通过 | - | - |
+| 蜻蜓FM | 1.0.3 | qingting | 通过 | - | - |
+| 喜马拉雅 | 1.2.1 | ximalaya | 通过 | - | - |
 | 荔枝FM | 1.0.2 | lizhi | 通过 | - | - |
 | 网易云电台 | 1.1.3 | neteaseradio | 通过 | - | - |
 | CCTV听音 | 1.0.2 | cctv | 通过 | - | - |
 | Jamendo | 1.0.2 | jamendo | 通过 | - | - |
 | 聚合 | 1.9.18 | agg | 通过 | - | - |
-| JOOX音乐 | 1.1.3 | joox | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: not a function at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:166) at com.guan |
-| djuu DJ | 1.1.2 | djuu | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: not a function at searchApi (plugin.js:2:12073) at gXujd (plugin.js:2:49774) at searchImpl (plugin.js:2 |
+| JOOX音乐 | 1.1.3 | joox | 通过 | - | - |
+| djuu DJ | 1.1.2 | djuu | 通过 | - | - |
 | 相声评书 | 1.0.3 | 相声评书 | 通过 | - | - |
-| 皮狗DJ | 1.1.2 | 皮狗DJ | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (u |
-| DJKK | 1.1.2 | DJKK | 失败 | runtime | com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (u |
+| 皮狗DJ | 1.1.2 | 皮狗DJ | 通过 | - | - |
+| DJKK | 1.1.2 | DJKK | 失败 | runtime | java.lang.InterruptedException: java.lang.InterruptedException at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:58) at kotlinx.coroutines.Builde |
 | 水晶舞曲 | 1.2.2 | 水晶舞曲 | 通过 | - | - |
 | 清风DJ | 1.2.2 | 清风DJ | 通过 | - | - |
 | DJ766 | 1.4.1 | DJ766 | 通过 | - | - |
-| 82DJ | 1.2.1 | 82DJ | 失败 | runtime | java.lang.InterruptedException: java.lang.InterruptedException at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:58) at kotlinx.coroutines.Builde |
+| 82DJ | 1.2.1 | 82DJ | 通过 | - | - |
 | QQDJ | 1.2.2 | QQDJ | 通过 | - | - |
 | 36DJ | 1.2.2 | 36DJ | 通过 | - | - |
 | 宝贝DJ | 1.2.1 | 宝贝DJ | 通过 | - | - |
@@ -72,92 +72,25 @@
 
 | 归类 | 数量 | 插件 |
 | --- | --- | --- |
-| async 插件在同步桥内长时间不返回（Promise 未结算，留 0.0.5） | 7 | B站、火龙DJ、DJ串烧集、蜻蜓FM、喜马拉雅、皮狗DJ、DJKK |
-| 插件自身混淆代码调用了不存在的成员（只记录） | 5 | DJ多多、街声、华为音乐、JOOX音乐、djuu DJ |
+| 其他 | 1 | DJ多多 |
 | 外部站点或接口变更（插件内部断言失败，只记录） | 1 | Apple Music |
-| 调用超过单次预算被中断（插件串行打太多 HTTP，留 0.0.5） | 1 | 82DJ |
+| 调用超过单次预算被中断（插件串行打太多 HTTP，留 0.0.5） | 1 | DJKK |
 
 ## 明细（每条报错前 300 字）
-
-### B站 1.1.4 · runtime
-
-```
-com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (use axios with a sync bridge) at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:166) at com.guangyue.core.plugin.runtim
-```
 
 ### DJ多多 1.0.2 · runtime
 
 ```
-com.guangyue.core.plugin.runtime.PluginRuntimeException: not a function at searchImpl (plugin.js:2:82904) at search (plugin.js:2:101446) at apply (native) at <anonymous> (dispatcher.js:54:25) at <eval> (call.js:1:65) at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:166) at com
-```
-
-### 街声 1.0.1 · runtime
-
-```
-com.guangyue.core.plugin.runtime.PluginRuntimeException: not a function at fetchSearchSongs (plugin.js:2:20879) at searchImpl (plugin.js:2:39682) at search (plugin.js:2:49224) at apply (native) at <anonymous> (dispatcher.js:54:25) at <eval> (call.js:1:65) at com.guangyue.core.plugin.runtime.PluginRu
-```
-
-### 火龙DJ 1.0.4 · runtime
-
-```
-com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (use axios with a sync bridge) at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:166) at com.guangyue.core.plugin.runtim
-```
-
-### DJ串烧集 1.0.1 · runtime
-
-```
-com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (use axios with a sync bridge) at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:166) at com.guangyue.core.plugin.runtim
+com.guangyue.core.plugin.runtime.PluginRuntimeException: djduoduo: sch 响应解密失败 at <anonymous> (plugin.js:2:52361) at gySettle (bridge.js:450:21) at <anonymous> (bridge.js:431:44) at apiGet (plugin.js:2:51526) at kkWkR (plugin.js:2:82083) at searchImpl (plugin.js:2:82676) at search (plugin.js:2:101446
 ```
 
 ### Apple Music 1.0.2 · runtime
 
 ```
-com.guangyue.core.plugin.runtime.PluginRuntimeException: apple token step1 failed: index-legacy js not found in homepage at extractJsPath (plugin.js:2:17954) at <anonymous> (plugin.js:2:18953) at <anonymous> (bridge.js:261:21) at fetchToken (plugin.js:2:18554) at IHqLZ (plugin.js:2:20251) at getToke
-```
-
-### 华为音乐 1.0.3 · runtime
-
-```
-com.guangyue.core.plugin.runtime.PluginRuntimeException: not a function at searchHuawei (plugin.js:2:42879) at search (plugin.js:2:146741) at apply (native) at <anonymous> (dispatcher.js:54:25) at <eval> (call.js:1:65) at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:166) at c
-```
-
-### 蜻蜓FM 1.0.3 · runtime
-
-```
-com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (use axios with a sync bridge) at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:166) at com.guangyue.core.plugin.runtim
-```
-
-### 喜马拉雅 1.2.1 · runtime
-
-```
-com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (use axios with a sync bridge) at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:166) at com.guangyue.core.plugin.runtim
-```
-
-### JOOX音乐 1.1.3 · runtime
-
-```
-com.guangyue.core.plugin.runtime.PluginRuntimeException: not a function at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:166) at com.guangyue.core.plugin.runtime.HealthCache.run(RealPluginHealthTest.kt:244) at com.guangyue.core.plugin.runtime.RealPluginHealthTest.health(RealPl
-```
-
-### djuu DJ 1.1.2 · runtime
-
-```
-com.guangyue.core.plugin.runtime.PluginRuntimeException: not a function at searchApi (plugin.js:2:12073) at gXujd (plugin.js:2:49774) at searchImpl (plugin.js:2:49956) at uDKla (plugin.js:2:60800) at search (plugin.js:2:60891) at apply (native) at <anonymous> (dispatcher.js:54:25) at <eval> (call.js
-```
-
-### 皮狗DJ 1.1.2 · runtime
-
-```
-com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (use axios with a sync bridge) at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:166) at com.guangyue.core.plugin.runtim
+com.guangyue.core.plugin.runtime.PluginRuntimeException: apple token step1 failed: index-legacy js not found in homepage at extractJsPath (plugin.js:2:17954) at <anonymous> (plugin.js:2:18953) at gySettle (bridge.js:450:21) at <anonymous> (bridge.js:431:44) at fetchToken (plugin.js:2:18554) at IHqLZ
 ```
 
 ### DJKK 1.1.2 · runtime
-
-```
-com.guangyue.core.plugin.runtime.PluginRuntimeException: function search returned a Promise that has not settled; MusicFree plugins must return synchronously (use axios with a sync bridge) at com.guangyue.core.plugin.runtime.PluginRuntime.call(PluginRuntime.kt:166) at com.guangyue.core.plugin.runtim
-```
-
-### 82DJ 1.2.1 · runtime
 
 ```
 java.lang.InterruptedException: java.lang.InterruptedException at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:58) at kotlinx.coroutines.BuildersKt__BuildersKt.runBlockingImpl(Builders.kt:30) at kotlinx.coroutines.BuildersKt.runBlockingImpl(?) at kotlinx.coroutines.BuildersKt__Build

@@ -50,7 +50,6 @@ fun GuangYueRoot(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: Routes.HOME
     val showBar = currentRoute in topLevelRoutes
-    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     MarbleBackground(dark = darkMode, modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
@@ -59,6 +58,8 @@ fun GuangYueRoot(
                 onDarkModeChange = onDarkModeChange,
                 playback = playback,
                 navController = navController,
+                // 0.0.8：底栏自己补手势条留白（FoliaBottomNav 内部读 navigationBars），
+                // 这里不再重复 padding —— 否则刘海屏上底栏会被抬高一整个手势条高度。
                 bottomBar = if (showBar) {
                     {
                         FoliaBottomNav(
@@ -73,7 +74,6 @@ fun GuangYueRoot(
                                     }
                                 }
                             },
-                            modifier = Modifier.padding(bottom = navBottom),
                         )
                     }
                 } else {

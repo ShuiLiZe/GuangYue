@@ -1,4 +1,4 @@
-package com.guangyue.music.ui
+﻿package com.guangyue.music.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +12,7 @@ import com.guangyue.core.plugin.MusicItem
 import com.guangyue.core.plugin.PluginHealth
 import com.guangyue.core.plugin.PluginMeta
 import com.guangyue.core.plugin.SearchType
+import com.guangyue.core.plugin.lx.LxSource
 import com.guangyue.core.player.MediaOrigin
 import com.guangyue.core.player.PlaybackState
 import com.guangyue.core.player.QueueItem
@@ -26,6 +27,7 @@ import com.guangyue.feature.library.home.HomeTile
 import com.guangyue.feature.library.home.HomeTileKind
 import com.guangyue.feature.library.screen.AboutScreen
 import com.guangyue.feature.library.screen.LicensesScreen
+import com.guangyue.feature.library.screen.LxSourceScreen
 import com.guangyue.feature.library.screen.PluginManagerScreen
 import com.guangyue.feature.library.screen.ProfileScreen
 import com.guangyue.feature.library.screen.SettingsScreen
@@ -46,7 +48,7 @@ import org.robolectric.annotation.GraphicsMode
  * 0.0.7 主要页面的 JVM 截图（Robolectric 真渲染 + Roborazzi 抓图）。
  *
  * `GUANGYUE_RECORD_SCREENSHOTS=true ./gradlew :app:testDebugUnitTest` 会把图写到
- * `docs/ui-0.0.7/`，尺寸 w411dp-h891dp-xxhdpi。0.0.7 新增四类必交图：
+ * `docs/ui-0.0.8/`，尺寸 w411dp-h891dp-xxhdpi。0.0.7 新增四类必交图：
  * 选音源（source-picker-*）、搜索结果（search-result-*）、播放中（player-playing-*）、
  * 失败提示（search-failure / player-failure）。
  */
@@ -74,11 +76,11 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage(filePath("$name.png"))
     }
 
-    /** Roborazzi 的路径相对 module 目录，统一指回仓库根上的 docs/ui-0.0.7/。 */
+    /** Roborazzi 的路径相对 module 目录，统一指回仓库根上的 docs/ui-0.0.8/。 */
     private fun filePath(name: String): String {
         val module = java.io.File(System.getProperty("user.dir"))
         val root = module.parentFile ?: module
-        return java.io.File(root, "docs/ui-0.0.7").resolve(name).absolutePath
+        return java.io.File(root, "docs/ui-0.0.8").resolve(name).absolutePath
     }
 
     private val emptyPlayback = PlaybackState()
@@ -472,7 +474,7 @@ class ScreenshotTest {
             onBack = {},
             onInstallUri = {},
             onInstallUrl = {},
-            onToggle = { _, _ -> },
+            onSelectSource = {},
             onDelete = {},
             onCheckUpdate = {},
         )
@@ -489,11 +491,11 @@ class ScreenshotTest {
                 plugin("酷我音乐", 4, PluginHealth.NO_MEDIA, false),
             ),
             busy = false,
-            message = "已启用 2 个体检可用的音源（共 4 个）",
+            message = "正在用「QQ音乐」搜索和取播放地址。装多个音源不会同时运行，换一个才切过去。",
             onBack = {},
             onInstallUri = {},
             onInstallUrl = {},
-            onToggle = { _, _ -> },
+            onSelectSource = {},
             onDelete = {},
             onCheckUpdate = {},
         )
@@ -527,5 +529,65 @@ class ScreenshotTest {
     @Test
     fun about() = shoot("about") {
         AboutScreen(onBack = {})
+    }
+
+    // ---------- 取链源（洛雪自定义源） ----------
+    private val lxSamples = listOf(
+        LxSource(
+            id = "lx-1",
+            name = "五源合一",
+            version = "1.6.0",
+            author = "研发1号",
+            enabled = true,
+            platforms = listOf("tx", "wy", "kg", "kw", "mg"),
+            note = "QQ音乐 / 网易云 / 酷狗 / 酷我 / 咪咕",
+        ),
+        LxSource(
+            id = "lx-2",
+            name = "某单源",
+            version = "0.3.2",
+            enabled = false,
+            platforms = emptyList(),
+            error = "脚本语法错误，可能不是洛雪自定义源",
+        ),
+    )
+
+    @Test
+    fun lxSourcesLight() = shoot("lx-sources-light") {
+        LxSourceScreen(
+            sources = lxSamples,
+            busy = false,
+            message = null,
+            errorDetails = null,
+            onBack = {},
+            onInstallCode = { _, _ -> },
+            onInstallUrl = {},
+            onInstallUri = {},
+            onToggle = { _, _ -> },
+            onDelete = {},
+            onRecheck = {},
+            onRecheckAll = {},
+            onMove = { _, _ -> },
+        )
+    }
+
+    @Test
+    fun lxSourcesDark() = shoot("lx-sources-dark", dark = true) {
+        LxSourceScreen(
+            sources = lxSamples,
+            busy = false,
+            message = "已导入「五源合一」，5 个平台在用",
+            errorDetails = null,
+            onBack = {},
+            onInstallCode = { _, _ -> },
+            onInstallUrl = {},
+            onInstallUri = {},
+            onToggle = { _, _ -> },
+            onDelete = {},
+            onRecheck = {},
+            onRecheckAll = {},
+            onMove = { _, _ -> },
+            defaultQuality = "flac",
+        )
     }
 }

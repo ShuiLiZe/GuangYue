@@ -8,12 +8,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -98,7 +104,12 @@ fun LyricFlowScreen(
             .fillMaxSize()
             .marbleBackground(),
     ) {
-        Column(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                // 0.0.8：收起按钮与曲目头必须整体下移到状态栏/刘海以下。
+                .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout)),
+        ) {
             Spacer(Modifier.height(48.dp))
             // 顶部：收起 + 封面标题（对应 LatticeChrome 的曲目头）
             Row(
@@ -172,7 +183,12 @@ fun LyricFlowScreen(
 
             Spacer(Modifier.height(GySpace.xl))
 
-            Box(Modifier.weight(1f)) {
+            Box(
+                Modifier
+                    .weight(1f)
+                    // 0.0.8：底部悬浮播放条要躲开手势条。
+                    .windowInsetsPadding(WindowInsets.navigationBars),
+            ) {
                 if (state.lyric.isEmpty) {
                     com.guangyue.feature.library.design.FoliaEmptyState(
                         title = if (vm.loading.value) "歌词加载中" else "还没有歌词",

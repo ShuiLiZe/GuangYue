@@ -1,4 +1,4 @@
-package com.guangyue.feature.library.screen
+﻿package com.guangyue.feature.library.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.guangyue.feature.library.design.FoliaGroup
 import com.guangyue.feature.library.design.FoliaRow
+import com.guangyue.feature.library.design.FoliaSegmented
 import com.guangyue.feature.library.design.FoliaTopBar
 import com.guangyue.feature.library.design.FoliaToggle
 import com.guangyue.feature.library.design.GuangYueDesign
@@ -49,6 +50,8 @@ fun SettingsScreen(
     onOpenLicenses: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    lxQuality: String = "320k",
+    onPickLxQuality: (String) -> Unit = {},
 ) {
     Box(modifier.fillMaxSize().marbleBackground()) {
         Column(Modifier.fillMaxSize()) {
@@ -82,7 +85,7 @@ fun SettingsScreen(
                     FoliaGroup(title = "关于") {
                         FoliaRow(
                             label = "版本",
-                            hint = "广乐 0.0.6",
+                            hint = "广乐 0.0.8",
                             first = true,
                             leading = {
                                 Icon(
@@ -116,10 +119,47 @@ fun SettingsScreen(
                         )
                     }
                 }
+                // 取链源的默认音质：插件自己取不到链时按这一档问洛雪源。
+                item(key = "lx-quality") {
+                    FoliaGroup(
+                        title = "取链源",
+                        foot = "插件取不到播放地址时，按这里选的音质问取链源；播放器切到无损就按无损问。",
+                    ) {
+                        FoliaRow(
+                            label = "默认音质",
+                            first = true,
+                            leading = {
+                                Icon(
+                                    GuangYueIcons.AudioLines,
+                                    null,
+                                    tint = Gyp.t2,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            },
+                            trailing = {
+                                FoliaSegmented(
+                                    value = lxQuality,
+                                    options = LxQualityOptions,
+                                    onSelect = onPickLxQuality,
+                                    fill = false,
+                                )
+                            },
+                        )
+                    }
+            }
             }
         }
     }
 }
+
+/** 取链源的四档音质（洛雪 LX 的 `info.type`）。 */
+private val LxQualityOptions = listOf(
+    "128k" to "128k",
+    "320k" to "320k",
+    "flac" to "无损",
+    "flac24bit" to "Hi-Res",
+)
+
 
 /** 开源许可：GPL 要求的署名、Folia 致谢、字体许可与第三方组件。 */
 @Composable

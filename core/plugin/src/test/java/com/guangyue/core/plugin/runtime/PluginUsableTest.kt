@@ -1,4 +1,4 @@
-package com.guangyue.core.plugin.runtime
+﻿package com.guangyue.core.plugin.runtime
 
 import com.guangyue.core.plugin.PluginHealth
 import com.guangyue.core.plugin.PluginMetaCodec
@@ -32,7 +32,7 @@ import java.io.File
  * ```
  *
  * 只有两步都过的插件才会被 [com.guangyue.core.plugin.PluginHealth.OK] 标记，
- * 结果写进 `build/plugin-cache-0.0.7/usable-report.jsonl`，再由
+ * 结果写进 `build/plugin-cache-0.0.4/usable-report.jsonl`，再由
  * [PluginUsableReportTest] 汇总成 `docs/plugin-usable-0.0.7.md` 与
  * `core/plugin/src/main/assets/plugin-health.json`（出厂基线，「只启用体检可用的」用的就是它）。
  *
@@ -88,11 +88,11 @@ data class UsableRow(
 object UsableCache {
     val dir: File by lazy {
         listOf(
-            File("../build/plugin-cache-0.0.7"),
-            File("build/plugin-cache-0.0.7"),
-            File("../../build/plugin-cache-0.0.7"),
-            File("${System.getProperty("guangyue.rootDir") ?: "."}/build/plugin-cache-0.0.7"),
-        ).firstOrNull { it.isDirectory } ?: File("../build/plugin-cache-0.0.7").apply { mkdirs() }
+            File("../build/plugin-cache-0.0.4"),
+            File("build/plugin-cache-0.0.4"),
+            File("../../build/plugin-cache-0.0.4"),
+            File("${System.getProperty("guangyue.rootDir") ?: "."}/build/plugin-cache-0.0.4"),
+        ).firstOrNull { it.isDirectory } ?: File("../build/plugin-cache-0.0.4").apply { mkdirs() }
     }
 
     private val json = Json { ignoreUnknownKeys = true }

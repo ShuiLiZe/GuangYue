@@ -96,14 +96,14 @@ data class PluginMeta(
     /** 体检通过（真搜得到且真取得到播放地址）的音源才允许被「只启用可用的」打开。 */
     val isHealthy: Boolean get() = health == PluginHealth.OK
 
-    /** 管理页第二行的一句健康状态。 */
+    /** 管理页每行的一句健康状态（0.0.8 起固定四档：可用 / 只能搜索 / 取不到链 / 搜索失败）。 */
     val healthLabel: String
         get() = when (health) {
             PluginHealth.OK -> "可用"
-            PluginHealth.NO_RESULT -> "搜索无结果"
-            PluginHealth.NO_MEDIA -> "取不到播放地址"
+            PluginHealth.NO_RESULT -> "只能搜索"
+            PluginHealth.NO_MEDIA -> "取不到链"
             PluginHealth.SEARCH_FAILED -> "搜索失败"
-            PluginHealth.UNSUPPORTED -> "未声明 search"
+            PluginHealth.UNSUPPORTED -> "只能搜索"
             else -> "未体检"
         }
 }

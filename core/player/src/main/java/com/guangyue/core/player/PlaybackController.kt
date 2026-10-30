@@ -12,6 +12,7 @@ import com.guangyue.core.data.model.TrackEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -133,6 +134,13 @@ class PlaybackController @Inject constructor(
 
     private var resolverRetriedFor: String? = null
 
+    /**
+     * 重试保险：插件取不到链时，二次 `prepare()` 在模拟器上会卡在 BUFFERING，
+     * ExoPlayer 既不回调 `onPlayerError` 也不回调 `onIsPlayingChanged`，界面上就是一句提示都没有。
+     * 这里给「重试后 N 秒仍没播出声」兜一个可读失败态。
+     */
+    private var retryWatchdog: Job? = null
+
     init {
         player.addListener(object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) {
@@ -147,18 +155,44 @@ class PlaybackController @Inject constructor(
                     resolverRetriedFor = key
                     dataSources.pluginResolver.invalidate(error.message)
                     android.util.Log.w(TAG, "playback error, retrying once: ${error.message}")
+                    // 注意：报错后 player 已回到 IDLE，此时直接 prepare() 在某些失败路径上
+                    // 不会再分发第二个 error（onPlayerError 只回调一次的那个现象就是这么来的），
+                    // 界面于是「既没声也没提示」。先 stop() 明确切回 IDLE 再 prepare。
+                    player.stop()
                     player.prepare()
                     player.play()
+                    armRetryWatchdog(key, error.message)
                 } else {
-                    _state.value = _state.value.copy(error = error.message ?: "播放失败")
+                    retryWatchdog?.cancel()
+                    retryWatchdog = null
+                    val text = PlaybackErrorText.readable(
+                        error.message ?: error.cause?.message,
+                        error.cause?.message,
+                    )
+                    android.util.Log.w(TAG, "playback error (final), surfacing: $text")
+                    _state.value = _state.value.copy(error = text)
                 }
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val key = mediaItem?.mediaId ?: return
                 resolverRetriedFor = null
+                retryWatchdog?.cancel()
+                retryWatchdog = null
+                // 换歌就把上一首的失败提示清掉，否则新歌一打开就顶着一行旧错误。
+                if (_state.value.error != null) {
+                    _state.value = _state.value.copy(error = null)
+                }
                 currentQueueItem(key)?.let { scope.launch { _trackChanged.emit(it) } }
                 publish()
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                // 真播出声了就把重试兜底撤掉。
+                if (isPlaying) {
+                    retryWatchdog?.cancel()
+                    retryWatchdog = null
+                }
             }
         })
 
@@ -327,6 +361,29 @@ class PlaybackController @Inject constructor(
         player.release()
     }
 
+    /**
+     * 重试兜底：`PREPARE_TIMEOUT_MS` 内既没播出声、也没再次报错，就按失败处理。
+     *
+     * 正常起播或再次报错时会 [retryWatchdog] 取消，因此这条路径只在「卡住」时生效。
+     */
+    private fun armRetryWatchdog(key: String, firstMessage: String?) {
+        retryWatchdog?.cancel()
+        retryWatchdog = scope.launch {
+            delay(PREPARE_TIMEOUT_MS)
+            if (player.currentMediaItem?.mediaId != key) return@launch
+            if (player.isPlaying || player.playbackState == Player.STATE_READY) return@launch
+            _state.value = _state.value.copy(error = PlaybackErrorText.readable(firstMessage))
+        }
+    }
+
+    /**
+     * 把 ExoPlayer 的内部报错换成用户能看懂的一句。
+     *
+     * `error.message` 常常是 `Source error` / `Unexpected ok` 这种没有信息量、还带异常类名的原文，
+     * 直接贴到播放页等于没提示。包含 `ResolutionException` 文案的原话才原样显示。
+     */
+    private fun readablePlaybackError(message: String?): String = PlaybackErrorText.readable(message)
+
     private fun publish() {
         val key = player.currentMediaItem?.mediaId
         val item = key?.let { k -> queue.firstOrNull { it.key == k } }
@@ -343,11 +400,17 @@ class PlaybackController @Inject constructor(
             repeatMode = player.repeatMode,
             queueSize = queue.size,
             index = player.currentMediaItemIndex.coerceAtLeast(0),
+            // 错误要跨 publish() 存活：进度 ticker / onEvents 每 250ms 都会重建整份 state，
+            // 这里不清空就等于 UI 永远看不到失败态。
+            error = _state.value.error,
         )
     }
 
     companion object {
         private const val TAG = "GuangYuePlayer"
         private const val KEY_QUALITY = "default_quality"
+
+        /** 二次 prepare 后等多久还没起播就判失败（毫秒）。 */
+        private const val PREPARE_TIMEOUT_MS = 8_000L
     }
 }

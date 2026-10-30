@@ -72,9 +72,13 @@ class PluginHealthChecker @Inject constructor(
     }
 
     /**
-     * 体检所有已启用插件并把结果写回 [PluginManager]。
+     * 体检所有已安装插件并把结果写回 [PluginManager]。
      *
-     * @param markEnabled true 时同时按结果开关（OK 的留下、其余关掉）——「只启用体检可用的」一步到位版。
+     * 0.0.8 起体检要覆盖**所有已安装**插件（`error == null` 的全部），不再只看「已启用」的
+     * 那几个 —— 插件页每行的状态标签（可用 / 只能搜索 / 取不到链 / 搜索失败）全靠这份结论，
+     * 而没被选中的插件同样需要标签。
+     *
+     * @param markEnabled 兼容 0.0.7 签名，0.0.8 已无「批量启用」概念，传什么都忽略。
      */
     suspend fun checkAll(
         keyword: String = KEYWORD,
@@ -82,7 +86,7 @@ class PluginHealthChecker @Inject constructor(
         onProgress: (done: Int, total: Int, report: Report) -> Unit = { _, _, _ -> },
     ): List<Report> = withContext(Dispatchers.IO) {
         manager.load()
-        val targets = manager.plugins.value.filter { it.enabled && it.error == null }.take(MAX_TARGETS)
+        val targets = manager.plugins.value.filter { it.error == null }.take(MAX_TARGETS)
         if (targets.isEmpty()) return@withContext emptyList()
         val gate = Semaphore(CONCURRENCY)
         val done = AtomicInteger(0)
@@ -105,6 +109,13 @@ class PluginHealthChecker @Inject constructor(
         reports
     }
 
+    /**
+     * 把插件抛出的原始异常压成一句中文短原因。
+     *
+     * 0.0.7 直接把 `com.guangyue.core.plugin.runtime.PluginRuntimeException at _0x3846` 这种栈
+     * 摊在插件行里，用户看不懂也帮不上忙。这里只输出「人话」；原始异常仍保留在
+     * [PluginManager.lastErrorDetails] 里，点开详情才看。
+     */
     private fun short(raw: String): String {
         val text = raw.replace(Regex("\\s+"), " ").trim()
         return when {
@@ -112,7 +123,19 @@ class PluginHealthChecker @Inject constructor(
             text.contains("超时") || text.contains("InterruptedException") -> "插件超时没返回"
             text.contains("not a function") -> "插件内部报错（函数不存在）"
             text.contains("UnknownHost") || text.contains("Unable to resolve host") -> "连不上源站"
-            else -> text.take(80)
+            text.contains("status code -1") || text.contains("Request failed with status code -1") ->
+                "网络请求失败（重定向或 TLS 被源站拒）"
+            text.contains("429") -> "请求被源站限流（429）"
+            text.contains("403") -> "源站拒绝访问（403）"
+            text.contains("404") -> "接口不存在（404）"
+            text.contains("timeout", ignoreCase = true) -> "源站响应超时"
+            text.contains("SocketTimeout") -> "源站响应超时"
+            text.contains("SSL") || text.contains("Certificate") -> "证书校验失败"
+            text.contains("url is required") -> "插件请求没给地址"
+            text.contains("Missing") -> "插件缺少接口实现"
+            text.contains("unsupported") || text.contains("Unsupported") -> "插件不支持这个操作"
+            text.length > 60 -> text.take(60) + "…"
+            else -> text
         }
     }
 

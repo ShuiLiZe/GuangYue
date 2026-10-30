@@ -1,4 +1,4 @@
-package com.guangyue.core.plugin
+﻿package com.guangyue.core.plugin
 
 /**
  * Result of one plugin invocation, as produced inside QuickJS.
@@ -162,6 +162,34 @@ internal object HostBridge {
     }
     return out;
   };
+  // 0.0.8：插件用 `new TextDecoder('gbk'|'utf-8').decode(bytes)` 转码（73DJ 等站点回 GBK 页面）。
+  // QuickJS 里没有 TextDecoder，这里补一个：utf-8 用 __gy_utf8Decode（纯 JS），
+  // 其它编码（gbk/gb18030/big5）交给宿主，宿主那侧才有 Charset。
+  G.__gy_decodeBytes = function (codec, bytes) {
+    var u8;
+    if (bytes instanceof Uint8Array) u8 = bytes;
+    else if (bytes && typeof bytes.length === 'number') u8 = new Uint8Array(bytes);
+    else u8 = new Uint8Array(0);
+    var name = String(codec || 'utf-8').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (name === '' || name === 'utf8' || name === 'unicode11utf8') return G.__gy_utf8Decode(u8);
+    var b64 = G.btoa(String.fromCharCode.apply(null, u8));
+    return G.__gy_text_in(b64, name);
+  };
+  G.TextDecoder = function (label) {
+    var codec = label || 'utf-8';
+    this.encoding = String(codec).toLowerCase();
+    this.decode = function (bytes) { return G.__gy_decodeBytes(codec, bytes); };
+  };
+  G.TextEncoder = function () {
+    this.encoding = 'utf-8';
+    this.encode = function (text) {
+      var s = String(text == null ? '' : text);
+      var enc = G.__gy_utf8Encode(s), u8 = new Uint8Array(enc.length);
+      for (var i = 0; i < enc.length; i++) u8[i] = enc.charCodeAt(i) & 0xff;
+      return u8;
+    };
+  };
+
 
   // ------------------------------------------------------------ URLSearchParams
   // QuickJS 没有 URLSearchParams / URL（浏览器/Node 才有）。0.0.7 体检里「快音」「36DJ」
@@ -445,12 +473,94 @@ internal object HostBridge {
   function attachChain(obj, err) { return gyChain(obj, err || null); }
   G.__gy_attachChain = attachChain;
 
-  function request(config) {
+  /**
+   * 0.0.8：`axios: url is required` 的三个真因，都在这里兜住——
+   *  1) `axios({ url, baseURL, ... })` 里 url 是相对路径（`/api/x`），要拼 baseURL；
+   *  2) `axios.get({ url: '...', params: ... })` —— 整个 config 当第一个参数传（不少插件这么写）；
+   *  3) `const http = axios.create({ baseURL, headers })` 之后 `http.get('/song')` ——
+   *     实例要继承 create 时给的 defaults。
+   * 另外把 axios 的 `transformResponse` / `validateStatus` 交给桥层默认行为（已实现），
+   * 不再对 300/400 抛「未捕获」。
+   */
+  function encodeUrlSafely(url) {
+    var out = '';
+    for (var i = 0; i < url.length; i++) {
+      var ch = url.charAt(i);
+      var code = url.charCodeAt(i);
+      if (code < 128) { out += ch; continue; }
+      // 保留已经是 %XX 的序列，其余非 ASCII 一律按 UTF-8 百分号编码。
+      try { out += encodeURIComponent(ch); } catch (e) { out += ch; }
+    }
+    // 空格在 path/query 里也常出现
+    out = out.replace(/ /g, '%20');
+    // 已经存在的百分号序列不能被二次编码（encodeURIComponent 只会处理非 ASCII，安全）
+    return out;
+  }
+
+  function resolveUrl(config, baseURL) {
+    var url = config.url;
+    if (url === undefined || url === null || url === '') return '';
+    url = String(url);
+    var base = config.baseURL || baseURL || '';
+    if (base && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url)) {
+      if (url.charAt(0) !== '/') url = '/' + url;
+      // base 去掉末尾斜杠，避免 // 出现（个别源站 301 到 404）
+      while (base.length > 1 && base.charAt(base.length - 1) === '/') base = base.slice(0, -1);
+      url = base + url;
+    }
+    return url;
+  }
+
+  function request(config, defaults) {
+    defaults = defaults || {};
     if (typeof config === 'string') config = { url: config };
     config = config || {};
+    // 合并 defaults：headers 深一层，其余浅覆盖
+    var merged = {};
+    var k;
+    for (k in defaults) if (Object.prototype.hasOwnProperty.call(defaults, k)) merged[k] = defaults[k];
+    for (k in config) if (Object.prototype.hasOwnProperty.call(config, k)) merged[k] = config[k];
+    if (defaults.headers || config.headers) {
+      var hs = {};
+      var hsrc = [defaults.headers, config.headers];
+      for (var hi = 0; hi < hsrc.length; hi++) {
+        var hh = hsrc[hi] || {};
+        for (var hk in hh) {
+          if (!Object.prototype.hasOwnProperty.call(hh, hk)) continue;
+          // axios 的默认头挂在 headers.common / headers.get 下，拍平
+          var hv = hh[hk];
+          if (hv && typeof hv === 'object' && !(hv instanceof GyURLSearchParams)) {
+            for (var sk in hv) {
+              if (Object.prototype.hasOwnProperty.call(hv, sk)) hs[sk] = hv[sk];
+            }
+          } else {
+            hs[hk] = hv;
+          }
+        }
+      }
+      merged.headers = hs;
+    }
+    config = merged;
+
+    // 0.0.8：个别插件把完整地址放在 `params` 里再配一个 baseURL，url 本身为空；
+    // 先把字符串形式的 params 当候选地址试一次，真拼不上再报 url 缺失。
+    if ((config.url === undefined || config.url === null || config.url === '') &&
+        typeof config.params === 'string' && /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(config.params)) {
+      config.url = config.params;
+      config.params = null;
+    }
     var method = String(config.method || 'get').toUpperCase();
-    var url = config.url;
-    if (!url) throw new Error('axios: url is required');
+    var url = resolveUrl(config, defaults.baseURL);
+    if (!url) {
+      // 不再粗暴 throw（那样 .catch 接不住）；返回一条带校验错误的链，插件能 catch 看到。
+      var missErr = new Error('axios: url is required');
+      missErr.config = config;
+      return attachChain({ status: 0, statusText: 'axios: url is required', headers: {}, data: null, config: config }, missErr);
+    }
+
+    // 0.0.8：URL 里带中文/空格时 OkHttp 会直接抛 `bad url`（status -1），这里统一做一次安全编码。
+    url = encodeUrlSafely(url);
+
 
     var params = config.params;
     // 插件常把 URLSearchParams 实例当 params/data 传（快音、36DJ 就这样）
@@ -461,14 +571,14 @@ internal object HostBridge {
     }
     if (params && typeof params === 'object') {
       var pairs = [];
-      for (var k in params) {
-        if (!Object.prototype.hasOwnProperty.call(params, k)) continue;
-        var v = params[k];
+      for (var k2 in params) {
+        if (!Object.prototype.hasOwnProperty.call(params, k2)) continue;
+        var v = params[k2];
         if (v === undefined || v === null) continue;
         if (Object.prototype.toString.call(v) === '[object Array]') {
-          for (var i = 0; i < v.length; i++) pairs.push(encodeURIComponent(k) + '=' + encodeURIComponent(v[i]));
+          for (var i = 0; i < v.length; i++) pairs.push(encodeURIComponent(k2) + '=' + encodeURIComponent(v[i]));
         } else {
-          pairs.push(encodeURIComponent(k) + '=' + encodeURIComponent(v));
+          pairs.push(encodeURIComponent(k2) + '=' + encodeURIComponent(v));
         }
       }
       if (pairs.length) url += (url.indexOf('?') >= 0 ? '&' : '?') + pairs.join('&');
@@ -476,16 +586,20 @@ internal object HostBridge {
 
     var data = config.data;
     if (data !== undefined && data !== null && typeof data !== 'string') {
-      try { data = JSON.stringify(data); } catch (e) { data = String(data); }
+      if (data instanceof GyURLSearchParams) {
+        data = data.toString();
+      } else {
+        try { data = JSON.stringify(data); } catch (e) { data = String(data); }
+      }
     }
 
     var headers = config.headers || {};
     var flatHeaders = {};
     for (var h in headers) {
       if (!Object.prototype.hasOwnProperty.call(headers, h)) continue;
-      var hv = headers[h];
-      if (hv === undefined || hv === null) continue;
-      flatHeaders[h] = String(hv);
+      var hv2 = headers[h];
+      if (hv2 === undefined || hv2 === null) continue;
+      flatHeaders[h] = String(hv2);
     }
 
     var payload = JSON.stringify({
@@ -509,46 +623,116 @@ internal object HostBridge {
       return attachChain({ status: 0, headers: {}, data: null, config: config }, netErr);
     }
     var response = makeResponse(raw);
+    // 0.0.8：`responseType: 'arraybuffer'` 时插件要的是二进制（封面、音频头、魔数校验）。
+    // 宿主回的是 Base64 文本，这里在 JS 里自己解成 Uint8Array —— 不能让 Kotlin 直接给
+    // ByteArray，那要经 JSON.stringify，会走到 android.util.Base64 那条通路（JVM 单测里是桩）。
+    var __rt = config.responseType;
+    if (typeof response.data === 'string' && (__rt === 'arraybuffer' || __rt === 'buffer' || __rt === 'blob')) {
+      var __bin = G.__gy_atob(response.data);
+      var __u8 = new Uint8Array(__bin.length);
+      for (var __bi = 0; __bi < __bin.length; __bi++) __u8[__bi] = __bin.charCodeAt(__bi) & 0xff;
+      response.data = __u8;
+      response.bytes = __u8;
+      response.buffer = __u8.buffer;
+    }
     var status = response.status;
-    if (status >= 200 && status < 300) return response;
-    if (status >= 300 && status < 400) return response;
-    // HTTP 非 2xx/3xx 同理：回一个带错误链的响应，让插件的 .catch 能处理。
-    var httpErr = new Error('Request failed with status code ' + status);
+    // 0.0.8：`validateStatus` 交给插件——默认 2xx/3xx 成功；插件显式给了就按它的判。
+    var ok = status >= 200 && status < 400;
+    if (typeof config.validateStatus === 'function') {
+      try { ok = !!config.validateStatus(status); } catch (e) { /* 用默认 */ }
+    }
+    if (status === 0) ok = false;
+    if (ok) return response;
+    // HTTP 非成功同理：回一个带错误链的响应，让插件的 .catch 能处理。
+    // 0.0.8：status<=0 表示根本没拿到 HTTP 响应（连不上/超时/证书/被拦截），此时 statusText 里是我们写的人话原因，带上它。
+    var httpErr = new Error(
+      status > 0
+        ? 'Request failed with status code ' + status
+        : (response.statusText ? String(response.statusText) + '（status ' + status + '）' : '请求失败（status ' + status + '）')
+    );
     httpErr.response = response;
     httpErr.config = config;
     return attachChain(response, httpErr);
   }
 
-  function axios(config) { return request(config); }
-  axios.request = request;
-  axios.get = function (url, config) {
-    config = config || {};
-    config.url = url; config.method = 'get';
-    return request(config);
-  };
-  axios.delete = function (url, config) {
-    config = config || {}; config.url = url; config.method = 'delete';
-    return request(config);
-  };
-  axios.head = function (url, config) {
-    config = config || {}; config.url = url; config.method = 'head';
-    return request(config);
-  };
-  axios.post = function (url, data, config) {
-    config = config || {}; config.url = url; config.method = 'post'; config.data = data;
-    return request(config);
-  };
-  axios.put = function (url, data, config) {
-    config = config || {}; config.url = url; config.method = 'put'; config.data = data;
-    return request(config);
-  };
-  axios.patch = function (url, data, config) {
-    config = config || {}; config.url = url; config.method = 'patch'; config.data = data;
-    return request(config);
-  };
-  axios.defaults = { headers: { common: {} } };
-  axios.create = function () { return axios; };
-  axios.all = function (arr) { return arr; };
+  function makeAxios(defaults) {
+    var inst = function (config) { return request(config, defaults); };
+    inst.request = function (config) { return request(config, defaults); };
+    // 0.0.8：`axios.get({ url, params })` 与 `axios.get('/x', { params })` 两种都认
+    function withUrl(method, urlOrConfig, config) {
+      if (urlOrConfig && typeof urlOrConfig === 'object' && !(urlOrConfig instanceof GyURLSearchParams)) {
+        var c = {};
+        var k3;
+        for (k3 in urlOrConfig) if (Object.prototype.hasOwnProperty.call(urlOrConfig, k3)) c[k3] = urlOrConfig[k3];
+        c.method = method;
+        return request(c, defaults);
+      }
+      config = config || {};
+      var c2 = {};
+      var k4;
+      for (k4 in config) if (Object.prototype.hasOwnProperty.call(config, k4)) c2[k4] = config[k4];
+      c2.url = urlOrConfig;
+      c2.method = method;
+      return request(c2, defaults);
+    }
+    inst.get = function (a, b) { return withUrl('get', a, b); };
+    inst.delete = function (a, b) { return withUrl('delete', a, b); };
+    inst.head = function (a, b) { return withUrl('head', a, b); };
+    inst.options = function (a, b) { return withUrl('options', a, b); };
+    inst.post = function (url, data, config) {
+      if (url && typeof url === 'object') {
+        var c = {}; var k5;
+        for (k5 in url) if (Object.prototype.hasOwnProperty.call(url, k5)) c[k5] = url[k5];
+        c.method = 'post';
+        return request(c, defaults);
+      }
+      config = config || {};
+      var c2 = {}; var k6;
+      for (k6 in config) if (Object.prototype.hasOwnProperty.call(config, k6)) c2[k6] = config[k6];
+      c2.url = url; c2.method = 'post'; c2.data = data;
+      return request(c2, defaults);
+    };
+    inst.put = function (url, data, config) { return inst.post(url, data, config); };
+    inst.patch = function (url, data, config) {
+      var r = inst.post(url, data, config);
+      return r;
+    };
+    inst.put = function (url, data, config) {
+      if (url && typeof url === 'object') {
+        var c = {}; var k7;
+        for (k7 in url) if (Object.prototype.hasOwnProperty.call(url, k7)) c[k7] = url[k7];
+        c.method = 'put';
+        return request(c, defaults);
+      }
+      config = config || {};
+      var c2 = {}; var k8;
+      for (k8 in config) if (Object.prototype.hasOwnProperty.call(config, k8)) c2[k8] = config[k8];
+      c2.url = url; c2.method = 'put'; c2.data = data;
+      return request(c2, defaults);
+    };
+    inst.defaults = defaults;
+    inst.interceptors = {
+      request: { use: function () { return 0; }, eject: function () {} },
+      response: { use: function () { return 0; }, eject: function () {} }
+    };
+    var baseURL = defaults.baseURL || '';
+    inst.create = function (extra) {
+      var merged = {}; var k9;
+      for (k9 in defaults) if (Object.prototype.hasOwnProperty.call(defaults, k9)) merged[k9] = defaults[k9];
+      extra = extra || {};
+      for (k9 in extra) if (Object.prototype.hasOwnProperty.call(extra, k9)) merged[k9] = extra[k9];
+      if (!merged.baseURL) merged.baseURL = baseURL;
+      var child = makeAxios(merged);
+      // 实例本身也是函数：`api({url})`
+      return child;
+    };
+    inst.all = function (arr) { return arr; };
+    inst.spread = function (fn) { return function (arr) { return fn.apply(null, arr); }; };
+    inst.isAxiosError = function (e) { return !!(e && e.config); };
+    return inst;
+  }
+
+  var axios = makeAxios({ headers: { common: { Accept: 'application/json, text/plain, */*' } } });
   G.axios = axios;
 
   // ---------------------------------------------------------------- utils

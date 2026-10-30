@@ -14,6 +14,7 @@ import com.guangyue.core.plugin.PluginManager
 import com.guangyue.core.plugin.PluginMeta
 import com.guangyue.core.plugin.SearchType
 import com.guangyue.core.plugin.UpdateCheck
+import com.guangyue.core.prefs.AppPreferences
 import com.guangyue.feature.library.home.HomeTile
 import com.guangyue.feature.library.home.HomeTileKind
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,6 +26,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import javax.inject.Inject
 
 /**
@@ -41,10 +46,15 @@ class HomeViewModel @Inject constructor(
     db: GuangYueDatabase,
 ) : ViewModel() {
 
-    /** 已启用的插件，供「推荐/榜单」去拉数据，也用来决定空状态文案。 */
+    /** 已安装插件（只统计能当音源用的），供空状态文案判断。 */
     val enabledPlugins: StateFlow<List<PluginMeta>> =
-        plugins.plugins.map { list -> list.filter { it.enabled } }
+        plugins.plugins.map { list -> list.filter { it.error == null && it.hasSearch } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** 当前音源：全局唯一，决定首页「推荐 / 榜单」从哪个音源拉数据。 */
+    val currentSource: StateFlow<PluginMeta?> =
+        plugins.plugins.map { list -> list.firstOrNull { it.enabled && it.error == null } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** 本地歌单（推荐段的第一来源）。 */
     val playlistsFlow: StateFlow<List<HomeTile>> = playlists.playlists()
@@ -66,46 +76,72 @@ class HomeViewModel @Inject constructor(
     private val _loadingCharts = MutableStateFlow(false)
     val loadingCharts: StateFlow<Boolean> = _loadingCharts.asStateFlow()
 
-    /** 插件返回的榜单条目（按标题缓存），点「热门榜单」时用它播放。 */
+    /** 「热门榜单」区块是否显示：插件声明了 getTopLists 且真拉到了榜单才有。 */
+    private val _hasCharts = MutableStateFlow(false)
+    val hasCharts: StateFlow<Boolean> = _hasCharts.asStateFlow()
+
+    /** 插件返回的榜单条目（按 key 缓存），点「热门榜单」时用它播放。 */
     private val _chartItems = MutableStateFlow<Map<String, MusicItem>>(emptyMap())
     val chartItems: StateFlow<Map<String, MusicItem>> = _chartItems.asStateFlow()
 
     private var chartsLoaded = false
+    private var chartsFor: String? = null
 
     /**
-     * 拉一次榜单：每个已启用插件搜一个通用关键词，取第一页结果做成条目。
+     * 拉一次榜单：用当前音源的 `getTopLists()` 真数据。
      *
-     * 只在首屏调用一次；失败就保持空列表，让首页显示引导，不弹错误。
+     * 0.0.7 这里是「拿关键词『热歌』去 search」，既不是榜单、也会给每个插件都发一次请求。
+     * 0.0.8 改成只问**当前音源**要它的官方榜单；插件没实现 getTopLists（或返回空）就
+     * **不显示这个区块**，而不是塞假数据。
      */
     fun loadChartsIfNeeded() {
-        if (chartsLoaded) return
+        val source = currentSource.value ?: return
+        if (chartsLoaded && chartsFor == source.id) return
         chartsLoaded = true
+        chartsFor = source.id
         viewModelScope.launch {
-            val plugins = enabledPlugins.value
-            if (plugins.isEmpty()) return@launch
             _loadingCharts.value = true
-            val tiles = mutableListOf<HomeTile>()
+            _hasCharts.value = false
+            _charts.value = emptyList()
+            if (!source.hasTopLists) {
+                _loadingCharts.value = false
+                return@launch
+            }
             val items = mutableMapOf<String, MusicItem>()
-            plugins.take(6).forEach { plugin ->
-                val hits = runCatching {
-                    bridge.search(plugin.id, "热歌", 1, SearchType.MUSIC).items
-                }.getOrDefault(emptyList())
-                hits.take(6).forEach { item ->
-                    val key = "chart:${plugin.id}:${item.title}:${item.displayArtist}"
-                    if (!items.containsKey(key)) {
-                        items[key] = item
-                        tiles += HomeTile(
-                            key = key,
-                            title = item.title,
-                            subtitle = item.displayArtist.ifBlank { plugin.displayName },
-                            artwork = item.artwork,
-                            kind = HomeTileKind.TRACK,
-                        )
-                    }
+            val tiles = mutableListOf<HomeTile>()
+            val boards = runCatching { bridge.getTopLists(source.id) }.getOrDefault(emptyList())
+            for (board in boards) {
+                // getTopLists 返回的是树形结构：每个 board 可能自己带一排子榜单（data 数组），
+                // 子项才是能喂给 getTopListDetail 的那一条。
+                val children = (board["data"] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
+                val leaves = if (children.isNotEmpty() && children.first().containsKey("id")) children
+                else listOf(board)
+                for (leaf in leaves) {
+                    val title = (leaf["title"] as? JsonPrimitive)?.contentOrNull
+                        ?: (leaf["name"] as? JsonPrimitive)?.contentOrNull
+                        ?: "排行榜"
+                    val songs = runCatching { bridge.getTopListDetail(source.id, leaf, 1) }
+                        .getOrDefault(emptyList())
+                    if (songs.isEmpty()) continue
+                    val top = songs.first()
+                    val key = "board:" + board["id"].let { (it as? JsonPrimitive)?.contentOrNull.orEmpty() } +
+                        ":" + leaf["id"].let { (it as? JsonPrimitive)?.contentOrNull.orEmpty() } +
+                        ":" + leaf["page"].let { (it as? JsonPrimitive)?.contentOrNull.orEmpty() }
+                    items[key] = top
+                    tiles += HomeTile(
+                        key = key,
+                        title = title,
+                        subtitle = songs.take(3).joinToString(" / ") { it.title },
+                        artwork = top.artwork,
+                        kind = HomeTileKind.STATION,
+                    )
+                    if (tiles.size >= 8) break
                 }
+                if (tiles.size >= 8) break
             }
             _chartItems.value = items
             _charts.value = tiles
+            _hasCharts.value = tiles.isNotEmpty()
             _loadingCharts.value = false
         }
     }
@@ -126,42 +162,59 @@ class HomeViewModel @Inject constructor(
     /**
      * 点开一个首页 / 歌单卡片后播放它。
      *
-     * 歌单卡片取该歌单的曲目；单曲卡片（榜单、最近播放）从榜单缓存里补齐来源信息。
-     * 拿不到曲目时不回调，由界面保持原状。
+     * 歌单卡片取该歌单的曲目；**榜单卡片**重新找当前音源把整张榜单的曲目拉一次（而不是只播
+     * 缓存里那一首）；最近播放的曲目走本地库。
      */
     fun playTracksOf(tile: HomeTile, onReady: (List<TrackEntity>, Int) -> Unit) {
         viewModelScope.launch {
             val list = when (tile.kind) {
                 HomeTileKind.PLAYLIST -> {
                     val id = tile.key.substringAfter("playlist:").toLongOrNull()
-                    if (id == null) {
-                        emptyList()
-                    } else {
-                        runCatching { playlists.snapshot(id) }.getOrDefault(emptyList())
-                    }
+                    if (id == null) emptyList()
+                    else runCatching { playlists.snapshot(id) }.getOrDefault(emptyList())
                 }
-                HomeTileKind.TRACK, HomeTileKind.ALBUM, HomeTileKind.STATION -> {
-                    val item = _chartItems.value[tile.key]
-                    if (item == null) {
+                HomeTileKind.STATION -> tracksOfChart(tile)
+                HomeTileKind.TRACK, HomeTileKind.ALBUM -> {
+                    val cached = _chartItems.value[tile.key]
+                    if (cached == null) {
                         val key = tile.key.removePrefix("track:")
                         runCatching { listOfNotNull(tracks.byKey(key)) }.getOrDefault(emptyList())
                     } else {
-                        listOf(
-                            TrackEntity(
-                                key = "${item.platform}:${item.id}",
-                                title = item.title,
-                                artist = item.displayArtist,
-                                album = item.album.orEmpty(),
-                                artwork = item.artwork,
-                                source = item.platform,
-                            ),
-                        )
+                        listOf(cached.toEntity())
                     }
                 }
             }
             if (list.isNotEmpty()) onReady(list, 0)
         }
     }
+
+    /** 榜单卡片 → 整张榜单的曲目实体（当前音源重新拉一次）。 */
+    private suspend fun tracksOfChart(tile: HomeTile): List<TrackEntity> {
+        val source = currentSource.value ?: return emptyList()
+        val parts = tile.key.removePrefix("board:").split(":")
+        if (parts.size < 2) return emptyList()
+        val boardId = parts[0]
+        val leafId = parts[1]
+        val page = parts.getOrNull(2)?.toIntOrNull() ?: 1
+        val boards = runCatching { bridge.getTopLists(source.id) }.getOrDefault(emptyList())
+        val leaf = boards.firstOrNull { o -> (o["id"] as? JsonPrimitive)?.contentOrNull == boardId }
+            ?.let { b -> (b["data"] as? JsonArray)?.mapNotNull { it as? JsonObject }?.firstOrNull {
+                (it["id"] as? JsonPrimitive)?.contentOrNull == leafId
+            } }
+            ?: return listOfNotNull(_chartItems.value[tile.key]?.toEntity())
+        return runCatching { bridge.getTopListDetail(source.id, leaf, page) }
+            .getOrDefault(emptyList())
+            .map { it.toEntity() }
+    }
+
+    private fun MusicItem.toEntity() = TrackEntity(
+        key = "${platform}:${id}",
+        title = title,
+        artist = displayArtist,
+        album = album.orEmpty(),
+        artwork = artwork,
+        source = platform,
+    )
 
     private fun PlaylistEntity.toTile() = HomeTile(
         key = "playlist:$id",
@@ -184,6 +237,7 @@ class HomeViewModel @Inject constructor(
 class PluginViewModel @Inject constructor(
     private val manager: PluginManager,
     private val checker: com.guangyue.core.plugin.PluginHealthChecker,
+    private val prefs: AppPreferences,
 ) : ViewModel() {
 
     val plugins: StateFlow<List<PluginMeta>> = manager.plugins
@@ -207,6 +261,33 @@ class PluginViewModel @Inject constructor(
     private fun say(text: String, details: String? = null) {
         _message.value = text
         _messageDetails.value = details
+    }
+
+    /** 0.0.8：当前音源（全局唯一）。 */
+    val currentSource: StateFlow<String> =
+        manager.plugins.map { list -> list.firstOrNull { it.enabled && it.error == null }?.id.orEmpty() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+
+    /** 「隐藏不可用」筛选状态：只看体检通过、或还没体检的音源。 */
+    private val _hideUnavailable = MutableStateFlow(false)
+    val hideUnavailable: StateFlow<Boolean> = _hideUnavailable.asStateFlow()
+
+    fun toggleHideUnavailable() {
+        _hideUnavailable.value = !_hideUnavailable.value
+    }
+
+    /** 选一个音源作为当前音源（单选；持久化在 [AppPreferences.currentSourceId]，与搜索页同步）。 */
+    fun selectSource(id: String) {
+        viewModelScope.launch {
+            manager.setCurrentSource(id)
+            prefs.currentSourceId = id
+            _message.value = "已切换到「${manager.find(id)?.displayName ?: id}」"
+        }
+    }
+
+    /** 排序：把插件移到第 [to] 位（0 基）。0.0.8 起排序收进每行的「⋯」菜单。 */
+    fun moveTo(id: String, to: Int) {
+        viewModelScope.launch { manager.moveTo(id, to) }
     }
 
     init {
@@ -340,55 +421,29 @@ class PluginViewModel @Inject constructor(
         }
     }
 
-    /** 全选 / 全不选。 */
-    fun setAllEnabled(enabled: Boolean) {
-        viewModelScope.launch { manager.setAllEnabled(enabled) }
+    /** 全选 / 全不选。0.0.8 已无多选，保留给旧调用点，实际等同于「选第一个 / 一个都不选」。 */
+    suspend fun setAllEnabledCompat(enabled: Boolean) {
+        if (enabled) manager.plugins.value.firstOrNull()?.let { manager.setCurrentSource(it.id) }
+        else manager.clearCurrentSource()
     }
 
     /**
-     * 一键「只启用体检可用的」。
+     * 体检全部已安装插件（真搜一次 + 真取一次播放地址）。
      *
-     * 只用打包进来的出厂体检基线（[com.guangyue.core.plugin.PluginHealthBaseline]）判断，
-     * 不在这里联网跑 57 个插件——那是 [recheckAll] 的事。
+     * 0.0.8 起体检覆盖所有插件而不是「已启用的」——插件页每行的状态标签就来自这份结果。
      */
-    fun enableHealthyOnly() = run {
-        _busy.value = true
-        viewModelScope.launch {
-            try {
-                val (on, total) = manager.enableHealthyOnly()
-                say(
-                    if (on == 0) {
-                        "没有体检通过的音源。点「体检」实测一遍，或先安装官方音源"
-                    } else {
-                        "已启用 $on 个体检可用的音源（共 $total 个）"
-                    }
-                )
-            } catch (t: Throwable) {
-                say("操作失败：" + (t.message ?: t.javaClass.simpleName))
-            } finally {
-                _busy.value = false
-            }
-        }
-    }
-
-    /** 拖动排序：把插件拖到第 [to] 位（0 基）。 */
-    fun moveTo(id: String, to: Int) {
-        viewModelScope.launch { manager.moveTo(id, to) }
-    }
-
-    /** 在设备上实测所有已启用插件（真搜一次 + 真取一次播放地址）。 */
-    fun recheckAll(markEnabled: Boolean = false) = run {
+    fun recheckAll() = run {
         requireIdle() ?: return@run
         _busy.value = true
         viewModelScope.launch {
             try {
-                val targets = manager.plugins.value.count { it.enabled && it.error == null }
+                val targets = manager.plugins.value.count { it.error == null }
                 if (targets == 0) {
-                    say("没有已启用的插件可以体检，先打开几个音源")
+                    say("还没有安装任何音源，先装一个")
                     return@launch
                 }
                 say("正在体检 $targets 个音源…")
-                val reports = checker.checkAll(markEnabled = markEnabled) { done, total, report ->
+                val reports = checker.checkAll { done, total, report ->
                     _message.value = "体检中 $done/$total：${report.name} → ${healthText(report.health)}"
                 }
                 val ok = reports.count { it.health == com.guangyue.core.plugin.PluginHealth.OK }

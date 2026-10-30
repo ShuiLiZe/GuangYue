@@ -1,4 +1,4 @@
-package com.guangyue.feature.search
+﻿package com.guangyue.feature.search
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -136,7 +136,7 @@ fun SearchScreen(
                     subtitle = "先在「我的 · 音源插件管理」里安装一个插件",
                     modifier = Modifier.padding(horizontal = GySpace.xl),
                 )
-                MiniSlot(bottomBar, miniPlayer)
+                MiniSlot(bottomBar, miniPlayer, alignBottom = true)
                 return@Column
             }
 

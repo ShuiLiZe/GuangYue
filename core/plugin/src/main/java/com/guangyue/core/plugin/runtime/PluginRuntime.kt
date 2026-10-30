@@ -1,4 +1,4 @@
-package com.guangyue.core.plugin.runtime
+﻿package com.guangyue.core.plugin.runtime
 
 import android.util.Log
 import com.dokar.quickjs.QuickJs
@@ -98,13 +98,22 @@ class PluginRuntime(
                 val level = args.getOrNull(0)?.let(::asBridgeText) ?: "log"
                 val msg = args.getOrNull(1)?.let(::asBridgeText) ?: ""
                 onLog?.invoke(level, msg)
-                Log.d(TAG, "[${meta.platform}] $level: $msg")
+                runCatching { Log.d(TAG, "[${meta.platform}] $level: $msg") }
                 ""
             }
 
             runtime.function("__gy_http") { args ->
                 val payload = args.getOrNull(0)?.let(::asBridgeText) ?: "{}"
                 performHttp(payload)
+            }
+            // 0.0.8：TextDecoder 的非 UTF-8 分支（gbk/gb18030/big5）交给宿主，宿主才有 Charset。
+            runtime.function("__gy_text_in") { args ->
+                val b64 = args.getOrNull(0)?.let(::asBridgeText) ?: ""
+                val codec = args.getOrNull(1)?.let(::asBridgeText) ?: "gbk"
+                runCatching {
+                    val bytes = java.util.Base64.getDecoder().decode(b64)
+                    String(bytes, java.nio.charset.Charset.forName(codec))
+                }.getOrElse { e -> "ERR:${e.message}" }
             }
 
             // 1) host bridge (CommonJS + axios + timers + console) – plain JS, no plugin code yet
@@ -288,19 +297,30 @@ class PluginRuntime(
         val responseType = (req["responseType"].asStr() ?: "json").lowercase()
         val timeoutMs = req["timeout"].asLong()?.takeIf { it > 0 } ?: 0L
         val body = req["body"].asStr()
+        // 0.0.8：部分插件（DJ 类）自己传了 `Accept-Encoding: gzip`，并要拿原始字节自己解压。
+        // OkHttp 默认透明解压，只有当调用方没显式设 Accept-Encoding 时才会解 —— 我们这里
+        // 统一「显式声明 gzip/br/deflate → 自己解」，并保证返回给插件的 headers 里
+        // Content-Encoding / Content-Length 与返回的 data 一致，避免插件拿到「已解压的字节
+        // 却被告知是 gzip」或相反。
+        val explicitEncoding = req["headers"].asObj()?.entries
+            ?.firstOrNull { it.key.equals("accept-encoding", ignoreCase = true) }
+            ?.value?.asStr()
 
         val builder = Request.Builder().url(url).header("User-Agent", UA)
         req["headers"].asObj()?.forEach { (k, v) ->
             v.asStr()?.let { runCatching { builder.header(k, it) } }
         }
-
-        val httpClient = if (timeoutMs > 0) {
-            http.newBuilder()
-                .callTimeout(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
-                .build()
-        } else {
-            http
+        // 重定向由 OkHttp 默认跟随（GET 跨域也跟，最多 20 跳）；这里不再覆写，
+        // 0.0.7 里 7 个源报 -1 的既有重定向也有 TLS/超时，见下面 httpClient 的超时设置。
+        if (explicitEncoding.isNullOrBlank()) {
+            // 让 OkHttp 负责解压（它会在解压后把 Content-Encoding / Content-Length 去掉）。
+            builder.header("Accept-Encoding", "gzip")
         }
+
+        val httpClient = http.newBuilder()
+            .connectTimeout(if (timeoutMs > 0) timeoutMs else 20_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .readTimeout(if (timeoutMs > 0) timeoutMs else 30_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .build()
 
         val request = try {
             if (method == "GET" || method == "HEAD") {
@@ -317,11 +337,16 @@ class PluginRuntime(
 
         return try {
             httpClient.newCall(request).execute().use { resp ->
-                val bytes = resp.body?.bytes() ?: ByteArray(0)
+                val rawBytes = resp.body?.bytes() ?: ByteArray(0)
+                // 手写解码：调用方自己声明了 Accept-Encoding 时，OkHttp 会把压缩字节原样给我们。
+                val bytes = inflateIfNeeded(resp.headers["Content-Encoding"], rawBytes)
                 val text = decode(resp.headers, bytes)
                 val dataJson: String = when (responseType) {
-                    "arraybuffer", "blob" -> JsonPrimitive(android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)).toString()
-                    "text" -> JsonPrimitive(text).toString()
+                    "arraybuffer", "blob", "buffer" -> JsonPrimitive(
+                        // 用 JDK 的 Base64：android.util.Base64 在 JVM 单测里是 not-mocked 桩，
+                        // 会让所有 resultbuffer 插件在体检里假失败。java.util.Base64 在 Android(26+) 一样可用。
+                        java.util.Base64.getEncoder().encodeToString(bytes),
+                    ).toString()
                     else -> {
                         val trimmed = text.trim()
                         if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
@@ -336,9 +361,13 @@ class PluginRuntime(
                 buildString {
                     append("{\"status\":").append(resp.code)
                     append(",\"statusText\":").append(JsonPrimitive(resp.message))
+                    append(",\"finalUrl\":").append(JsonPrimitive(resp.request.url.toString()))
                     append(",\"headers\":{")
                     var first = true
                     for (name in resp.headers.names()) {
+                        // 已经解压过就不要再把 Content-Encoding / Content-Length 透给插件，
+                        // 否则插件里的 zlib.gunzip 会二次解压报「invalid stored block lengths」。
+                        if (name.equals("Content-Encoding", true) || name.equals("Content-Length", true)) continue
                         if (!first) append(',')
                         first = false
                         append(JsonPrimitive(name)).append(':').append(JsonPrimitive(resp.headers.values(name).joinToString(", ")))
@@ -347,10 +376,44 @@ class PluginRuntime(
                 }
             }
         } catch (e: IOException) {
-            onHttp?.invoke(method, url, -1, System.currentTimeMillis() - started)
-            netError(e.message ?: "network error", -1, started, url)
+            // 0.0.8 诊断：把真实失败原因和地址带出去，别只留一句 `status code -1`。
+            runCatching { Log.w(TAG, "HTTP -1 ${method} ${url} => ${e.javaClass.simpleName}: ${e.message}") }
+            netError(describeNetworkError(e), -1, started, url)
         } catch (e: Throwable) {
             netError(e.message ?: "network error", -1, started, url)
+        }
+    }
+
+    /** 把 OkHttp 的 IOException 说人话：连不上 / 超时 / 证书 / 重定向 / DNS。 */
+    private fun describeNetworkError(e: IOException): String {
+        val reason = e.message ?: ""
+        return when {
+            e is java.net.UnknownHostException -> "域名解析失败：$reason"
+            e is java.net.SocketTimeoutException -> "请求超时：$reason"
+            e is javax.net.ssl.SSLException -> "HTTPS 证书/TLS 握手失败：$reason"
+            e is java.net.ConnectException -> "连不上服务器：$reason"
+            reason.contains("too many redirects", ignoreCase = true) -> "重定向次数过多：$reason"
+            reason.contains("unwrap", ignoreCase = true) || reason.contains("unexpected end of stream", ignoreCase = true) ->
+                "响应被截断（可能被防盗链/代理改写）：$reason"
+            else -> reason.ifBlank { "网络错误（${e.javaClass.simpleName}）" }
+        }
+    }
+    /** 按 `Content-Encoding` 解 gzip / deflate / br；解不开就原样返回（不因为解压失败丢数据）。 */
+    private fun inflateIfNeeded(encoding: String?, bytes: ByteArray): ByteArray {
+        if (encoding.isNullOrBlank() || bytes.isEmpty()) return bytes
+        val enc = encoding.lowercase()
+        if (enc.contains("identity")) return bytes
+        return try {
+            val input = when {
+                enc.contains("gzip") -> java.util.zip.GZIPInputStream(bytes.inputStream())
+                enc.contains("br") -> throw IllegalStateException("br")
+                enc.contains("deflate") -> java.util.zip.InflaterInputStream(bytes.inputStream())
+                else -> return bytes
+            }
+            input.use { it.readBytes() }
+        } catch (e: Throwable) {
+            // br 需要 brotli 解码器（未内置）；此时宁可把原始字节给插件，也不让请求整体失败。
+            bytes
         }
     }
 

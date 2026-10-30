@@ -24,11 +24,13 @@ import com.guangyue.feature.library.home.HomeTile
 import com.guangyue.feature.library.screen.AboutScreen
 import com.guangyue.feature.library.screen.DownloadScreen
 import com.guangyue.feature.library.screen.LicensesScreen
+import com.guangyue.feature.library.screen.LxSourceScreen
 import com.guangyue.feature.library.screen.PluginManagerScreen
 import com.guangyue.feature.library.screen.ProfileScreen
 import com.guangyue.feature.library.screen.SettingsScreen
 import com.guangyue.feature.library.viewmodel.DownloadViewModel
 import com.guangyue.feature.library.viewmodel.HomeViewModel
+import com.guangyue.feature.library.viewmodel.LxViewModel
 import com.guangyue.feature.library.viewmodel.PluginViewModel
 import com.guangyue.feature.player.lyrics.LyricFlowScreen
 import com.guangyue.feature.player.lyrics.LyricStageScreen
@@ -52,6 +54,9 @@ object Routes {
     const val SETTINGS = "settings"
     const val LICENSES = "licenses"
     const val ABOUT = "about"
+
+    /** 取链源（洛雪自定义源）管理页。 */
+    const val LX_SOURCES = "lxSources"
 }
 
 /**
@@ -214,6 +219,8 @@ fun GuangYueNavHost(
             val messageDetails by vm.messageDetails.collectAsStateWithLifecycle()
             val subscriptions by vm.subscriptions.collectAsStateWithLifecycle()
             val batch by vm.batchProgress.collectAsStateWithLifecycle()
+            val currentSource by vm.currentSource.collectAsStateWithLifecycle()
+            val hideUnavailable by vm.hideUnavailable.collectAsStateWithLifecycle()
             val ctx = LocalContext.current
             PluginManagerScreen(
                 plugins = plugins,
@@ -232,21 +239,50 @@ fun GuangYueNavHost(
                     }
                 },
                 onInstallUrl = { url -> vm.installFromUrl(url) },
-                onToggle = { plugin, enabled -> vm.toggle(plugin, enabled) },
+                onSelectSource = { plugin -> vm.selectSource(plugin.id) },
                 onDelete = { vm.delete(it) },
                 onCheckUpdate = { vm.checkUpdate(it) },
                 onBack = { navController.popBackStack() },
+                currentSourceId = currentSource,
                 subscriptions = subscriptions,
                 batchStage = batch.stage,
                 batchFraction = batch.fraction,
                 onInstallOfficial = { vm.installOfficial() },
                 onCheckAllUpdates = { vm.checkAllUpdates() },
-                onSetAllEnabled = { vm.setAllEnabled(it) },
                 onForgetSubscription = { vm.forgetSubscription(it) },
                 errorDetails = messageDetails,
-                onEnableHealthyOnly = { vm.enableHealthyOnly() },
                 onRecheckAll = { vm.recheckAll() },
                 onMove = { plugin, to -> vm.moveTo(plugin.id, to) },
+                hideUnavailable = hideUnavailable,
+                onToggleHideUnavailable = { vm.toggleHideUnavailable() },
+                onOpenLxSources = { navController.navigate(Routes.LX_SOURCES) },
+            )
+        }
+
+        // 取链源（洛雪自定义源）：插件取不到链时的第二出口，与搜索音源是两层不同的东西。
+        composable(Routes.LX_SOURCES) {
+            val vm: LxViewModel = hiltViewModel()
+            val sources by vm.sources.collectAsStateWithLifecycle()
+            val busy by vm.busy.collectAsStateWithLifecycle()
+            val message by vm.message.collectAsStateWithLifecycle()
+            val details by vm.errorDetails.collectAsStateWithLifecycle()
+            val quality by vm.quality.collectAsStateWithLifecycle()
+            LxSourceScreen(
+                sources = sources,
+                busy = busy,
+                message = message,
+                errorDetails = details,
+                onBack = { navController.popBackStack() },
+                onInstallCode = { code, src -> vm.installFromCode(code, src) },
+                onInstallUrl = { url -> vm.installFromUrl(url) },
+                onInstallUri = { uri -> vm.installFromUri(uri) },
+                onToggle = { source, on -> vm.toggle(source, on) },
+                onDelete = { vm.delete(it) },
+                onRecheck = { vm.recheck(it) },
+                onRecheckAll = { vm.recheckAll() },
+                onMove = { source, to -> vm.move(source, to) },
+                defaultQuality = quality,
+                onPickQuality = { vm.pickQuality(it) },
             )
         }
 
@@ -275,11 +311,15 @@ fun GuangYueNavHost(
         }
 
         composable(Routes.SETTINGS) {
+            val lxVm: LxViewModel = hiltViewModel()
+            val lxQuality by lxVm.quality.collectAsStateWithLifecycle()
             SettingsScreen(
                 darkMode = darkMode,
                 onDarkModeChange = onDarkModeChange,
                 onOpenLicenses = { navController.navigate(Routes.LICENSES) },
                 onBack = { navController.popBackStack() },
+                lxQuality = lxQuality,
+                onPickLxQuality = { lxVm.pickQuality(it) },
             )
         }
 

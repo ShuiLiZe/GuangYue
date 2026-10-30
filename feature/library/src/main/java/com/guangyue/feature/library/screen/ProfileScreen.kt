@@ -1,4 +1,4 @@
-package com.guangyue.feature.library.screen
+﻿package com.guangyue.feature.library.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -163,7 +163,7 @@ fun ProfileScreen(
                     ) {
                         com.guangyue.feature.library.design.FoliaRow(
                             label = "音源插件管理",
-                            hint = "安装、启用、更新音源插件",
+                            hint = "装音源、选当前音源、看体检结果",
                             first = true,
                             leading = {
                                 Icon(
@@ -245,7 +245,7 @@ fun ProfileScreen(
                         )
                         com.guangyue.feature.library.design.FoliaRow(
                             label = "关于广乐",
-                            hint = "0.0.6",
+                            hint = "0.0.8",
                             leading = {
                                 Icon(
                                     GuangYueIcons.Info,

@@ -9,10 +9,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,8 +35,30 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.guangyue.feature.library.design.icons.GuangYueIcons
+
+/**
+ * 系统栏高度（px）：状态栏与刘海取大者、手势条、左右刘海。
+ *
+ * 0.0.8 起全 App 走 edge-to-edge（`enableEdgeToEdge()` 已在 MainActivity 调用），每一页
+ * 自己负责把内容放进安全区。`safeDrawing` 已包含 statusBars / IME / navigationBars；
+ * 横屏时刘海在左右，再与 `displayCutout` 取大值兜底。
+ */
+data class FoliaInsets(val top: Int, val bottom: Int, val left: Int, val right: Int)
+
+@Composable
+fun rememberFoliaInsets(): FoliaInsets {
+    val safe = WindowInsets.safeDrawing.asPaddingValues()
+    val cutout = WindowInsets.displayCutout.asPaddingValues()
+    return FoliaInsets(
+        top = maxOf(safe.calculateTopPadding(), cutout.calculateTopPadding()).value.toInt(),
+        bottom = safe.calculateBottomPadding().value.toInt(),
+        left = maxOf(safe.calculateLeftPadding(LayoutDirection.Ltr), cutout.calculateLeftPadding(LayoutDirection.Ltr)).value.toInt(),
+        right = maxOf(safe.calculateRightPadding(LayoutDirection.Ltr), cutout.calculateRightPadding(LayoutDirection.Ltr)).value.toInt(),
+    )
+}
 
 /**
  * 页面的顶部标题。
@@ -38,6 +66,9 @@ import com.guangyue.feature.library.design.icons.GuangYueIcons
  * Folia 的标题在窗口标题栏（Electron 去掉的），手机上改成页内标题：字重 semibold、
  * 20/32（`PageHeader.tsx` 的 `text-xl font-semibold leading-8`），左 16dp（`pl-4`）。
  * 二级页的返回键是 32dp 圆角方块（`h-8 w-8 rounded-lg`），图标 16dp，与 Folia 关闭钮同规格。
+ *
+ * 0.0.8：顶部自动避开状态栏 / 刘海（`WindowInsets.statusBars` ∪ `displayCutout`），
+ * 否则标题会和状态栏时间重叠（0.0.7 真机截图就是这么被压住的）。
  */
 @Composable
 fun FoliaTopBar(
@@ -47,13 +78,17 @@ fun FoliaTopBar(
     serif: Boolean = true,
     actions: @Composable (() -> Unit)? = null,
 ) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val cutoutTop = WindowInsets.displayCutout.asPaddingValues().calculateTopPadding()
+    val safeTop = maxOf(statusTop, cutoutTop)
     Row(
         modifier = modifier
             .fillMaxWidth()
             .padding(
                 start = if (onBack != null) GySpace.xs else GySpace.pageH,
                 end = GySpace.l,
-                top = GySpace.pageH,
+                top = safeTop + GySpace.pageH,
                 bottom = GySpace.s,
             ),
         verticalAlignment = Alignment.CenterVertically,
@@ -139,9 +174,12 @@ fun FoliaBottomNav(
     modifier: Modifier = Modifier,
 ) {
     val hairline = Gyp.hairline
+    // 底栏贴着屏幕底：手势条 / 三键导航的高度要补在底栏内部，否则按钮被手势条压住。
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .padding(bottom = navBottom)
             .then(Modifier.glassPanel(corner = 0.dp))
             .drawBehind {
                 drawRect(

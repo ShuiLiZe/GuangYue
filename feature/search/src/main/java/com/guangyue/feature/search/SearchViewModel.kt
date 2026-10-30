@@ -142,9 +142,13 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch { manager.load() }
         viewModelScope.launch {
             manager.plugins.collect { list ->
-                val selectable = list.filter { it.enabled && it.error == null && it.hasSearch }
+                // 0.0.8：搜索页顶部列出所有能搜的音源（已装、没装坏），
+                // 但全局只有一个是「当前音源」——列表里排在最前，选中即切换。
+                val selectable = list.filter { it.error == null && it.hasSearch }
+                val active = list.firstOrNull { it.enabled && it.error == null && it.hasSearch }
                 val keep = _state.value.sourceId.takeIf { id -> selectable.any { it.id == id } }
                     ?: prefs.lastSourceId.takeIf { id -> selectable.any { it.id == id } }
+                    ?: active?.id
                     ?: selectable.firstOrNull()?.id.orEmpty()
                 val previous = _state.value.sourceId
                 _state.value = _state.value.copy(
@@ -185,6 +189,9 @@ class SearchViewModel @Inject constructor(
         )
         prefs.lastSourceId = id
         forgetLoaded()
+        // 0.0.8：音源是全局单选——搜索页换音源要同时切换「当前音源」，
+        // 这样首页榜单、插件页的单选圈、取链都跟着变。
+        viewModelScope.launch { manager.setCurrentSource(id) }
         // 已经搜过就立刻用新音源重搜，避免用户以为「换了音源没反应」
         if (_state.value.query.isNotBlank()) search()
     }

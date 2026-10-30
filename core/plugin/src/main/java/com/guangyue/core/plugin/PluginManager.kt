@@ -87,6 +87,8 @@ class PluginManager @Inject constructor(
                 store.readCachedSource(sub.url)?.plugins?.map { CatalogEntry(it, sub.url) } ?: emptyList()
             }
         }
+        // 0.0.7 允许每个插件各自一个开关，升上来的旧数据可能同时启用十几个；这里收成一个。
+        coerceSingleSource()
     }
 
     fun enabled(): List<PluginMeta> = _plugins.value.filter { it.enabled && it.error == null }
@@ -572,6 +574,60 @@ class PluginManager @Inject constructor(
     suspend fun setEnabled(id: String, enabled: Boolean) = withContext(Dispatchers.IO) {
         val meta = find(id) ?: return@withContext
         upsert(meta.copy(enabled = enabled, updatedAt = System.currentTimeMillis()))
+        if (enabled) coerceCurrent(id)
+    }
+
+    /**
+     * 0.0.8：**唯一当前音源**。
+     *
+     * 用户在插件页点一个单选、或在搜索页顶部选一个，走的都是这里：把一个插件设为当前音源，
+     * 其余插件全部让位（`enabled = false`）。App 里任何时刻最多只有**一个**插件处于运行状态，
+     * 不会一次搜索同时打十几个源站，也不会出现「到底是哪个音源在跑」的困惑。
+     *
+     * @return 被选中的插件；[id] 不存在时返回 null。
+     */
+    suspend fun setCurrentSource(id: String): PluginMeta? = withContext(Dispatchers.IO) {
+        val target = find(id) ?: return@withContext null
+        coerceCurrent(id)
+        find(target.id)
+    }
+
+    /** 当前选中的那个音源（没选过、或选中的已被删掉时为 null）。 */
+    fun currentSource(): PluginMeta? =
+        _plugins.value.firstOrNull { it.enabled && it.error == null }
+
+    /** 清空当前音源：所有插件都变成「已安装、可选、未选中」。 */
+    suspend fun clearCurrentSource() = withContext(Dispatchers.IO) {
+        if (_plugins.value.none { it.enabled }) return@withContext
+        val now = System.currentTimeMillis()
+        val next = _plugins.value.map { it.copy(enabled = false, updatedAt = now) }
+        next.forEach { store.writeMeta(it) }
+        _plugins.value = next.ordered()
+        store.writeIndex(_plugins.value)
+        notifyReload(null)
+    }
+
+    /**
+     * 保证同一时刻最多一个插件启用。`load()` 之后调一次，修掉 0.0.7 留下的
+     * 「十几个插件同时启用」的旧数据（老用户升级上来就会遇到）。
+     */
+    suspend fun coerceSingleSource() = withContext(Dispatchers.IO) {
+        val enabledList = _plugins.value.filter { it.enabled && it.error == null }
+        if (enabledList.size <= 1) return@withContext
+        coerceCurrent(enabledList.first().id)
+        notifyReload(null)
+    }
+
+    /** 把 [id] 设为唯一启用项（内部用；不触发 runtime 重载）。 */
+    private fun coerceCurrent(id: String) {
+        val now = System.currentTimeMillis()
+        val next = _plugins.value.map { meta ->
+            val wanted = meta.id == id
+            if (meta.enabled == wanted) meta else meta.copy(enabled = wanted, updatedAt = now)
+        }
+        next.forEach { store.writeMeta(it) }
+        _plugins.value = next.ordered()
+        store.writeIndex(_plugins.value)
     }
 
     /** 全选 / 全不选：一次性改所有插件的启用状态。 */

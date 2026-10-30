@@ -1,4 +1,4 @@
-package com.guangyue.core.plugin.runtime
+﻿package com.guangyue.core.plugin.runtime
 
 import com.guangyue.core.plugin.PluginHealth
 import kotlinx.serialization.json.Json
@@ -17,11 +17,11 @@ import java.time.LocalDateTime
 /**
  * 把 [PluginUsableTest] 的逐插件结果汇总成两份交付物：
  *
- *  - `docs/plugin-usable-0.0.7.md` —— 0.0.7 的可用插件清单（**只有真能搜、真能取到播放地址的才标可用**）；
+ *  - `docs/plugin-usable-0.0.8.md` —— 0.0.8 的可用插件清单（**只有真能搜、真能取到播放地址的才标可用**）；
  *  - `core/plugin/src/main/assets/plugin-health.json` —— 出厂体检基线，App 里「只启用体检可用的」
  *    与插件管理页的健康状态就靠它（见 [com.guangyue.core.plugin.PluginHealthBaseline]）。
  *
- * 数据源是 `build/plugin-cache-0.0.7/usable-report.jsonl`（跑 [PluginUsableTest] 时写入）。
+ * 数据源是 `build/plugin-cache-0.0.4/usable-report.jsonl`（跑 [PluginUsableTest] 时写入）。
  * 报告文件不存在时这条用例 skip 而不是 fail：报告是「跑过体检」的产物，不是回归门槛。
  */
 class PluginUsableReportTest {
@@ -63,7 +63,7 @@ class PluginUsableReportTest {
 
     private fun docFile(): File {
         val root = System.getProperty("guangyue.rootDir") ?: File(".").absolutePath
-        return File(root, "docs/plugin-usable-0.0.7.md")
+        return File(root, "docs/plugin-usable-0.0.8.md")
     }
 
     private fun assetFile(): File {
@@ -87,7 +87,7 @@ class PluginUsableReportTest {
     @Test
     fun `aggregate usable report into docs and factory health baseline`() {
         val rows = rows()
-        assumeTrue("还没跑 PluginUsableTest（没有 build/plugin-cache-0.0.7/usable-report.jsonl）", rows.isNotEmpty())
+        assumeTrue("还没跑 PluginUsableTest（没有 build/plugin-cache-0.0.4/usable-report.jsonl）", rows.isNotEmpty())
 
         val usable = rows.filter { it.health == PluginHealth.OK }
         val noResult = rows.filter { it.health == PluginHealth.NO_RESULT }
@@ -97,7 +97,7 @@ class PluginUsableReportTest {
         val unknown = rows.filter { it.health == PluginHealth.UNKNOWN || it.health.isBlank() }
 
         val sb = StringBuilder()
-        sb.appendLine("# 广乐 0.0.7 · 插件可用性清单")
+        sb.appendLine("# 广乐 0.0.8 · 插件可用性清单")
         sb.appendLine()
         sb.appendLine("> 生成时间：${LocalDateTime.now()}　判据：`search(\"周杰伦\", 1, \"music\")` 至少返回一条**可映射成列表项**的结果，")
         sb.appendLine("> 且拿第一条继续调 `getMediaSource(item, \"standard\")` 后 `url` 非空。两步都过才算「可用」。")
@@ -161,7 +161,7 @@ class PluginUsableReportTest {
         sb.appendLine("- 判据与实际 App 路径完全一致：`PluginRuntime.call` → `SearchParser.parse` → `getMediaSource`。")
         sb.appendLine("  映射层（`data/isEnd`、`title/artist/album/artwork/id`、秒/毫秒）由")
         sb.appendLine("  `SearchParserTest` 单测覆盖，本清单只记录真插件跑通与否。")
-        sb.appendLine("- 结果由 `PluginUsableTest` 逐插件产生（`build/plugin-cache-0.0.7/usable-report.jsonl`），")
+        sb.appendLine("- 结果由 `PluginUsableTest` 逐插件产生（`build/plugin-cache-0.0.4/usable-report.jsonl`），")
         sb.appendLine("  本文件由 `PluginUsableReportTest` 汇总，可重跑复现。")
         sb.appendLine("- 「搜索无结果」多为源站改版或地区限制；「搜得到但取不到播放地址」说明该源搜索可用但")
         sb.appendLine("  取链接被墙/需要会员，App 里会提示「换其他音源搜同名歌曲」。")
@@ -175,7 +175,7 @@ class PluginUsableReportTest {
 
         // 出厂基线：platform → health，插件管理页在用户没体检过时也有话可说。
         val baseline = buildJsonObject {
-            put("version", JsonPrimitive("0.0.7"))
+            put("version", JsonPrimitive("0.0.8"))
             put("generatedAt", JsonPrimitive(LocalDateTime.now().toString()))
             put("keyword", JsonPrimitive("周杰伦"))
             put("plugins", buildJsonArray {

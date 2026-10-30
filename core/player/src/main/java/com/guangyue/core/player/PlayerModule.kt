@@ -2,9 +2,11 @@ package com.guangyue.core.player
 
 import androidx.media3.datasource.cache.CacheDataSource
 import com.guangyue.core.data.model.TrackMapper
+import com.guangyue.core.prefs.AppPreferences
 import com.guangyue.core.data.repository.TrackRepository
 import com.guangyue.core.plugin.MusicItem
 import com.guangyue.core.plugin.MusicPluginBridge
+import com.guangyue.core.plugin.lx.LxSourceManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -27,6 +29,8 @@ import javax.inject.Singleton
 class PluginMediaSourceResolver @Inject constructor(
     private val bridge: MusicPluginBridge,
     private val tracks: TrackRepository,
+    private val lx: LxSourceManager,
+    private val prefs: AppPreferences,
 ) : MediaSourceResolver {
 
     override suspend fun resolve(origin: MediaOrigin): ResolvedSource = withContext(Dispatchers.IO) {
@@ -53,9 +57,35 @@ class PluginMediaSourceResolver @Inject constructor(
             musicItemRaw = payload,
             item = pluginItem,
             quality = origin.quality.wire,
-        ) ?: throw ResolutionException("这个音源取不到「$label」的播放地址")
+        )
 
-        ResolvedSource(result.url, result.headers, volatile = true)
+        if (result != null) {
+            return@withContext ResolvedSource(result.url, result.headers, volatile = true)
+        }
+
+        // 插件自己取不到链时，按启用顺序问「取链源」（洛雪自定义源）。
+        // 它们只提供 musicUrl，不参与搜索；这里把曲目映射成洛雪 musicInfo 再问。
+        val lxItem = pluginItem ?: row?.let {
+            MusicItem(
+                platform = it.platform,
+                id = it.songId,
+                title = it.title,
+                artist = it.artist,
+                album = it.album,
+                artwork = it.artwork,
+                durationMs = it.durationMs,
+            )
+        }
+        if (lxItem != null) {
+            val fallback = runCatching {
+                lx.resolveMediaUrl(lxItem, origin.quality.wire, prefs.lxDefaultQuality)
+            }.getOrNull()
+            if (!fallback.isNullOrBlank()) {
+                return@withContext ResolvedSource(fallback, volatile = true)
+            }
+        }
+
+        throw ResolutionException("这个音源取不到「$label」的播放地址")
     }
 }
 

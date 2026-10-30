@@ -1,6 +1,9 @@
-package com.guangyue.feature.library.design
+﻿package com.guangyue.feature.library.design
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +16,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
@@ -27,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -156,7 +162,7 @@ fun FoliaGroup(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = GySpace.xxs)
+                    .padding(horizontal = 4.dp) /* Folia px-1 */
                     .heightIn(min = 24.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -185,8 +191,7 @@ fun FoliaGroup(
                 fontSize = GyText.hint,
                 lineHeight = GyText.hintHeight,
                 color = Gyp.t3,
-                fontFamily = GuangYueDesign.Sans,
-                modifier = Modifier.padding(horizontal = GySpace.xxs),
+                modifier = Modifier.padding(horizontal = 4.dp), /* Folia mx-1 */
             )
         }
     }
@@ -309,6 +314,162 @@ fun FoliaButton(
 }
 
 enum class FoliaButtonVariant { Fill, Primary, Quiet }
+
+/** 状态语气，对应 Folia `Status.tsx` 的 tone：ok / warn / error / 未给 tone。 */
+enum class FoliaTone { Neutral, Ok, Warn, Error }
+
+/**
+ * 状态行（`kit/Status.tsx`）：1.5dp 圆点 + 12/18 的 `--st-t2` 文字，圆点按 tone 换色。
+ * Folia 源码是 `inline-flex items-start gap-1.5 text-xs leading-[18px]`，圆点 `h-1.5 w-1.5`。
+ */
+@Composable
+fun FoliaStatus(
+    text: String,
+    modifier: Modifier = Modifier,
+    tone: FoliaTone = FoliaTone.Neutral,
+    maxLines: Int = 1,
+) {
+    val dot = when (tone) {
+        FoliaTone.Ok -> Gyp.ok
+        FoliaTone.Warn -> Gyp.warn
+        FoliaTone.Error -> Gyp.danger
+        FoliaTone.Neutral -> Gyp.t3
+    }
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(GySpace.xs),
+    ) {
+        Box(
+            Modifier
+                .padding(top = 6.dp) // dot `mt-1.5`
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(dot),
+        )
+        Text(
+            text = text,
+            fontSize = GyText.hint,
+            lineHeight = 18.sp,
+            color = Gyp.t2,
+            fontFamily = GuangYueDesign.Sans,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+    }
+}
+
+/**
+ * 弹出的菜单（`kit/Popover.tsx` + `kit/Menu.tsx`）：圆角 10dp、`--st-menu` 底、
+ * `0 14px 36px rgba(0,0,0,.34), 0 0 0 1px var(--st-line2)`；条目高 32dp、最小宽 176dp、
+ * 圆角 6dp、左右 10dp、13px。入场 move（220ms out）+ 位移 4dp + 缩放 .98。
+ */
+@Composable
+fun FoliaMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    items: List<FoliaMenuItem>,
+    modifier: Modifier = Modifier,
+) {
+    if (!expanded) return
+    androidx.compose.ui.window.Popup(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.PopupProperties(focusable = true),
+    ) {
+        Column(
+            modifier = modifier
+                .widthIn(min = 176.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Gyp.menu)
+                .border(1.dp, Gyp.line2, RoundedCornerShape(10.dp))
+                .shadow(14.dp, RoundedCornerShape(10.dp), ambientColor = Color.Black, spotColor = Color.Black)
+                .padding(vertical = GySpace.xxs),
+        ) {
+            items.forEach { item ->
+                if (item.divider) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = GySpace.xxs)
+                            .height(1.dp)
+                            .background(Gyp.hairline),
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(32.dp)
+                        .clip(RoundedCornerShape(GyRadius.quiet))
+                        .then(
+                            if (item.enabled) {
+                                Modifier.pointerInput(item.label) {
+                                    detectTapGestures {
+                                        onDismiss()
+                                        item.onClick()
+                                    }
+                                }
+                            } else Modifier
+                        )
+                        .padding(horizontal = 10.dp)
+                        .alpha(if (item.enabled) 1f else 0.4f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(GySpace.s),
+                ) {
+                    if (item.icon != null) {
+                        Icon(item.icon, null, tint = if (item.destructive) Gyp.danger else Gyp.t2, modifier = Modifier.size(15.dp))
+                    }
+                    Text(
+                        text = item.label,
+                        fontSize = GyText.label,
+                        color = if (item.destructive) Gyp.danger else Gyp.ink,
+                        fontFamily = GuangYueDesign.Sans,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** [FoliaMenu] 的一个条目。 */
+data class FoliaMenuItem(
+    val label: String,
+    val onClick: () -> Unit,
+    val icon: ImageVector? = null,
+    val enabled: Boolean = true,
+    val destructive: Boolean = false,
+    val divider: Boolean = false,
+)
+
+/**
+ * 折叠展开（`kit/Reveal.tsx` 的 `st-unfold`）：高度 0 → 内容高度 + 透明度 0 → 1，
+ * 用 Folia 的 unfold（300ms，ease-out）。收起后内容不占位。
+ */
+@Composable
+fun FoliaUnfold(
+    expanded: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    androidx.compose.animation.AnimatedVisibility(
+        visible = expanded,
+        enter = androidx.compose.animation.fadeIn(
+            animationSpec = tween(GyMotion.UNFOLD_MS, easing = GyMotion.easeOut),
+        ) + androidx.compose.animation.expandVertically(
+            animationSpec = tween(GyMotion.UNFOLD_MS, easing = GyMotion.easeOut),
+            expandFrom = Alignment.Top,
+        ),
+        exit = androidx.compose.animation.fadeOut(
+            animationSpec = tween(GyMotion.UNFOLD_MS, easing = GyMotion.easeOut),
+        ) + androidx.compose.animation.shrinkVertically(
+            animationSpec = tween(GyMotion.UNFOLD_MS, easing = GyMotion.easeOut),
+            shrinkTowards = Alignment.Top,
+        ),
+        modifier = modifier.fillMaxWidth(),
+    ) { content() }
+}
 
 /**
  * Folia 的输入框表面（`kit/TextField.tsx`）：高 32dp、圆角 8dp、`--st-fill` 底、13px，

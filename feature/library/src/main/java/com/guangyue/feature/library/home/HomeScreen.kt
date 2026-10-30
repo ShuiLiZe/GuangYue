@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.guangyue.feature.library.design.FoliaButton
 import com.guangyue.feature.library.design.FoliaButtonVariant
+import com.guangyue.feature.library.design.FoliaEmptyState
 import com.guangyue.feature.library.design.FoliaSectionTitle
 import com.guangyue.feature.library.design.FoliaTopBar
 import com.guangyue.feature.library.design.GuangYueDesign
@@ -61,11 +62,13 @@ data class HomeTile(
 enum class HomeTileKind { PLAYLIST, ALBUM, TRACK, STATION }
 
 /**
- * 首页：只放内容。
+ * 首页：只放真实数据。
  *
- * 结构照 m00161：顶部「广乐」标题（衬线）→ 推荐歌单封面流 → 最近播放 → 热门榜单。
- * 插件、下载这类管理入口一律不在这里出现；没有任何数据时，每一段都给出占位视觉与
- * 一句引导（「去添加音源」直接跳插件页），而不是留一片空白。
+ * 0.0.8 起不再有「示例曲目 / 灰色占位」这种假数据：
+ * - 没有音源 → 整页空态，只给一个「去添加音源」入口；
+ * - 有音源但某一区块拿不到数据（插件不声明 getTopLists / 还没播放过）→ 该区块整个不显示，
+ *   而不是塞一块占位。
+ * - 推荐 / 榜单来自当前音源的 getTopLists + getTopListDetail；最近播放来自真实播放记录。
  */
 @Composable
 fun HomeScreen(
@@ -115,69 +118,75 @@ fun HomeScreen(
                 },
             )
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = GySpace.xl),
-            ) {
-                item(key = "recommend-title") {
-                    FoliaSectionTitle("推荐歌单")
+            if (!hasAnyPlugin && recommended.isEmpty() && recent.isEmpty() && charts.isEmpty()) {
+                // 全空：Folia 的居中空态 + 唯一入口。
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = GySpace.xl),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    FoliaEmptyState(
+                        title = "空空如也",
+                        subtitle = "还没有音源。装一个官方音源，搜索和榜单就有了。",
+                        action = {
+                            Spacer(Modifier.height(GySpace.xs))
+                            FoliaButton(
+                                text = "去添加音源",
+                                onClick = onOpenPlugins,
+                                variant = FoliaButtonVariant.Primary,
+                                icon = GuangYueIcons.Plus,
+                            )
+                        },
+                    )
                 }
-                item(key = "recommend-row") {
-                    if (recommended.isEmpty()) {
-                        EmptyStrip(
-                            icon = GuangYueIcons.LibraryBig,
-                            text = if (hasAnyPlugin) "还没有推荐，去搜索喜欢的歌吧" else "还没有音源插件",
-                            action = if (hasAnyPlugin) null else "去添加音源",
-                            onAction = onOpenPlugins,
-                        )
-                    } else {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = GySpace.pageH),
-                            horizontalArrangement = Arrangement.spacedBy(GySpace.m),
-                        ) {
-                            items(recommended, key = { it.key }) { tile ->
-                                PosterTile(tile = tile, width = 152.dp, onClick = { onOpenTile(tile) })
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = GySpace.xl),
+                ) {
+                    // 拿不到推荐就整段不显示（插件不声明 getRecommendSheetTags 时属于正常情况）。
+                    if (recommended.isNotEmpty()) {
+                        item(key = "recommend-title") {
+                            FoliaSectionTitle("推荐歌单")
+                        }
+                        item(key = "recommend-row") {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = GySpace.pageH),
+                                horizontalArrangement = Arrangement.spacedBy(GySpace.m),
+                            ) {
+                                items(recommended, key = { it.key }) { tile ->
+                                    PosterTile(tile = tile, width = 152.dp, onClick = { onOpenTile(tile) })
+                                }
                             }
                         }
                     }
-                }
 
-                item(key = "recent-title") {
-                    FoliaSectionTitle("最近播放")
-                }
-                item(key = "recent-row") {
-                    if (recent.isEmpty()) {
-                        EmptyStrip(
-                            icon = GuangYueIcons.History,
-                            text = "还没有播放记录",
-                        )
-                    } else {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = GySpace.pageH),
-                            horizontalArrangement = Arrangement.spacedBy(GySpace.m),
-                        ) {
-                            items(recent, key = { it.key }) { tile ->
-                                SquareTile(tile = tile, size = 112.dp, onClick = { onOpenTile(tile) })
+                    // 没播放过就不显示「最近播放」这一段。
+                    if (recent.isNotEmpty()) {
+                        item(key = "recent-title") {
+                            FoliaSectionTitle("最近播放")
+                        }
+                        item(key = "recent-row") {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = GySpace.pageH),
+                                horizontalArrangement = Arrangement.spacedBy(GySpace.m),
+                            ) {
+                                items(recent, key = { it.key }) { tile ->
+                                    SquareTile(tile = tile, size = 112.dp, onClick = { onOpenTile(tile) })
+                                }
                             }
                         }
                     }
-                }
 
-                item(key = "charts-title") {
-                    FoliaSectionTitle("热门榜单")
-                }
-                if (charts.isEmpty()) {
-                    item(key = "charts-empty") {
-                        EmptyStrip(
-                            icon = GuangYueIcons.LibraryBig,
-                            text = if (hasAnyPlugin) "音源还没有返回榜单" else "添加音源后这里出现榜单",
-                            action = if (hasAnyPlugin) null else "去添加音源",
-                            onAction = onOpenPlugins,
-                        )
-                    }
-                } else {
-                    items(charts, key = { it.key }) { tile ->
-                        ChartRow(tile = tile, onClick = { onOpenTile(tile) })
+                    // 当前音源不提供 getTopLists 时没有榜单这一块，直接不给标题。
+                    if (charts.isNotEmpty()) {
+                        item(key = "charts-title") {
+                            FoliaSectionTitle("热门榜单")
+                        }
+                        items(charts, key = { it.key }) { tile ->
+                            ChartRow(tile = tile, onClick = { onOpenTile(tile) })
+                        }
                     }
                 }
             }

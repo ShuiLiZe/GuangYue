@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 广乐 0.0.5 —— 界面从 WebView 换成原生 Jetpack Compose。
  *
  * 这个模块现在只剩「壳」的职责：
@@ -68,8 +68,8 @@ android {
         targetSdk = 36
         // 版本号按 0.x 小步走：0.0.1 → 0.0.2 → …（tag 与 versionName 一致，不带 v 前缀）。
         // versionCode 必须始终大于上一版，否则装不上去覆盖。
-        versionCode = 7
-        versionName = "0.0.7"
+        versionCode = 8
+        versionName = "0.0.8"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -143,13 +143,13 @@ android {
             isIncludeAndroidResources = true
             isReturnDefaultValues = true
             all { test ->
-                // Roborazzi：截图写到仓库里的 docs/ui-0.0.7/。只在显式传入
+                // Roborazzi：截图写到仓库里的 docs/ui-0.0.8/。只在显式传入
                 // GUANGYUE_RECORD_SCREENSHOTS=true 时录制，平时跑测试不会改仓库文件。
                 test.systemProperty(
                     "roborazzi.test.record",
                     System.getenv("GUANGYUE_RECORD_SCREENSHOTS") ?: "false",
                 )
-                test.systemProperty("roborazzi.output.dir", "${rootDir}/docs/ui-0.0.7")
+                test.systemProperty("roborazzi.output.dir", "${rootDir}/docs/ui-0.0.8")
                 test.maxHeapSize = "3g"
             }
         }
