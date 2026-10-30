@@ -1,3 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  广乐界面文案（简体中文为默认语言）。
+
+  原则（U1b / Hark 审查）：
+   - 界面文字一律取自 Folia 的简体中文翻译 src/i18n/locales/zh-CN.ts，键名写在每条注释里；
+   - zh-CN.ts 没有对应条目的（纯广乐画廊用语），注释标「自拟」；
+   - 文案不写死在 Composable 里，一律走 stringResource。
+-->
 <resources>
     <string name="app_name">广乐</string>
+
+    <!-- ===== 通用 ===== -->
+    <!-- zh-CN.ts: "searchDatabase"（en.ts 同键 "SEARCH DATABASE..."，顶栏搜索框占位符） -->
+    <string name="search_database">搜索在线歌曲...</string>
+    <!-- zh-CN.ts: "searchLocal" -->
+    <string name="search_local">搜索本地歌曲...</string>
+    <!-- zh-CN.ts: "search" -->
+    <string name="search">搜索</string>
+    <!-- zh-CN.ts: "playAll" -->
+    <string name="play_all">播放全部</string>
+    <!-- zh-CN.ts: "addToQueue" -->
+    <string name="add_to_queue">加入队列</string>
+    <!-- 自拟（Folia 无下载按钮文案；shell/downloads 语义） -->
+    <string name="download">下载</string>
+    <!-- 自拟（画廊里示意禁用态，Folia 无对应键） -->
+    <string name="disabled_sample">已禁用</string>
+    <!-- zh-CN.ts: "more"（command palette / 右键菜单里的「更多」） -->
+    <string name="more">更多</string>
+    <!-- zh-CN.ts: "kind.album" -->
+    <string name="album">专辑</string>
+    <!-- zh-CN.ts: "kind.artist" -->
+    <string name="artist">歌手</string>
+    <!-- zh-CN.ts: "kind.playlist" -->
+    <string name="playlist">歌单</string>
+    <!-- zh-CN.ts: "tracks" -->
+    <string name="tracks_unit">首歌曲</string>
+
+    <!-- ===== 内容页示例数据 ===== -->
+    <string name="song_cover_letter_night">夜</string>
+    <string name="song_cover_letter_sunny">晴</string>
+    <string name="song_cover_letter_rice">稻</string>
+    <!-- zh-CN.ts: "special.daily" -->
+    <string name="special_daily">每日推荐</string>
+    <!-- 示例歌单名（自拟，中文），副标题用 zh-CN.ts: "tracks" 量词 -->
+    <string name="playlist_daily_mix">每日推荐 · 30 首</string>
+    <!-- 示例专辑名（自拟，中文） -->
+    <string name="album_liked">我喜欢的音乐</string>
+    <string name="card_subtitle_daily">每日推荐 · 30 首</string>
+    <string name="card_subtitle_liked">我喜欢的音乐 · 128 首</string>
+
+    <!-- ===== 画廊分区标题（纯广乐用语，全部自拟中文，无英文副标题） ===== -->
+    <string name="gallery_title">广乐 · 设计地基</string>
+    <string name="gallery_subtitle">Folia 设计令牌与基础组件 · 360×800dp</string>
+    <string name="gallery_tab_token">令牌</string>
+    <string name="gallery_tab_control">控件</string>
+    <string name="gallery_tab_content">内容</string>
+    <string name="gallery_tab_overlay">浮层</string>
+
+    <string name="section_colors">颜色</string>
+    <string name="section_type">字体</string>
+    <string name="section_shape">圆角与间距</string>
+    <string name="section_buttons">按钮</string>
+    <string name="section_toggle">开关</string>
+    <string name="section_segmented">分段与标签页</string>
+    <string name="section_search">搜索框</string>
+    <string name="section_slider">滑条</string>
+    <string name="section_card">封面卡</string>
+    <string name="section_row">歌曲行</string>
+    <string name="section_empty">空状态</string>
+    <string name="section_glass">毛玻璃面板</string>
+    <string name="section_sheet">底部弹层</string>
+
+    <!-- ===== 令牌页说明（token 名保留英文，旁边中文注释） ===== -->
+    <string name="type_sample_headline">标题 24/30 粗体</string>
+    <string name="type_sample_section">分区标题 16/22 特粗</string>
+    <string name="type_sample_body_strong">列表标题 16/22 中粗 · 夜曲</string>
+    <string name="type_sample_body">正文 14/22 · 夜曲</string>
+    <string name="type_sample_caption">次要说明 12/18 · 周杰伦 · 十一月的萧邦</string>
+    <string name="type_sample_control">控件文字 14 · 按钮</string>
+    <string name="type_sample_micro">小标签 12 · 刻度名</string>
+    <string name="type_sample_numeric">03:24 / 04:12</string>
+
+    <string name="shape_sm">小圆角 6</string>
+    <string name="shape_md">小圆角 8</string>
+    <string name="shape_lg">中圆角 12</string>
+    <string name="shape_xl">卡片圆角 16</string>
+    <string name="shape_pill">胶囊</string>
+    <string name="shape_metrics_note">页面边距 16dp · 分区间距 18dp · 行高 ≥56dp · 触控 ≥48dp</string>
+
+    <!-- 颜色令牌名（英文 token 名 + 中文说明） -->
+    <string name="token_page">页面底色</string>
+    <string name="token_ink">主文字</string>
+    <string name="token_ink_soft">次要文字</string>
+    <string name="token_accent">强调色</string>
+    <string name="token_on_accent">强调色上的文字</string>
+    <string name="token_card">卡片底</string>
+    <string name="token_raise">抬起面</string>
+    <string name="token_track">轨道</string>
+    <string name="token_fill">静默填充</string>
+    <string name="token_line">发丝线</string>
+    <string name="token_text2">次要文字 62%</string>
+    <string name="token_text3">弱化文字 42%</string>
+    <string name="token_glass">玻璃底</string>
+    <string name="token_ok">成功</string>
+    <string name="token_warn">警告</string>
+    <string name="token_error">错误</string>
+
+    <!-- ===== 控件页 ===== -->
+    <!-- zh-CN.ts: "special" 里的 personal-fm -->
+    <string name="sample_follow_cover_color">跟随封面取色</string>
+    <!-- 自拟：设置项语义（下载仅在 Wi-Fi 下进行） -->
+    <string name="sample_wifi_only">仅 Wi-Fi 下载</string>
+    <!-- zh-CN.ts: 首页视图切换 —— "libraryBravaisCollection.list" / "rendererGrid" / 墙面 "wall" -->
+    <string name="view_list">列表</string>
+    <string name="view_grid">网格</string>
+    <string name="view_wall">墙面</string>
+    <!-- zh-CN.ts: "kind.track" -->
+    <string name="kind_track">歌曲</string>
+    <string name="progress_label">播放进度</string>
+    <!-- 自拟：播放器音量（Folia 无键） -->
+    <string name="volume_label">音量</string>
+    <string name="disabled_label">禁用态</string>
+    <!-- zh-CN.ts: "searchPlaceholder"（在线搜索） -->
+    <string name="search_placeholder_online">搜索在线平台</string>
+
+    <!-- ===== 浮层页 ===== -->
+    <string name="glass_on">Android 12+ · 真模糊已启用</string>
+    <string name="glass_off">低版本降级 · 半透明底（无真模糊）</string>
+    <string name="glass_note">玻璃底 85% + 描边 12%（Folia 玻璃面板同款）</string>
+    <string name="open_song_menu">打开歌曲菜单</string>
+    <string name="sheet_hint">桌面右键菜单 → 长按列表行 → 底部弹层（下拉或系统返回关闭，无右上角叉号）</string>
+    <string name="sheet_play_now">立即播放</string>
+    <!-- zh-CN.ts: "enqueue" -->
+    <string name="sheet_enqueue">加入播放队列</string>
+    <!-- 自拟（下载动作，同 download） -->
+    <string name="sheet_download">下载到本地</string>
+    <string name="sheet_view_album">查看专辑</string>
+    <string name="sheet_remove_liked">移出喜欢</string>
+
+    <!-- ===== 空状态 ===== -->
+    <string name="empty_hint">这里还什么都没有。搜索一首歌，或者先建一个歌单。</string>
+    <string name="empty_action">去搜索</string>
+
+    <!-- ===== 无障碍描述 ===== -->
+    <string name="cd_play">播放</string>
+    <string name="cd_like">喜欢</string>
+    <string name="cd_shuffle">随机播放</string>
+    <string name="cd_queue">播放队列</string>
+
+    <!-- ===== 示例曲目（中文歌，替掉 Midnight City 等英文假数据） ===== -->
+    <string name="song_night">夜曲</string>
+    <string name="song_sunny">晴天</string>
+    <string name="song_rice">稻香</string>
+    <string name="song_album_november">周杰伦 · 十一月的萧邦</string>
+    <string name="song_album_yehuimei">周杰伦 · 叶惠美</string>
+    <string name="song_album_magic">周杰伦 · 魔杰座</string>
+
+    <!-- ===== U1b 新增（队列面板 / 补充 token 说明） ===== -->
+    <string name="queue_title">播放队列</string>
+    <string name="cd_more">更多</string>
+    <string name="cd_download">下载</string>
+    <string name="token_section">分区标题</string>
+    <string name="token_card_shadow">卡片投影</string>
+    <string name="token_panel">玻璃面板底</string>
+    <string name="token_row_current">当前行底</string>
+    <string name="token_row_marker">当前行竖条</string>
+    <string name="section_row_panel">队列面板</string>
+    <string name="section_fixed">固定尺寸</string>
+    <string name="song_cover_letter_daily">荐</string>
 </resources>
