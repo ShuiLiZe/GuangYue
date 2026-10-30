@@ -1,4 +1,4 @@
-package com.guangyue.music.ui
+﻿package com.guangyue.music.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,9 +33,10 @@ import com.guangyue.feature.library.screen.ProfileScreen
 import com.guangyue.feature.library.screen.SettingsScreen
 import com.guangyue.feature.player.screen.IPlayerRoute
 import com.guangyue.feature.search.SearchRow
-import com.guangyue.feature.search.SearchScreen
+import com.guangyue.feature.search.FoliaSearchScreen
 import com.guangyue.feature.search.SearchTab
 import com.guangyue.feature.search.SearchUiState
+import com.guangyue.music.nav.searchStrings
 import com.guangyue.music.theme.GuangYueTheme
 import org.junit.Before
 import org.junit.Rule
@@ -267,7 +268,8 @@ class ScreenshotTest {
         state: SearchUiState = emptySearchState(),
         current: String = "search",
     ) {
-        SearchScreen(
+        FoliaSearchScreen(
+            res = searchStrings(),
             state = state,
             onQueryChange = {},
             onSearch = {},
@@ -696,3 +698,5 @@ class ScreenshotTest {
         )
     }
 }
+
+

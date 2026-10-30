@@ -1,4 +1,4 @@
-package com.guangyue.music.ui.shell
+﻿package com.guangyue.music.ui.shell
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -25,7 +25,8 @@ import com.guangyue.feature.library.home.HomeScreen
 import com.guangyue.feature.library.home.HomeTile
 import com.guangyue.feature.library.home.HomeTileKind
 import com.guangyue.feature.library.screen.ProfileScreen
-import com.guangyue.feature.search.SearchScreen
+import com.guangyue.feature.search.FoliaSearchScreen
+import com.guangyue.music.nav.searchStrings
 import com.guangyue.feature.search.SearchUiState
 import com.guangyue.music.ui.design.Folia
 import com.guangyue.music.ui.design.FoliaTheme
@@ -165,7 +166,8 @@ class U2ShellScreenshotTest {
 
     @Composable
     private fun SearchRoot() {
-        SearchScreen(
+        FoliaSearchScreen(
+            res = searchStrings(),
             state = SearchUiState(query = "", history = listOf("晴天", "海阔天空"), searched = false),
             onQueryChange = {},
             onSearch = {},
@@ -282,3 +284,4 @@ class U2ShellScreenshotTest {
         val GESTURE = 24.dp
     }
 }
+

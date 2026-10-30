@@ -192,4 +192,34 @@
     <string name="home_placeholder_hint">搜索一首歌，先听一点，最近播放会出现在这里。</string>
     <!-- zh-CN.ts: "search" 的动作形式 -->
     <string name="home_placeholder_action">去搜索</string>
+
+    <!-- ===== U3 搜索页（Folia SearchWorkspace） ===== -->
+    <!-- zh-CN.ts: "searchDatabase"（顶栏搜索框占位符，Folia 中文版就是这一条） -->
+    <string name="search_placeholder_folia">搜索在线歌曲...</string>
+    <!-- zh-CN.ts: "clear" -->
+    <string name="search_clear">清除</string>
+    <!-- zh-CN.ts: "searching" -->
+    <string name="search_searching">搜索中...</string>
+    <!-- zh-CN.ts: "noResults"（Folia 搜索页 0 结果那一句） -->
+    <string name="search_no_results">未找到相关结果</string>
+    <!-- 自拟：Folia 只给一句「未找到相关结果」，手机版补一句可操作建议 -->
+    <string name="search_empty_subtitle">换个关键词，或换一个音源试试</string>
+    <!-- 自拟：分类 Tab 下某一类没有结果（Folia 搜索结果页没有分类 Tab） -->
+    <string name="search_empty_category">这一类没有结果</string>
+    <!-- zh-CN.ts: "retry" -->
+    <string name="search_retry">重试</string>
+    <!-- 自拟：Folia 桌面没有「搜索历史」这一块，手机版初始态需要 -->
+    <string name="search_history">搜索历史</string>
+    <!-- 自拟：同上，初始态的推荐关键词区 -->
+    <string name="search_suggestions">推荐搜索</string>
+    <!-- 自拟：搜索结果行右侧「加入歌单」按钮（Folia 是 hover 才出现的 ＋） -->
+    <string name="search_add_to_playlist">加入歌单</string>
+    <!-- 自拟（沿用 shell/downloads 语义，Folia 搜索结果行没有下载入口） -->
+    <string name="search_download">下载</string>
+    <!-- 自拟：一个音源都没装时的空态（旧页面为硬编码中文，本次收进资源） -->
+    <string name="search_no_source">还没有可用的音源</string>
+    <!-- 自拟：同上 -->
+    <string name="search_no_source_hint">先在「我的 · 音源插件管理」里安装一个插件</string>
+    <!-- 自拟：同上，直达插件管理页的按钮 -->
+    <string name="search_open_plugins">去音源插件管理</string>
 </resources>
