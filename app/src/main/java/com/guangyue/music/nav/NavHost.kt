@@ -1,4 +1,4 @@
-﻿package com.guangyue.music.nav
+package com.guangyue.music.nav
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -357,23 +357,12 @@ fun GuangYueNavHost(
         // ---------- 全屏播放 / 歌词 ----------
         composable(Routes.PLAYER) {
             IPlayerRoute(
-                playback = playbackState,
-                accent = accent,
+                playback = playback,
+                playbackState = playbackState,
                 darkMode = darkMode,
-                onTogglePlay = { playback.toggle() },
-                onNext = { playback.next() },
-                onPrevious = { playback.previous() },
-                onSeek = { playback.seekToProgress(it) },
-                onCycleRepeat = { playback.cycleRepeat() },
-                onToggleShuffle = { playback.setShuffle(!playbackState.shuffle) },
-                onQuality = {
-                    val current = playbackState.item?.origin?.quality ?: playback.defaultQuality
-                    val ladder = com.guangyue.core.player.QualityLadder.of(
-                        playbackState.item?.origin?.availableQualities,
-                    ).ifEmpty { com.guangyue.core.player.QualityLadder.default() }
-                    playback.setQuality(com.guangyue.core.player.QualityLadder.cycle(ladder, current))
-                },
+                accent = accent,
                 onOpenLyrics = { navController.navigate(Routes.LYRIC_FLOW) },
+                onAddToPlaylist = { navController.navigate(Routes.SEARCH) },
                 onBack = { navController.popBackStack() },
             )
         }

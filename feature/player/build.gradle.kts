@@ -10,6 +10,13 @@ android {
     compileSdk = 37
     defaultConfig { minSdk = 26 }
     buildFeatures { compose = true }
+    // U4：播放页状态层（模式三态 / 渐变取色 / 标题区 / 收藏）都是纯 Kotlin 推导，跑单元测试。
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -40,4 +47,5 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    testImplementation(libs.junit)
 }

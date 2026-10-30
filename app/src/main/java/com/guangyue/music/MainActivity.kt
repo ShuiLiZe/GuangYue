@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.guangyue.core.data.repository.TrackRepository
 import com.guangyue.core.player.PlaybackController
 import com.guangyue.music.nav.GuangYueRoot
 import com.guangyue.music.ui.design.FoliaTheme

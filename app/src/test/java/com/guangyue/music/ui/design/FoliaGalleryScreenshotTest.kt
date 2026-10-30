@@ -63,8 +63,9 @@ class FoliaGalleryScreenshotTest {
      */
     private val outDir: java.io.File = run {
         val prop = System.getProperty("roborazzi.output.dir")
+        // 本用例（U1 设计画廊）固定写自己那一节，避免被其他分段的 roborazzi.output.dir 覆盖。
         val dir = if (prop.isNullOrBlank()) java.io.File("build/roborazzi-u1")
-        else java.io.File(prop).let { if (it.isAbsolute) it else java.io.File(it.absolutePath) }
+        else java.io.File(prop).let { if (it.isAbsolute) it else java.io.File(it.absolutePath) }.let { java.io.File(it.parentFile, "ui-u1") }
         dir.mkdirs()
         dir
     }

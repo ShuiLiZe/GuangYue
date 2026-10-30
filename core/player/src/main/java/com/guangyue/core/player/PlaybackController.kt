@@ -337,6 +337,12 @@ class PlaybackController @Inject constructor(
         publish()
     }
 
+    /** U4：三态播放模式直接给目标值（顺序 / 单曲 / 随机），由播放页的纯逻辑算出来。 */
+    fun setRepeatMode(mode: Int) {
+        player.repeatMode = mode
+        publish()
+    }
+
     fun cycleRepeat() {
         player.repeatMode = when (player.repeatMode) {
             Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL

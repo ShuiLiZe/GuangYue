@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 广乐 0.0.5 —— 界面从 WebView 换成原生 Jetpack Compose。
  *
  * 这个模块现在只剩「壳」的职责：
@@ -149,7 +149,7 @@ android {
                     "roborazzi.test.record",
                     System.getenv("GUANGYUE_RECORD_SCREENSHOTS") ?: "false",
                 )
-                test.systemProperty("roborazzi.output.dir", "${rootDir}/docs/ui-u3")
+                test.systemProperty("roborazzi.output.dir", "${rootDir}/docs/ui-u4")
                 test.maxHeapSize = "3g"
             }
         }

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   广乐界面文案（简体中文为默认语言）。
 
@@ -222,4 +222,51 @@
     <string name="search_no_source_hint">先在「我的 · 音源插件管理」里安装一个插件</string>
     <!-- 自拟：同上，直达插件管理页的按钮 -->
     <string name="search_open_plugins">去音源插件管理</string>
+    <!-- ===== U4 播放页（Folia player-panel / player-playing / mini-bar） ===== -->
+    <!-- 自拟措辞：Folia 顶栏没有微标题，手机全屏页给一个「正在播放」 -->
+    <string name="player_now_playing">正在播放</string>
+    <!-- zh-CN.ts: "panelCollapse"（「收起」） -->
+    <string name="player_collapse">收起</string>
+    <!-- zh-CN.ts: "previous" -->
+    <string name="player_previous">上一首</string>
+    <!-- zh-CN.ts: "next" -->
+    <string name="player_next">下一首</string>
+    <!-- zh-CN.ts: "resumePlayback" / "pausePlayback" -->
+    <string name="player_play">播放</string>
+    <string name="player_pause">暂停</string>
+    <!-- zh-CN.ts: "shuffle"「打乱播放队列」压成按钮名 -->
+    <string name="player_shuffle">随机播放</string>
+    <!-- zh-CN.ts: "loopAll" / "loopOne"；顺序档自拟（Folia 只有 "loopOff"「循环关闭」） -->
+    <string name="player_mode_sequential">顺序播放</string>
+    <string name="player_mode_loop_one">单曲循环</string>
+    <string name="player_mode_shuffle">随机播放</string>
+    <!-- zh-CN.ts: "liked"「已添加到喜欢的音乐」/ "unliked"「已取消喜欢」压成按钮名 -->
+    <string name="player_like">喜欢</string>
+    <string name="player_liked">取消喜欢</string>
+    <!-- zh-CN.ts: "add_to_playlist"（Folia 播放页动作行那颗星形按钮） -->
+    <string name="player_add_to_playlist">加入歌单</string>
+    <!-- zh-CN.ts: "queue"「播放队列」 -->
+    <string name="player_queue">播放队列</string>
+    <!-- zh-CN.ts: "panel-onlineLyrics"（「歌词」） -->
+    <string name="player_lyrics">歌词</string>
+    <!-- 自拟：U5 才做歌词，本段入口给一句占位 -->
+    <string name="player_lyrics_soon">歌词功能即将上线</string>
+    <!-- zh-CN.ts: "queueCount" 带占位形态（Folia 是「播放队列 N 首」） -->
+    <string name="player_queue_count">播放队列 %1$d 首</string>
+    <!-- 自拟：Folia 队列空时没有专门句子 -->
+    <string name="player_queue_empty">队列是空的</string>
+    <!-- zh-CN.ts: "noSongPlaying"「当前没有正在播放的歌曲」 -->
+    <string name="player_no_song">当前没有正在播放的歌曲</string>
+    <!-- 与 QueueItem.toCachedTrack 的兜底一致 -->
+    <string name="player_unknown_artist">未知艺术家</string>
+    <!-- zh-CN.ts: "quality" -->
+    <string name="player_quality">音质</string>
+    <!-- 自拟：播放失败时除了原生错误文案再给一句出路 -->
+    <string name="player_retry_hint">可以在设置里换一个音源再试</string>
+    <!-- zh-CN.ts: "queueHide"「收起播放队列」 -->
+    <string name="player_close_queue">收起播放队列</string>
+    <!-- 自拟：进度条无障碍名（Folia 无 aria） -->
+    <string name="player_seek_bar">播放进度</string>
+    <!-- 自拟：封面图无障碍名模板 -->
+    <string name="player_cover_of">%1$s 的封面</string>
 </resources>
