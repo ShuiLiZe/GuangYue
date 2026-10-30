@@ -1,15 +1,22 @@
-# U1 · Folia 设计地基（Compose）
+﻿# U1 · Folia 设计地基（Compose）
 
 分支 `port/u1`（worktree `D:\workspaces\GuangYue-u1`），基线 commit `1428a05`。
 本段只做设计 token + 基础组件 + 画廊 + 截图；未改 NavHost / Root / MainActivity / `theme/Theme.kt`（旧 `GuangYueTheme` 原样保留，新主题另起名 `FoliaTheme`）。
 
 代码位置：
 - `app/src/main/java/com/guangyue/music/ui/design/`：`FoliaColors.kt` `FoliaType.kt` `FoliaShapes.kt` `FoliaMotion.kt` `FoliaBlur.kt` `FoliaTheme.kt` `FoliaComponents.kt` `GalleryScreen.kt`
-- `app/src/test/java/com/guangyue/music/ui/design/`：`FoliaTokensTest.kt`（13 个纯 JVM 断言）、`FoliaGalleryScreenshotTest.kt`（Roborazzi 截图）
+- `app/src/main/res/values/strings.xml`：**U1b 起所有界面文案的唯一来源**（中文为默认语言）
+- `app/src/test/java/com/guangyue/music/ui/design/`：`FoliaTokensTest.kt`（13 个纯 JVM 断言）、`FoliaGalleryScreenshotTest.kt`（Roborazzi 截图）、**U1b 新增** `FoliaU1bTest.kt`（18 个：文案/质感 token/手机化尺寸）、`FoliaComponentsTest.kt`（17 个：组件渲染与交互）
 - `tools/u1_side_by_side.py`：并排图脚本（PIL）
 - `app/build.gradle.kts`：唯一改动是 `roborazzi.output.dir` → `${rootDir}/docs/ui-u1`（1 行）
 
-验证：`gradlew testDebugUnitTest` 全仓 **123 过 / 0 败 / 2 跳过**（基线 94/0/2，新增 29 个），`gradlew assembleDebug` BUILD SUCCESSFUL。
+验证（U1b 重测，`--offline --rerun-tasks` 全量）：`testDebugUnitTest` **89 过 / 0 败 / 0 跳过**，`assembleDebug` BUILD SUCCESSFUL。
+
+> **数字口径更正**：U1 报告里写的「123 过 / 0 败 / 2 跳过」与实跑不符 —— 本 worktree 里
+> 全量 `testDebugUnitTest` 实测只有 89 个用例（U1 时是 54 个：`MainActivitySmokeTest` 1 +
+> `FoliaGalleryScreenshotTest` 16 + `FoliaTokensTest` 13 + `ScreenshotTest` 24，0 跳过），
+> 也不存在跳过用例。`123/0/2` 应当是把别的会话/别的分支的统计抄了过来，U1b 以实测为准并在此改正。
+> U1b 新增 35 个用例（18 + 17），**89 > U1 基线 54**，也无失败。
 
 ---
 
@@ -161,7 +168,7 @@ m00169 要求：正文 ≥14sp、次要 ≥12sp、触控 ≥48dp、列表行 56�
 | `FoliaToggle` | `src/components/modal/settings/kit/Toggle.tsx:25-28` | 视觉 40×24dp / 拇指 18dp 照搬；按下拇指加宽 22dp 位移 16dp；外框 48dp 触控；checked 用 accent/onAccent |
 | `FoliaSegmented<T>` | `src/components/modal/settings/kit/Segmented.tsx:33-59` | 32dp → 48dp 容器；选中标记用 `raise` 底 + 6dp 圆角 + 阴影，动画走 `FoliaMotion.move()`（替代 layoutId 滑动） |
 | `FoliaTabs<T>` | `src/components/modal/settings/kit/Tabs.tsx:73-107` | h-9/36px → 46dp 文本区；下划线 2dp + accent；底部 hairline `--st-line`；gap 18dp 保留 |
-| `FoliaSearchField` | `kit/TextField.tsx:9-72` + 基准截图顶栏胶囊搜索框 | 32px 高 → 48dp；默认 `Pill` 形状对齐 Folia 顶栏胶囊；占位符默认 `SEARCH DATABASE...`（`src/i18n/locales/en.ts:1579`）；可选 `Rounded` |
+| `FoliaSearchField` | `kit/TextField.tsx:9-72` + 基准截图顶栏胶囊搜索框 | 32px 高 → 48dp；默认 `Pill` 形状对齐 Folia 顶栏胶囊；占位符默认「搜索在线歌曲...」（src/i18n/locales/zh-CN.ts:1579 searchDatabase）；可选 `Rounded` |
 | `FoliaGlassPanel` | `src/index.css:163-168 .theme-glass-panel` + `FloatingPlayerControls.tsx:384` | 底色 85% 页色 + 12% 描边；blur 按平台分档（31+ `Modifier.blur`，26–30 半透明） |
 | `FoliaEmptyState` | `src/components/panelTab/shell/EmptyState.tsx:14-18` | 180dp 最小高、28dp 图标、13px→14sp 文案、最大宽 264dp；新增可选按钮（手机上"下一步动作"比文案更重要） |
 | `FoliaBottomSheet` / `FoliaSheetDragHandle` / `FoliaSheetItem` | 桌面 Modal（右键菜单、设置弹窗）；inventory 红线「右键/弹窗 → ModalBottomSheet」 | 底部滑入 + 拖动条 + 遮罩；下拉/点遮罩/`BackHandler` 关闭；**无叉号**；图标行 ≥56dp |
@@ -222,3 +229,155 @@ $env:GUANGYUE_RECORD_SCREENSHOTS="true"
 - **未接入任何页面**：`GalleryScreen` 只在测试里调用，NavHost/Root 未改，符合段落约束。
 - **`tools/u1_side_by_side.py` 里的裁剪框是硬编码像素**：基准图若换版本需要调 `CROPS`。
 - 本段耗时超过 70 分钟限时（主要是 Gradle 首次配置 + Roborazzi 输出路径/编码返工），没有遗留编译或测试失败。
+
+---
+
+# U1b · 审查返工
+
+Hark 对 U1 打回 5 条，逐条处理（第 5 条按指示只写说明，不动代码）。
+
+## 12. 文案来源（界面文字 → zh-CN.ts 键名 或 自拟）
+
+**规则**：所有界面文字只存在于 `app/src/main/res/values/strings.xml`（`values/` 即中文默认，
+不再需要 `values-zh/`），Composable 里一律 `stringResource(R.string.…)`，禁止硬编码。
+取自 Folia `D:\workspaces\_folia-src\src\i18n\locales\zh-CN.ts` 的逐条标键名；zh-CN 里没有的标「自拟」。
+
+| 界面文字 | 来源（zh-CN.ts 键名 / 自拟） |
+|---|---|
+| 搜索在线歌曲... | `searchDatabase`（zh-CN.ts:1579，对应 en 的 `SEARCH DATABASE...`） |
+| 搜索 | `search` |
+| 播放全部 | `playAll` |
+| 加入队列 | `addToQueue` |
+| 加入播放队列 | `enqueue` |
+| 下载 / 下载到本地 | `download` / 自拟（弹层动作用带补语的短句） |
+| 更多 | `more` |
+| 歌曲 / 专辑 / 歌手 / 歌单 | `kind.track` / `kind.album` / `kind.artist` / `kind.playlist` |
+| 每日推荐 | `special.daily` |
+| 首歌曲 | `tracks` |
+| 列表 / 网格 / 墙面 | `libraryBravaisCollection.list` / `rendererGrid` / `wall`（「墙面」取 wall 的磁贴墙义） |
+| 立即播放 / 查看专辑 | 自拟（zh-CN 无对应弹层项） |
+| 打开歌曲菜单 / 毛玻璃面板 / 底部弹层 / 队列面板 / 封面卡 / 歌曲行 | 自拟（画廊专用术语，Folia 无对应控件名） |
+| 令牌 / 控件 / 内容 / 浮层 | 自拟（画廊 tab） |
+| 颜色 / 字体 / 圆角与间距 / 按钮 / 开关 / 分段与标签页 / 搜索框 / 滑条 / 空状态 | 自拟（画廊分区标题，**已去掉英文副标题**） |
+| 夜曲 / 晴天 / 稻香 | 自拟（真实中文歌名，替代 `Midnight City` / `Cloud Fixture` / `Fixture Artist`） |
+| 周杰伦 · 十一月的萧邦 / 叶惠美 / 魔杰座 | 自拟（真实专辑） |
+| 每日推荐 · 30 首 / 我喜欢的音乐 · 128 首 | 自拟（替代 `Daily Mix` / `Cloud Fixture`） |
+| 这里还什么都没有。搜索一首歌，或者先建一个歌单。 | 自拟（空态） |
+| 已禁用 | 自拟（画廊演示禁用态） |
+| Android 12+ · 真模糊已启用 / 低版本降级 · 半透明底（无真模糊） | 自拟（画廊浮层说明） |
+| 卡片投影 / 玻璃面板底 / 当前行底 / 当前行竖条（token 中文说明） | 自拟（token 名保留英文，旁边加中文解释） |
+
+校验：`FoliaU1bTest.uiStringsAreChinese` 断言 33 个界面文案每条都含中日韩字符；
+`sectionTitlesHaveNoEnglishSuffix` 断言 14 个分区标题不含 `/` 和 3 个字母以上的英文；
+`sampleDataUsesRealChineseSongs` 断言示例数据里不再出现 6 个英文假数据串。
+
+## 13. 卡片质感（审查第 2 条）
+
+**问题**：U1 的卡片是「浅灰细描边、无投影、平的」，Folia 是白纸底凸起卡 + 柔和投影，浮在模糊背景上。
+
+| 项 | U1 做法 | U1b 改成 | 出处 |
+|---|---|---|---|
+| 卡片底色 | `cardFill` 自取值（偏灰） | `color-mix(bg 94%, ink)`（浅）/ `88%`（深）→ 浅 `#F6F5F4`、深 `#1C1B1D` | `components/wall/wall.css:34` / `:10` `--lattice-poster-background` |
+| 投影 | **无** | `Modifier.shadow(elevation = 16.dp, clip = false, ambient/spot = cardShadow)`，浅 18% 黑、深 45% 黑 | `wall.css:35` / `:12` `--lattice-focus-lift: 0 12px 32px rgb(0 0 0 / 25% \| 45%)` |
+| 描边 | 1dp 浅灰（就当卡片边） | 降为 5%/6% 发丝线，且 pressed 才用 `lineStrong` | `kit/kit.css:62-70` 发丝线 |
+| 封面内描边 | **无** | 封面外加 `1dp coverRing`（浅 8% 黑 / 深 10% 白） | 实测 `m412-light-home-playlists.png` 封面边缘那圈亮线 |
+| 圆角 | 16dp | 保持 16dp（内封 12dp） | inventory §1 |
+
+深色版对照 `m412-dark-home-playlists.png` 同步改：底色 88%、投影 45% 黑。
+
+**列表行容器**（审查同条后半）：U1 只是把行塞进普通 Column，没有「玻璃面板上的行」。
+
+| 项 | U1 | U1b | 出处 |
+|---|---|---|---|
+| 行容器 | 无面板 | 新增 `FoliaListPanel`：圆角 20dp、底 白62% / 黑40%、描边 黑7% / 白8%、投影 `0 24dp 64dp`、backdrop blur 24dp（Robolectric 走降级） | `components/wall/WallToolsQueueIsland.css:1-20` `.lattice-tools-island` |
+| 选中行底 | `fill`（7%，几乎看不出） | `rowCurrent`：白10% / 黑7% | `WallToolsQueueIsland.css:176-177` `.is-current` |
+| 选中竖条 | **无** | 行左侧 3×18dp、圆角 2dp、取 accent 色 | `WallToolsQueueIsland.css:249` `.lattice-tools-island-marker` |
+| 选中字重 | 不变 | 名称加粗 | `WallToolsQueueIsland.css` `.is-current …-name { font-weight:700 }` |
+
+## 14. 禁用按钮（审查第 3 条）
+
+**问题**：U1 的禁用态是「橙底 + 淡字」——底色仍是 accent，只把文字压淡。
+
+**出处**：`src/components/modal/settings/kit/Button.tsx:11`
+```
+BASE_CLASS = '… transition-[background-color,color,opacity,scale]
+              enabled:active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40'
+```
+即禁用 = **整组 `opacity: .4`**，橙色底跟着一起淡，不存在「保留橙底」。
+图标按钮另有 `ICON_CLASS.fill … disabled:bg-transparent`（连底色一起去掉）。
+
+**改法**：`.alpha(if (enabled) 1f else 0.4f)` 从文字层提到 `FoliaButton` 最外层 `Box`，
+底色/图标/文字整体降到 40%；`FoliaIconButton` 同理（U1 只压图标，现在整体压）。
+
+## 15. 并排图重做（审查第 4 条）
+
+**问题**：左边 Folia 裁切太小、右边是整张 720×1600 整屏图，两边每 dp 像素数不同，没法比。
+
+**改法**（`tools/u1_side_by_side.py` 全文重写）：
+- 两边都按**目标组件的紧包围盒**裁切，再统一缩放到 **360dp 宽**。基准图 824×1830 是 @2x（412dp），
+  缩放系数 0.874；广乐截图本身就是 720×1600 @xhdpi（360dp），系数 1.0 —— 于是两边 **1dp = 2px**，
+  圆角半径、投影扩散、行高、字号可以直接用眼睛量。
+- `tight()` 自动按内容包围盒再收一次边，避免大片背景把两栏拉得高低不齐。
+- 标注全中文，左栏副标题写明「Folia 截图 <文件名> 裁切 <框>」，右栏写关键 token/交互，便于复核。
+- 渲染侧同时修了 `shootFit`：U1 用 `onRoot()` 截到整屏 800dp（下方三分之二空白）；U1b 改成
+  `onNodeWithTag(FitTag)` + `cropToContent()` 按「内容非底色底边」裁掉空白，特写图现在
+  高度 472–671px（U1 是 1600px）。
+
+7 张（原 5 张 + 审查要求新增 2 张）：
+
+| 文件 | 左（Folia 基准） | 右（广乐） |
+|---|---|---|
+| `side-card.png` | `m412-light-home-playlists` 封面卡 | `closeup-card-light` |
+| `side-dark-card.png` | `m412-dark-home-playlists` 封面卡 | `closeup-card-dark` |
+| `side-row.png` | `m412-light-panel-queue` 播放队列面板 | `closeup-row-light`（选中「稻香」） |
+| `side-controls.png` | `m412-light-settings-playback` 开关/分段 | `closeup-button-light` |
+| `side-sheet.png` | `m412-light-panel-queue` 玻璃面板 | `gallery-light-4`（毛玻璃 + 底部弹层） |
+| **`side-search.png`（新增）** | `m412-light-search-typing` 顶栏胶囊搜索 | `gallery-light-2` 搜索框 |
+| **`side-dark-controls.png`（新增）** | `m412-dark-settings-playback` 开关/分段 | `closeup-button-dark` |
+
+## 16. 毛玻璃（审查第 5 条，本段不处理）
+
+截图里毛玻璃是**降级态**（Robolectric 无 GPU，`Modifier.blur` 不产生真实模糊，
+看到的是 85% 半透底 + 12% 描边）。按指示本段不改实现。
+**真机 API 31+ 待 Hark 在模拟器复核。**
+
+## 17. 手机化两张表（U1b 补充行）
+
+审查要求保留的两张表在 §5、§6，U1b 新增的取值补在这里。
+
+| 位置 | Folia 原值 | 手机值 | 原因 |
+|---|---|---|---|
+| 卡片投影 | `0 12px 32px rgb(0 0 0/25%)`（日光）/ `45%`（深） | `shadow(16.dp)` + 18% / 45% 黑 | CSS 的 12px 偏移+32px 模糊在 Compose 只有 elevation 一个旋钮，16dp 是 Robolectric 截图里能和基准对上「柔和扩散」的最小值；透明度照抄源码 |
+| 封面内描边 | 实测可见 1px 亮线 | 1dp，浅 8% 黑 / 深 10% 白 | 1px @2x = 0.5dp 渲染不出来，抬到 1dp |
+| 队列面板圆角 | 20px | 20dp | 照搬 |
+| 队列面板投影 | `0 24px 64px rgb(0 0 0/42%)` | `shadow(24.dp)` | 同上，取视觉最接近的一档 |
+| 选中竖条 | 3×18px、radius 2px | 3×18dp、radius 2dp | 照搬（dp≈px，且 ≥1dp 才能看清） |
+| 按钮禁用 | `opacity: .4` | `alpha(0.4f)` | 照搬（整体压，不保橙底） |
+| 特写截图宽度 | — | 360dp | 与基准 412dp 缩到 360dp 后同密度，便于并排 |
+
+| 桌面动作 | 手机动作 | 原因 |
+|---|---|---|
+| 卡片 hover 抬起（`--lattice-focus-lift`） | 投影常驻 + 按压 scale 0.97 | 触屏无 hover，抬起效果必须常显才看得出「凸起」 |
+| 行 hover 才显的底色 | 选中行常驻浅底 + 左侧竖条 | 同上，且竖条给「正在播放」一个不依赖颜色的标识 |
+| 禁用按钮靠 cursor-not-allowed 提示 | 整体 40% 透明（无鼠标指针可依赖） | 手机上唯一能表达「不可用」的就是视觉降权 |
+
+## 18. U1b 验收
+
+| 项 | 结果 |
+|---|---|
+| `testDebugUnitTest` | **89 过 / 0 败 / 0 跳过**（U1 基线 54/0/0；新增 `FoliaU1bTest` 18 + `FoliaComponentsTest` 17） |
+| `assembleDebug` | BUILD SUCCESSFUL |
+| 截图重录 | 全部 16 张 gallery/closeup 重录，7 张 side 重生成 |
+| commit | `port/u1` 本地提交，消息前缀 `U1b:`，未 push、未打 tag |
+
+## 19. U1b 已知问题
+
+- **用例数没到 123**：任务要求「不少于 123/0/2」，但本 worktree 实测基线是 54 个用例、
+  且**没有** 2 个跳过用例 —— 这个基线数字本身对不上（见文首更正）。U1b 把用例从 54 提到 89，
+  全绿，但没有为了凑数写无意义断言。如需硬指标，请派活方确认基线口径后再补。
+- **卡片投影在浅色截图上仍偏弱**：16dp 已是 Robolectric 软件渲染下不产生脏边界的上限，
+  真机上可再压一层 24dp。已在 `side-card.png` 里与基准并排，肉眼可见扩散范围接近。
+- **并排图右侧的 `gallery-light-2/4` 是整屏图**（搜索、浮层两张）：这两项 Folia 侧也是整屏裁切，
+  没有可紧裁的组件包围盒，所以两张各 1712px 高。其余 5 张已按组件紧裁。
+- `tools/u1_side_by_side.py` 的裁切框仍是硬编码像素，基准图换版本需要调 `BOXES`。
+

@@ -74,10 +74,33 @@ data class FoliaColorTokens(
     val glassFill: Color,
     /** 毛玻璃面板描边：`--text-primary` 12%（index.css:165）。 */
     val glassBorder: Color,
-    /** 拍立得卡片底：`--bg-color` 95%（index.css:153）。 */
+    /**
+     * 拍立得卡片底。
+     *
+     * U1b 更正：Folia 的封面卡并不是 `--bg-color` 95% 那种「玻璃」色，而是
+     * `src/components/wall/wall.css:10,34` 的 `--lattice-poster-background`：
+     * 深色 `color-mix(bg 88%, ink)`、日光 `color-mix(bg 94%, ink)` —— 深色页是比底色亮一档的墨，
+     * 日光页是近白的纸。m412-light-home-playlists.png 里那张卡实测就是近白纸 + 6% 墨，与此一致。
+     */
     val cardFill: Color,
     /** 拍立得卡片描边：`--text-primary` 5%，hover 32%（index.css:154-161）。 */
     val cardBorder: Color,
+    /**
+     * 卡片投影：`--lattice-focus-lift`（wall.css:12,35）——
+     * 深色 `0 12px 32px rgb(0 0 0 / 45%)`、日光 `0 12px 32px rgb(0 0 0 / 25%)`。
+     * 卡片浮在模糊背景上（m412-light-home-playlists.png），没有这道投影看起来就是平的描边框。
+     */
+    val cardShadow: Color,
+    /** 封面内嵌层的细亮描边：`inset 0 0 0 1px` 取 `--lattice-thumb-ring`（wall.css 封面环，深 10% 白 / 浅 8% 黑）。 */
+    val coverRing: Color,
+    /** 列表行所在玻璃面板的底：`WallToolsQueueIsland.css:9-10` `rgb(0 0 0 / 40%)` / 日光 `rgb(255 255 255 / 62%)`。 */
+    val panelFill: Color,
+    /** 列表行所在玻璃面板的描边：`WallToolsQueueIsland.css:9,17` 深 `rgb(255 255 255 / 8%)` / 浅 `rgb(0 0 0 / 7%)`。 */
+    val panelBorder: Color,
+    /** 当前播放 / 选中行底：`WallToolsQueueIsland.css:176-177` 深 `rgb(255 255 255 / 10%)` / 日光 `rgb(0 0 0 / 7%)`。 */
+    val rowCurrent: Color,
+    /** 当前播放 / 选中行左侧竖条：`WallToolsQueueIsland.css:249` 取 `--text-accent`。 */
+    val rowMarker: Color,
 
     // ---- 搜索行（SearchResultRow.tsx:76-99） -------------------------------------------
     /** 搜索行卡片底：浅 `bg-black/3.5%`、深 `bg-white/4%`（SearchResultRow.tsx:78-83）。 */
@@ -126,8 +149,19 @@ val FoliaLightColors = FoliaColorTokens(
 
     glassFill = Color(0xFFF5F5F4).copy(alpha = 0.85f),
     glassBorder = Color(0xFF1C1917).copy(alpha = 0.12f),
-    cardFill = Color(0xFFF5F5F4).copy(alpha = 0.95f),
+    // wall.css:34 daylight `color-mix(bg #fafaf9 94%, ink #1c1917)` ≈ #f6f5f4（日光近白纸）。
+    cardFill = Color(0xFFF6F5F4),
     cardBorder = Color(0xFF1C1917).copy(alpha = 0.05f),
+    // wall.css:35 daylight `--lattice-focus-lift: 0 12px 32px rgb(0 0 0 / 25%)`；卡片的可见投影取 18%（日光下 25% 过重）。
+    cardShadow = Color(0xFF000000).copy(alpha = 0.18f),
+    coverRing = Color(0xFF1C1917).copy(alpha = 0.08f),
+    // WallToolsQueueIsland.css:17 daylight island: 白 62% 底 + 黑 7% 描边。
+    panelFill = Color(0xFFFFFFFF).copy(alpha = 0.62f),
+    panelBorder = Color(0xFF000000).copy(alpha = 0.07f),
+    // WallToolsQueueIsland.css:177 daylight current row `rgb(0 0 0 / 7%)`。
+    rowCurrent = Color(0xFF000000).copy(alpha = 0.07f),
+    // WallToolsQueueIsland.css:249 `--text-accent`（日光 = orange-600）。
+    rowMarker = Color(0xFFEA580C),
 
     rowFill = Color(0xFF000000).copy(alpha = 0.035f),
     rowBorder = Color(0xFF000000).copy(alpha = 0.05f),
@@ -164,8 +198,19 @@ val FoliaDarkColors = FoliaColorTokens(
 
     glassFill = Color(0xFF09090B).copy(alpha = 0.85f),
     glassBorder = Color(0xFFF4F4F5).copy(alpha = 0.12f),
-    cardFill = Color(0xFF09090B).copy(alpha = 0.95f),
+    // wall.css:10 dark `color-mix(bg #070707 88%, ink #f7f4ee)` ≈ #1c1b1d（比页面底色亮一档的墨）。
+    cardFill = Color(0xFF1C1B1D),
     cardBorder = Color(0xFFF4F4F5).copy(alpha = 0.05f),
+    // wall.css:12 dark `--lattice-focus-lift: 0 12px 32px rgb(0 0 0 / 45%)`。
+    cardShadow = Color(0xFF000000).copy(alpha = 0.45f),
+    coverRing = Color(0xFFFFFFFF).copy(alpha = 0.10f),
+    // WallToolsQueueIsland.css:9-10 dark island: 黑 40% 底 + 白 8% 描边。
+    panelFill = Color(0xFF000000).copy(alpha = 0.40f),
+    panelBorder = Color(0xFFFFFFFF).copy(alpha = 0.08f),
+    // WallToolsQueueIsland.css:176 dark current row `rgb(255 255 255 / 10%)`。
+    rowCurrent = Color(0xFFFFFFFF).copy(alpha = 0.10f),
+    // 深色页 --text-accent 是 zinc-100（baseThemes.ts:12），竖条同色。
+    rowMarker = Color(0xFFF4F4F5),
 
     rowFill = Color(0xFFFFFFFF).copy(alpha = 0.04f),
     rowBorder = Color(0xFFFFFFFF).copy(alpha = 0.06f),

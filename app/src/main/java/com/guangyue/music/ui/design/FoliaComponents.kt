@@ -1,4 +1,4 @@
-﻿package com.guangyue.music.ui.design
+package com.guangyue.music.ui.design
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -11,6 +11,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -41,11 +42,16 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -113,6 +119,11 @@ enum class FoliaButtonKind {
  *  - primary：`bg accent text on-accent`；quiet：`h-6 rounded-md px-1.5 text-xs`。
  *
  * 手机化：高度 32dp → 48dp（触控下限），圆角仍 8dp（`rounded-lg`），字号 13sp，禁用 40% 透明。
+ *
+ * 禁用态（U1b 更正）：Folia 的禁用是**整体** `disabled:opacity-40`（Button.tsx:11 BASE_CLASS），
+ * 底色一起变淡 —— 不是「橙底 + 淡字」。所以这里把 [alpha] 提到最外层 `Box` 上，
+ * 底色与文字一起降到 40%，与源码同义；`enabled:hover:opacity-90`（Button.tsx:16）在触屏上无对应，
+ * 换成已有的按压缩放。
  */
 @Composable
 fun FoliaButton(
@@ -141,6 +152,8 @@ fun FoliaButton(
 
     Box(
         modifier = modifier
+            // 先整体降透明度再画底色：等于 Folia 的 `disabled:opacity-40`（底色一起淡，不留橙块）。
+            .alpha(if (enabled) 1f else 0.4f)
             .foliaPressScale(interaction)
             .defaultMinSize(minHeight = 48.dp)
             .clip(shape)
@@ -152,8 +165,7 @@ fun FoliaButton(
                 role = Role.Button,
                 onClick = onClick,
             )
-            .padding(horizontal = s.x4Dp, vertical = s.x2_5Dp)
-            .alpha(if (enabled) 1f else 0.4f),
+            .padding(horizontal = s.x4Dp, vertical = s.x2_5Dp),
         contentAlignment = Alignment.Center,
     ) {
         Row(
@@ -173,6 +185,8 @@ fun FoliaButton(
  *
  * 源：`src/components/modal/settings/kit/Button.tsx:21-25` —— `ICON_CLASS = h-8 w-8`（32×32），图标 14px。
  * 手机化：32dp → 48dp 触控方框（图标 18dp，保留 Folia 小图标的观感），圆角 `rounded-md` 6dp。
+ * 禁用态照 `ICON_CLASS.fill` 的 `disabled:bg-transparent`（Button.tsx:22）：**连底色一起去掉**，
+ * 只留 40% 透明的图标（`disabled:opacity-40`），不是留一个空方块。
  */
 @Composable
 fun FoliaIconButton(
@@ -189,6 +203,7 @@ fun FoliaIconButton(
     Box(
         modifier = modifier
             .size(48.dp)
+            .alpha(if (enabled) 1f else 0.4f)
             .foliaPressScale(interaction)
             .clip(RoundedCornerShape(6.dp))
             .clickable(
@@ -205,7 +220,7 @@ fun FoliaIconButton(
             imageVector = icon,
             contentDescription = null,
             tint = tint ?: c.inkSoft,
-            modifier = Modifier.size(iconSize).alpha(if (enabled) 1f else 0.4f),
+            modifier = Modifier.size(iconSize),
         )
     }
 }
@@ -217,13 +232,22 @@ fun FoliaIconButton(
 /**
  * Folia 封面卡（首页墙面卡片）。
  *
- * 源：基准截图 `m412-dark-home-playlists.png` / `m412-light-search-typing.png` 的 Daily Mix 卡片 +
- * `src/index.css:152-161` `.theme-polaroid-card`（底 `--bg-color` 95%、描边 `--text-primary` 5%、
- * hover 描边 32%）+ `src/library/suites/bravais/bravaisHome.css:17-29`（外框内边距 10px、间隙 10px）。
+ * 源：
+ *  - 卡片本体 `src/components/wall/wall.css:103-113` —— `.lattice-poster` 的
+ *    `background-color: var(--lattice-poster-background)`（深 `color-mix(bg 88%, ink)`，
+ *    日光 `color-mix(bg 94%, ink)`，:10 / :34）+ `box-shadow: … var(--lattice-poster-elevation)`；
+ *  - 抬起投影 `--lattice-focus-lift`（wall.css:12 深 `0 12px 32px rgb(0 0 0/45%)`、
+ *    :35 日光 `0 12px 32px rgb(0 0 0/25%)`）—— 卡片是浮在模糊背景上的纸，不是描边框；
+ *  - 封面内嵌层细亮描边（m412-light-home-playlists.png 封面四周那一道 1px 亮线）+ 内边距 10px
+ *    （`bravaisHome.css:17-29` 外框 pad 10px、gap 10px）；
+ *  - 结构照截图：外框圆角 16dp（inventory.md §1「卡片圆角统一 CornerSize(16.dp)」）→ 内嵌封面
+ *    圆角 12dp → 左对齐标题 16sp/600 + 副标题 12sp（`--text-secondary`）。
  *
- * 结构（照截图）：外框圆角 16dp（inventory.md §1「卡片圆角统一 CornerSize(16.dp)」）→ 内嵌封面
- * 圆角 12dp → 左对齐标题 14sp/600 + 副标题 12sp（`--text-secondary`）。
- * 手机化：hover 改按压（底从 95% 提到 [FoliaColorTokens.fillStrong] 一档 + scale 0.97）。
+ * U1b 更正（Hark 审查第 2 条）：U1 用的是「浅灰细描边、无投影」的平卡，与 Folia 的白纸凸起卡不符。
+ * 现在补上 [FoliaColorTokens.cardFill] 的近白纸底 + [FoliaColorTokens.cardShadow] 的柔和投影，
+ * 描边只留 5%（`index.css:154`）—— 描边负责边缘，投影负责浮起。
+ * 手机化：hover（`theme-polaroid-card:hover` 描边 32%）改按压（底抬到 [FoliaColorTokens.rowCurrent]
+ * 一档 + scale 0.97），触屏没有悬停。
  */
 @Composable
 fun FoliaCoverCard(
@@ -247,9 +271,17 @@ fun FoliaCoverCard(
     Column(
         modifier = modifier
             .foliaPressScale(interaction)
+            // 投影画在裁剪之前（顺序：阴影 → 裁剪 → 底色），否则会被 clip 裁掉看不到。
+            .shadow(
+                elevation = 16.dp,
+                shape = cardShape,
+                clip = false,
+                ambientColor = c.cardShadow,
+                spotColor = c.cardShadow,
+            )
             .clip(cardShape)
-            .background(if (pressed) c.fillStrong else c.cardFill)
-            .border(1.dp, c.cardBorder, cardShape)
+            .background(if (pressed) c.rowCurrent else c.cardFill, cardShape)
+            .border(1.dp, if (pressed) c.lineStrong else c.cardBorder, cardShape)
             .clickable(
                 interactionSource = interaction,
                 indication = androidx.compose.material3.ripple(bounded = true),
@@ -262,7 +294,8 @@ fun FoliaCoverCard(
                 .fillMaxWidth()
                 .aspectRatio(aspect)
                 .clip(coverShape)
-                .background(coverColor ?: c.preview),
+                .background(coverColor ?: c.preview)
+                .border(1.dp, c.coverRing, coverShape),
             contentAlignment = Alignment.Center,
         ) {
             if (cover != null) cover() else Text(title.take(1), style = t.headline, color = Color.White.copy(alpha = 0.9f))
@@ -309,6 +342,11 @@ fun FoliaCoverCard(
  *  - 行高 56px → 56dp 不变（本来就是 ≥48dp），只去掉 hover，按压改 `--st-fill` 底 + ripple；
  *  - 右侧操作按钮从「hover 才出现」改为常驻（触屏没有 hover，否则入口会丢）；
  *  - 副标题压成一行（艺人 • 专辑，inventory.md §3），超长省略。
+ *
+ * 选中 / 当前播放行（U1b 更正，Hark 审查第 2 条）：U1 只给了浅色底，没有左侧竖条。Folia 的队列面板
+ * （`WallToolsQueueIsland.css:176-177, 249`）是「浅一档的底色 + 左边一根 3×18px 圆角竖条（取
+ * `--text-accent`）」+ 名字加粗（:255 附近 `.is-current .lattice-tools-island-name { font-weight: 700 }`）。
+ * 现在照此补上：底色 [FoliaColorTokens.rowCurrent]，左边 3dp×18dp 圆角 2dp 的 [FoliaColorTokens.rowMarker]。
  */
 @Composable
 fun FoliaSongRow(
@@ -334,8 +372,19 @@ fun FoliaSongRow(
         modifier = modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 56.dp)
-            .background(if (pressed || selected) c.fill else Color.Transparent)
+            .background(if (pressed) c.fill else if (selected) c.rowCurrent else Color.Transparent)
             .drawBehind {
+                if (selected) {
+                    // WallToolsQueueIsland.css:249 —— 3px 宽、18px 高、圆角 2px 的竖条贴左侧。
+                    val w = 3.dp.toPx()
+                    val h = 18.dp.toPx()
+                    drawRoundRect(
+                        color = c.rowMarker,
+                        topLeft = Offset(0f, (size.height - h) / 2f),
+                        size = Size(w, h),
+                        cornerRadius = CornerRadius(2.dp.toPx()),
+                    )
+                }
                 if (showDivider) {
                     // kit.css:62-70 的发丝线：1px，左缩进 16px。
                     val y = size.height - 0.5f
@@ -359,7 +408,13 @@ fun FoliaSongRow(
     ) {
         if (leading != null) leading()
         Column(Modifier.weight(1f)) {
-            Text(text = title, style = t.bodyStrong, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                text = title,
+                style = t.bodyStrong.copy(fontWeight = if (selected) FontWeight.Bold else t.bodyStrong.fontWeight),
+                color = c.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             Text(
                 text = subtitle,
                 style = t.caption,
@@ -710,8 +765,9 @@ enum class FoliaSearchBarShape { Pill, Rounded }
  *
  * 源：`src/components/modal/settings/kit/TextField.tsx:9-12,72` —— `rounded-lg border border-transparent
  * bg --st-fill`，聚焦 `focus-within:border accent`，placeholder `--st-t3`，`h-8 text-13px`；
- * 顶栏那一版是胶囊形（`m412-dark-home-playlists.png`），占位符 `SEARCH DATABASE...`
- * （`src/i18n/locales/en.ts:1579`）。
+ * 顶栏那一版是胶囊形（`m412-dark-home-playlists.png`），占位符取 Folia 简体中文翻译
+ * `src/i18n/locales/zh-CN.ts:1579` 的 `searchDatabase`「搜索在线歌曲...」（英文同键 `en.ts:1579`
+ * 就是 `SEARCH DATABASE...`）。默认值从 `strings.xml` 的 `search_database` 读，不在 Compose 里写死。
  *
  * 手机化：32dp → 48dp 高；聚焦描边用 120ms 颜色过渡（motion.ts:15 `fast`）。
  */
@@ -720,7 +776,7 @@ fun FoliaSearchField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "SEARCH DATABASE...",
+    placeholder: String = stringResource(com.guangyue.music.R.string.search_database),
     shape: FoliaSearchBarShape = FoliaSearchBarShape.Pill,
     leadingIcon: ImageVector? = null,
     onSearch: () -> Unit = {},
@@ -768,6 +824,67 @@ fun FoliaSearchField(
             )
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// 列表容器（玻璃面板 + 行）
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Folia 的列表行容器：一面玻璃面板，里面排若干行（队列 / 搜索结果）。
+ *
+ * 源：`src/components/wall/WallToolsQueueIsland.css:1-20` `.lattice-tools-island` ——
+ *  `border: 1px solid rgb(255 255 255 / 8%)`（日光 `rgb(0 0 0 / 7%)`）、`border-radius: 20px`、
+ *  `background: rgb(0 0 0 / 40%)`（日光 `rgb(255 255 255 / 62%)`）、
+ *  `box-shadow: 0 24px 64px rgb(0 0 0 / 42%)`（日光 `rgb(42 35 27 / 18%)`）、`backdrop-filter: blur(24px)`；
+ *  行 `.lattice-tools-island-row` `padding: 2px 4px 2px 0; border-radius: 10px`。
+ *
+ * 手机化：圆角 20dp、行内边距 4/8dp；`backdrop-filter` → API31+ 的 Modifier.blur（FoliaBlur.kt，
+ * 截图里是降级态）。
+ *
+ * U1b 新增（Hark 审查第 2 条）：U1 只有「一行行贴在页面底色上」，没有 Folia 那面玻璃板，
+ * 于是选中行的浅底与橙竖条都浮不起来。容器补上后，「玻璃面板 → 行 → 选中行」三层才和
+ * m412-light-panel-queue 对得上。
+ */
+@Composable
+fun FoliaListPanel(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val c = Folia.colors
+    val panelShape = RoundedCornerShape(20.dp)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            // WallToolsQueueIsland.css:11 的 `0 24px 64px`：面板浮在内容之上。
+            .shadow(
+                elevation = 24.dp,
+                shape = panelShape,
+                clip = false,
+                ambientColor = c.cardShadow,
+                spotColor = c.cardShadow,
+            )
+            .clip(panelShape)
+            .background(c.panelFill)
+            .border(1.dp, c.panelBorder, panelShape)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        content = content,
+    )
+}
+
+/** 列表容器内部的一行外壳：`border-radius: 10px`（WallToolsQueueIsland.css:120-140）。 */
+@Composable
+fun FoliaListPanelRow(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp)),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
 }
 
 // ---------------------------------------------------------------------------------------------

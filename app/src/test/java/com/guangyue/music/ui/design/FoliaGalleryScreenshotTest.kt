@@ -1,4 +1,4 @@
-﻿package com.guangyue.music.ui.design
+package com.guangyue.music.ui.design
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -21,11 +21,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.guangyue.feature.library.design.icons.GuangYueIcons
+import com.guangyue.music.R
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -75,15 +79,63 @@ class FoliaGalleryScreenshotTest {
         compose.onRoot().captureRoboImage(java.io.File(outDir, "$name.png"))
     }
 
-    /** 内容自适应高度的特写截图：截「content」节点本身，不留整屏空白。 */
+    /**
+     * 内容自适应高度的特写截图：只截组件本身，不留整屏空白。
+     *
+     * U1b 修正：U1 版用 `onRoot()` + `wrapContentHeight()`，但 root 节点仍被撑到整屏 800dp，
+     * 特写图下方三分之二全是空背景（并排图因此被拉长、且两边尺度对不上）。现在改成
+     * `onNodeWithTag` 截挂了 [FitTag] 的节点 —— 但 Roborazzi 的节点截图仍按 root 画布尺寸
+     * 输出，所以再用 [cropToContent] 按「内容非底色底边」把下方空白裁掉。
+     */
     private fun shootFit(name: String, dark: Boolean, content: @Composable () -> Unit) {
         compose.setContent {
             FoliaTheme(dark = dark) {
-                Box(Modifier.requiredWidth(360.dp).wrapContentHeight().background(Folia.colors.page)) { Box(Modifier.fillMaxWidth()) { content() } }
+            Box(
+                Modifier
+                    .requiredWidth(360.dp)
+                    .wrapContentHeight()
+                    .background(Folia.colors.page)
+                    .testTag(FitTag),
+            ) { content() }
             }
         }
         compose.waitForIdle()
-        compose.onRoot().captureRoboImage(java.io.File(outDir, "$name.png"))
+        val file = java.io.File(outDir, "$name.png")
+        compose.onNodeWithTag(FitTag).captureRoboImage(file)
+        cropToContent(file)
+    }
+
+    /**
+     * 把截图里「最后一处内容像素」以下的底色裁掉（下方留 8dp 呼吸）。
+     * 取左上角像素为页面底色，逐行从底往上找第一个与底色明显不同的行（欧氏距离 > 12，
+     * 这样投影这类极淡像素不会被当成内容）。
+     */
+    private fun cropToContent(file: java.io.File) {
+        val img = javax.imageio.ImageIO.read(file) ?: return
+        val bg = img.getRGB(2, 2) and 0xFFFFFF
+        var last = 0
+        var y = img.height - 1
+        while (y > 0) {
+            var x = 0
+            var hit = false
+            while (x < img.width) {
+                val p = img.getRGB(x, y) and 0xFFFFFF
+                val dr = ((p shr 16 and 0xFF) - (bg shr 16 and 0xFF))
+                val dg = ((p shr 8 and 0xFF) - (bg shr 8 and 0xFF))
+                val db = ((p and 0xFF) - (bg and 0xFF))
+                if (dr * dr + dg * dg + db * db > 144) { hit = true; break }
+                x += 2
+            }
+            if (hit) { last = y; break }
+            y -= 1
+        }
+        if (last <= 0 || last >= img.height - 1) return
+        val h = (last + 16).coerceAtMost(img.height)
+        javax.imageio.ImageIO.write(img.getSubimage(0, 0, img.width, h), "png", file)
+    }
+
+    private companion object {
+        const val FitTag = "u1-fit"
     }
 
     @Test
@@ -153,41 +205,59 @@ class FoliaGalleryScreenshotTest {
         var seg: Int by remember { mutableStateOf(1) }
         Frame {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FoliaButton("播放全部", onClick = {}, icon = GuangYueIcons.Play)
-                FoliaButton("加入队列", onClick = {}, kind = FoliaButtonKind.Secondary, icon = GuangYueIcons.ListPlus)
+                FoliaButton(stringResource(R.string.play_all), onClick = {}, icon = GuangYueIcons.Play)
+                FoliaButton(stringResource(R.string.add_to_queue), onClick = {}, kind = FoliaButtonKind.Secondary, icon = GuangYueIcons.ListPlus)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                FoliaButton("已禁用", onClick = {}, enabled = false)
-                FoliaButton("更多", onClick = {}, kind = FoliaButtonKind.Quiet)
+                FoliaButton(stringResource(R.string.disabled_sample), onClick = {}, enabled = false)
+                FoliaButton(stringResource(R.string.more), onClick = {}, kind = FoliaButtonKind.Quiet)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                FoliaIconButton(GuangYueIcons.Play, "播放", onClick = {})
-                FoliaIconButton(GuangYueIcons.Heart, "喜欢", onClick = {})
-                FoliaIconButton(GuangYueIcons.Download, "下载", onClick = {})
-                FoliaIconButton(GuangYueIcons.Shuffle, "随机", onClick = {})
+                FoliaIconButton(GuangYueIcons.Play, stringResource(R.string.cd_play), onClick = {})
+                FoliaIconButton(GuangYueIcons.Heart, stringResource(R.string.cd_like), onClick = {})
+                FoliaIconButton(GuangYueIcons.Download, stringResource(R.string.cd_download), onClick = {})
+                FoliaIconButton(GuangYueIcons.Shuffle, stringResource(R.string.cd_shuffle), onClick = {})
                 FoliaToggle(checked = on, onCheckedChange = { on = it })
             }
-            FoliaSegmented<Int>(options = listOf(0, 1, 2), selected = seg, onSelect = { seg = it }, label = { listOf("列表", "网格", "墙面")[it] })
-            FoliaTabs<String>(tabs = listOf("歌曲", "专辑", "艺人", "歌单"), selected = "歌曲", onSelect = {}, label = { it })
+            val viewLabels = listOf(
+                stringResource(R.string.view_list), stringResource(R.string.view_grid),
+                stringResource(R.string.view_wall),
+            )
+            FoliaSegmented<Int>(options = listOf(0, 1, 2), selected = seg, onSelect = { seg = it }, label = { viewLabels[it] })
+            val kinds = listOf(
+                stringResource(R.string.kind_track), stringResource(R.string.album),
+                stringResource(R.string.artist), stringResource(R.string.playlist),
+            )
+            FoliaTabs<String>(tabs = kinds, selected = kinds[0], onSelect = {}, label = { it })
         }
     }
 
+    /**
+     * 行特写。
+     *
+     * 手机化：桌面的队列行贴在玻璃面板上（`WallToolsQueueIsland.css`），所以这里也放进
+     * [FoliaListPanel]，并让中间一行 `selected = true`，把「浅底 + 左侧橙竖条」一起截进去
+     * （对应基准 `m412-light-panel-queue.png`）。
+     */
     @Composable
     private fun RowCloseup() {
         Frame {
-            Column(Modifier.clip(Folia.shapes.xl).background(Folia.colors.preview)) {
+            FoliaListPanel {
                 FoliaSongRow(
-                    "夜曲", "周杰伦 · 十一月的萧邦", trailingText = "03:44",
+                    stringResource(R.string.song_night), stringResource(R.string.song_album_november), trailingText = "03:44",
                     leading = { FoliaRowCover(icon = GuangYueIcons.Music) },
                     trailingIcon = GuangYueIcons.Plus, onTrailingClick = {},
+                    showDivider = false,
                 )
                 FoliaSongRow(
-                    "Midnight City", "M83 · Hurry Up, We're Dreaming", trailingText = "04:03",
-                    leading = { FoliaRowCover(color = Color(0xFF2F6F5B)) },
+                    stringResource(R.string.song_rice), stringResource(R.string.song_album_magic), trailingText = "03:43",
+                    leading = { FoliaRowCover(color = Color(0xFF8C5A2B)) },
                     trailingIcon = GuangYueIcons.Plus, onTrailingClick = {},
+                    showDivider = false,
+                    selected = true,
                 )
                 FoliaSongRow(
-                    "晴天", "周杰伦 · 叶惠美", trailingText = "04:29",
+                    stringResource(R.string.song_sunny), stringResource(R.string.song_album_yehuimei), trailingText = "04:29",
                     leading = { FoliaRowCover(color = Color(0xFFC9A227)) },
                     trailingIcon = GuangYueIcons.Plus, onTrailingClick = {},
                     showDivider = false,
@@ -203,18 +273,17 @@ class FoliaGalleryScreenshotTest {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.weight(1f)) {
                     FoliaCoverCard(
-                        "Daily Mix", "18 首 · 每日推荐", coverColor = Color(0xFFE0453F),
-                        cover = { Text("Mix", style = Folia.type.bodyStrong, color = Color.White) },
+                        stringResource(R.string.playlist_daily_mix), stringResource(R.string.card_subtitle_daily), coverColor = Color(0xFFE0453F),
+                        cover = { Text(stringResource(R.string.song_cover_letter_daily), style = Folia.type.bodyStrong, color = Color.White) },
                     )
                 }
                 Box(Modifier.weight(1f)) {
                     FoliaCoverCard(
-                        "Cloud Fixture", "NetEase", coverColor = Color(0xFF4B6BD8),
-                        cover = { Text("Cloud", style = Folia.type.bodyStrong, color = Color.White) },
+                        stringResource(R.string.album_liked), stringResource(R.string.card_subtitle_liked), coverColor = Color(0xFF4B6BD8),
+                        cover = { Text(stringResource(R.string.song_cover_letter_night), style = Folia.type.bodyStrong, color = Color.White) },
                     )
                 }
             }
-            FoliaEmptyState(GuangYueIcons.Inbox, "这里还什么都没有。搜索一首歌，或者先建一个歌单。")
         }
     }
 
@@ -242,7 +311,7 @@ class FoliaGalleryScreenshotTest {
                 }
                 FoliaGlassPanel(Modifier.align(Alignment.Center).padding(horizontal = 12.dp)) {
                     Text(
-                        "毛玻璃 " + if (LocalFoliaBlurEnabled.current) "blur-on" else "blur-off",
+                        stringResource(if (LocalFoliaBlurEnabled.current) R.string.glass_on else R.string.glass_off),
                         style = Folia.type.bodyStrong,
                         color = Folia.colors.ink,
                         modifier = Modifier.padding(16.dp),
