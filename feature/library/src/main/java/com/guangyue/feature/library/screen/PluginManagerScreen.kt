@@ -33,6 +33,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -351,9 +352,10 @@ private fun SourceRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             RadioMark(selected = selected, enabled = selectable)
             Spacer(Modifier.width(GySpace.m))
-            // 0.0.9 a：不再用首字当图标。优先插件自带 iconUrl，其次源站点 favicon，
-            // 都取不到才回退首字占位（见 PluginIcon.kt）。
-            PluginIcon(plugin)
+            // 0.0.9 b：真机图标必须出来。候选顺序 = 插件自带 iconUrl → 站点 logo/favicon
+            // （PluginPlatformIcons）→ 插件源站 favicon，逐条 probe 成功才显示，全挂才回退首字占位。
+            // 加载在 IO 线程各走各的 produceState，不参与本次合成，滚动不被阻塞（见 PluginIcon.kt）。
+            key(plugin.id) { PluginIcon(plugin) }
             Spacer(Modifier.width(GySpace.m))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -437,10 +439,13 @@ private fun SourceRow(
                     .padding(start = 56.dp, end = GySpace.m, top = GySpace.xs),
                 verticalArrangement = Arrangement.spacedBy(GySpace.xxs),
             ) {
+                // 0.0.9 b：这里必须过一遍 PluginFailureText 收口 —— 插件索引里存的是未清洗的原始异常
+                // （`com.guangyue...PluginRuntimeException: ... at plugin.js:2:442400`），直接贴出来
+                // 就是给用户看栈帧。状态来源见 [statusOf] 上方注释。
                 val note = plugin.healthNote
                 if (!note.isNullOrBlank()) {
                     Text(
-                        text = "体检：" + note.take(200),
+                        text = "体检：" + firstSentence(note),
                         fontSize = 11.sp,
                         lineHeight = 16.sp,
                         color = Gyp.t2,

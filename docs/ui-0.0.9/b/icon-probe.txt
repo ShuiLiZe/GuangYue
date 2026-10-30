@@ -1,0 +1,26 @@
+# 0.0.9 b · 图标地址真机探测记录
+
+由 PluginIconLoader.probe 在模拟器 gy34 上逐个取到的实际结果（logcat TAG=GYICON），主机侧用 node 复核同一批 URL。全部为「2xx 且读到至少 1 字节」才算通过，未通过的直接回退首字占位。
+
+platform | url | http | content-type | bytes | 结果
+--- | --- | --- | --- | --- | ---
+`kugou` | `https://t1.kugou.com/favicon.ico` | 200 | image/vnd.microsoft.icon | 1150 | 真机取到，酷狗蓝K标
+`kuwo` | `https://www.kuwo.cn/static/image/logo.png` | 200 | image/png | 3862 | 真机取到，酷我橙色K标
+`qq` | `https://y.qq.com/favicon.ico` | 200 | image/x-icon | 4286 | 真机取到，QQ黄绿音符标
+`netease` | `https://music.163.com/favicon.ico` | 200 | image/x-icon | 4286 | 真机取到，网易云红圆标
+`qishui` | `https://lf1-cdn-tos.bytegoofy.com/goofy/ies/douyin_web/public/favicon.ico` | 200 | image/vnd.microsoft.icon | 4286 | 真机取到，抖音音符标（汽水无独立站点）
+`migu` | `https://www.migu.cn/favicon.ico` | 200 | image/x-icon | 16958 | 真机取到，咪咕蓝色圆标
+`fanqie` | `https://p1-tt.byteimg.com/origin/novel-static/a3621391ca2e537045168afda6722ee9` | 200 | image/png | 6940 | 真机取到，番茄小说番茄标
+`bilibili` | `https://www.bilibili.com/favicon.ico` | 200 | image/x-icon | 4286 | 真机取到，B站蓝色小电视
+
+## 0.0.9 a 用过的、在真机上失败的地址（本轮已换掉）
+
+platform | 旧 url | 真机结果 | 换成
+--- | --- | --- | ---
+酷狗 | `https://www.kugou.com/favicon.ico` | probe 403（主机 curl 200，设备被拒） | `https://t1.kugou.com/favicon.ico`
+番茄 | `https://fanqienovel.com/favicon.ico` | 200 但 0 字节（text/plain），解码必然失败 | 番茄小说首页 `<link rel="shortcut icon">` 指向的字节 CDN PNG
+汽水 | `https://www.douyin.com/favicon.ico` | 302 到 CDN，时常 404 | `https://lf1-cdn-tos.bytegoofy.com/.../douyin_web/public/favicon.ico`
+
+## 没有可用站点图标的源（保持首字占位）
+
+快音、y2002、lrts、bookan、streetvoice、djcsj、huole、DJ秀、cctv、DJKK、皮狗DJ、水晶舞曲、相声评书、QQDJ、清风DJ、宝贝DJ、黑色音频、好听轻音乐、电音阁、我是DJ、73DJ、先上DJ、DJ6、SpaceDJ、DJ娱乐、魅力DJ、MixDJ、波比DJ、小熊电音 —— 要么平台名带中文/连字符对不上 byPlatform，要么源站根本没有可取的图标资源；宁可用首字圆圈，也不瞎编 URL。

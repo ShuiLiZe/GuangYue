@@ -33,6 +33,7 @@ class PluginMediaSourceResolver @Inject constructor(
     private val tracks: TrackRepository,
     private val lx: LxSourceManager,
     private val prefs: AppPreferences,
+    private val health: com.guangyue.core.plugin.PlaybackHealthHook,
 ) : MediaSourceResolver {
 
     override suspend fun resolve(origin: MediaOrigin): ResolvedSource = withContext(Dispatchers.IO) {
@@ -72,6 +73,9 @@ class PluginMediaSourceResolver @Inject constructor(
             }
 
         val label = row?.title?.takeIf { it.isNotBlank() } ?: "这首歌"
+        // 0.0.9 b：这条曲目归哪个音源 —— 插件直出与洛雪兜底成功后都用它把该插件标成「可用」。
+        val pluginKey = origin.pluginId.takeIf { it.isNotBlank() }
+            ?: row?.platform?.takeIf { it.isNotBlank() }
         // 插件取链通常 5~15s（慢网/聚合源更久）。洛雪取链源（自带五源脚本）在 PC 上实测 1 秒级，
         // 所以把插件取链压到较短预算：超时就直接落到洛雪源，别让用户等一分钟。
         val result = runCatching {
@@ -89,6 +93,8 @@ class PluginMediaSourceResolver @Inject constructor(
         if (result != null) {
             // 拿到播放地址就把播放服务拉起来，这样一开播就有 media session（通知栏/锁屏/媒体键）。
             GuangYuePlaybackService.start(app)
+            // 插件自己真取到了链 → 体检结论按实测改写（管理页由「取不到链」变「可用」）。
+            health.recordPlayback(pluginKey, "插件直出")
             return@withContext ResolvedSource(result.url, result.headers, volatile = true)
         }
 
@@ -112,6 +118,9 @@ class PluginMediaSourceResolver @Inject constructor(
                 .getOrNull()
             android.util.Log.d("GYHOME", "lx fallback for " + origin.trackKey + " -> " + (fallback ?: "null"))
             if (!fallback.isNullOrBlank()) {
+                // 「能出声」就算是可用：洛雪取链源兜底成功也说明这个音源能播，
+                // 状态里写明是哪个取链源给的地址，别让列表继续显示「取不到链」。
+                health.recordPlayback(pluginKey, "洛雪取链源「${lx.lastResolvedBy ?: "已启用源"}」")
                 return@withContext ResolvedSource(fallback, volatile = true)
             }
         }

@@ -264,6 +264,7 @@ class LxSourceManager @Inject constructor(
         defaultWire: String = "320k",
     ): String? {
         load()
+        lastResolvedBy = null
         val candidates = enabled()
         if (candidates.isEmpty()) return null
         val key = LxPlatforms.of(item.platform) ?: return null
@@ -284,11 +285,22 @@ class LxSourceManager @Inject constructor(
                 .getOrNull()
             if (!url.isNullOrBlank()) {
                 Log.d(TAG, "lx ${source.displayName} 取到链：$key ${item.title}")
+                lastResolvedBy = source.displayName
                 return url
             }
         }
         return null
     }
+
+    /**
+     * 最近一次 [resolveMediaUrl] 命中的取链源名（没命中为 null）。
+     *
+     * 0.0.9 b：播放链路拿它写「播放实测：洛雪取链源『Free listen』」—— 状态页要能说清这首歌
+     * 到底是谁给出的地址，也用来和 logcat 里那句 `lx … 取到链` 交叉复核。
+     */
+    @Volatile
+    var lastResolvedBy: String? = null
+        private set
 
     private suspend fun resolveWith(
         source: LxSource,
