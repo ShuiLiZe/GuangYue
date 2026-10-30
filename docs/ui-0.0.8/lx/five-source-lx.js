@@ -151,7 +151,7 @@ const getToken = () => new Promise((resolve, reject) => {
     name: '酷我音乐',
     type: 'music',
     actions: ['musicUrl'],
-    qualitys: ['128k', '320k', 'flac'],
+    qualitys: ['128k', '320k', 'flac', 'flac24bit'],
   },
 
   // 广乐 0.0.8 补丁：官方 www.kuwo.cn/api/v1/www/music/playUrl 现在对未登录请求
@@ -190,6 +190,12 @@ async function kwMusicUrl(songInfo, quality) {
   // 酷我移动端只认纯数字 rid；songmid 可能是 'MUSIC_123' 或纯数字，统一剥掉前缀。
   const rid = String((songInfo && songInfo.songmid) == null ? '' : songInfo.songmid).replace(/^(MUSIC_|MP3_)/i, '')
   if (!rid) throw new Error('酷我：缺少歌曲 rid')
+  // 非数字 rid 一定不是酷我的（其它源的 songmid 会是 '0039MnYb0qxYhV' 这种字母数字）。
+  // 不拦就会拿到 {"code":4011,"data":{"format":"None","sig":"None","url":"None"}}，
+  // 宿主那边只会报「取链脚本返回的不是直链：None」，看不出是「拿别人的 id 来问酷我」。
+  if (!/^\d+$/.test(rid)) {
+    throw new Error('酷我：rid 不是酷我的数字 id（' + rid + '），不能跨源凑')
+  }
   const target_url = 'http://nmobi.kuwo.cn/mobi.s?f=web'
     + '&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk'
     + '&type=convert_url_with_sign'
@@ -208,6 +214,11 @@ async function kwMusicUrl(songInfo, quality) {
       const body = resp && resp.body
       const d = body && body.data
       if (!d || !d.url) return reject(new Error('酷我取链失败（未返回 url）'))
+      // 未知 rid 时酷我回 {"code":4011,"data":{"format":"None","sig":"None","url":"None"}}，
+      // 它「有 url 字段」所以上面拦不住，但值就是字符串 "None"，不是直链。
+      if (String(d.url) === 'None' || String(d.url) === 'null') {
+        return reject(new Error('酷我：该 rid 不是酷我的曲目（code=' + (body && body.code) + '，url=None）'))
+      }
       resolve(d)
     })
   })
@@ -271,7 +282,7 @@ function kgTracker(hash, br) {
     name: '酷狗音乐',
     type: 'music',
     actions: ['musicUrl'],
-    qualitys: ['128k', '320k', 'flac'],
+    qualitys: ['128k', '320k', 'flac', 'flac24bit'],
   },
 
   async musicUrl({ hash, albumId }, quality) {
@@ -306,6 +317,13 @@ const fileConfig = {
     e: '.flac',
     bitrate: 'FLAC',
   },
+  // 广乐 0.0.8 补：QQ 没有独立的 24bit 文件名规则，按 F000 无损文件名再要一次，
+  // 有 24bit 版权时会回落成 flac；缺这个 key 会抛 cannot read property 's' of undefined。
+  flac24bit: {
+    s: 'F000',
+    e: '.flac',
+    bitrate: 'FLAC',
+  },
 }
 
 // https://github.com/listen1/listen1_chrome_extension/blob/master/js/provider/qq.js
@@ -314,7 +332,7 @@ const fileConfig = {
     name: '企鹅音乐',
     type: 'music',
     actions: ['musicUrl'],
-    qualitys: ['128k'],
+    qualitys: ['128k', '320k', 'flac', 'flac24bit'],
   },
 
   musicUrl({ songmid, strMediaMid }, quality) {
@@ -367,16 +385,14 @@ const fileConfig = {
 
         // vip
         if (purl === '') {
-          // 广乐 0.0.8 实测：未登录 QQ 已经不发 vkey（purl 恒为空、result=104003），
-          // 但新版响应里还带一份「试听片段」testfile2g（C400 的 30 秒 m4a，vkey 有效）。
-          // 有就给这条能出声的片段，总比整首歌直接失败好；没有就如实报错。
-          const preview = data.req_0.data.testfile2g || data.req_0.data.testfilewifi
-          if (preview) {
-            const host = (data.req_0.data.sip && data.req_0.data.sip[0]) || 'http://aqqmusic.tc.qq.com/'
-            console.log('[QQ] 未登录只拿到试听片段')
-            return resolve(host + preview)
-          }
-          return reject(new Error('该曲目 QQ 需要付费/登录，未登录取不到直链'))
+          // 广乐 0.0.8 实测：未登录 QQ 不发 vkey（purl 恒为空、result=104003/101404），
+          // 响应里那份 testfile2g 是 C400 的 30 秒试听片段，不是这首歌的直链。
+          // 以前把它当成功返回，会在「五源矩阵」里冒充 QQ/串源成功（连 filename 拼成
+          // F000undefined.flac 也照样拿到它），把真正的失败全盖掉。这里如实报失败，
+          // 具体原因（result 码 / filename）一起带出去。
+          const m = (data.req_0.data.midurlinfo && data.req_0.data.midurlinfo[0]) || {}
+          return reject(new Error('QQ 未登录只给 30s 试听片段（filename=' + (m.filename || file)
+            + ' result=' + (m.result == null ? '-' : m.result) + '），取不到正式直链'))
         }
 
         const url = data.req_0.data.sip[0] + purl
@@ -452,6 +468,10 @@ const wy_qualitys = {
   '128k': 128000,
   '320k': 320000,
   flac: 999000,
+  // 广乐 0.0.8 补：网易 eapi 的 br 只是「偏好值」，1999000（hires 请求）实测回
+  // level=exhigh 的正常直链，不会被拒。原来缺这个 key 会让 br 变成 undefined，
+  // JSON 丢弃后服务端直接回 {"msg":"参数错误","code":400}。
+  flac24bit: 1999000,
 }
 const eapi = (url, object) => {
   const eapiKey = 'e82ckenh8dichen8'
@@ -476,7 +496,7 @@ if (wy_token) wy_cookie = `MUSIC_U=${wy_token}; ` + wy_cookie
     actions: ['musicUrl'],
     // 广乐 0.0.8 补丁：未登录也报三档。脚本能取到什么档由曲目版权决定，
     // 只报 128k 会让 320k / flac 的请求直接被宿主判「不支持」，而不是如实回落。
-    qualitys: ['128k', '320k', 'flac'],
+    qualitys: ['128k', '320k', 'flac', 'flac24bit'],
   },
 
   musicUrl({ songmid }, quality) {
@@ -556,6 +576,12 @@ async function mgMusicUrl(songInfo, quality) {
     }, (err, resp) => {
       if (err) return reject(err)
       const body = (resp && resp.body) || {}
+      // 咪咕在 contentId 不属于咪咕（比如拿了别的源的数字 id）时会回非 JSON 或空体，
+      // 这时 body.code 是 undefined，不能当成「有 body 就继续」——直接报失败。
+      if (!body || typeof body !== 'object' || !body.code) {
+        return reject(new Error('咪咕接口没有返回 JSON（contentId=' + contentId
+          + ' 可能不是咪咕的 id，status=' + (resp && resp.statusCode) + '）'))
+      }
       resolve(body)
     })
   })
@@ -584,7 +610,7 @@ async function mgMusicUrl(songInfo, quality) {
     name: '咪咕音乐',
     type: 'music',
     actions: ['musicUrl'],
-    qualitys: ['128k', '320k', 'flac'],
+    qualitys: ['128k', '320k', 'flac', 'flac24bit'],
   },
 
   musicUrl(musicInfo, quality) {
@@ -678,6 +704,51 @@ const __searchSongId = (source, musicInfo) => {
   })
 }
 
+// 本脚本五个源都没有 search（只实现了 musicUrl），所以兜底到别的源时没有「同名曲 id 可查」，
+// 只能把宿主那份 musicInfo 里属于目标源的 id 抠出来再传。
+// 以前直接把整份 musicInfo 丢进 apis[k].musicUrl：QQ 会拿 "F000undefined.flac" 去要链，
+// 返回 testfile2g 的 30s 试听片段却当成成功，把咪咕/酷我的真实失败盖掉。
+const __PICK = {
+  tx: ['songmid', 'strMediaMid', 'mediaMid', 'albumMid'],
+  wy: ['songmid', 'musicId', 'id'],
+  kw: ['songmid', 'copyrightId', 'rid', 'musicId'],
+  kg: ['hash', 'albumId', 'fileHash'],
+  mg: ['contentId', 'songId', 'copyrightId'],
+}
+// 每个源「有它才算有本源的 id」的主键。只看键在不在是不够的：宿主 LxMusicInfo.of 会把
+// 一个 id 顺手塞进 songmid/hash/rid/songId 四个键（为了让兜底有机会命中），所以一堆
+// 数字 id 在每个键上看起来都「存在」。真正可靠的判据是宿主给的 platform（kuwo/kugou/qq/
+// netease/migu）——它标明这份 musicInfo 是从哪个源搜出来的。platform 对不上就说明
+// 这份 id 不是目标源的，跨源兜底一律跳过，避免拿别人的 id 去要链。
+const __MAIN = { tx: 'songmid', wy: 'songmid', kw: 'songmid', kg: 'hash', mg: 'contentId' }
+const __hostPlatform = { kw: 'kuwo', kg: 'kugou', tx: 'qq', wy: 'netease', mg: 'migu' }
+const __pick = (source, musicInfo) => {
+  const keys = __PICK[source]
+  const main = __MAIN[source]
+  const out = {}
+  if (!keys || !musicInfo) return out
+  const hostPlat = String(musicInfo.platform || '').toLowerCase()
+  if (hostPlat && __hostPlatform[source] && hostPlat !== __hostPlatform[source]) {
+    throw new Error('musicInfo 来自 ' + hostPlat + '，不是 ' + source + ' 的 id，不能跨源凑')
+  }
+  // 宿主 LxMusicInfo.of 只在「本来就是这个源」时才会写出该源的主键；咪咕是唯一例外，
+  // 它只写 songmid/songId 不写 contentId，所以 contentId 缺失时用 songId/songmid 顶上。
+  var mainVal = musicInfo[main]
+  if ((mainVal == null || mainVal === '') && source === 'mg') {
+    mainVal = musicInfo.songId || musicInfo.songmid
+  }
+  if (main && (mainVal == null || mainVal === '')) {
+    throw new Error('缺少 ' + source + ' 自己的 ' + main + '（musicInfo 不属于该源，不能跨源凑 id）')
+  }
+  for (const k of keys) {
+    if (musicInfo[k] != null && musicInfo[k] !== '') out[k] = musicInfo[k]
+  }
+  if (source === 'mg' && !out.contentId) out.contentId = mainVal
+  if (musicInfo.name) out.name = musicInfo.name
+  if (musicInfo.singer) out.singer = musicInfo.singer
+  return out
+}
+
 on(lx_EVENT_NAMES.request, ({ source, action, info }) => {
   switch (action) {
     case 'musicUrl':
@@ -688,8 +759,7 @@ on(lx_EVENT_NAMES.request, ({ source, action, info }) => {
       var __order = __has ? [source].concat(Object.keys(apis).filter(function (k) { return k !== source })) : Object.keys(apis)
       console.log('FALLBACK_START n=' + __order.length)
       var __start
-      try { __start = __has ? apis[source].musicUrl(info.musicInfo, info.type) : Promise.reject(new Error('host source ' + source + ' not in this script')) } catch (e) { __start = e instanceof Error ? Promise.reject(e) : Promise.resolve(e) }
-      try {
+      try { __start = __has ? apis[source].musicUrl(__pick(source, info.musicInfo), info.type) : Promise.reject(new Error('host source ' + source + ' not in this script')) } catch (e) { __start = e instanceof Error ? Promise.reject(e) : Promise.resolve(e) }      try {
       return __order.reduce(function (p, k) { if (k === source) return p
         return p.catch(function (e0) {
          console.log('TRY ' + k + ' after ' + (e0 && e0.message) + ' hasSearch=' + (typeof apis[k].search))
@@ -723,7 +793,23 @@ on(lx_EVENT_NAMES.request, ({ source, action, info }) => {
               throw e2
             })
           })
-          .catch(function () { return apis[k].musicUrl(info.musicInfo, info.type) })
+          .catch(function (e1) {
+            // 本脚本没有 search（五个源都只实现了 musicUrl），所以跨源兜底时没有「同名曲
+            // 自己的 id」可查：只有宿主 musicInfo 本来就是这个源的（主键对得上）才继续问它，
+            // 否则直接把这个源判失败。以前是把整份混了五个源 id 的 musicInfo 丢进去，
+            // QQ 会拿咪咕 contentId 拼出 F000undefined.flac 并返回 30s 试听片段，
+            // 把咪咕/酷我的真实失败包装成成功（矩阵里 kw flac24bit、mg flac24bit 就是这么串的）。
+            if (e1 && e1.__pick) throw e1
+            var picked
+            try { picked = __pick(k, info.musicInfo) } catch (ep) {
+              console.log('NOPICK ' + k + ' ' + (ep && ep.message))
+              var e3 = new Error('跨源兜底跳过 ' + k + '：' + (ep && ep.message))
+              e3.__pick = true
+              throw e3
+            }
+            console.log('NOSEARCH ' + k + ' after ' + (e1 && e1.message) + ' picked=' + JSON.stringify(picked).slice(0, 200))
+            return apis[k].musicUrl(picked, info.type)
+          })
          } catch (es) { console.log('SYNERR ' + k + ' ' + (es && es.message)); return Promise.reject(es) }
         }) }, __start).catch((err) => {
         console.log('FINAL ' + (err && err.message))

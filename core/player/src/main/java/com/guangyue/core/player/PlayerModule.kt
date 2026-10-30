@@ -54,7 +54,9 @@ class PluginMediaSourceResolver @Inject constructor(
                     durationMs = null,
                 )
             }
-        val payload = pluginItem?.raw
+        val payload = row?.rawJson
+            ?.let { runCatching { com.guangyue.core.plugin.Json2.parse(it) as? kotlinx.serialization.json.JsonObject }.getOrNull() }
+            ?: pluginItem?.raw
             ?: row?.let {
                 MusicItem(
                     platform = it.platform,
@@ -95,7 +97,9 @@ class PluginMediaSourceResolver @Inject constructor(
         if (lxItem != null) {
             val fallback = runCatching {
                 lx.resolveMediaUrl(lxItem, origin.quality.wire, prefs.lxDefaultQuality)
-            }.getOrNull()
+            }.onFailure { android.util.Log.w("GYHOME", "lx fallback threw: " + it.message) }
+                .getOrNull()
+            android.util.Log.d("GYHOME", "lx fallback for " + origin.trackKey + " -> " + (fallback ?: "null"))
             if (!fallback.isNullOrBlank()) {
                 return@withContext ResolvedSource(fallback, volatile = true)
             }

@@ -206,8 +206,20 @@ class LxRuntime(
         }
         val obj = Json2.parse(raw).asObj() ?: throw LxRuntimeException("返回不是对象")
         if (obj["ok"].asBool() == true) {
-            val data = obj["data"].asStr() ?: return ""
-            return data.trim().trim('"')
+            val data = obj["data"].asStr() ?: throw LxRuntimeException("取链脚本返回空链接")
+            val url = data.trim().trim('"').trim()
+            // 脚本可能 return 一个 undefined/null（例如未登录付费曲的分支漏了 return），
+            // JSON 化后变成字面量 "null"；这种必须在宿主侧判失败，交给上层换源。
+            if (url.isEmpty() || url == "null" || url == "undefined") {
+                throw LxRuntimeException("取链脚本返回空链接（null/undefined）")
+            }
+            // 源站偶尔把「没有这首歌」写成字符串 "None"（实测酷我 convert_url_with_sign 对
+            // 未知 rid 回 {"code":4011,"data":{"format":"None","sig":"None","url":"None"}}），
+            // 脚本把它当直链返回。宿主只认 http(s)，其余一律算失败交给上层换源。
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                throw LxRuntimeException("取链脚本返回的不是直链：$url")
+            }
+            return url
         }
         if (obj["missing"].asBool() == true) {
             throw LxRuntimeException("脚本不支持 musicUrl")

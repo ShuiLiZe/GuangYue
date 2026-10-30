@@ -212,15 +212,20 @@ class LxRuntimeTest {
     @Test
     fun `lxcrypto 的 md5 与标准一致`() {
         val code = """
+            // musicUrl 的返回值必须是直链（宿主会拒非 http（s）值且报
+            // 「取链脚本返回的不是直链」），所以把 md5 拼进 URL 里断言。
             lx.on(lx.EVENT_NAMES.request, function () {
-              return lx.utils.crypto.md5('abc');
+              return 'https://example.com/' + lx.utils.crypto.md5('abc') + '.mp3';
             });
             lx.send(lx.EVENT_NAMES.inited, { status: true, sources: { tx: { name: 'QQ音乐' } } });
         """.trimIndent()
         val rt = runtime(code, offlineHttp())
         try {
             rt.install()
-            assertEquals("900150983cd24fb0d6963f7d28e17f72", rt.musicUrl("tx", "320k", musicInfo()))
+            assertEquals(
+                "https://example.com/900150983cd24fb0d6963f7d28e17f72.mp3",
+                rt.musicUrl("tx", "320k", musicInfo()),
+            )
         } finally {
             rt.close()
         }

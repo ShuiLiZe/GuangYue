@@ -1,0 +1,310 @@
+# 五源 × 四音质取链原始结果
+# 脚本 = docs\ui-0.0.8\lx\five-source-lx.js  生成时间 = 2026-10-30T18:59:45.818010900
+# 平台上报 = []
+
+# 平台上报 = [tx, wy, kg, kw, mg]
+
+## kw  酷我 花海(474678847)
+musicInfo = {"name":"花海","singer":"周杰伦","copyrightId":"474678847","musicId":"474678847","songmid":"474678847","hash":"474678847","rid":"474678847","songId":"474678847"}
+  128k : OK   http://kw-er.kuwo.cn/05be72c12eb8e4f49e35cb3fbc4c5466/6ae478a3/resource/30106/trackmedia/M500004OK6pa2JfRwK.mp3?bitrate$128&format$mp3&source$kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type$convert_url_with_sign&user$&loginUid$   (155ms)
+        log [log] ENTRY kw 128k
+        log [log] FALLBACK_START n=5
+        log [http] GET 200 153ms http://nmobi.kuwo.cn/mobi.s?f=web&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type=convert_url_with_sign&br=128kmp3&rid=474678847
+  320k : OK   http://kw-er.kuwo.cn/968feeda7fc5ea6342baf38c341a0bb0/6ae478a3/resource/30106/trackmedia/M800004OK6pa2JfRwK.mp3?bitrate$320&format$mp3&source$kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type$convert_url_with_sign&user$&loginUid$   (109ms)
+        log [log] ENTRY kw 320k
+        log [log] FALLBACK_START n=5
+        log [http] GET 200 107ms http://nmobi.kuwo.cn/mobi.s?f=web&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type=convert_url_with_sign&br=320kmp3&rid=474678847
+  flac : OK   http://kw-er.kuwo.cn/968feeda7fc5ea6342baf38c341a0bb0/6ae478a3/resource/30106/trackmedia/M800004OK6pa2JfRwK.mp3?bitrate$320&format$mp3&source$kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type$convert_url_with_sign&user$&loginUid$   (178ms)
+        log [log] ENTRY kw flac
+        log [log] FALLBACK_START n=5
+        log [http] GET 200 95ms http://nmobi.kuwo.cn/mobi.s?f=web&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type=convert_url_with_sign&br=2000kflac&rid=474678847
+        log [http] GET 200 81ms http://nmobi.kuwo.cn/mobi.s?f=web&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type=convert_url_with_sign&br=320kmp3&rid=474678847
+  flac24bit : FAIL 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+    at mgMusicUrl (source.js:590:20)
+   (811ms)
+        log [log] SS-TYPE kg object
+        log [log] NOSEARCH kg after no search kg q=花海 周杰伦 picked={"hash":"474678847","name":"花海","singer":"周杰伦"}
+        log [http] GET 200 199ms https://trackercdn.kugou.com/i/v2/?key=12871f9098a2d2c6e87013163beeec8f&hash=474678847&br=hq&appid=1005&pid=2&cmd=25&behavior=play
+        log [log] TRY tx after 酷狗取链失败：Bad hash hasSearch=undefined
+        log [log] IN-KW-PATH tx
+        log [log] SS-TYPE tx object
+        log [log] NOSEARCH tx after no search tx q=花海 周杰伦 picked={"songmid":"474678847","name":"花海","singer":"周杰伦"}
+        log [log] 474678847 flac24bit
+        log [http] GET 200 243ms https://u.y.qq.com/cgi-bin/musicu.fcg?format=json&data={"req_0":{"module":"vkey.GetVkeyServer","method":"CgiGetVkey","param":{"filename":["F000undefined.flac"],
+        log [log] {"code":0,"ts":1793357988108,"start_ts":1793357988073,"traceid":"795974a1529bc361","req_0":{"code":0,"data":{"uin":"","retcode":0,"verify_type":0,"login_key":"","msg":"120.227.53.174;fnameHitCache_200","sip":["http://aqqmusic.tc.qq.com/","http://sjy6.stream.qqmusic.qq.com/"],"thirdip":["",""],"testfile2g":"C400003mAan70zUy5O.m4a?guid=10000&vkey=9F206A6DAC24F7C7CFC075E4D09A99DB212CD88B48D72E0B10511603BAB21FCBECD1156E1C1A00A14540F7034D5DB4B495D2E726091C3CAA__v21e2a1f1b&uin=&fromtag=3","testfilewifi":"C400003mAan70zUy5O.m4a?guid=10000&vkey=9F206A6DAC24F7C7CFC075E4D09A99DB212CD88B48D72E0B10511603BAB21FCBECD1156E1C1A00A14540F7034D5DB4B495D2E726091C3CAA__v21e2a1f1b&uin=&fromtag=3","midurlinfo":[{"songmid":"474678847","filename":"F000undefined.flac","purl":"","errtype":"","p2pfromtag":0,"qmdlfromtag":0,"common_downfromtag":0,"vip_downfromtag":0,"pdl":0,"premain":0,"hisdown":0,"hisbuy":0,"uiAlert":0,"isbuy":0,"pneedbuy":0,"pneed":0,"isonly":0,"onecan":0,"result":101404,"tips":"","opi48kurl":"","opi96kurl":"","opi192kurl":"","opiflackurl":"","opi128kurl":"","opi192koggurl":"","wififromtag":"","flowfromtag":"","wifiurl":"","flowurl":"","vkey":"","opi30surl":"","ekey":"","auth_switch":0,"subcode":0,"opi96koggurl":"","auth_switch2":0,"xcdnurl":"","mid":"undefined","df":null}],"servercheck":"9df74969e0fda51f49b3033c66f2e553","expiration":80400,"deviceResult":"","validUrl":"","validTitle":"","validText":""}}}
+        log [log] TRY wy after QQ 未登录只给 30s 试听片段（filename=F000undefined.flac result=101404），取不到正式直链 hasSearch=undefined
+        log [log] IN-KW-PATH wy
+        log [log] SS-TYPE wy object
+        log [log] NOSEARCH wy after no search wy q=花海 周杰伦 picked={"songmid":"474678847","musicId":"474678847","name":"花海","singer":"周杰伦"}
+        log [log] 474678847 1999000
+        log [http] POST 200 182ms https://interface3.music.163.com/eapi/song/enhance/player/url
+        log [log] {"data":[{"id":474678847,"url":null,"br":0,"size":0,"md5":null,"code":404,"expi":1200,"type":null,"gain":0,"peak":null,"closedGain":0,"closedPeak":0,"fee":0,"uf":null,"payed":0,"flag":1,"canExtend":false,"freeTrialInfo":null,"level":null,"encodeType":null,"channelLayout":null,"freeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"listenType":null,"cannotListenReason":1,"playReason":null,"freeLimitTagType":null},"freeTimeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"type":0,"remainTime":0},"urlSource":0,"rightSource":0,"podcastCtrp":null,"effectTypes":null,"time":0,"message":null,"levelConfuse":null,"musicId":null,"accompany":null,"sr":0,"auEff":null,"immerseType":null,"beatType":0}],"code":200}
+        log [log] TRY mg after failed hasSearch=undefined
+        log [log] IN-KW-PATH mg
+        log [log] SS-TYPE mg object
+        log [log] NOSEARCH mg after no search mg q=花海 周杰伦 picked={"songId":"474678847","copyrightId":"474678847","contentId":"474678847","name":"花海","singer":"周杰伦"}
+        log [http] GET 200 172ms https://c.musicapp.migu.cn/MIGUM3.0/strategy/pc/listen/v1.0?contentId=474678847&resourceType=2&toneFlag=ZQ
+        log [log] FINAL 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+        log [log] 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+
+## kg  酷狗 恒星不忘(周杰伦/言承旭/吴建豪/周渝民)
+musicInfo = {"name":"恒星不忘 Forever Forever","singer":"周杰伦","hash":"b9b3a55ffb5b95f165839a26120e9fec","albumId":"3521156714","songmid":"b9b3a55ffb5b95f165839a26120e9fec","rid":"b9b3a55ffb5b95f165839a26120e9fec","songId":"b9b3a55ffb5b95f165839a26120e9fec"}
+  128k : OK   http://fsandroid.tx.kugou.com/202610301859/746163762b1387977107168ce3aff003/v3/b9b3a55ffb5b95f165839a26120e9fec/yp/full/ap1005_pi2_ct430100_s3521156714.mp3   (46ms)
+        log [log] ENTRY kg 128k
+        log [log] FALLBACK_START n=5
+        log [http] GET 200 43ms https://trackercdn.kugou.com/i/v2/?key=a92d91a3666886bf532a52f516b2235f&hash=b9b3a55ffb5b95f165839a26120e9fec&br=hq&appid=1005&pid=2&cmd=25&behavior=play
+  320k : OK   http://fsandroid.tx.kugou.com/202610301859/746163762b1387977107168ce3aff003/v3/b9b3a55ffb5b95f165839a26120e9fec/yp/full/ap1005_pi2_ct430100_s3521156714.mp3   (83ms)
+        log [log] ENTRY kg 320k
+        log [log] FALLBACK_START n=5
+        log [http] GET 200 80ms https://trackercdn.kugou.com/i/v2/?key=a92d91a3666886bf532a52f516b2235f&hash=b9b3a55ffb5b95f165839a26120e9fec&br=hq&appid=1005&pid=2&cmd=25&behavior=play
+  flac : OK   http://fsandroid.tx.kugou.com/202610301859/746163762b1387977107168ce3aff003/v3/b9b3a55ffb5b95f165839a26120e9fec/yp/full/ap1005_pi2_ct430100_s3521156714.mp3   (45ms)
+        log [log] ENTRY kg flac
+        log [log] FALLBACK_START n=5
+        log [http] GET 200 44ms https://trackercdn.kugou.com/i/v2/?key=a92d91a3666886bf532a52f516b2235f&hash=b9b3a55ffb5b95f165839a26120e9fec&br=hq&appid=1005&pid=2&cmd=25&behavior=play
+        log [log] [酷狗] 请求无损但只有 mp3，已回落
+  flac24bit : OK   http://fsandroid.tx.kugou.com/202610301859/746163762b1387977107168ce3aff003/v3/b9b3a55ffb5b95f165839a26120e9fec/yp/full/ap1005_pi2_ct430100_s3521156714.mp3   (42ms)
+        log [log] ENTRY kg flac24bit
+        log [log] FALLBACK_START n=5
+        log [http] GET 200 40ms https://trackercdn.kugou.com/i/v2/?key=a92d91a3666886bf532a52f516b2235f&hash=b9b3a55ffb5b95f165839a26120e9fec&br=hq&appid=1005&pid=2&cmd=25&behavior=play
+
+## tx  QQ 晴天(0039MnYb0qxYhV)
+musicInfo = {"name":"晴天","singer":"周杰伦","songmid":"0039MnYb0qxYhV","mediaMid":"003Qui1q2u1Zho","strMediaMid":"003Qui1q2u1Zho","albumMid":"000MkMni19ClKG","hash":"0039MnYb0qxYhV","rid":"0039MnYb0qxYhV","songId":"0039MnYb0qxYhV"}
+  128k : FAIL 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+    at mgMusicUrl (source.js:590:20)
+   (201ms)
+        log [log] {"code":0,"ts":1793357988776,"start_ts":1793357988741,"traceid":"429450407475bbbb","req_0":{"code":0,"data":{"uin":"","retcode":0,"verify_type":0,"login_key":"","msg":"120.227.53.174;fnameHitCache_200","sip":["http://aqqmusic.tc.qq.com/","http://sjy6.stream.qqmusic.qq.com/"],"thirdip":["",""],"testfile2g":"C400003mAan70zUy5O.m4a?guid=10000&vkey=382CE76A587FAF13C5C0B430A9D64C87172A3E2C526928B11FB410B7942154D7FFD4E31B4E4A28FEF29635EAB0F5B546E5E26622DB4A7C68__v2b9a899c&uin=&fromtag=3","testfilewifi":"C400003mAan70zUy5O.m4a?guid=10000&vkey=382CE76A587FAF13C5C0B430A9D64C87172A3E2C526928B11FB410B7942154D7FFD4E31B4E4A28FEF29635EAB0F5B546E5E26622DB4A7C68__v2b9a899c&uin=&fromtag=3","midurlinfo":[{"songmid":"0039MnYb0qxYhV","filename":"M500003Qui1q2u1Zho.mp3","purl":"","errtype":"","p2pfromtag":0,"qmdlfromtag":0,"common_downfromtag":0,"vip_downfromtag":0,"pdl":0,"premain":0,"hisdown":0,"hisbuy":0,"uiAlert":0,"isbuy":0,"pneedbuy":0,"pneed":0,"isonly":0,"onecan":0,"result":104003,"tips":"","opi48kurl":"","opi96kurl":"","opi192kurl":"","opiflackurl":"","opi128kurl":"","opi192koggurl":"","wififromtag":"","flowfromtag":"","wifiurl":"","flowurl":"","vkey":"","opi30surl":"","ekey":"","auth_switch":16897793,"subcode":0,"opi96koggurl":"","auth_switch2":0,"xcdnurl":"","mid":"003Qui1q2u1Zho","df":null}],"servercheck":"9df74969e0fda51f49b3033c66f2e553","expiration":80400,"deviceResult":"","validUrl":"","validTitle":"","validText":""}}}
+        log [log] TRY kw after QQ 未登录只给 30s 试听片段（filename=M500003Qui1q2u1Zho.mp3 result=104003），取不到正式直链 hasSearch=undefined
+        log [log] IN-KW-PATH kw
+        log [log] SS-TYPE kw object
+        log [log] NOSEARCH kw after no search kw q=晴天 周杰伦 picked={"songmid":"0039MnYb0qxYhV","rid":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [log] TRY kg after 酷我：rid 不是酷我的数字 id（0039MnYb0qxYhV），不能跨源凑 hasSearch=undefined
+        log [log] IN-KW-PATH kg
+        log [log] SS-TYPE kg object
+        log [log] NOSEARCH kg after no search kg q=晴天 周杰伦 picked={"hash":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [http] GET 200 38ms https://trackercdn.kugou.com/i/v2/?key=84b980fcc0184669f4346e6d3c740112&hash=0039MnYb0qxYhV&br=hq&appid=1005&pid=2&cmd=25&behavior=play
+        log [log] TRY wy after 酷狗取链失败：Bad hash hasSearch=undefined
+        log [log] IN-KW-PATH wy
+        log [log] SS-TYPE wy object
+        log [log] NOSEARCH wy after no search wy q=晴天 周杰伦 picked={"songmid":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [log] 0039MnYb0qxYhV 128000
+        log [http] POST 200 37ms https://interface3.music.163.com/eapi/song/enhance/player/url
+        log [log] {"msg":"参数错误","code":400}{"msg":"参数错误","code":400}
+        log [log] TRY mg after 网易没有返回这首歌的播放地址："{\"msg\":\"参数错误\",\"code\":400}{\"msg\":\"参数错误\",\"code\":400}" hasSearch=undefined
+        log [log] IN-KW-PATH mg
+        log [log] SS-TYPE mg object
+        log [log] NOSEARCH mg after no search mg q=晴天 周杰伦 picked={"songId":"0039MnYb0qxYhV","contentId":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [http] GET 200 44ms https://c.musicapp.migu.cn/MIGUM3.0/strategy/pc/listen/v1.0?contentId=0039MnYb0qxYhV&resourceType=2&toneFlag=PQ
+        log [log] FINAL 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+        log [log] 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+  320k : FAIL 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+    at mgMusicUrl (source.js:590:20)
+   (199ms)
+        log [log] {"code":0,"ts":1793357988959,"start_ts":1793357988921,"traceid":"374cf09794a7651e","req_0":{"code":0,"data":{"uin":"","retcode":0,"verify_type":0,"login_key":"","msg":"120.227.53.174;fnameHitCache_200","sip":["http://aqqmusic.tc.qq.com/","http://sjy6.stream.qqmusic.qq.com/"],"thirdip":["",""],"testfile2g":"C400003mAan70zUy5O.m4a?guid=10000&vkey=8B83E087E4A8DA1138470F8B61DCBF0435A0797532F1768FC9D2F62CA4A853124810C521EA77951DBFB86BA95C7999F7CF6AB8C287932AB0__v21e2a1f1b&uin=&fromtag=3","testfilewifi":"C400003mAan70zUy5O.m4a?guid=10000&vkey=8B83E087E4A8DA1138470F8B61DCBF0435A0797532F1768FC9D2F62CA4A853124810C521EA77951DBFB86BA95C7999F7CF6AB8C287932AB0__v21e2a1f1b&uin=&fromtag=3","midurlinfo":[{"songmid":"0039MnYb0qxYhV","filename":"M800003Qui1q2u1Zho.mp3","purl":"","errtype":"","p2pfromtag":0,"qmdlfromtag":0,"common_downfromtag":0,"vip_downfromtag":0,"pdl":0,"premain":0,"hisdown":0,"hisbuy":0,"uiAlert":0,"isbuy":0,"pneedbuy":0,"pneed":0,"isonly":0,"onecan":0,"result":104003,"tips":"","opi48kurl":"","opi96kurl":"","opi192kurl":"","opiflackurl":"","opi128kurl":"","opi192koggurl":"","wififromtag":"","flowfromtag":"","wifiurl":"","flowurl":"","vkey":"","opi30surl":"","ekey":"","auth_switch":16897793,"subcode":0,"opi96koggurl":"","auth_switch2":0,"xcdnurl":"","mid":"003Qui1q2u1Zho","df":null}],"servercheck":"9df74969e0fda51f49b3033c66f2e553","expiration":80400,"deviceResult":"","validUrl":"","validTitle":"","validText":""}}}
+        log [log] TRY kw after QQ 未登录只给 30s 试听片段（filename=M800003Qui1q2u1Zho.mp3 result=104003），取不到正式直链 hasSearch=undefined
+        log [log] IN-KW-PATH kw
+        log [log] SS-TYPE kw object
+        log [log] NOSEARCH kw after no search kw q=晴天 周杰伦 picked={"songmid":"0039MnYb0qxYhV","rid":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [log] TRY kg after 酷我：rid 不是酷我的数字 id（0039MnYb0qxYhV），不能跨源凑 hasSearch=undefined
+        log [log] IN-KW-PATH kg
+        log [log] SS-TYPE kg object
+        log [log] NOSEARCH kg after no search kg q=晴天 周杰伦 picked={"hash":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [http] GET 200 36ms https://trackercdn.kugou.com/i/v2/?key=84b980fcc0184669f4346e6d3c740112&hash=0039MnYb0qxYhV&br=hq&appid=1005&pid=2&cmd=25&behavior=play
+        log [log] TRY wy after 酷狗取链失败：Bad hash hasSearch=undefined
+        log [log] IN-KW-PATH wy
+        log [log] SS-TYPE wy object
+        log [log] NOSEARCH wy after no search wy q=晴天 周杰伦 picked={"songmid":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [log] 0039MnYb0qxYhV 320000
+        log [http] POST 200 35ms https://interface3.music.163.com/eapi/song/enhance/player/url
+        log [log] {"msg":"参数错误","code":400}{"msg":"参数错误","code":400}
+        log [log] TRY mg after 网易没有返回这首歌的播放地址："{\"msg\":\"参数错误\",\"code\":400}{\"msg\":\"参数错误\",\"code\":400}" hasSearch=undefined
+        log [log] IN-KW-PATH mg
+        log [log] SS-TYPE mg object
+        log [log] NOSEARCH mg after no search mg q=晴天 周杰伦 picked={"songId":"0039MnYb0qxYhV","contentId":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [http] GET 200 44ms https://c.musicapp.migu.cn/MIGUM3.0/strategy/pc/listen/v1.0?contentId=0039MnYb0qxYhV&resourceType=2&toneFlag=HQ
+        log [log] FINAL 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+        log [log] 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+  flac : FAIL 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+    at mgMusicUrl (source.js:590:20)
+   (199ms)
+        log [log] {"code":0,"ts":1793357989170,"start_ts":1793357989130,"traceid":"40dfc79fa107da67","req_0":{"code":0,"data":{"uin":"","retcode":0,"verify_type":0,"login_key":"","msg":"120.227.53.174;fnameHitCache_200","sip":["http://aqqmusic.tc.qq.com/","http://sjy6.stream.qqmusic.qq.com/"],"thirdip":["",""],"testfile2g":"C400003mAan70zUy5O.m4a?guid=10000&vkey=125B122E21A454CDD19F88751379972FA45CDDA9D7F01FADA001ECBA6DF7383F121C2C0D66D18B48BA9CE7A4F83EDF0063A998B51692DE91__v2b9ab226&uin=&fromtag=3","testfilewifi":"C400003mAan70zUy5O.m4a?guid=10000&vkey=125B122E21A454CDD19F88751379972FA45CDDA9D7F01FADA001ECBA6DF7383F121C2C0D66D18B48BA9CE7A4F83EDF0063A998B51692DE91__v2b9ab226&uin=&fromtag=3","midurlinfo":[{"songmid":"0039MnYb0qxYhV","filename":"F000003Qui1q2u1Zho.flac","purl":"","errtype":"","p2pfromtag":0,"qmdlfromtag":0,"common_downfromtag":0,"vip_downfromtag":0,"pdl":0,"premain":0,"hisdown":0,"hisbuy":0,"uiAlert":0,"isbuy":0,"pneedbuy":0,"pneed":0,"isonly":0,"onecan":0,"result":104003,"tips":"","opi48kurl":"","opi96kurl":"","opi192kurl":"","opiflackurl":"","opi128kurl":"","opi192koggurl":"","wififromtag":"","flowfromtag":"","wifiurl":"","flowurl":"","vkey":"","opi30surl":"","ekey":"","auth_switch":16897793,"subcode":0,"opi96koggurl":"","auth_switch2":0,"xcdnurl":"","mid":"003Qui1q2u1Zho","df":null}],"servercheck":"9df74969e0fda51f49b3033c66f2e553","expiration":80400,"deviceResult":"","validUrl":"","validTitle":"","validText":""}}}
+        log [log] TRY kw after QQ 未登录只给 30s 试听片段（filename=F000003Qui1q2u1Zho.flac result=104003），取不到正式直链 hasSearch=undefined
+        log [log] IN-KW-PATH kw
+        log [log] SS-TYPE kw object
+        log [log] NOSEARCH kw after no search kw q=晴天 周杰伦 picked={"songmid":"0039MnYb0qxYhV","rid":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [log] TRY kg after 酷我：rid 不是酷我的数字 id（0039MnYb0qxYhV），不能跨源凑 hasSearch=undefined
+        log [log] IN-KW-PATH kg
+        log [log] SS-TYPE kg object
+        log [log] NOSEARCH kg after no search kg q=晴天 周杰伦 picked={"hash":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [http] GET 200 38ms https://trackercdn.kugou.com/i/v2/?key=84b980fcc0184669f4346e6d3c740112&hash=0039MnYb0qxYhV&br=hq&appid=1005&pid=2&cmd=25&behavior=play
+        log [log] TRY wy after 酷狗取链失败：Bad hash hasSearch=undefined
+        log [log] IN-KW-PATH wy
+        log [log] SS-TYPE wy object
+        log [log] NOSEARCH wy after no search wy q=晴天 周杰伦 picked={"songmid":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [log] 0039MnYb0qxYhV 999000
+        log [http] POST 200 38ms https://interface3.music.163.com/eapi/song/enhance/player/url
+        log [log] {"msg":"参数错误","code":400}{"msg":"参数错误","code":400}
+        log [log] TRY mg after 网易没有返回这首歌的播放地址："{\"msg\":\"参数错误\",\"code\":400}{\"msg\":\"参数错误\",\"code\":400}" hasSearch=undefined
+        log [log] IN-KW-PATH mg
+        log [log] SS-TYPE mg object
+        log [log] NOSEARCH mg after no search mg q=晴天 周杰伦 picked={"songId":"0039MnYb0qxYhV","contentId":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [http] GET 200 41ms https://c.musicapp.migu.cn/MIGUM3.0/strategy/pc/listen/v1.0?contentId=0039MnYb0qxYhV&resourceType=2&toneFlag=SQ
+        log [log] FINAL 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+        log [log] 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+  flac24bit : FAIL 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+    at mgMusicUrl (source.js:590:20)
+   (198ms)
+        log [log] {"code":0,"ts":1793357989368,"start_ts":1793357989332,"traceid":"7b6751e3feb410a9","req_0":{"code":0,"data":{"uin":"","retcode":0,"verify_type":0,"login_key":"","msg":"120.227.53.174;fnameHitCache_200","sip":["http://aqqmusic.tc.qq.com/","http://sjy6.stream.qqmusic.qq.com/"],"thirdip":["",""],"testfile2g":"C400003mAan70zUy5O.m4a?guid=10000&vkey=D1EE5EBE0B80D576B2845ECDFF16CF39DCFB956F9DC83A771220DFD5AB080753F5C1D5E2607BE0661EAEBF04259509B06D9C4C4718E596BD__v2b9abbac&uin=&fromtag=3","testfilewifi":"C400003mAan70zUy5O.m4a?guid=10000&vkey=D1EE5EBE0B80D576B2845ECDFF16CF39DCFB956F9DC83A771220DFD5AB080753F5C1D5E2607BE0661EAEBF04259509B06D9C4C4718E596BD__v2b9abbac&uin=&fromtag=3","midurlinfo":[{"songmid":"0039MnYb0qxYhV","filename":"F000003Qui1q2u1Zho.flac","purl":"","errtype":"","p2pfromtag":0,"qmdlfromtag":0,"common_downfromtag":0,"vip_downfromtag":0,"pdl":0,"premain":0,"hisdown":0,"hisbuy":0,"uiAlert":0,"isbuy":0,"pneedbuy":0,"pneed":0,"isonly":0,"onecan":0,"result":104003,"tips":"","opi48kurl":"","opi96kurl":"","opi192kurl":"","opiflackurl":"","opi128kurl":"","opi192koggurl":"","wififromtag":"","flowfromtag":"","wifiurl":"","flowurl":"","vkey":"","opi30surl":"","ekey":"","auth_switch":16897793,"subcode":0,"opi96koggurl":"","auth_switch2":0,"xcdnurl":"","mid":"003Qui1q2u1Zho","df":null}],"servercheck":"9df74969e0fda51f49b3033c66f2e553","expiration":80400,"deviceResult":"","validUrl":"","validTitle":"","validText":""}}}
+        log [log] TRY kw after QQ 未登录只给 30s 试听片段（filename=F000003Qui1q2u1Zho.flac result=104003），取不到正式直链 hasSearch=undefined
+        log [log] IN-KW-PATH kw
+        log [log] SS-TYPE kw object
+        log [log] NOSEARCH kw after no search kw q=晴天 周杰伦 picked={"songmid":"0039MnYb0qxYhV","rid":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [log] TRY kg after 不支持的音质：flac24bit hasSearch=undefined
+        log [log] IN-KW-PATH kg
+        log [log] SS-TYPE kg object
+        log [log] NOSEARCH kg after no search kg q=晴天 周杰伦 picked={"hash":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [http] GET 200 39ms https://trackercdn.kugou.com/i/v2/?key=84b980fcc0184669f4346e6d3c740112&hash=0039MnYb0qxYhV&br=hq&appid=1005&pid=2&cmd=25&behavior=play
+        log [log] TRY wy after 酷狗取链失败：Bad hash hasSearch=undefined
+        log [log] IN-KW-PATH wy
+        log [log] SS-TYPE wy object
+        log [log] NOSEARCH wy after no search wy q=晴天 周杰伦 picked={"songmid":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [log] 0039MnYb0qxYhV 1999000
+        log [http] POST 200 36ms https://interface3.music.163.com/eapi/song/enhance/player/url
+        log [log] {"msg":"参数错误","code":400}{"msg":"参数错误","code":400}
+        log [log] TRY mg after 网易没有返回这首歌的播放地址："{\"msg\":\"参数错误\",\"code\":400}{\"msg\":\"参数错误\",\"code\":400}" hasSearch=undefined
+        log [log] IN-KW-PATH mg
+        log [log] SS-TYPE mg object
+        log [log] NOSEARCH mg after no search mg q=晴天 周杰伦 picked={"songId":"0039MnYb0qxYhV","contentId":"0039MnYb0qxYhV","name":"晴天","singer":"周杰伦"}
+        log [http] GET 200 40ms https://c.musicapp.migu.cn/MIGUM3.0/strategy/pc/listen/v1.0?contentId=0039MnYb0qxYhV&resourceType=2&toneFlag=ZQ
+        log [log] FINAL 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+        log [log] 咪咕取链失败：歌曲下线暂不支持播放，敬请期待
+
+## wy  网易 屋顶(5257138，周杰伦/温岚)
+musicInfo = {"name":"屋顶","singer":"周杰伦","songmid":"5257138","musicId":"5257138","id":"5257138","hash":"5257138","rid":"5257138","songId":"5257138"}
+  128k : OK   http://m701.music.126.net/20261030192449/28da68ceb35d4a63312a6df99064c01a/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/9444694535/c8bb/65da/db54/9e257ff0610f84e4242cf0127dac6005.mp3?vuutv=SBamSgA/LRzU6hO6WsdgdPSjqKO8ZYMrTmSkceIAQ4p0is7n83chnuVbpZhqs+9HisnhUsTWbWC8Ki8XDEEVa1tawbvo7O3jdLvglH3yHWBV0LE58eRhjw6IkAJX52b+HWK6xsPDpsg9u96G4DMZJQ==   (47ms)
+        log [log] ENTRY wy 128k
+        log [log] FALLBACK_START n=5
+        log [log] 5257138 128000
+        log [http] POST 200 45ms https://interface3.music.163.com/eapi/song/enhance/player/url
+        log [log] {"data":[{"id":5257138,"url":"http://m701.music.126.net/20261030192449/28da68ceb35d4a63312a6df99064c01a/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/9444694535/c8bb/65da/db54/9e257ff0610f84e4242cf0127dac6005.mp3?vuutv=SBamSgA/LRzU6hO6WsdgdPSjqKO8ZYMrTmSkceIAQ4p0is7n83chnuVbpZhqs+9HisnhUsTWbWC8Ki8XDEEVa1tawbvo7O3jdLvglH3yHWBV0LE58eRhjw6IkAJX52b+HWK6xsPDpsg9u96G4DMZJQ==","br":128001,"size":5105833,"md5":"9e257ff0610f84e4242cf0127dac6005","code":200,"expi":1200,"type":"mp3","gain":0,"peak":1,"closedGain":0,"closedPeak":0,"fee":8,"uf":null,"payed":0,"flag":260,"canExtend":false,"freeTrialInfo":null,"level":"standard","encodeType":"mp3","channelLayout":null,"freeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"listenType":null,"cannotListenReason":null,"playReason":null,"freeLimitTagType":null},"freeTimeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"type":0,"remainTime":0},"urlSource":0,"rightSource":0,"podcastCtrp":null,"effectTypes":null,"time":319039,"message":null,"levelConfuse":null,"musicId":"6709987428","accompany":null,"sr":44100,"auEff":null,"immerseType":null,"beatType":0}],"code":200}
+  320k : OK   http://m801.music.126.net/20261030192449/e9c8e0a7c97bf0f6ad9c20b101c93c88/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/9444693488/94b2/45cb/21d6/9e34cbd9902ee8a917e6d0781557b94e.mp3?vuutv=5dGt1nM5gnXrDwZ8UfGN+AxUYXFxn7N2e21vJwG+zGvTDVZjpiCR/2jSITYebybIkC/1gz40srmcNMS8EEVhUQdZwb+euBsRVY96Jrw1xUptW4+EUvjjPnqc6Ol+cHtMp1hYuc8AmNzm966uIKwE6Q==   (47ms)
+        log [log] ENTRY wy 320k
+        log [log] FALLBACK_START n=5
+        log [log] 5257138 320000
+        log [http] POST 200 44ms https://interface3.music.163.com/eapi/song/enhance/player/url
+        log [log] {"data":[{"id":5257138,"url":"http://m801.music.126.net/20261030192449/e9c8e0a7c97bf0f6ad9c20b101c93c88/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/9444693488/94b2/45cb/21d6/9e34cbd9902ee8a917e6d0781557b94e.mp3?vuutv=5dGt1nM5gnXrDwZ8UfGN+AxUYXFxn7N2e21vJwG+zGvTDVZjpiCR/2jSITYebybIkC/1gz40srmcNMS8EEVhUQdZwb+euBsRVY96Jrw1xUptW4+EUvjjPnqc6Ol+cHtMp1hYuc8AmNzm966uIKwE6Q==","br":320001,"size":12764517,"md5":"9e34cbd9902ee8a917e6d0781557b94e","code":200,"expi":1200,"type":"mp3","gain":0,"peak":0.9999,"closedGain":0,"closedPeak":0,"fee":8,"uf":null,"payed":0,"flag":260,"canExtend":false,"freeTrialInfo":null,"level":"exhigh","encodeType":"mp3","channelLayout":null,"freeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"listenType":null,"cannotListenReason":null,"playReason":null,"freeLimitTagType":null},"freeTimeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"type":0,"remainTime":0},"urlSource":0,"rightSource":0,"podcastCtrp":null,"effectTypes":null,"time":319039,"message":null,"levelConfuse":null,"musicId":"6709986424","accompany":null,"sr":44100,"auEff":null,"immerseType":null,"beatType":0}],"code":200}
+  flac : OK   http://m701.music.126.net/20261030192449/e9c8e0a7c97bf0f6ad9c20b101c93c88/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/9444693488/94b2/45cb/21d6/9e34cbd9902ee8a917e6d0781557b94e.mp3?vuutv=SEexoNpGi+Wck0CYQKMMRhKcIovtMi9j4zkSTnX8fEAADnZAwO6tXH8+5Nt45VUQgK5C2I9rwyWg0kjozbKjKNTAMByyoKntyvPB93cmdVBHoO3E5oZemFA4z/BkfFtsqWMJlwNpJ6doWDY/xEJHKQ==   (45ms)
+        log [log] ENTRY wy flac
+        log [log] FALLBACK_START n=5
+        log [log] 5257138 999000
+        log [http] POST 200 43ms https://interface3.music.163.com/eapi/song/enhance/player/url
+        log [log] {"data":[{"id":5257138,"url":"http://m701.music.126.net/20261030192449/e9c8e0a7c97bf0f6ad9c20b101c93c88/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/9444693488/94b2/45cb/21d6/9e34cbd9902ee8a917e6d0781557b94e.mp3?vuutv=SEexoNpGi+Wck0CYQKMMRhKcIovtMi9j4zkSTnX8fEAADnZAwO6tXH8+5Nt45VUQgK5C2I9rwyWg0kjozbKjKNTAMByyoKntyvPB93cmdVBHoO3E5oZemFA4z/BkfFtsqWMJlwNpJ6doWDY/xEJHKQ==","br":320001,"size":12764517,"md5":"9e34cbd9902ee8a917e6d0781557b94e","code":200,"expi":1200,"type":"mp3","gain":0,"peak":0.9999,"closedGain":0,"closedPeak":0,"fee":8,"uf":null,"payed":0,"flag":260,"canExtend":false,"freeTrialInfo":null,"level":"exhigh","encodeType":"mp3","channelLayout":null,"freeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"listenType":null,"cannotListenReason":null,"playReason":null,"freeLimitTagType":null},"freeTimeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"type":0,"remainTime":0},"urlSource":0,"rightSource":0,"podcastCtrp":null,"effectTypes":null,"time":319039,"message":null,"levelConfuse":null,"musicId":"6709986424","accompany":null,"sr":44100,"auEff":null,"immerseType":null,"beatType":0}],"code":200}
+  flac24bit : OK   http://m801.music.126.net/20261030192449/e9c8e0a7c97bf0f6ad9c20b101c93c88/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/9444693488/94b2/45cb/21d6/9e34cbd9902ee8a917e6d0781557b94e.mp3?vuutv=c+sc38HBUCRqUQXzVzrrCv5HHG+o20geDlm5+dk22Xc84OvoXt5wk44dWHvYQpHT5M8rkaW2DvZD0vuVmvQhhsRMWfNGMunTfgjCD+QD0iePtUOcag12WblNBDgS4LyQiMG64oDNNYqsGnuB2/mSfg==   (44ms)
+        log [log] ENTRY wy flac24bit
+        log [log] FALLBACK_START n=5
+        log [log] 5257138 1999000
+        log [http] POST 200 42ms https://interface3.music.163.com/eapi/song/enhance/player/url
+        log [log] {"data":[{"id":5257138,"url":"http://m801.music.126.net/20261030192449/e9c8e0a7c97bf0f6ad9c20b101c93c88/jdymusic/obj/wo3DlMOGwrbDjj7DisKw/9444693488/94b2/45cb/21d6/9e34cbd9902ee8a917e6d0781557b94e.mp3?vuutv=c+sc38HBUCRqUQXzVzrrCv5HHG+o20geDlm5+dk22Xc84OvoXt5wk44dWHvYQpHT5M8rkaW2DvZD0vuVmvQhhsRMWfNGMunTfgjCD+QD0iePtUOcag12WblNBDgS4LyQiMG64oDNNYqsGnuB2/mSfg==","br":320001,"size":12764517,"md5":"9e34cbd9902ee8a917e6d0781557b94e","code":200,"expi":1200,"type":"mp3","gain":0,"peak":0.9999,"closedGain":0,"closedPeak":0,"fee":8,"uf":null,"payed":0,"flag":260,"canExtend":false,"freeTrialInfo":null,"level":"exhigh","encodeType":"mp3","channelLayout":null,"freeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"listenType":null,"cannotListenReason":null,"playReason":null,"freeLimitTagType":null},"freeTimeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"type":0,"remainTime":0},"urlSource":0,"rightSource":0,"podcastCtrp":null,"effectTypes":null,"time":319039,"message":null,"levelConfuse":null,"musicId":"6709986424","accompany":null,"sr":44100,"auEff":null,"immerseType":null,"beatType":0}],"code":200}
+
+## mg  咪咕 晴天(Live) contentId 600913000007163534
+musicInfo = {"name":"晴天 (Live)","singer":"周杰伦","songmid":"600913000007163534","musicId":"600913000007163534","songId":"600913000007163534","hash":"600913000007163534","rid":"600913000007163534"}
+  128k : OK   https://freetyst.nf.migu.cn/public/product9th/product44/2021/07/1112/2019%E5%B9%B410%E6%9C%8830%E6%97%A516%E7%82%B952%E5%88%86%E7%B4%A7%E6%80%A5%E5%86%85%E5%AE%B9%E5%87%86%E5%85%A5%E7%BA%B5%E6%A8%AA%E4%B8%96%E4%BB%A325%E9%A6%96/%E6%A0%87%E6%B8%85%E9%AB%98%E6%B8%85/MP3_128_16_Stero/60054704101123747.mp3?channelid=02&msisdn=d415c8d5-e43c-40ef-8a40-811972a9a00f&Tim=1793358289723&Key=d6455e8a4fa86484&   (56ms)
+        log [log] ENTRY mg 128k
+        log [log] FALLBACK_START n=5
+        log [http] GET 200 54ms https://c.musicapp.migu.cn/MIGUM3.0/strategy/pc/listen/v1.0?contentId=600913000007163534&resourceType=2&toneFlag=PQ
+  320k : FAIL failed
+    at <anonymous> (source.js:531:59)
+    at request (lx-shim.js:144:15)
+    at <anonymous> (source.js:515:14)
+    at Promise (native)
+    at musicUrl (source.js:513:23)
+    at <anonymous> (source.js:811:13)
+   (332ms)
+        log [log] SS-TYPE kw object
+        log [log] NOSEARCH kw after no search kw q=晴天 (Live) 周杰伦 picked={"songmid":"600913000007163534","rid":"600913000007163534","musicId":"600913000007163534","name":"晴天 (Live)","singer":"周杰伦"}
+        log [http] GET 200 60ms http://nmobi.kuwo.cn/mobi.s?f=web&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type=convert_url_with_sign&br=320kmp3&rid=600913000007163534
+        log [log] TRY kg after 酷我：该 rid 不是酷我的曲目（code=4013，url=None） hasSearch=undefined
+        log [log] IN-KW-PATH kg
+        log [log] SS-TYPE kg object
+        log [log] NOSEARCH kg after no search kg q=晴天 (Live) 周杰伦 picked={"hash":"600913000007163534","name":"晴天 (Live)","singer":"周杰伦"}
+        log [http] GET 200 75ms https://trackercdn.kugou.com/i/v2/?key=44d7a5c94f2c32e98aab3dd6c16633a2&hash=600913000007163534&br=hq&appid=1005&pid=2&cmd=25&behavior=play
+        log [log] TRY tx after 酷狗取链失败：Bad hash hasSearch=undefined
+        log [log] IN-KW-PATH tx
+        log [log] SS-TYPE tx object
+        log [log] NOSEARCH tx after no search tx q=晴天 (Live) 周杰伦 picked={"songmid":"600913000007163534","name":"晴天 (Live)","singer":"周杰伦"}
+        log [log] 600913000007163534 320k
+        log [http] GET 200 75ms https://u.y.qq.com/cgi-bin/musicu.fcg?format=json&data={"req_0":{"module":"vkey.GetVkeyServer","method":"CgiGetVkey","param":{"filename":["M800undefined.mp3"],"
+        log [log] {"code":0,"ts":1793357990022,"start_ts":1793357989989,"traceid":"504c9c6da7929ad7","req_0":{"code":0,"data":{"uin":"","retcode":0,"verify_type":0,"login_key":"","msg":"120.227.53.174;fnameHitCache_200","sip":["http://aqqmusic.tc.qq.com/","http://sjy6.stream.qqmusic.qq.com/"],"thirdip":["",""],"testfile2g":"C400003mAan70zUy5O.m4a?guid=10000&vkey=191F2D737F67C8427336217706FC3470A64CC453F98E95313FC9D140B27FBD237240B9F7D23754BDD01544B365255A596FEFAF16C5234058__v2b9aba4b&uin=&fromtag=3","testfilewifi":"C400003mAan70zUy5O.m4a?guid=10000&vkey=191F2D737F67C8427336217706FC3470A64CC453F98E95313FC9D140B27FBD237240B9F7D23754BDD01544B365255A596FEFAF16C5234058__v2b9aba4b&uin=&fromtag=3","midurlinfo":[{"songmid":"600913000007163534","filename":"M800undefined.mp3","purl":"","errtype":"","p2pfromtag":0,"qmdlfromtag":0,"common_downfromtag":0,"vip_downfromtag":0,"pdl":0,"premain":0,"hisdown":0,"hisbuy":0,"uiAlert":0,"isbuy":0,"pneedbuy":0,"pneed":0,"isonly":0,"onecan":0,"result":101404,"tips":"","opi48kurl":"","opi96kurl":"","opi192kurl":"","opiflackurl":"","opi128kurl":"","opi192koggurl":"","wififromtag":"","flowfromtag":"","wifiurl":"","flowurl":"","vkey":"","opi30surl":"","ekey":"","auth_switch":0,"subcode":0,"opi96koggurl":"","auth_switch2":0,"xcdnurl":"","mid":"undefined","df":null}],"servercheck":"9df74969e0fda51f49b3033c66f2e553","expiration":80400,"deviceResult":"","validUrl":"","validTitle":"","validText":""}}}
+        log [log] TRY wy after QQ 未登录只给 30s 试听片段（filename=M800undefined.mp3 result=101404），取不到正式直链 hasSearch=undefined
+        log [log] IN-KW-PATH wy
+        log [log] SS-TYPE wy object
+        log [log] NOSEARCH wy after no search wy q=晴天 (Live) 周杰伦 picked={"songmid":"600913000007163534","musicId":"600913000007163534","name":"晴天 (Live)","singer":"周杰伦"}
+        log [log] 600913000007163534 320000
+        log [http] POST 200 48ms https://interface3.music.163.com/eapi/song/enhance/player/url
+        log [log] {"data":[{"id":600913000007163500,"url":null,"br":0,"size":0,"md5":null,"code":404,"expi":1200,"type":null,"gain":0,"peak":null,"closedGain":0,"closedPeak":0,"fee":0,"uf":null,"payed":0,"flag":1,"canExtend":false,"freeTrialInfo":null,"level":null,"encodeType":null,"channelLayout":null,"freeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"listenType":null,"cannotListenReason":null,"playReason":null,"freeLimitTagType":null},"freeTimeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"type":0,"remainTime":0},"urlSource":0,"rightSource":0,"podcastCtrp":null,"effectTypes":null,"time":0,"message":null,"levelConfuse":null,"musicId":null,"accompany":null,"sr":0,"auEff":null,"immerseType":null,"beatType":0}],"code":200}
+        log [log] FINAL failed
+        log [log] failed
+  flac : FAIL failed
+    at <anonymous> (source.js:531:59)
+    at request (lx-shim.js:144:15)
+    at <anonymous> (source.js:515:14)
+    at Promise (native)
+    at musicUrl (source.js:513:23)
+    at <anonymous> (source.js:811:13)
+   (275ms)
+        log [log] SS-TYPE kw object
+        log [log] NOSEARCH kw after no search kw q=晴天 (Live) 周杰伦 picked={"songmid":"600913000007163534","rid":"600913000007163534","musicId":"600913000007163534","name":"晴天 (Live)","singer":"周杰伦"}
+        log [http] GET 200 65ms http://nmobi.kuwo.cn/mobi.s?f=web&source=kwplayer_ar_5.1.0.0_B_jiakong_vh.apk&type=convert_url_with_sign&br=2000kflac&rid=600913000007163534
+        log [log] TRY kg after 酷我：该 rid 不是酷我的曲目（code=4013，url=None） hasSearch=undefined
+        log [log] IN-KW-PATH kg
+        log [log] SS-TYPE kg object
+        log [log] NOSEARCH kg after no search kg q=晴天 (Live) 周杰伦 picked={"hash":"600913000007163534","name":"晴天 (Live)","singer":"周杰伦"}
+        log [http] GET 200 36ms https://trackercdn.kugou.com/i/v2/?key=44d7a5c94f2c32e98aab3dd6c16633a2&hash=600913000007163534&br=hq&appid=1005&pid=2&cmd=25&behavior=play
+        log [log] TRY tx after 酷狗取链失败：Bad hash hasSearch=undefined
+        log [log] IN-KW-PATH tx
+        log [log] SS-TYPE tx object
+        log [log] NOSEARCH tx after no search tx q=晴天 (Live) 周杰伦 picked={"songmid":"600913000007163534","name":"晴天 (Live)","singer":"周杰伦"}
+        log [log] 600913000007163534 flac
+        log [http] GET 200 79ms https://u.y.qq.com/cgi-bin/musicu.fcg?format=json&data={"req_0":{"module":"vkey.GetVkeyServer","method":"CgiGetVkey","param":{"filename":["F000undefined.flac"],
+        log [log] {"code":0,"ts":1793357990294,"start_ts":1793357990255,"traceid":"7245f581c26b13c7","req_0":{"code":0,"data":{"uin":"","retcode":0,"verify_type":0,"login_key":"","msg":"120.227.53.174;fnameHitCache_200","sip":["http://aqqmusic.tc.qq.com/","http://sjy6.stream.qqmusic.qq.com/"],"thirdip":["",""],"testfile2g":"C400003mAan70zUy5O.m4a?guid=10000&vkey=96C85E6A2902F6B648950FF583EBFCDA9F5637289C5BBB81FC3E33F5DA9BF85540B50F52F142D0117753E51B2C0FB242AA7C0FE05DA9AD01__v2b9abbae&uin=&fromtag=3","testfilewifi":"C400003mAan70zUy5O.m4a?guid=10000&vkey=96C85E6A2902F6B648950FF583EBFCDA9F5637289C5BBB81FC3E33F5DA9BF85540B50F52F142D0117753E51B2C0FB242AA7C0FE05DA9AD01__v2b9abbae&uin=&fromtag=3","midurlinfo":[{"songmid":"600913000007163534","filename":"F000undefined.flac","purl":"","errtype":"","p2pfromtag":0,"qmdlfromtag":0,"common_downfromtag":0,"vip_downfromtag":0,"pdl":0,"premain":0,"hisdown":0,"hisbuy":0,"uiAlert":0,"isbuy":0,"pneedbuy":0,"pneed":0,"isonly":0,"onecan":0,"result":101404,"tips":"","opi48kurl":"","opi96kurl":"","opi192kurl":"","opiflackurl":"","opi128kurl":"","opi192koggurl":"","wififromtag":"","flowfromtag":"","wifiurl":"","flowurl":"","vkey":"","opi30surl":"","ekey":"","auth_switch":0,"subcode":0,"opi96koggurl":"","auth_switch2":0,"xcdnurl":"","mid":"undefined","df":null}],"servercheck":"9df74969e0fda51f49b3033c66f2e553","expiration":80400,"deviceResult":"","validUrl":"","validTitle":"","validText":""}}}
+        log [log] TRY wy after QQ 未登录只给 30s 试听片段（filename=F000undefined.flac result=101404），取不到正式直链 hasSearch=undefined
+        log [log] IN-KW-PATH wy
+        log [log] SS-TYPE wy object
+        log [log] NOSEARCH wy after no search wy q=晴天 (Live) 周杰伦 picked={"songmid":"600913000007163534","musicId":"600913000007163534","name":"晴天 (Live)","singer":"周杰伦"}
+        log [log] 600913000007163534 999000
+        log [http] POST 200 42ms https://interface3.music.163.com/eapi/song/enhance/player/url
+        log [log] {"data":[{"id":600913000007163500,"url":null,"br":0,"size":0,"md5":null,"code":404,"expi":1200,"type":null,"gain":0,"peak":null,"closedGain":0,"closedPeak":0,"fee":0,"uf":null,"payed":0,"flag":1,"canExtend":false,"freeTrialInfo":null,"level":null,"encodeType":null,"channelLayout":null,"freeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"listenType":null,"cannotListenReason":null,"playReason":null,"freeLimitTagType":null},"freeTimeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"type":0,"remainTime":0},"urlSource":0,"rightSource":0,"podcastCtrp":null,"effectTypes":null,"time":0,"message":null,"levelConfuse":null,"musicId":null,"accompany":null,"sr":0,"auEff":null,"immerseType":null,"beatType":0}],"code":200}
+        log [log] FINAL failed
+        log [log] failed
+  flac24bit : FAIL failed
+    at <anonymous> (source.js:531:59)
+    at request (lx-shim.js:144:15)
+    at <anonymous> (source.js:515:14)
+    at Promise (native)
+    at musicUrl (source.js:513:23)
+    at <anonymous> (source.js:811:13)
+   (241ms)
+        log [log] IN-KW-PATH kw
+        log [log] SS-TYPE kw object
+        log [log] NOSEARCH kw after no search kw q=晴天 (Live) 周杰伦 picked={"songmid":"600913000007163534","rid":"600913000007163534","musicId":"600913000007163534","name":"晴天 (Live)","singer":"周杰伦"}
+        log [log] TRY kg after 不支持的音质：flac24bit hasSearch=undefined
+        log [log] IN-KW-PATH kg
+        log [log] SS-TYPE kg object
+        log [log] NOSEARCH kg after no search kg q=晴天 (Live) 周杰伦 picked={"hash":"600913000007163534","name":"晴天 (Live)","singer":"周杰伦"}
+        log [http] GET 200 37ms https://trackercdn.kugou.com/i/v2/?key=44d7a5c94f2c32e98aab3dd6c16633a2&hash=600913000007163534&br=hq&appid=1005&pid=2&cmd=25&behavior=play
+        log [log] TRY tx after 酷狗取链失败：Bad hash hasSearch=undefined
+        log [log] IN-KW-PATH tx
+        log [log] SS-TYPE tx object
+        log [log] NOSEARCH tx after no search tx q=晴天 (Live) 周杰伦 picked={"songmid":"600913000007163534","name":"晴天 (Live)","singer":"周杰伦"}
+        log [log] 600913000007163534 flac24bit
+        log [http] GET 200 74ms https://u.y.qq.com/cgi-bin/musicu.fcg?format=json&data={"req_0":{"module":"vkey.GetVkeyServer","method":"CgiGetVkey","param":{"filename":["F000undefined.flac"],
+        log [log] {"code":0,"ts":1793357990534,"start_ts":1793357990498,"traceid":"61ab87e90d4a8d07","req_0":{"code":0,"data":{"uin":"","retcode":0,"verify_type":0,"login_key":"","msg":"120.227.53.174;fnameHitCache_200","sip":["http://aqqmusic.tc.qq.com/","http://sjy6.stream.qqmusic.qq.com/"],"thirdip":["",""],"testfile2g":"C400003mAan70zUy5O.m4a?guid=10000&vkey=3D0D60B2710C6A7BCFAE5ABED372BDD4DA31828074BD4691D37C7760E7DDFA273ADAB016FBCD5F7A05A60BDC475AB93C528285936DA54ED0__v2b9ab224&uin=&fromtag=3","testfilewifi":"C400003mAan70zUy5O.m4a?guid=10000&vkey=3D0D60B2710C6A7BCFAE5ABED372BDD4DA31828074BD4691D37C7760E7DDFA273ADAB016FBCD5F7A05A60BDC475AB93C528285936DA54ED0__v2b9ab224&uin=&fromtag=3","midurlinfo":[{"songmid":"600913000007163534","filename":"F000undefined.flac","purl":"","errtype":"","p2pfromtag":0,"qmdlfromtag":0,"common_downfromtag":0,"vip_downfromtag":0,"pdl":0,"premain":0,"hisdown":0,"hisbuy":0,"uiAlert":0,"isbuy":0,"pneedbuy":0,"pneed":0,"isonly":0,"onecan":0,"result":101404,"tips":"","opi48kurl":"","opi96kurl":"","opi192kurl":"","opiflackurl":"","opi128kurl":"","opi192koggurl":"","wififromtag":"","flowfromtag":"","wifiurl":"","flowurl":"","vkey":"","opi30surl":"","ekey":"","auth_switch":0,"subcode":0,"opi96koggurl":"","auth_switch2":0,"xcdnurl":"","mid":"undefined","df":null}],"servercheck":"9df74969e0fda51f49b3033c66f2e553","expiration":80400,"deviceResult":"","validUrl":"","validTitle":"","validText":""}}}
+        log [log] TRY wy after QQ 未登录只给 30s 试听片段（filename=F000undefined.flac result=101404），取不到正式直链 hasSearch=undefined
+        log [log] IN-KW-PATH wy
+        log [log] SS-TYPE wy object
+        log [log] NOSEARCH wy after no search wy q=晴天 (Live) 周杰伦 picked={"songmid":"600913000007163534","musicId":"600913000007163534","name":"晴天 (Live)","singer":"周杰伦"}
+        log [log] 600913000007163534 1999000
+        log [http] POST 200 44ms https://interface3.music.163.com/eapi/song/enhance/player/url
+        log [log] {"data":[{"id":600913000007163500,"url":null,"br":0,"size":0,"md5":null,"code":404,"expi":1200,"type":null,"gain":0,"peak":null,"closedGain":0,"closedPeak":0,"fee":0,"uf":null,"payed":0,"flag":1,"canExtend":false,"freeTrialInfo":null,"level":null,"encodeType":null,"channelLayout":null,"freeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"listenType":null,"cannotListenReason":null,"playReason":null,"freeLimitTagType":null},"freeTimeTrialPrivilege":{"resConsumable":false,"userConsumable":false,"type":0,"remainTime":0},"urlSource":0,"rightSource":0,"podcastCtrp":null,"effectTypes":null,"time":0,"message":null,"levelConfuse":null,"musicId":null,"accompany":null,"sr":0,"auEff":null,"immerseType":null,"beatType":0}],"code":200}
+        log [log] FINAL failed
+        log [log] failed
+
