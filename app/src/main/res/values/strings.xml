@@ -168,4 +168,28 @@
     <string name="section_row_panel">队列面板</string>
     <string name="section_fixed">固定尺寸</string>
     <string name="song_cover_letter_daily">荐</string>
+
+    <!-- ===== U2 外壳（底部 3 Tab + 迷你条 + 空态） ===== -->
+    <!-- zh-CN.ts: "home"（顶栏「首页」），本次用作底栏 Tab 名 -->
+    <string name="tab_home">首页</string>
+    <!-- zh-CN.ts: "search" -->
+    <string name="tab_search">搜索</string>
+    <!-- 自拟：Folia 桌面端没有「我的」这个侧栏项（库里是「曲库 / 设置 / 平台」） -->
+    <string name="tab_profile">我的</string>
+    <!-- zh-CN.ts: "play" -->
+    <string name="mini_play">播放</string>
+    <!-- zh-CN.ts: "pause" -->
+    <string name="mini_pause">暂停</string>
+    <!-- zh-CN.ts: "next" -->
+    <string name="mini_next">下一首</string>
+    <!-- 自拟：迷你条整条点按进入全屏播放页 -->
+    <string name="mini_open_player">打开播放页</string>
+    <!-- 自拟：迷你条封面无障碍描述 -->
+    <string name="cd_song_cover">歌曲封面</string>
+    <!-- zh-CN.ts: "emptyCollection" + 自拟补充（U6 之前首页只放空态） -->
+    <string name="home_placeholder_title">还没有开始听</string>
+    <!-- 自拟：首页占位说明（U6 才做内容墙） -->
+    <string name="home_placeholder_hint">搜索一首歌，先听一点，最近播放会出现在这里。</string>
+    <!-- zh-CN.ts: "search" 的动作形式 -->
+    <string name="home_placeholder_action">去搜索</string>
 </resources>

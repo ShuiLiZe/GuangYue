@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
@@ -16,6 +17,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.guangyue.core.player.PlaybackController
+import com.guangyue.music.R
 import com.guangyue.feature.library.design.GuangYueDesign
 import com.guangyue.feature.library.design.GySpace
 import com.guangyue.feature.library.home.FoliaMiniPlayer
@@ -79,11 +81,12 @@ fun GuangYueNavHost(
     val playbackState by playback.state.collectAsStateWithLifecycle()
 
     // 迷你播放条：三个顶层页共用同一份，避免各页各建一条。
+    // 0.0.9（U2）：加了「下一首」按钮（走现有播放器 playback.next()），文案全部走 strings.xml。
     val miniPlayer: (@Composable () -> Unit)? = playbackState.item?.let { item ->
         {
             FoliaMiniPlayer(
                 title = item.title,
-                subtitle = item.artist ?: "广乐",
+                subtitle = item.artist ?: stringResource(R.string.app_name),
                 artwork = item.artworkUri,
                 progress = playbackState.progress,
                 isPlaying = playbackState.isPlaying,
@@ -94,6 +97,10 @@ fun GuangYueNavHost(
                     end = GySpace.pageH,
                     bottom = GySpace.s,
                 ),
+                onNext = { playback.next() },
+                playLabel = stringResource(R.string.mini_play),
+                pauseLabel = stringResource(R.string.mini_pause),
+                nextLabel = stringResource(R.string.mini_next),
             )
         }
     }
@@ -138,6 +145,11 @@ fun GuangYueNavHost(
                         playbackProgress = playbackState.progress,
                         isPlaying = playbackState.isPlaying,
                         onTogglePlay = { playback.toggle() },
+                        // 0.0.9（U2）：首页占位空态的「去搜索」入口（内容墙 U6 再做）。
+                        onOpenSearch = { navController.navigate(Routes.SEARCH) },
+                        placeholderTitle = stringResource(R.string.home_placeholder_title),
+                        placeholderHint = stringResource(R.string.home_placeholder_hint),
+                        placeholderAction = stringResource(R.string.home_placeholder_action),
                     )
                 },
                 miniPlayer = miniPlayer,

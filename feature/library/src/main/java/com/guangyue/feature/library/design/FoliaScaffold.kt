@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.guangyue.feature.library.design.icons.GuangYueIcons
@@ -172,14 +173,23 @@ fun FoliaBottomNav(
     current: String,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * 覆盖底部的系统栏留白（手势条 / 三键导航）。
+     *
+     * 生产环境留 `null`：底栏自己读 `WindowInsets.navigationBars`。截图用例（Robolectric 里
+     * 造不出真的系统栏）与需要固定留白的宿主可以显式传值，两条路径共用同一份版式。
+     */
+    navBarInset: Dp? = null,
 ) {
     val hairline = Gyp.hairline
-    // 底栏贴着屏幕底：手势条 / 三键导航的高度要补在底栏内部，否则按钮被手势条压住。
-    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // 底栏贴着屏幕底：手势条 / 三键导航的高度补在玻璃面板**内部**（顺序在 glassPanel 之后），
+    // 面板一直铺到屏幕最底边，按钮再往上抬 navBottom，这样手势条不会盖住按钮、面板也不会
+    // 和屏幕之间漏出一条页面底色。
+    val navBottom = navBarInset
+        ?: WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = navBottom)
             .then(Modifier.glassPanel(corner = 0.dp))
             .drawBehind {
                 drawRect(
@@ -188,7 +198,8 @@ fun FoliaBottomNav(
                     size = androidx.compose.ui.geometry.Size(size.width, 1f),
                 )
             }
-            .padding(horizontal = GySpace.s, vertical = GySpace.xs),
+            .padding(horizontal = GySpace.s, vertical = GySpace.xs)
+            .padding(bottom = navBottom),
         horizontalArrangement = Arrangement.spacedBy(0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

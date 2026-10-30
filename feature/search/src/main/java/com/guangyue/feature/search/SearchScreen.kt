@@ -1,4 +1,4 @@
-﻿package com.guangyue.feature.search
+package com.guangyue.feature.search
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -86,7 +87,9 @@ fun SearchScreen(
 ) {
     val counts = state.tabCounts
     val tab = state.tab
-    Box(modifier.fillMaxSize().marbleBackground()) {
+    // 0.0.9（U2）：键盘弹起时搜索页自己吃 ime inset（底栏与迷你条由外壳整条让位），
+    // 输入框与结果一起抬到键盘上面，不会被 IME 盖住。
+    Box(modifier.fillMaxSize().marbleBackground().imePadding()) {
         Column(Modifier.fillMaxSize()) {
             FoliaTopBar(title = "搜索")
 

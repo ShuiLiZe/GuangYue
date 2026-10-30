@@ -87,6 +87,11 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     bottomBar: (@Composable () -> Unit)? = null,
     miniPlayer: (@Composable () -> Unit)? = null,
+    // 0.0.9（U2）：内容墙由 U6 做，这一版先给中文占位空态 + 去搜索入口。
+    onOpenSearch: (() -> Unit)? = null,
+    placeholderTitle: String = "还没有开始听",
+    placeholderHint: String = "搜索一首歌，先听一点，最近播放会出现在这里。",
+    placeholderAction: String = "去搜索",
 ) {
     Column(
         modifier
@@ -119,7 +124,9 @@ fun HomeScreen(
             )
 
             if (!hasAnyPlugin && recommended.isEmpty() && recent.isEmpty() && charts.isEmpty()) {
-                // 全空：Folia 的居中空态 + 唯一入口。
+                // 0.0.9（U2）：U6 才做首页内容墙，这一版先给中文占位空态。
+                // 装了音源还是空（说明插件不给榜 / 什么都没播过）则退回「去添加音源」那条。
+                val noSource = !hasAnyPlugin && onOpenSearch == null
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -127,15 +134,19 @@ fun HomeScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     FoliaEmptyState(
-                        title = "空空如也",
-                        subtitle = "还没有音源。装一个官方音源，搜索和榜单就有了。",
+                        title = if (noSource) "空空如也" else placeholderTitle,
+                        subtitle = if (noSource) {
+                            "还没有音源。装一个官方音源，搜索和榜单就有了。"
+                        } else {
+                            placeholderHint
+                        },
                         action = {
                             Spacer(Modifier.height(GySpace.xs))
                             FoliaButton(
-                                text = "去添加音源",
-                                onClick = onOpenPlugins,
+                                text = if (noSource) "去添加音源" else placeholderAction,
+                                onClick = if (noSource) onOpenPlugins else (onOpenSearch ?: {}),
                                 variant = FoliaButtonVariant.Primary,
-                                icon = GuangYueIcons.Plus,
+                                icon = if (noSource) GuangYueIcons.Plus else GuangYueIcons.Search,
                             )
                         },
                     )
@@ -143,6 +154,7 @@ fun HomeScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
+                    // 底栏与迷你条由外壳竖排在外，不覆盖内容；这里只留视觉呼吸。
                     contentPadding = PaddingValues(bottom = GySpace.xl),
                 ) {
                     // 拿不到推荐就整段不显示（插件不声明 getRecommendSheetTags 时属于正常情况）。
@@ -458,6 +470,10 @@ fun FoliaMiniPlayer(
     onTogglePlay: () -> Unit,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
+    onNext: (() -> Unit)? = null,
+    playLabel: String = "播放",
+    pauseLabel: String = "暂停",
+    nextLabel: String = "下一首",
 ) {
     Row(
         modifier = modifier
@@ -523,10 +539,29 @@ fun FoliaMiniPlayer(
         ) {
             Icon(
                 imageVector = if (isPlaying) GuangYueIcons.Pause else GuangYueIcons.Play,
-                contentDescription = if (isPlaying) "暂停" else "播放",
+                contentDescription = if (isPlaying) pauseLabel else playLabel,
                 tint = Gyp.onAccent,
                 modifier = Modifier.size(18.dp),
             )
+        }
+        // 0.0.9（U2）：「下一首」——Folia 桌面悬浮条上没有这一颗（桌面靠 hover 出的
+        // 悬浮控件 / 快捷键），手机版按需求补一颗 48dp 触控的图标按钮。
+        if (onNext != null) {
+            Spacer(Modifier.width(GySpace.xs))
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onNext),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = GuangYueIcons.SkipForward,
+                    contentDescription = nextLabel,
+                    tint = Gyp.ink,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }
