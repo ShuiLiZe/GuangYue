@@ -6633,4 +6633,33 @@ object GuangYueIcons {
             )
             .build()
     }
+
+
+    /** SkipForward = lucide `skip-forward` */
+    val SkipForward: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "SkipForward",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        )
+            .addPath(
+                pathData = addPathNodes("M5 4 15 12 5 20 5 4"),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .addPath(
+                pathData = addPathNodes("M19 5v14"),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .build()
+    }
 }

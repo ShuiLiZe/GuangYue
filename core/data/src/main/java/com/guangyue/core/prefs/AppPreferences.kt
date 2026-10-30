@@ -23,6 +23,15 @@ class AppPreferences @Inject constructor(
         set(value) = prefs.edit().putBoolean(KEY_DARK, value).apply()
 
     /**
+     * 用户是否已经**显式**选过一次深浅色。
+     *
+     * 0.0.9 起主题默认跟随系统（`uiMode`）；只有这里为 true（`ui_dark_mode` 写过一次）
+     * 时才用 [darkMode] 的值覆盖系统，否则界面层跟着 `isSystemInDarkTheme()` 走。
+     */
+    val hasDarkMode: Boolean
+        get() = prefs.contains(KEY_DARK)
+
+    /**
      * 搜索页上次选中的音源（插件 id）。
      *
      * 空串 = 从未选过，搜索页会落到可选音源里的第一个。
