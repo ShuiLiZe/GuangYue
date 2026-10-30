@@ -47,8 +47,18 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
 
     /** 已安装插件（只统计能当音源用的），供空状态文案判断。 */
+    init {
+        android.util.Log.d("GYHOME", "VM CREATED plugins=" + plugins.plugins.value.size)
+    }
+
     val enabledPlugins: StateFlow<List<PluginMeta>> =
-        plugins.plugins.map { list -> list.filter { it.error == null && it.hasSearch } }
+        plugins.plugins.map { list ->
+            android.util.Log.d("GYHOME", "plugins total=" + list.size + " enabled=" + list.count { it.enabled } + " ok=" + list.count { it.error == null } + " hs=" + list.count { it.hasSearch })
+            if (list.isNotEmpty() && list.none { it.error == null && it.hasSearch }) {
+                android.util.Log.d("GYHOME", "list empty? size=" + list.size + " sample=" + list.take(3).map { it.id + "/en=" + it.enabled + "/err=" + it.error + "/hs=" + it.hasSearch })
+            }
+            list.filter { it.error == null && it.hasSearch }
+        }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** 当前音源：全局唯一，决定首页「推荐 / 榜单」从哪个音源拉数据。 */
@@ -86,6 +96,77 @@ class HomeViewModel @Inject constructor(
 
     private var chartsLoaded = false
     private var chartsFor: String? = null
+
+    private val _sheets = MutableStateFlow<List<HomeTile>>(emptyList())
+
+    /** 推荐段：当前音源的官方推荐歌单（`getRecommendSheetTags` 双层结构）。 */
+    val sheets: StateFlow<List<HomeTile>> = _sheets.asStateFlow()
+
+    private val _sheetLeaves = MutableStateFlow<Map<String, JsonObject>>(emptyMap())
+
+    private var sheetsLoaded = false
+    private var sheetsFor: String? = null
+
+    /**
+     * 拉一次推荐歌单：只问**当前音源**。
+     *
+     * 0.0.7 首页「推荐」段只显示本地歌单，没有任何音源内容；插件明明声明了
+     * `getRecommendSheetTags` 却没人用。0.0.8 改成真正的音源推荐歌单，拿不到就整段不显示。
+     */
+    fun loadSheetsIfNeeded() {
+        android.util.Log.d("GYHOME", "loadSheetsIfNeeded src=" + currentSource.value?.id + " hasRecommend=" + currentSource.value?.hasRecommend + " loaded=" + sheetsLoaded + " for=" + sheetsFor)
+        val source = currentSource.value ?: return
+        if (sheetsLoaded && sheetsFor == source.id) return
+        // 换音源后要重拉：hasRecommend 是上一次的结论，不能拿它挡新音源。
+        sheetsLoaded = true
+        sheetsFor = source.id
+        viewModelScope.launch {
+            _sheets.value = emptyList()
+            _sheetLeaves.value = emptyMap()
+            // functions 为空 = 插件没声明能力清单，不代表不支持；直接试一次，拿到空就整段不显示。
+            if (source.functions.isNotEmpty() && !source.hasRecommend) return@launch
+            val tags = runCatching { bridge.getRecommendSheetTags(source.id) }.getOrElse { android.util.Log.d("GYHOME", "tags ERR " + it.message); emptyList() }
+            android.util.Log.d("GYHOME", "tags=" + tags.size)
+            val leaves = linkedMapOf<String, JsonObject>()
+            val tiles = mutableListOf<HomeTile>()
+            for (tag in tags) {
+                // getRecommendSheetTags 返回 [{title, data:[{id,title}, ...]}, ...]，
+                // 内层每一项才是能喂给 getRecommendSheetsByTag 的「分类叶子」。
+                val children = (tag["data"] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
+                for (leaf in children) {
+                    val id = (leaf["id"] as? JsonPrimitive)?.contentOrNull ?: continue
+                    if (leaves.containsKey(id)) continue
+                    leaves[id] = leaf
+                    if (leaves.size >= 12) break
+                }
+                if (leaves.size >= 12) break
+            }
+            for ((id, leaf) in leaves) {
+                android.util.Log.d("GYHOME", "leaf=" + id + " -> " + runCatching { bridge.getRecommendSheets(source.id, leaf, 1).size }.getOrElse { "ERR:" + it.message })
+                val sheetsOfLeaf = runCatching { bridge.getRecommendSheets(source.id, leaf, 1) }
+                    .getOrDefault(emptyList())
+                for (sheet in sheetsOfLeaf) {
+                    val name = (sheet["title"] as? JsonPrimitive)?.contentOrNull
+                        ?: (sheet["name"] as? JsonPrimitive)?.contentOrNull
+                        ?: "推荐歌单"
+                    val artwork = (sheet["artwork"] as? JsonPrimitive)?.contentOrNull
+                        ?: (sheet["coverImg"] as? JsonPrimitive)?.contentOrNull
+                    val desc = (sheet["description"] as? JsonPrimitive)?.contentOrNull
+                    tiles += HomeTile(
+                        key = "sheet:$id:" + ((sheet["id"] as? JsonPrimitive)?.contentOrNull.orEmpty()),
+                        title = name,
+                        subtitle = desc?.takeIf { it.isNotBlank() } ?: "推荐歌单",
+                        artwork = artwork,
+                        kind = HomeTileKind.SHEET,
+                    )
+                    if (tiles.size >= 8) break
+                }
+                if (tiles.size >= 8) break
+            }
+            _sheetLeaves.value = leaves
+            _sheets.value = tiles.distinctBy { it.key }
+        }
+    }
 
     /**
      * 拉一次榜单：用当前音源的 `getTopLists()` 真数据。
@@ -147,8 +228,10 @@ class HomeViewModel @Inject constructor(
     }
 
     /** 推荐段：本地歌单优先，没有歌单时用最近播放补齐，保证首屏不空。 */
-    fun recommended(playlists: List<HomeTile>, recent: List<HomeTile>): List<HomeTile> =
-        if (playlists.isNotEmpty()) playlists else recent
+    fun recommended(playlists: List<HomeTile>, recent: List<HomeTile>): List<HomeTile> {
+        android.util.Log.d("GYHOME", "recommended sheets=" + playlists.size + " recent=" + recent.size)
+        return if (playlists.isNotEmpty()) playlists else recent
+    }
 
     /** 「我的」页的计数：我喜欢 / 本地下载。 */
     val likedCount: StateFlow<Int> = tracks.favorites()
@@ -174,6 +257,7 @@ class HomeViewModel @Inject constructor(
                     else runCatching { playlists.snapshot(id) }.getOrDefault(emptyList())
                 }
                 HomeTileKind.STATION -> tracksOfChart(tile)
+                HomeTileKind.SHEET -> { android.util.Log.d("GYHOME", "sheet leaf=" + _sheetLeaves.value.keys + " leafObj=" + _sheetLeaves.value[tile.key.removePrefix("sheet:").substringBefore(":")]); tracksOfSheet(tile) }
                 HomeTileKind.TRACK, HomeTileKind.ALBUM -> {
                     val cached = _chartItems.value[tile.key]
                     if (cached == null) {
@@ -184,8 +268,32 @@ class HomeViewModel @Inject constructor(
                     }
                 }
             }
+            android.util.Log.d("GYHOME", "playTracksOf kind=" + tile.kind + " key=" + tile.key + " n=" + list.size + " src=" + currentSource.value?.id)
             if (list.isNotEmpty()) onReady(list, 0)
         }
+    }
+
+    /**
+     * 推荐歌单卡片 → 该歌单的全部曲目。
+     *
+     * key 形如 `sheet:<分类叶子id>:<歌单id>`；用当前音源重新问一次详情，
+     * 而不是把歌单本身当歌喂给取链（0.0.8 之前点推荐卡片会报「取不到播放地址」）。
+     */
+    private suspend fun tracksOfSheet(tile: HomeTile): List<TrackEntity> {
+        val source = currentSource.value ?: return emptyList()
+        val body = tile.key.removePrefix("sheet:")
+        val leafId = body.substringBefore(":")
+        val sheetId = body.substringAfter(":", "")
+        val leaf = _sheetLeaves.value[leafId] ?: return emptyList()
+        val raw = runCatching { bridge.getRecommendSheetInfo(source.id, leaf, sheetId, 1) }.getOrDefault(emptyList())
+        android.util.Log.d("GYHOME", "sheetItems n=" + raw.size + " first=" + (raw.firstOrNull()?.let { it.title + "/" + it.artist + "/" + it.platform + "/" + it.id }))
+        val ents = raw.map { e ->
+            val ent = e.toEntity()
+            // 插件原始对象要落库：播放层走 TrackMapper.toMusicItem 还原 MusicItem，
+            // 洛雪取链源靠它的 raw 拿 songmid/hash 之类的字段，丢了就只能取到「取不到地址」。
+            if (e.raw != null) ent.copy(rawJson = e.raw.toString()) else ent
+        }
+        return ents
     }
 
     /** 榜单卡片 → 整张榜单的曲目实体（当前音源重新拉一次）。 */

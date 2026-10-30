@@ -39,6 +39,8 @@ data class QueueItem(
     @UnstableApi
     fun toMediaItem(): MediaItem {
         OriginStore.put(key, origin)
+        // 队列里的曲目可能还没落库（首页推荐歌单直接开播），byKey 查不到就没法还原
+        // MusicItem，洛雪取链源需要它的 raw。这里顺带把行写库，取链时就能查到。
         return MediaItem.Builder()
             .setMediaId(key)
             .setUri(Uri.parse(resolveUri(key)))
@@ -54,6 +56,23 @@ data class QueueItem(
             )
             .build()
     }
+
+    /**
+     * 队列项 → 可落库行。首页 / 歌单直连开播的曲目本地库里还没有这一行，
+     * 取链时 TrackMapper.toMusicItem 就还原不出带 raw 的 MusicItem（洛雪源依赖 raw）。
+     */
+    fun toCachedTrack(): TrackEntity? = TrackEntity(
+        key = key,
+        title = title.ifBlank { "未知歌曲" },
+        artist = artist.ifBlank { "未知艺术家" },
+        album = album.orEmpty(),
+        artwork = artworkUri,
+        platform = origin.pluginId,
+        songId = origin.trackKey.substringAfter(":"),
+        source = TrackEntity.SOURCE_PLUGIN,
+        quality = origin.quality.wire,
+        rawJson = rawJson,
+    )
 
     companion object {
         /** Builds a queue entry from a persisted track row. */
@@ -103,6 +122,7 @@ class PlaybackController @Inject constructor(
     @ApplicationContext private val context: Context,
     private val dataSources: MediaDataSourceProvider,
     private val prefetcher: PlaybackPrefetcher,
+    private val tracks: com.guangyue.core.data.repository.TrackRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -237,8 +257,14 @@ class PlaybackController @Inject constructor(
 
     fun setQueue(items: List<QueueItem>, startIndex: Int = 0, play: Boolean = true) {
         if (items.isEmpty()) return
+        val remembered = items.mapNotNull { it.toCachedTrack() }
         queue.clear()
         queue += items
+        // 队列里的曲目可能还没落库（首页推荐歌单直接开播）。先写库，取链时
+        // TrackMapper.toMusicItem 才能还原出带 raw 的 MusicItem，洛雪源要用 raw 里的字段。
+        if (remembered.isNotEmpty()) {
+            scope.launch { try { remembered.forEach { tracks.cache(it) } } catch (_: Throwable) { } }
+        }
         player.setMediaItems(
             items.map { it.toMediaItem() },
             startIndex.coerceIn(0, items.size - 1),

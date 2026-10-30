@@ -37,7 +37,23 @@ class PluginMediaSourceResolver @Inject constructor(
         // Prefer the exact payload the plugin produced (MusicFree contract), falling back to the
         // reconstructed item when the row was cached without raw JSON.
         val row = tracks.byKey(origin.trackKey)
+        android.util.Log.d("GYHOME", "resolve key=" + origin.trackKey + " row=" + (row != null) + " raw=" + (if (row?.rawJson != null) "yes" else "no"))
+        // 首页 / 歌单点进来的曲目可能还没落本地库（byKey 为 null）。这时用 origin 里的
+        // 平台+歌曲 id 兜底：插件取链可以失败，但洛雪取链源只要有 platform+id 就能取到。
         val pluginItem = row?.let { TrackMapper.toMusicItem(it) }
+            ?: origin.let { o ->
+                val (platform, songId) = o.trackKey.split(":", limit = 2).takeIf { it.size == 2 }
+                    ?.let { it[0] to it[1] } ?: return@let null
+                MusicItem(
+                    platform = platform,
+                    id = songId,
+                    title = "",
+                    artist = "",
+                    album = null,
+                    artwork = null,
+                    durationMs = null,
+                )
+            }
         val payload = pluginItem?.raw
             ?: row?.let {
                 MusicItem(

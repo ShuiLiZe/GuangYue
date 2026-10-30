@@ -1,4 +1,4 @@
-﻿package com.guangyue.core.plugin.lx
+package com.guangyue.core.plugin.lx
 
 import com.guangyue.core.plugin.MusicItem
 import com.guangyue.core.plugin.runtime.EmptyPreludeProvider
@@ -49,8 +49,16 @@ class LxFiveSourceTest {
         }
     }
 
+    /**
+     * 用真实曲目走一遍 musicUrl。
+     *
+     * 挑网易而不是 QQ：2026-10 起 QQ 对未登录请求一律回 `midurlinfo[0].purl = ""`
+     * （result=104003），酷狗 `play/getdata` 回 err_code=30020 风控、咪咕 listen-url 回
+     * 870001，都是站点侧限制，与本仓库运行时无关。网易 eapi 对免费曲目仍然正常出链，
+     * 所以拿它做「真实网络端到端」的守门用例；站点策略变化时这条会先报警。
+     */
     @Test
-    fun `真实 QQ 歌曲能经五源合一取到直链`() {
+    fun `真实网易免费曲能经五源合一取到直链`() {
         val script = scriptFile() ?: run {
             println("跳过：找不到 build/lx/five-source-lx.js")
             return
@@ -67,21 +75,21 @@ class LxFiveSourceTest {
         try {
             runtime.install()
             val item = MusicItem(
-                platform = "qq",
-                id = "003OUlho2HcRHC",
-                title = "夜曲",
+                platform = "netease",
+                id = "518076026",
+                title = "黄浦江深",
                 artist = "周杰伦",
                 raw = JsonObject(
                     mapOf(
-                        "songmid" to kotlinx.serialization.json.JsonPrimitive("003OUlho2HcRHC"),
-                        "id" to kotlinx.serialization.json.JsonPrimitive("003OUlho2HcRHC"),
-                        "interval" to kotlinx.serialization.json.JsonPrimitive("03:46"),
+                        "songmid" to kotlinx.serialization.json.JsonPrimitive("518076026"),
+                        "musicId" to kotlinx.serialization.json.JsonPrimitive("518076026"),
+                        "interval" to kotlinx.serialization.json.JsonPrimitive("04:05"),
                     ),
                 ),
             )
-            val info = LxMusicInfo.of("tx", item) ?: error("musicInfo 映射失败")
-            val url = runtime.musicUrl("tx", "320k", info)
-            println("tx 320k => $url")
+            val info = LxMusicInfo.of("wy", item) ?: error("musicInfo 映射失败")
+            val url = runtime.musicUrl("wy", "320k", info)
+            println("wy 320k => $url")
             assert(url.startsWith("http")) { "没取到直链：$url" }
         } finally {
             runtime.close()

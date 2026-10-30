@@ -1,4 +1,4 @@
-﻿package com.guangyue.core.plugin.lx
+package com.guangyue.core.plugin.lx
 
 import android.util.Log
 import com.dokar.quickjs.QuickJs
@@ -51,6 +51,9 @@ class LxRuntime(
     private var installed = false
     private val drainLatch = AtomicBoolean(false)
 
+    /** 跨请求保持的 cookie（洛雪源取 token 要靠它）。 */
+    private val cookies = LxCookieJar()
+
     var onLog: ((level: String, message: String) -> Unit)? = null
     var onHttp: ((method: String, url: String, status: Int, ms: Long) -> Unit)? = null
 
@@ -84,6 +87,13 @@ class LxRuntime(
                 val text = args.getOrNull(0)?.let(::asBridgeText) ?: ""
                 md5Hex(text)
             }
+            runtime.function("__lx_aes") { args ->
+                val data = args.getOrNull(0)?.let(::asBridgeText) ?: ""
+                val mode = args.getOrNull(1)?.let(::asBridgeText) ?: "aes-128-ecb"
+                val key = args.getOrNull(2)?.let(::asBridgeText) ?: ""
+                val iv = args.getOrNull(3)?.let(::asBridgeText) ?: ""
+                aesEncrypt(data, mode, key, iv)
+            }
             runtime.function("__lx_drainOneJob") { _ ->
                 if (drainOneJob(runtime)) 1 else 0
             }
@@ -104,16 +114,49 @@ class LxRuntime(
             ) {
                 throw LxRuntimeException("prelude 覆盖了 globalThis.lx，洛雪外壳失效")
             }
-            step("source.js") { exec(runtime, code, "source.js") }
+            // 脚本主体执行。有些源（五源合一就是）在同步注册完 handler、发出 inited 之后，
+            // 还会挂一串 fire-and-forget 的 Promise（检查更新、预取 token）。这些 Promise 的
+            // reject 会冒成「未捕获的异步错误」，让整次 evaluate 直接抛异常 —— 但此刻源其实
+            // 已经完全装好了。所以这里不当场判死，只在日志里留痕，真出问题由后面的
+            // inited / handler 两道探针兜底。
+            try {
+                step("source.js") { exec(runtime, code, "source.js") }
+            } catch (t: Throwable) {
+                runCatching {
+                    Log.d(TAG, "[${source.displayName}] source.js 执行报错，继续探针：${t.message}")
+                }
+            }
 
             step("dispatcher.js") { exec(runtime, LX_DISPATCHER, "dispatcher.js") }
+            runCatching { Log.d(TAG, "[${source.displayName}] dispatcher ok") }
 
+            // 探针只看「脚本上报了哪些源」，不驱动脚本的事件循环：
+            // `lx.send(inited)` 是同步调用，脚本主体跑完时 __lx_inited 就已经有值了。
+            // 之前这里先跑 `__lx_pump(80)` 推进异步任务，结果脚本自己挂的「检查更新」
+            // 请求在模拟器上卡住时会把这次 evaluate 一起拖死，源明明可用却一直显示不可用。
             val inited = step("init-probe.js") {
-                // 脚本可能只在回调/微任务里 inited，先跑一轮事件循环再读。
-                runCatching { read(runtime, "__lx_pump(80)", "init-pump.js") }
-                read(runtime, "JSON.stringify(globalThis.__lx_inited || null)", "init-probe.js")
+                runCatching {
+                    read(runtime, "JSON.stringify(globalThis.__lx_inited || null)", "init-probe.js")
+                }.getOrElse { t ->
+                    runCatching {
+                        Log.d(TAG, "[${source.displayName}] init-probe 读失败：${t.message}")
+                    }
+                    runCatching {
+                        readRaw(
+                            runtime,
+                            "(globalThis.__lx_inited && globalThis.__lx_inited.sources)"
+                                + " ? Object.keys(globalThis.__lx_inited.sources).join(',') : ''",
+                            "init-probe2.js",
+                        )
+                    }.getOrElse { "" }
+                }
             }
-            platforms = parsePlatforms(inited)
+            platforms = if (inited.startsWith("{")) {
+                parsePlatforms(inited)
+            } else {
+                inited.split(',').map { it.trim() }.filter { it in LxPlatforms.ALL }
+            }
+            runCatching { Log.d(TAG, "[${source.displayName}] inited=${inited.take(300)}") }
             if (platforms.isEmpty()) {
                 throw LxRuntimeException("脚本没有上报任何音源（lx.send(inited) 缺失或为空）")
             }
@@ -194,11 +237,22 @@ class LxRuntime(
         req["headers"].asObj()?.forEach { (k, v) ->
             v.asStr()?.let { runCatching { builder.header(k, it) } }
         }
-        // 洛雪源会自己传 Accept-Encoding（有的要原始字节自己解），没传就交给 OkHttp 透明解压。
-        val explicitEncoding = req["headers"].asObj()?.entries
-            ?.firstOrNull { it.key.equals("accept-encoding", ignoreCase = true) }
+        // 洛雪源会自己传 Accept-Encoding（有的要原始字节自己解）。
+        //
+        // 千万别在这里替它补 `Accept-Encoding: gzip`：一旦请求里出现这个头，OkHttp 就不再
+        // 透明解压，而响应里的 `Content-Encoding` 我们又会从 headers 里剔掉（见下面的序列化），
+        // 脚本于是拿到一坨 gzip 二进制——`body.match(...)` 直接成 null，酷我取 token 就报
+        // 「Invalid cookie」，一个官方可用源直接变成不可用。
+        // 什么都不带时 OkHttp 默认自己发 gzip 并自己解，这才是对的。
+
+        // 洛雪源普遍是「先取 token 再取链」两跳，服务端认 cookie（酷我、网易都是）。
+        // 脚本自己写了 Cookie 头就尊重它，否则补上之前响应里攒下来的。
+        val explicitCookie = req["headers"].asObj()?.entries
+            ?.firstOrNull { it.key.equals("cookie", ignoreCase = true) }
             ?.value?.asStr()
-        if (explicitEncoding.isNullOrBlank()) builder.header("Accept-Encoding", "gzip")
+        if (explicitCookie.isNullOrBlank()) {
+            cookies.headerFor(url)?.let { runCatching { builder.header("Cookie", it) } }
+        }
 
         val client = http.newBuilder()
             .connectTimeout(if (timeoutMs > 0) timeoutMs else 20_000L, TimeUnit.MILLISECONDS)
@@ -223,6 +277,7 @@ class LxRuntime(
             client.newCall(request).execute().use { resp ->
                 val rawBytes = resp.body?.bytes() ?: ByteArray(0)
                 val bytes = inflateIfNeeded(resp.headers["Content-Encoding"], rawBytes)
+                cookies.absorb(resp.request.url.toString(), resp.headers.values("Set-Cookie"))
                 onHttp?.invoke(method, url, resp.code, System.currentTimeMillis() - started)
                 buildString {
                     append("{\"ok\":true,\"statusCode\":").append(resp.code)
@@ -236,8 +291,18 @@ class LxRuntime(
                         if (name.equals("Content-Encoding", true)) continue
                         if (!first) append(',')
                         first = false
-                        append(JsonPrimitive(name)).append(':')
-                            .append(JsonPrimitive(resp.headers.values(name).joinToString(", ")))
+                        // 头名统一小写：OkHttp 保留服务端原始大小写（nginx 发的是 `Set-Cookie`），
+                        // 而洛雪源一律按小写取（`response.headers['set-cookie']`），大小写对不上
+                        // 就等于「没有 cookie」，酷我就报 Invalid cookie。
+                        append(JsonPrimitive(name.lowercase())).append(':')
+                        val all = resp.headers.values(name)
+                        // `set-cookie` 得是数组：洛雪源里写的是 `cookies.find(s => s.startsWith('Hm_Iuvt_'))`，
+                        // 合并成一个逗号串会让它一条都认不出来。
+                        if (all.size == 1 && !name.equals("set-cookie", true)) {
+                            append(JsonPrimitive(all[0]))
+                        } else {
+                            append(JsonArray(all.map { JsonPrimitive(it) }))
+                        }
                     }
                     append("},\"body\":").append(JsonPrimitive(bodyText(bytes, resp.header("Content-Type"))))
                     append(",\"length\":").append(bytes.size)
@@ -415,6 +480,53 @@ class LxRuntime(
         .joinToString("") { "%02x".format(it) }
 
     /**
+     * `utils.crypto.aesEncrypt(data, mode, key, iv)`。
+     *
+     * 网易的 eapi 接口（`/api/song/enhance/player/url/v1` 之外的老通道、评论、eapi 加密的
+     * 播放地址）全靠这个：明文是 `${url}-36cd479b6b5-${body}-36cd479b6b5-${md5}`，
+     * 用 `aes-128-ecb` 加密后十六进制大写当 `params`。宿主浏览器里跑的是 crypto-js，
+     * 这里用 JCE 对齐它的语义：key/iv 按 UTF-8 取字节，明文同样 UTF-8，
+     * 结果给「每字符一个字节」的 latin-1 字符串（脚本会自己 `buf2hex`）。
+     */
+    private fun aesEncrypt(data: String, mode: String, key: String, iv: String): String {
+        val m = mode.lowercase()
+        val transformation = when {
+            m.contains("ecb") -> "AES/ECB/PKCS5Padding"
+            m.contains("cbc") -> "AES/CBC/PKCS5Padding"
+            else -> "AES/ECB/PKCS5Padding"
+        }
+        val keyBytes = normaliseKey(key)
+        if (keyBytes.size != 16 && keyBytes.size != 24 && keyBytes.size != 32) {
+            throw LxRuntimeException("aesEncrypt 的 key 长度不对（${keyBytes.size} 字节）")
+        }
+        val cipher = javax.crypto.Cipher.getInstance(transformation)
+        cipher.init(
+            javax.crypto.Cipher.ENCRYPT_MODE,
+            javax.crypto.spec.SecretKeySpec(keyBytes, "AES"),
+            if (transformation.contains("CBC")) {
+                javax.crypto.spec.IvParameterSpec(
+                    normaliseKey(iv).let { if (it.size == 16) it else ByteArray(16) },
+                )
+            } else {
+                null
+            },
+        )
+        val out = cipher.doFinal(data.toByteArray(Charsets.UTF_8))
+        // 二进制原样交给脚本：latin-1 保证每个字节对应一个 char，charCodeAt 取低 8 位不丢字节。
+        return String(out, Charsets.ISO_8859_1)
+    }
+
+    /** key/iv 按 UTF-8 取字节；不足 16 字节就补 0，超了截断（crypto-js 的等价行为）。 */
+    private fun normaliseKey(raw: String): ByteArray {
+        val bytes = raw.toByteArray(Charsets.UTF_8)
+        return when {
+            bytes.size == 16 || bytes.size == 24 || bytes.size == 32 -> bytes
+            bytes.size > 16 -> bytes.copyOf(16)
+            else -> bytes.copyOf(16)
+        }
+    }
+
+    /**
      * 反射接出 quickjs-kt 私有的 `executePendingJob` —— 只能从 binding 回调里调用，
      * 见 `PluginRuntime.drainJobs` 的注释（从普通线程直接调会卡在 futex 上）。
      */
@@ -497,6 +609,39 @@ class LxRuntime(
   if (G.__LX_INSTALLED__) return;
   G.__LX_INSTALLED__ = true;
 
+  // 洛雪源普遍用 console.log 打调试信息（取链失败分支里也有），原生环境没有 console，
+  // 缺了会直接 ReferenceError 把整次取链判死。这里转给宿主的 __lx_log。
+  if (typeof G.console === 'undefined' || !G.console) {
+    var __lx_console_write = function (level) {
+      return function () {
+        var parts = [];
+        for (var i = 0; i < arguments.length; i++) {
+          var a = arguments[i];
+          try {
+            parts.push(typeof a === 'string' ? a : JSON.stringify(a));
+          } catch (e) {
+            parts.push(String(a));
+          }
+        }
+        try {
+          if (typeof __lx_log === 'function') __lx_log(level, parts.join(' '));
+        } catch (e) { /* 日志失败不能影响脚本 */ }
+      };
+    };
+    G.console = {
+      log: __lx_console_write('log'),
+      info: __lx_console_write('info'),
+      warn: __lx_console_write('warn'),
+      error: __lx_console_write('error'),
+      debug: __lx_console_write('debug'),
+      group: function () {},
+      groupEnd: function () {},
+      table: __lx_console_write('log'),
+      time: function () {},
+      timeEnd: function () {}
+    };
+  }
+
   var EVENT_NAMES = {
     request: 'request',
     inited: 'inited',
@@ -506,6 +651,28 @@ class LxRuntime(
   var handlers = {};
   G.__lx_handler = null;
   G.__lx_inited = null;
+
+  function jsonableBody(body, headers) {
+    if (typeof body !== 'string' || !body) return body === undefined ? '' : body;
+    var ct = '';
+    try {
+      for (var k in (headers || {})) {
+        if (String(k).toLowerCase() === 'content-type') { ct = String(headers[k] || '').toLowerCase(); }
+      }
+    } catch (e) { ct = ''; }
+    var looksJson = ct.indexOf('json') >= 0;
+    if (!looksJson) {
+      var head = body.slice(0, 40).replace(/^\uFEFF/, '').trim();
+      looksJson = head.charAt(0) === '{' || head.charAt(0) === '[';
+    }
+    if (!looksJson) return body;
+    try {
+      var parsed = JSON.parse(body);
+      return (parsed === null || parsed === undefined) ? body : parsed;
+    } catch (e) {
+      return body;
+    }
+  }
 
   function bytesOf(v) {
     if (!v) return new Uint8Array(0);
@@ -531,8 +698,7 @@ class LxRuntime(
 
   var lx = {
     version: '2.0.0',
-    env: 'desktop',
-    EVENT_NAMES: EVENT_NAMES,
+    env: 'desktop',    EVENT_NAMES: EVENT_NAMES,
     currentScriptInfo: { name: '', version: '', author: '', description: '', homepage: '' },
     on: function (eventName, handler) {
       if (typeof eventName !== 'string' || typeof handler !== 'function') return;
@@ -546,12 +712,30 @@ class LxRuntime(
     },
     request: function (url, options, callback) {
       var opts = options || {};
+      // 洛雪源一律用 `form: {k: v}` 发表单（网易 eapi、咪咕、QQ 都是），但不是每个源都记得
+      // 自己写 Content-Type。这里统一转成 application/x-www-form-urlencoded 并补头——
+      // 不然服务端收到空 body（content-length: 0），JSON 解析成 undefined，取链就「取到了却当失败」。
+      var headers = {};
+      for (var hk in (opts.headers || {})) headers[hk] = opts.headers[hk];
+      var bodyValue = (opts.body === undefined || opts.body === null) ? null : String(opts.body);
+      var hasCt = false;
+      for (var ck in headers) { if (String(ck).toLowerCase() === 'content-type') hasCt = true; }
+      if (opts.form && typeof opts.form === 'object') {
+        var pairs = [];
+        for (var fk in opts.form) {
+          var fv = opts.form[fk];
+          pairs.push(encodeURIComponent(fk) + '=' + encodeURIComponent(fv === undefined || fv === null ? '' : String(fv)));
+        }
+        bodyValue = pairs.join('&');
+        if (!hasCt) { headers['Content-Type'] = 'application/x-www-form-urlencoded'; hasCt = true; }
+        if (opts.method === undefined || opts.method === null) opts.method = 'POST';
+      }
       var payload = JSON.stringify({
         url: url,
         method: opts.method || 'GET',
-        headers: opts.headers || {},
+        headers: headers,
         timeout: opts.timeout || 0,
-        body: (opts.body === undefined || opts.body === null) ? null : String(opts.body)
+        body: bodyValue
       });
       var text = G.__lx_http(payload);
       var res;
@@ -566,7 +750,9 @@ class LxRuntime(
         statusMessage: res.statusMessage,
         headers: res.headers || {},
         url: res.url || url,
-        body: res.body === undefined ? '' : res.body,
+        // 洛雪源当浏览器用：`resp.body.data[0]`、`resp.body.code` 这种写法要求 JSON 已经 parse 好。
+        // 原样给字符串时它们全是 undefined —— 网易/咪咕/QQ 的取链就「取到了却当失败」。
+        body: jsonableBody(res.body, res.headers),
         bytes: bytesOf(res.body)
       }, opts);
     },
@@ -578,7 +764,7 @@ class LxRuntime(
           for (var i = 0; i < out.length; i++) out[i] = Math.floor(Math.random() * 256);
           return out;
         },
-        aesEncrypt: function () { throw new Error('aesEncrypt not supported'); },
+        aesEncrypt: function (data, mode, key, iv) { return G.__lx_aes(String(data), String(mode || 'aes-128-ecb'), String(key || ''), String(iv || '')); },
         rsaEncrypt: function () { throw new Error('rsaEncrypt not supported'); }
       },
       buffer: {

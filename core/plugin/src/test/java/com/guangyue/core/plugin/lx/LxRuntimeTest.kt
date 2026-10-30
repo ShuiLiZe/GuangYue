@@ -153,18 +153,19 @@ class LxRuntimeTest {
     }
 
     @Test
-    fun `JSON 响应按 UTF-8 交给脚本`() {
+    fun `JSON 响应解析成对象并以 UTF-8 交给脚本`() {
         val body = """{"data":{"name":"夜曲"}}""".toByteArray(Charsets.UTF_8)
         val client = OkHttpClient.Builder()
             .addInterceptor { chain -> respond(chain.request(), body, "application/json; charset=utf-8") }
             .build()
+        // 洛雪桌面版把 JSON 响应**解析成对象**再交给脚本（源里直接写 resp.body.data[0]、
+        // resp.body.code），所以这里断言的是「拿到的是对象且中文没乱码」。
         val code = """
             lx.on(lx.EVENT_NAMES.request, function () {
               return new Promise(function (resolve, reject) {
                 lx.request('https://api.example.com/json', { method: 'GET' }, function (err, res) {
                   if (err) { reject(err); return; }
-                  var parsed = JSON.parse(res.body);
-                  resolve(parsed.data.name === '夜曲' ? 'https://cdn.example.com/ok.mp3' : 'bad');
+                  resolve(res.body.data.name === '夜曲' ? 'https://cdn.example.com/ok.mp3' : 'bad');
                 });
               });
             });

@@ -1,4 +1,4 @@
-﻿package com.guangyue.core.plugin.lx
+package com.guangyue.core.plugin.lx
 
 import android.content.Context
 import android.util.Log
@@ -87,8 +87,7 @@ class LxSourceManager @Inject constructor(
         _busy.value = true
         try {
             val text = if (url.startsWith("file://") || File(url).isAbsolute) {
-                val path = url.removePrefix("file://")
-                File(path).readText()
+                readLocal(url.removePrefix("file://"))
             } else {
                 download(url)
             }
@@ -101,14 +100,47 @@ class LxSourceManager @Inject constructor(
         }
     }
 
-    /** 从 `content://` 或 `file://` 的 Uri 读脚本并安装（系统文件选择器给的就是这种）。 */
-    suspend fun installFromUriCompat(uri: android.net.Uri): Boolean = withContext(Dispatchers.IO) {
-        val code = when (uri.scheme?.lowercase()) {
-            "content" -> context.contentResolver.openInputStream(uri)?.use {
+    /**
+     * 读本地 `.js`。
+     *
+     * `/sdcard/…` 这类共享目录在 Android 10+ 上直接 `File.readText()` 会吃
+     * `EACCES (Permission denied)` —— App 没申请存储权限，也不能申请。
+     * 先走 `openInputStream`（MediaStore / DocumentsProvider 认这个路径），
+     * 实在不行再退回普通文件读（App 自己的私有目录归这条路）。
+     */
+    private fun readLocal(path: String): String {
+        val viaProvider = runCatching {
+            context.contentResolver.openInputStream(android.net.Uri.fromFile(File(path)))?.use {
                 it.readBytes().toString(Charsets.UTF_8)
             }
-            else -> uri.path?.let { File(it).readText() }
-        } ?: throw LxRuntimeException("读不到这个文件")
+        }.getOrNull()
+        if (!viaProvider.isNullOrBlank()) return viaProvider
+        return File(path).readText()
+    }
+
+    /**
+     * 从 `content://` 或 `file://` 的 Uri 读脚本并安装（系统文件选择器给的就是这种）。
+     *
+     * 读文件这一步也会抛（取消授权、Uri 失效、EACCES），而 `busy` 是全局的：
+     * 之前它只写在 [installScript] 里，异常从读文件那步逃出来时没人复位，
+     * 整页按钮就被永久锁死 —— 所以这里自己兜住 `busy`。
+     */
+    suspend fun installFromUriCompat(uri: android.net.Uri): Boolean = withContext(Dispatchers.IO) {
+        if (_busy.value) return@withContext false
+        _busy.value = true
+        val code = try {
+            when (uri.scheme?.lowercase()) {
+                "content" -> context.contentResolver.openInputStream(uri)?.use {
+                    it.readBytes().toString(Charsets.UTF_8)
+                }
+                else -> uri.path?.let(::readLocal)
+            } ?: throw LxRuntimeException("读不到这个文件")
+        } catch (t: Throwable) {
+            _busy.value = false
+            fail(t)
+            return@withContext false
+        }
+        _busy.value = false
         installScript(code, srcUrl = uri.toString())
     }
 
@@ -236,9 +268,17 @@ class LxSourceManager @Inject constructor(
         if (candidates.isEmpty()) return null
         val key = LxPlatforms.of(item.platform) ?: return null
         val quality = LxQuality.pick(qualityWire, defaultWire)
+        // 平台对不上也照样问一遍：脚本内部会自己按「歌名 + 歌手」在别的源再搜一次
+        // （网易的 id 酷我/酷狗/QQ 都不认，只有名字通用），所以「当前曲目来自哪个平台」
+        // 不该成为能不能出链的前置条件。
         for (source in candidates) {
-            if (source.platforms.isNotEmpty() && !source.platforms.contains(key)) continue
+            // 交给脚本的 platform 固定成五个源之一的 key：曲目来自网易云插件时是 "wy"，
+            // 来自酷狗插件时是 "kg" …… 脚本靠这个 key 决定先问哪个源（问不到会自己按
+            // 歌名兜底到别的源）。
+            // 脚本只认五个源（kw/kg/tx/wy/mg）。曲目来自网易云插件时 key 由 LxPlatforms.of("netease")
+            // 映射成 "wy"，脚本照这个 key 先问网易、问不到再按歌名兜底到别的源。
             val musicInfo = LxMusicInfo.of(key, item) ?: continue
+            runCatching { android.util.Log.d(TAG, "lx info $key => $musicInfo") }
             val url = runCatching { resolveWith(source, key, quality, musicInfo) }
                 .onFailure { runCatching { Log.d(TAG, "lx ${source.displayName} 取链失败：${it.message}") } }
                 .getOrNull()
@@ -391,14 +431,24 @@ object LxMusicInfo {
 
         when (platformKey) {
             "tx" -> {
-                put("songmid", fromRaw("songmid", "mid", "songMid") ?: item.id)
-                put("mediaMid", fromRaw("mediaMid", "strMediaMid", "media_mid"))
+                val songmid = fromRaw("songmid", "mid", "songMid") ?: item.id
+                put("songmid", songmid)
+                // 洛雪源读的是 `strMediaMid`。只给 `mediaMid` 等于没给：文件名拼成
+                // `M500undefined.mp3`，QQ 直接回空 purl，表现就是「取链失败」。
+                val mediaMid = fromRaw("mediaMid", "strMediaMid", "media_mid") ?: songmid
+                put("mediaMid", mediaMid)
+                put("strMediaMid", mediaMid)
                 put("albumMid", fromRaw("albumMid", "albummid"))
                 put("songId", fromRaw("songId", "songid"))
             }
             "wy" -> {
-                put("musicId", fromRaw("musicId", "songId") ?: item.id)
-                put("id", fromRaw("id", "musicId") ?: item.id)
+                // 脚本是 `musicUrl({ songmid })`，`ids` 直接用 songmid 拼。
+                // 这里以前只给 musicId/id，拼出来是 `[undefined]`，eapi 回的就是
+                // {"msg":"参数错误","code":400}——不是加密错。
+                val songmid = fromRaw("songmid", "musicId", "songId", "id") ?: item.id
+                put("songmid", songmid)
+                put("musicId", fromRaw("musicId", "songId") ?: songmid)
+                put("id", fromRaw("id", "musicId") ?: songmid)
                 put("hash", fromRaw("hash"))
                 put("albumId", fromRaw("albumId", "albumid") ?: item.albumId)
             }
@@ -413,14 +463,27 @@ object LxMusicInfo {
                 put("songmid", fromRaw("songmid", "rid") ?: item.id)
             }
             "mg" -> {
+                // 同理，咪咕脚本也是 `musicUrl({ songmid })`，songId 要拼进 URL。
+                val songmid = fromRaw("songmid", "songId", "musicId", "copyrightId") ?: item.id
+                put("songmid", songmid)
                 put("copyrightId", fromRaw("copyrightId", "copyright_id"))
-                put("musicId", fromRaw("musicId") ?: item.id)
+                put("musicId", fromRaw("musicId") ?: songmid)
                 put("albumId", fromRaw("albumId") ?: item.albumId)
-                put("songId", fromRaw("songId") ?: item.id)
+                put("songId", fromRaw("songId") ?: songmid)
             }
             else -> return null
         }
         if (fields.isEmpty()) return null
+        // 洛雪源之间还会互相兜底：网易取不到时脚本会拿 songmid 去试酷我/酷狗/QQ/咪咕。
+        // 只按平台分支填字段，那个兜底一定全部落空（其它源的键一个都没有），所以把能取到的 id".
+        // 顺手按别的平台习惯再补一份 id 形态，让降级路径有机会命中。
+        val loose = item.id.substringAfterLast("_", item.id).trim()
+        if (loose.isNotBlank()) {
+            fields.getOrPut("songmid") { JsonPrimitive(loose) }
+            fields.getOrPut("hash") { JsonPrimitive(loose) }
+            fields.getOrPut("rid") { JsonPrimitive(loose) }
+            fields.getOrPut("songId") { JsonPrimitive(loose) }
+        }
         return JsonObject(fields)
     }
 

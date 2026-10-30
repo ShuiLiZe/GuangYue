@@ -59,7 +59,7 @@ data class HomeTile(
     val kind: HomeTileKind = HomeTileKind.PLAYLIST,
 )
 
-enum class HomeTileKind { PLAYLIST, ALBUM, TRACK, STATION }
+enum class HomeTileKind { PLAYLIST, ALBUM, TRACK, STATION, SHEET }
 
 /**
  * 首页：只放真实数据。
@@ -156,7 +156,7 @@ fun HomeScreen(
                                 horizontalArrangement = Arrangement.spacedBy(GySpace.m),
                             ) {
                                 items(recommended, key = { it.key }) { tile ->
-                                    PosterTile(tile = tile, width = 152.dp, onClick = { onOpenTile(tile) })
+                                    PosterTile(tile = tile, width = 152.dp, onClick = { android.util.Log.d("GYTAP", "poster tap " + tile.key + " :: " + recommended.joinToString(" | ") { it.key }); onOpenTile(tile) })
                                 }
                             }
                         }
@@ -404,6 +404,8 @@ private fun ArtworkFrame(
                 HomeTileKind.ALBUM -> GuangYueIcons.Disc3
                 HomeTileKind.TRACK -> GuangYueIcons.Music
                 HomeTileKind.STATION -> GuangYueIcons.Radio
+                // 推荐歌单（音源给的官方歌单）无封面时用列表图标兜底。
+                HomeTileKind.SHEET -> GuangYueIcons.ListMusic
             }
             if (kind == HomeTileKind.PLAYLIST || kind == HomeTileKind.ALBUM) {
                 PlaylistStack()

@@ -106,20 +106,26 @@ fun GuangYueNavHost(
             val playlists by vm.playlistsFlow.collectAsStateWithLifecycle()
             val recent by vm.recentTiles.collectAsStateWithLifecycle()
             val charts by vm.charts.collectAsStateWithLifecycle()
+            val sheets by vm.sheets.collectAsStateWithLifecycle()
             val plugins by vm.enabledPlugins.collectAsStateWithLifecycle()
+            val source by vm.currentSource.collectAsStateWithLifecycle()
 
-            LaunchedEffect(plugins.isNotEmpty()) {
-                if (plugins.isNotEmpty()) vm.loadChartsIfNeeded()
+            LaunchedEffect(source?.id) {
+                if (source != null) {
+                    vm.loadChartsIfNeeded()
+                    vm.loadSheetsIfNeeded()
+                }
             }
 
             ShellColumn(
                 content = {
                     HomeScreen(
-                        recommended = vm.recommended(playlists, recent),
+                        recommended = vm.recommended(sheets, recent),
                         recent = recent,
                         charts = charts,
                         hasAnyPlugin = plugins.isNotEmpty(),
                         onOpenTile = { tile ->
+                            android.util.Log.d("GYHOME", "onOpenTile key=" + tile.key + " kind=" + tile.kind)
                             vm.playTracksOf(tile) { tracks, at ->
                                 playback.setQueueFromTracks(tracks, at, true)
                                 navController.navigate(Routes.PLAYER)

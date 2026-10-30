@@ -279,6 +279,55 @@ class MusicPluginBridge @Inject constructor(
             }.getOrDefault(emptyList())
         }
 
+    /**
+     * 推荐歌单的分类标签（`getRecommendSheetTags`）。
+     *
+     * 返回形如 `[{ title: "推荐", data: [{ id: "hot", title: "热门" }, ...] }, ...]`，
+     * **内层 data 里的每一项**才是 [getRecommendSheets] 能吃的「分类叶子」。
+     */
+    suspend fun getRecommendSheetTags(pluginId: String): List<JsonObject> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val raw = invoke(pluginId) { call("getRecommendSheetTags") }
+                (raw.asArr() ?: raw.asObj()?.get("data").asArr())
+                    ?.mapNotNull { it.asObj() } ?: emptyList()
+            }.getOrDefault(emptyList())
+        }
+
+    /** 某个分类下的推荐歌单列表（`getRecommendSheetTags` 的叶子 + 页码）。 */
+    suspend fun getRecommendSheets(pluginId: String, tagItem: JsonObject, page: Int = 1): List<JsonObject> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val raw = invoke(pluginId) {
+                    call("getRecommendSheetsByTag", tagItem, JsonPrimitive(page))
+                }
+                val o = raw.asObj()
+                (o?.get("data").asArr() ?: raw.asArr())
+                    ?.mapNotNull { it.asObj() } ?: emptyList()
+            }.getOrDefault(emptyList())
+        }
+
+    /**
+     * 播放一个推荐歌单：按「分类叶子 + 歌单 + 页码」重新问一次当前音源。
+     *
+     * 必须重问的原因：推荐歌单在首页只缓存了 id 与标题，而 `getMusicSheetInfo`
+     * 要的是插件自己的歌单对象；直接把歌单当歌曲喂给取链会报「取不到播放地址」。
+     */
+    suspend fun getRecommendSheetInfo(
+        pluginId: String,
+        tagItem: JsonObject,
+        sheetId: String,
+        page: Int = 1,
+    ): List<MusicItem> = withContext(Dispatchers.IO) {
+        runCatching {
+            val sheets = getRecommendSheets(pluginId, tagItem, page)
+            val sheet = sheets.firstOrNull {
+                (it["id"] as? kotlinx.serialization.json.JsonPrimitive)?.content == sheetId
+            } ?: sheets.firstOrNull() ?: return@runCatching emptyList()
+            getMusicSheetInfo(pluginId, sheet, page)
+        }.getOrDefault(emptyList())
+    }
+
     suspend fun importMusicSheet(pluginId: String, url: String): List<MusicItem> = withContext(Dispatchers.IO) {
         runCatching {
             val raw = invoke(pluginId) { call("importMusicSheet", JsonPrimitive(url)) }
@@ -298,8 +347,7 @@ class MusicPluginBridge @Inject constructor(
         }
 
     /** Optional: plugin-provided comment section. */
-    suspend fun getMusicComments(pluginId: String, item: MusicItem, page: Int = 1): List<JsonObject> =
-        withContext(Dispatchers.IO) {
+    suspend fun getMusicComments(pluginId: String, item: MusicItem, page: Int = 1): List<JsonObject> =        withContext(Dispatchers.IO) {
             runCatching {
                 val raw = invoke(pluginId) {
                     call("getMusicComments", item.raw ?: item.toJson(), JsonPrimitive(page))
