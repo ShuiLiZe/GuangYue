@@ -88,6 +88,32 @@ http://fsandroid.tx.kugou.com/202610301857/<sig>/v3/b9b3a55f…/yp/full/ap1005_p
 
 3. **酷我对未知 rid 回 `url:"None"`**。`{"code":4011,"data":{"format":"None","sig":"None","url":"None"}}` 里 `url` 字段存在但值就是字符串 `"None"`，旧代码当直链返回，宿主报「不是直链：None」看不出原因。现在 `kwMusicUrl` 同时校验 rid 是纯数字、且 `url !== "None"`，错误信息直接写明「该 rid 不是酷我的曲目」。
 
+## core:plugin 单测结果
+
+```
+.\gradlew.bat --offline :core:plugin:testDebugUnitTest --rerun-tasks
+BUILD SUCCESSFUL
+
+PluginMetaCodecTest            tests= 6 failed=0 skipped=0
+R8PluginLoadTest               tests= 3 failed=0 skipped=0
+SearchParserTest               tests=12 failed=0 skipped=0
+lx.LxCookieJarTest             tests= 8 failed=0 skipped=0
+lx.LxFiveSourceMatrixTest      tests= 1 failed=0 skipped=0
+lx.LxFiveSourceTest            tests= 2 failed=0 skipped=0
+lx.LxRuntimeTest               tests= 8 failed=0 skipped=0
+runtime.PluginHealthReportTest tests= 1 failed=0 skipped=1
+runtime.PluginRuntimeJvmTest   tests= 4 failed=0 skipped=0
+runtime.PluginUsableReportTest tests= 1 failed=0 skipped=1
+runtime.RuntimeRegressionTest  tests= 4 failed=0 skipped=0
+runtime.SearchEndToEndTest     tests= 3 failed=0 skipped=0
+----------------------------------------------------------
+total=53 failed=0 skipped=2
+```
+
+临时探测文件 `LxProbeTest/2/3/4/6Test.kt` 已全部删除，未提交。
+
+**同时修掉一个被我改坏的单测**：`LxRuntimeTest > lxcrypto 的 md5 与标准一致` 原本让脚本 `return lx.utils.crypto.md5('abc')`，并把 md5 十六进制当 `musicUrl` 的返回值断言。`LxRuntime.musicUrl` 新增的「必须 http(s)」校验必然拒绝它（报「取链脚本返回的不是直链」）。已改为 `return 'https://example.com/' + md5('abc') + '.mp3'`，断言相应改成整条 URL——既保住 md5 正确性校验，又不绕过直链校验。
+
 ## 待办 / 需要人工决定
 
 1. **tx 四档全灭**：未登录 QQ 不发 vkey（`result=104003`）。要通需 QQ 登录态（cookie/vkey），属于账号前提，不是代码问题。是否在本期接入 QQ 登录？
