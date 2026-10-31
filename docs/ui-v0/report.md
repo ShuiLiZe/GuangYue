@@ -162,3 +162,50 @@ gfxinfo（模拟器软件渲染，拖拽歌词样式弹层时采样）：Total f
 
 - assembleRelease 与 SHA-256（按指示跳过）。
 - 舞台单行 + 字幕层、Folia 同句对照，均留待下一会话。
+## V0d（辉光按 Folia text-shadow 重做 · WIP 收口）
+
+### 1. 矩形来源结论
+
+本轮先用 V0c 实拍帧定位，再看代码路径逐条对照，矩形有两个来源，都发生在**绘制层**而非布局层：
+
+1. **旧 `GlowWordCanvas` 的画法本身**（feature/player/.../visualizer/GlowWord.kt，HEAD 6216110 第 305–354 行）：
+   逐字 `layout.getPathForRange` + `layout.getBoundingBox`，在 `drawIntoCanvas{ saveLayer(null,null) }` 里用
+   `PorterDuffXfermode(CLEAR)` 把**整块字盒 RectF** 擦掉，再挂 `BlurMaskFilter` 画字形 Path。
+   硬件加速层里 CLEAR 擦除不生效、BlurMaskFilter 退化为「实心矩形 + 模糊」，于是字盒被整块填成矩形。
+   对应实拍：v0c 帧里「弹奏」整块实心红方 + 白字、「夜曲」整块深灰字盒底。
+2. **非当前行的 `Modifier.blur`**（feature/player/.../lyrics/LyricFlowScreen.kt:493，档位 0.6/1.6/2.6/3.6dp）：
+   Compose 的 blur 会把整个节点光栅进一层再模糊，代价是节点边界成为不透明矩形底。
+   对应实拍：非当前行每行都有可见的矩形块边界。
+
+另外确认一条**环境事实**：`ro.hardware.egl=emulation`，硬件加速层不具备真实 GPU 语义，
+所以任何依赖 saveLayer/framebuffer 擦除、或依赖 `withFrameNanos` 推进的写法在模拟器上都不可靠。
+
+### 2. 实现说明（已落地，待实拍收敛）
+
+`GlowWord.kt` 里删除 `GlowLayer` + `GlowWordCanvas` 整段（saveLayer、CLEAR、RectF 全部去掉），
+改为单一 `WordInk` Composable，用 `Modifier.fillMaxSize().drawWithCache{ onDrawBehind{...} }`：
+
+- 辉光：`nativeCanvas.drawText` 画两遍，`TextPaint.maskFilter = BlurMaskFilter(px, Blur.NORMAL)`，
+  半径 = `WordGlow.glowRadii(mode)`（instant 14/24、fast 18/32、normal 20/40 CSS px）
+  × `WordGlow.DROP_SHADOW_RADIUS_SCALE`(0.4) 换算成 dp→px；内圈 alpha = `DROP_SHADOW_INNER_ALPHA`(0.7)。
+  逐字强度来自 `glowStrengthAt(clock, word, profile, …, charStartTime, charEndTime)`，与 Folia 的逐字扫光一致。
+- 正文：同一个 `WordInk` 在辉光之后 drawText，叠在光晕之上；waiting 的正文模糊改用
+  `body.maskFilter = BlurMaskFilter(blurPx, NORMAL)`，不再用 `Modifier.blur`；passed 正文 alpha = `PASSED_WORD_OPACITY`(0.82)。
+- 动画只动 opacity/强度，光晕半径固定，与 Folia `glowKeyframes` 语义一致。
+- 新增仅在 debug 生效的旁路：`runningUnderRobolectricOverride`（VisualizerKernel.kt）与
+  `glowStrengthOverride` 参数链（LyricFlowScreen → ClassicLyricLine → GlowWord），供取证 harness 钉住三态。
+
+### 3. 未收敛的部分（下一会话接着做）
+
+模拟器上当前行（`ClassicLyricLine` 路径）**整行不绘制**：非当前行、背景、LyricBar 全部正常，
+`WordInk.onDrawBehind` 首行插 `drawRect(Color.Red)` 也不出红块 → 绘制块未被调用。
+`ClassicLyricLine` 顶部的日志能打印，紧接着 `Row` 之前的日志从未打印；
+把 `breathingMotion` 的 `rememberInfiniteTransition` 换成常量后仍空白 → 卡点不在呼吸浮动。
+诊断代码已全部回退。因此**六张验收图、320dp 与 1.3 倍字号图本轮未产出**。
+
+### 4. 本轮实际产出
+
+- 全量单测：**566 总 / 0 失败 / 0 错误 / 34 跳过**（与 V0c 基线一致）。
+- `assembleRelease` 成功，`app-release.apk` 8,996,985 字节，
+  SHA-256 `8495d8eaeb5f7c2d2ffdb70fd48b924b4f6017638f37733be36912a1b03616d4`。
+- 截图：无（见上）。
