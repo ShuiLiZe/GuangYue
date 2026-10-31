@@ -101,6 +101,7 @@ fun ClassicTuning.snapshot(): ClassicTuning = copy()
  * 所以歌词页在 Robolectric 下改用固定时间的 `rememberStaticVisualizerClock`，只在真机/模拟器上跑帧循环。
  */
 val runningUnderRobolectric: Boolean by lazy {
+    if (runningUnderRobolectricOverride) return@lazy true
     try {
         Class.forName("org.robolectric.Robolectric")
         true
@@ -108,3 +109,12 @@ val runningUnderRobolectric: Boolean by lazy {
         false
     }
 }
+
+/**
+ * 静态时钟开关（debug 取证用）。
+ *
+ * 模拟器的软件 EGL 上 `withFrameNanos` 推进极慢，播放时钟停在前一两秒，三态永远卡在 WAITING，
+ * 辉光过程拍不到。V0d 的取证 harness（app/src/debug）在需要时把它置 true，让歌词页走固定时钟，
+ * 由 `v0c_ms` 直接指定播放时刻。release 包里没有写入方，恒为 false，行为与真机一致。
+ */
+var runningUnderRobolectricOverride: Boolean = false

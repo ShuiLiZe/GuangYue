@@ -1,4 +1,4 @@
-﻿package com.guangyue.feature.player.lyrics
+package com.guangyue.feature.player.lyrics
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -134,6 +134,8 @@ fun LyricFlowScreen(
     onOpenStyleSheet: (() -> Unit)? = null,
     /** 样式入口的无障碍文案（feature:player 无资源表，由 app 侧注入）。 */
     styleLabel: String = "",
+    // V0d 取证：非 null 时把当前句的辉光强度钉死（debug harness 用，业务侧恒为 null）。
+    glowStrengthOverride: Float? = null,
     modifier: Modifier = Modifier,
 ) {
     val backLabel = str(strings.back)
@@ -339,6 +341,7 @@ fun LyricFlowScreen(
                                     activeColor = lyricAccent,
                                     baseColor = onBackdrop,
                                     fontFamily = GuangYueDesign.Serif,
+                                    glowStrengthOverride = glowStrengthOverride,
                                     modifier = Modifier.clickableNoRipple { onSeekToLine(index) },
                                 )
                             } else {

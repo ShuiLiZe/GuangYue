@@ -24,6 +24,7 @@ import com.guangyue.core.player.QueueItem
 import com.guangyue.feature.player.lyrics.LyricFlowScreen
 import com.guangyue.feature.player.lyrics.LyricStringHost
 import com.guangyue.feature.player.lyrics.LyricStrings
+import com.guangyue.feature.player.lyrics.visualizer.runningUnderRobolectricOverride
 import com.guangyue.music.ui.design.Folia
 import com.guangyue.music.ui.design.FoliaTheme
 
@@ -84,6 +85,8 @@ private fun playing(positionMs: Long) = PlaybackState(
 @Composable
 fun V0cStage(positionMs: Long, dark: Boolean) {
     FoliaTheme(dark = dark) {
+        // V0d 取证：拍了固定强度时改用静态时钟（模拟器的帧循环推不动三态）。
+        if (V0dGlowOverride != null) runningUnderRobolectricOverride = true
         val kernel = remember { buildKernelLines() }
         val lines = remember { parseLrc(LRC) }
         CompositionLocalProvider(LyricStringHost provides { id -> id.toString() }) {
@@ -105,6 +108,7 @@ fun V0cStage(positionMs: Long, dark: Boolean) {
                 kernelLines = kernel,
                 classicTuning = ClassicTuning(),
                 coverUrl = null,
+                glowStrengthOverride = V0dGlowOverride,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -122,11 +126,23 @@ private val V0cStrings = LyricStrings(
  * 入口：
  * adb shell am start -n com.guangyue.music/.V0cStageActivity --ei v0c_ms 2000 --ez v0c_dark true
  */
+/**
+ * V0d 取证用：非 null 时把辉光强度钉在这个值上。
+ *
+ * 模拟器的软件 EGL 上下文中 `withFrameNanos` 推进极慢，[VisualizerClock] 停在前一两秒，
+ * 三态一直停在 WAITING，拍不到 active / passed。这里只在 debug 源集里提供一个覆盖开关，
+ * 只影响拍图，不进入 release。
+ */
+internal var V0dGlowOverride: Float? = null
 class V0cStageActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val positionMs = intent?.getLongExtra("v0c_ms", 2_000L) ?: 2_000L
         val dark = intent?.getBooleanExtra("v0c_dark", true) ?: true
+    // V0d 取证：给辉光一个固定强度，避开「withFrameNanos 在模拟 EGL 上不推进」导致画面停在 WAITING。
+    if (intent?.hasExtra("v0c_strength") == true) {
+        V0dGlowOverride = intent.getFloatExtra("v0c_strength", 1f)
+    }
         setContent { V0cStage(positionMs, dark) }
     }
 }

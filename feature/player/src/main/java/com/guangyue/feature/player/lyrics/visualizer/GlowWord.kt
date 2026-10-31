@@ -16,40 +16,31 @@
 //  4. 弹簧：spring(stiffness=200, dampingRatio=20/(2√200)≈0.7071067811865476)，推导见 VisualizerKernel.kt。
 package com.guangyue.feature.player.lyrics.visualizer
 
+import android.graphics.BlurMaskFilter
+import android.text.TextPaint
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.BlurredEdgeTreatment
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.asAndroidPath
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.drawscope.Fill
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.guangyue.core.lyrics.AnimationIntensity
@@ -59,6 +50,7 @@ import com.guangyue.core.lyrics.GlowWordRenderProfile
 import com.guangyue.core.lyrics.GlowWordStatus
 import com.guangyue.core.lyrics.GlowWordTiming
 import com.guangyue.core.lyrics.GlowWordVariants
+import com.guangyue.core.lyrics.GraphemeTiming
 import com.guangyue.core.lyrics.GraphemeTimings
 import com.guangyue.core.lyrics.Word
 import com.guangyue.core.lyrics.WordGlow
@@ -94,6 +86,8 @@ fun GlowWord(
     fontFamily: FontFamily,
     reduceMotion: Boolean = false,
     isChorus: Boolean = false,
+    // V0d 取证：非 null 时把辉光强度钉死（debug harness 用，release 恒为 null）。
+    glowStrengthOverride: Float? = null,
     modifier: Modifier = Modifier,
 ) {
     val style = remember(fontSizeSp, fontFamily) {
@@ -127,9 +121,14 @@ fun GlowWord(
     val layout = GlowWordVariants.layoutState(status, config, intensity, enableWordRotation)
     val spring = activeSpring
     val active = status == GlowWordStatus.ACTIVE
-    val passed = status == GlowWordStatus.PASSED
     val general = if (active) spring else tween(secondsToMillis(layout.durationSeconds))
 
+    // V0d：Folia 的布局层（x/y/scale/rotate/opacity）是 framer-motion 的 motion.div，动画只改
+    // transform 与 opacity 这两个合成属性。广乐原来用 animateFloatAsState，每个属性都是一次
+    // 快照读，100ms 内连推 60 帧就够把整棵树重组十几遍——排版每帧重跑，字形反复重贴图，
+    // 硬件层被反复重建，画面上就出现一闪一闪的矩形底/色块。
+    // 现在四个几何量在 draw 阶段读动画值（`graphicsLayer` 的 lambda 只在绘制时执行），
+    // 只有 opacity 仍然走组合阶段（它要驱动辉光强度，见下面的 glowStrength）。
     val x by animateFloatAsState(layout.x.toFloat(), general, label = "gw-x")
     val y by animateFloatAsState(layout.y.toFloat(), general, label = "gw-y")
     val scale by animateFloatAsState(layout.scale.toFloat(), general, label = "gw-scale")
@@ -137,7 +136,8 @@ fun GlowWord(
         targetValue = layout.rotate.toFloat(),
         animationSpec = when {
             // passed：Folia 让旋转单独跑 5s 线性漂移（rotate: { duration: 5, ease: 'linear' }）
-            passed -> tween(secondsToMillis(layout.rotateDurationSeconds), easing = kernelLinearEasing)
+            status == GlowWordStatus.PASSED ->
+                tween(secondsToMillis(layout.rotateDurationSeconds), easing = kernelLinearEasing)
             active -> spring
             else -> tween(secondsToMillis(layout.durationSeconds))
         },
@@ -160,7 +160,7 @@ fun GlowWord(
     )
     val bodyFinal = when {
         active -> activeColor
-        passed -> baseColor
+        status == GlowWordStatus.PASSED -> baseColor
         else -> baseColor
     }
 
@@ -175,7 +175,29 @@ fun GlowWord(
     // 注意：必须读 `clock.seconds()` 这个 State 本身，不能包在 derivedStateOf 里再读，
     // 否则快照系统只跟踪内层读取，外层 `glowStrength` 不会在播放时间推进时失效，
     // 辉光会永远停在第一次算出的强度（截图里表现为一块静止的斜矩形底）。
-    val glowStrength = glowStrengthAt(clock.seconds(), word, profile, reduceMotion)
+    val glowStrength = glowStrengthOverride ?: glowStrengthAt(clock.seconds(), word, profile, reduceMotion)
+
+    // 逐字扫光（normal 且词内字数 >1）：每个字按自己的时序求强度；其余情况整词一个强度。
+    // 在组合阶段算好再以 List 传进绘制层——draw lambda 里不读 clock，绘制阶段就不再有快照依赖。
+    val graphemes = remember(word) { GraphemeTimings.buildWordGraphemeTimings(word) }
+    val perCharGlow = graphemes.size > 1 &&
+        profile.wordRevealMode == WordRevealMode.NORMAL &&
+        !reduceMotion
+    val charStrengths = if (perCharGlow) {
+        val t = clock.seconds()
+        graphemes.map { g ->
+            glowStrengthAt(
+                time = t,
+                word = word,
+                profile = profile,
+                reduceMotion = false,
+                charStartTime = g.startTime,
+                charEndTime = g.endTime,
+            )
+        }
+    } else {
+        emptyList()
+    }
 
     Box(modifier = modifier.graphicsLayer {
         translationX = x
@@ -185,29 +207,28 @@ fun GlowWord(
         alpha = opacity
         rotationZ = rotate
     }) {
-        // 辉光层：逐字画在正文下面（字形轮廓模糊，见 GlowLayer/GlowGlyph 的注释）。
-        GlowLayer(
-            word = word,
-            style = style,
-            profile = profile,
-            color = bodyFinal,
-            strength = glowStrength,
-            clock = clock,
-            reduceMotion = reduceMotion,
-        )
-
         // 正文层：颜色线性过渡 + waiting 模糊。透明度完全照 Folia glowWordVariants.body：
         // waiting 是 baseColor + blur 10px，整词不可见由外层 opacity 0 负责；active 过渡到高亮色；
         // passed 回到 baseColor（外层 opacity 0.82）。不要再叠自定义 alpha，否则 passed 会「消失」。
-        Text(
-            text = word.text,
-            style = style.copy(color = bodyColor),
-            maxLines = 1,
-            modifier = if (bodyBlur > 0.05f) {
-                Modifier.blur(bodyBlur.dp, BlurredEdgeTreatment.Unbounded)
-            } else {
-                Modifier
-            },
+        //
+        // V0d：waiting 的 10px 模糊不再用 `Modifier.blur`。那一版会把整个 Text 节点先光栅化成
+        // 一块不透明矩形再模糊，矩形底比字形先亮起来（V0c 审图第 3 条的矩形来源之一）。
+        // 现在把正文和辉光画在同一块画布上：先画两圈模糊光晕（Folia 的 text-shadow），
+        // 再按 0.82 的 passed 透明度叠正文；waiting 的模糊用 `TextPaint.maskFilter`（只作用于字形），
+        // 于是任何状态下都不存在「矩形像素块」。
+        WordInk(
+            word = word,
+            style = style,
+            color = bodyColor,
+            // 光晕颜色 = 高亮色（Folia 的 text-shadow 用 activeColor），与正文当前颜色无关。
+            glowColor = activeColor,
+            glowStrength = glowStrength,
+            chars = if (perCharGlow) graphemes else emptyList(),
+            charStrengths = charStrengths,
+            blurPx = bodyBlur,
+            profile = profile,
+            reduceMotion = reduceMotion,
+            bodyAlpha = if (status == GlowWordStatus.PASSED) PASSED_WORD_OPACITY else 1f,
         )
         // 合唱涟漪
         if (isChorus && active) {
@@ -221,154 +242,147 @@ fun GlowWord(
     }
 
 }
-
 /**
- * 辉光层：外圈 R*0.4 @1.0 + 内圈 R*0.4 @0.7，逐字画在正文 Text 下方。
+ * 一个词的「光晕 + 正文」，画在同一块画布上（画布 = 词盒）。
  *
- * 审图第 3 条（帧 2–6 里「弹奏」「萧邦」背后出现浅色矩形底）的根因是辉光曾是一整块铺满的模糊图层：
- * `Modifier.blur` 会先把节点光栅化成一块实心矩形再高斯模糊。现在 `GlowGlyph` 直接对
- * 「字形轮廓」(`TextLayoutResult.getPathForRange`) 施加 `BlurMaskFilter`，模糊源只有字形本身，
- * 字与字之间、字盒空白永远不会被涂上颜色。半径照 Folia wordGlow.ts。
+ * 层序照 Folia：光晕在下、正文在上。正文也用 drawText 画而不是叠一个 Text 子节点，
+ * 这样正文与光晕共用同一份 [TextLayoutResult]，字位像素级对齐。
+ *
+ * @param glowStrength 整词强度（0..1），**只乘到 alpha** —— Folia 的光晕半径固定，只用 opacity 渐入渐出
+ * @param chars 逐字时序（逐字扫光时用）；为空表示整词一次画完
+ * @param charStrengths 与 [chars] 一一对应的逐字强度
+ * @param blurPx 正文模糊半径（px）：waiting 10px → active 0。用 maskFilter 做，只糊字形不出矩形。
+ * @param bodyAlpha 正文层透明度（passed 0.82 / 其余 1.0）。
  */
 @Composable
-private fun GlowLayer(
+private fun WordInk(
     word: Word,
     style: TextStyle,
-    clock: VisualizerClock,
-    strength: Float,
-    profile: GlowWordRenderProfile,
     color: Color,
-    reduceMotion: Boolean,
-) {
-    if (reduceMotion || strength <= 0.002f) return
-    val radii = WordGlow.glowRadii(profile.wordRevealMode)
-    val graphemes = remember(word) { GraphemeTimings.buildWordGraphemeTimings(word) }
-    val time = clock.seconds()
-    GlowWordCanvas(
-        chars = graphemes.map { it.char },
-        startTimes = graphemes.map { it.startTime },
-        endTimes = graphemes.map { it.endTime },
-        perChar = graphemes.size > 1,
-        fallbackStrength = strength,
-        style = style,
-        color = color,
-        innerRadiusCss = radii.first,
-        outerRadiusCss = radii.second,
-        clockSeconds = time,
-        word = word,
-        profile = profile,
-        reduceMotion = reduceMotion,
-    )
-}
-
-/**
- * 一个词的全部辉光字，画在同一块画布上（`matchParentSize` = 词盒）。
- *
- * 之所以整词一块画布：每个字单独一个 [androidx.compose.foundation.layout.Row] 子项时，
- * 子项会按自己的测量宽度各自定位，模糊后的字形会整体错位（曾被截图发现「萧邦」跑到屏幕右侧）。
- * 一块画布 + `TextLayoutResult.getPath` 的原始坐标，字位与正文 Text 完全一致。
- */
-@Composable
-private fun GlowWordCanvas(
-    chars: List<String>,
-    startTimes: List<Double>,
-    endTimes: List<Double>,
-    perChar: Boolean,
-    fallbackStrength: Float,
-    style: TextStyle,
-    color: Color,
-    innerRadiusCss: Double,
-    outerRadiusCss: Double,
-    clockSeconds: Double,
-    word: Word,
+    glowColor: Color,
+    glowStrength: Float,
+    chars: List<GraphemeTiming>,
+    charStrengths: List<Float>,
+    blurPx: Float,
+    bodyAlpha: Float,
     profile: GlowWordRenderProfile,
     reduceMotion: Boolean,
 ) {
-    if (reduceMotion || fallbackStrength <= 0.002f) return
-    val wordText = remember(chars) { chars.joinToString("") }
+    val wordText = remember(word) { word.text }
     val measurer = rememberTextMeasurer()
-    val layout = remember(wordText, style, measurer) {
-        measurer.measure(text = AnnotatedString(wordText), style = style, maxLines = 1, softWrap = false)
+    val layout = remember(wordText, style) {
+        measurer.measure(
+            text = AnnotatedString(wordText),
+            style = style,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
     val density = LocalDensity.current
-    val innerPx = with(density) { (innerRadiusCss * WordGlow.DROP_SHADOW_RADIUS_SCALE).toFloat().dp.toPx() }
-    val outerPx = with(density) { (outerRadiusCss * WordGlow.DROP_SHADOW_RADIUS_SCALE).toFloat().dp.toPx() }
-    val argb = color.toArgb()
-    // 按字取「不含字形的字盒矩形」：高斯模糊会把整块矩形都涂亮，只有用它做
-    // DST_OUT 遮罩，才能把模糊层裁到字形轮廓上（审图第 3 条：不能出矩形边）。
-    val boxPaint = remember {
-        Paint().asFrameworkPaint().apply {
-            isAntiAlias = true
-            this.color = android.graphics.Color.BLACK
-        }
-    }
-    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-        for (index in chars.indices) {
-            val strength = if (!perChar) {
-                fallbackStrength
-            } else {
-                glowStrengthAt(
-                    time = clockSeconds,
-                    word = word,
-                    profile = profile,
-                    reduceMotion = reduceMotion,
-                    charStartTime = startTimes[index],
-                    charEndTime = endTimes[index],
-                )
+    val radii = WordGlow.glowRadii(profile.wordRevealMode)
+    val innerPx = with(density) { (radii.first * WordGlow.DROP_SHADOW_RADIUS_SCALE).toFloat().dp.toPx() }
+    val outerPx = with(density) { (radii.second * WordGlow.DROP_SHADOW_RADIUS_SCALE).toFloat().dp.toPx() }
+    val bodyArgb = color.toArgb()
+    val glowArgb = glowColor.toArgb()
+    // 字号：sp → px（需要 fontScale，所以借助当前 density）。
+    // 字位全部来自 TextLayoutResult；这里只把像素字号交给 TextPaint。
+    val textSizePx = with(density) { style.fontSize.toPx() }
+    val baseline = layout.getLineBaseline(0).toFloat()
+    val originX = layout.getBoundingBox(0).left
+
+    Modifier
+        .fillMaxSize()
+        .drawWithCache {
+            // 光晕要能溢出词盒（text-shadow 本就不受盒边界拘束），这里刻意不裁。
+            val outer = TextPaint().apply {
+                isAntiAlias = true
+                textSize = textSizePx
+                this.color = glowArgb
+                maskFilter = BlurMaskFilter(outerPx.coerceAtLeast(0.1f), BlurMaskFilter.Blur.NORMAL)
             }
-            if (strength <= 0.002f) continue
-            val path = layout.getPathForRange(index, index + 1)
-            val box = layout.getBoundingBox(index)
-            listOf(outerPx to 1.0f, innerPx to WordGlow.DROP_SHADOW_INNER_ALPHA.toFloat()).forEach { pair ->
-                val layerAlpha = (strength * pair.second).coerceIn(0f, 1f)
-                if (layerAlpha <= 0.001f) return@forEach
-                drawIntoCanvas { canvas ->
-                    val nativeParent = canvas.nativeCanvas
-                    nativeParent.saveLayer(null, null)
-                    val paint = Paint().asFrameworkPaint().apply {
-                        this.color = android.graphics.Color.argb(
-                            (layerAlpha * 255f).toInt().coerceIn(0, 255),
-                            android.graphics.Color.red(argb),
-                            android.graphics.Color.green(argb),
-                            android.graphics.Color.blue(argb),
-                        )
-                        // 只画字形轮廓外圈的模糊光：先擦掉字盒内已经落在字形上的部分，
-                        // 避免「实心字 + 模糊框」叠成矩形底（审图第 3 条）。
-                        xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
-                        nativeParent.drawRect(
-                            android.graphics.RectF(box.left, box.top, box.right, box.bottom),
-                            this,
-                        )
-                        xfermode = null
-                        maskFilter = android.graphics.BlurMaskFilter(
-                            pair.first.coerceAtLeast(0.1f),
-                            android.graphics.BlurMaskFilter.Blur.NORMAL,
-                        )
-                    }
-                    nativeParent.drawPath(path.asAndroidPath(), paint)
-                    nativeParent.restore()
+            val inner = TextPaint().apply {
+                isAntiAlias = true
+                textSize = textSizePx
+                this.color = glowArgb
+                maskFilter = BlurMaskFilter(innerPx.coerceAtLeast(0.1f), BlurMaskFilter.Blur.NORMAL)
+            }
+            val body = TextPaint().apply {
+                isAntiAlias = true
+                textSize = textSizePx
+                this.color = bodyArgb
+            }
+            onDrawBehind {
+                val canvas = drawContext.canvas.nativeCanvas
+                if (!reduceMotion && glowStrength > 0.002f) {
+                    drawTextShadow(
+                        canvas = canvas,
+                        layout = layout,
+                        chars = chars,
+                        charStrengths = charStrengths,
+                        inner = inner,
+                        outer = outer,
+                        wordText = wordText,
+                        baseline = baseline,
+                        originX = originX,
+                        alphaScale = bodyAlpha,
+                    )
                 }
+                // 正文：waiting 走 maskFilter 的 10px 模糊（只糊字形），active 起清晰。
+                body.alpha = (255 * bodyAlpha).toInt().coerceIn(0, 255)
+                body.maskFilter = if (blurPx > 0.05f) {
+                    BlurMaskFilter(blurPx.coerceAtLeast(0.1f), BlurMaskFilter.Blur.NORMAL)
+                } else {
+                    null
+                }
+                canvas.drawText(wordText, originX, baseline, body)
             }
         }
-    }
 }
 
 /**
- * 当前时刻某词的辉光强度（0..1）。
+ * Folia 的两层 text-shadow（`0 0 inner` + `0 0 outer`），只画光晕、不画实心字。
  *
- * 直接消费内核 [WordGlow.variantFor] 的关键帧与时序：
- *  - instant / fast：peaks[0,1,0]，times[0,0.35,1] / [0,0.4,1]
- *  - normal 且词内字数 >1：peaks[0,1,0]，times[0,0.3,1]，时长 charDuration*6，delay = 字起点-词起点
- *  - normal 单字 / CJK：peaks[0,1,1]，times[0,0.9,1]
- *  - passed：半径与强度同步淡出（0.12/0.22/0.9）
- *
- * @param charStartTime 逐字层传入的该字起点（秒）；整词层传 null
- * @param charEndTime 逐字层传入的该字终点（秒）
+ * 模糊源是字形本身（maskFilter），全程没有 saveLayer / PorterDuff.CLEAR / 字盒矩形，
+ * 所以不会出现 V0c 那种整块色块。强度只乘 alpha，半径恒定 —— 与 Folia wordGlow.ts 一致。
  */
-/**
- * 合唱涟漪：对应 Folia GlowWord.tsx 的 `h-[150%] aspect-square rounded-full border-1`
- * （initial scale 0.2 / opacity 0.8 → scale 1.5~3.5 / opacity 0，0.5s easeOut）。
- */
+private fun drawTextShadow(
+    canvas: android.graphics.Canvas,
+    layout: TextLayoutResult,
+    chars: List<GraphemeTiming>,
+    charStrengths: List<Float>,
+    inner: TextPaint,
+    outer: TextPaint,
+    wordText: String,
+    baseline: Float,
+    originX: Float,
+    alphaScale: Float,
+) {
+    val baseInnerAlpha = (255 * WordGlow.DROP_SHADOW_INNER_ALPHA).toInt().coerceIn(0, 255)
+    fun applyStrength(s: Float) {
+        val a = (s * alphaScale).coerceIn(0f, 1f)
+        outer.alpha = (255 * a).toInt().coerceIn(0, 255)
+        inner.alpha = (baseInnerAlpha * a).toInt().coerceIn(0, 255)
+    }
+
+    if (chars.isEmpty() || charStrengths.size != chars.size) {
+        // 整词一次画完：字位用 Compose 量出的首字左边界 + 单词 maxLines=1 的基线。
+        applyStrength(if (charStrengths.isEmpty()) 1f else charStrengths.first())
+        canvas.drawText(wordText, originX, baseline, outer)
+        canvas.drawText(wordText, originX, baseline, inner)
+        return
+    }
+    for (index in chars.indices) {
+        val s = charStrengths[index]
+        if (s <= 0.002f) continue
+        applyStrength(s)
+        val grapheme = chars[index].char
+        if (grapheme.isBlank()) continue
+        val left = if (index == 0) originX else layout.getBoundingBox(index).left
+        canvas.drawText(grapheme, left, baseline, outer)
+        canvas.drawText(grapheme, left, baseline, inner)
+    }
+}
+
 @Composable
 private fun ChorusRipple(
     color: Color,

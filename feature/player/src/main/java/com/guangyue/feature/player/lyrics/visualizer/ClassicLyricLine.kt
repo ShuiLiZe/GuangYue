@@ -1,4 +1,4 @@
-﻿// 对应 Folia 文件：
+// 对应 Folia 文件：
 //   src/components/visualizer/classic/Visualizer.tsx（行 124–348：逐词布局、呼吸浮动、行容器）
 //   src/components/visualizer/classic/tuning.ts（字词旋转 / 呼吸浮动 / 词距）
 //   src/components/visualizer/GlowWord.tsx（每个词由 GlowWord 渲染）
@@ -80,6 +80,8 @@ internal fun ClassicLyricLine(
     activeColor: Color,
     baseColor: Color,
     fontFamily: FontFamily,
+    // V0d 取证：非 null 时把辉光强度钉死（debug harness 用）。
+    glowStrengthOverride: Float? = null,
     modifier: Modifier = Modifier,
 ) {
     val measurer = rememberTextMeasurer()
@@ -166,6 +168,7 @@ internal fun ClassicLyricLine(
                             fontFamily = fontFamily,
                             reduceMotion = reduceMotion,
                             isChorus = line.isChorus,
+                            glowStrengthOverride = glowStrengthOverride,
                         )
                     } else {
                         PlainWord(word, fontSizeSp, baseColor, fontFamily)
