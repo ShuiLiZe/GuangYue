@@ -26,7 +26,9 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import com.guangyue.core.lyrics.LineJustify
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -128,6 +130,7 @@ internal fun ClassicLyricLine(
     }
     // 总宽 = 每个词宽 + 内核算出的 marginRight，至少和视口一样宽：这样词距拉满时也不会把
     // 最后一个词顶出屏幕（Folia classic 的行是 flex-wrap 居中排布，画布是整块 70vh）。
+    val viewportWidthDp = with(density) { viewportWidthPx.toFloat().toDp() }
     val rowWidth = with(density) {
         val contentPx = line.words.indices.sumOf { index ->
             val label = line.words[index].text
@@ -136,10 +139,22 @@ internal fun ClassicLyricLine(
         }
         maxOf(contentPx, viewportWidthPx).toFloat().toDp()
     }
-
+    // V0d：外层只负责「行内水平对齐」，不放宽测量约束。
+    // 原来 Row 直接把 `modifier`（外面挂的是 clickable）当唯一修饰符、宽度靠 `widthIn(min=rowWidth)`，
+    // 当前句的 active 放大 + 逐词 x/y 偏移会让 Row 的最终宽度超出视口，Compose 就把整行按
+    // min 宽度排版后溢出到屏幕外（实拍表现为当前句只露出一角、右侧还有粉色残影）。
+    // 这里给 Row 一层 fillMaxWidth 的 Box 做对齐容器，Row 自身恢复原来的约束，不再加 unbounded。
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = when (layout.line.justifyContent) {
+            LineJustify.CENTER -> Alignment.Center
+            LineJustify.END -> Alignment.CenterEnd
+            else -> Alignment.CenterStart
+        },
+    ) {
     Row(
         modifier = modifier
-            .widthIn(min = rowWidth)
+            .widthIn(min = rowWidth, max = viewportWidthDp)
             .heightIn(min = rowMinHeight)
             .graphicsLayer {
                 translationY = floatY
@@ -176,6 +191,7 @@ internal fun ClassicLyricLine(
                 }
             }
         }
+    }
     }
 }
 

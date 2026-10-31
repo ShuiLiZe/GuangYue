@@ -200,8 +200,12 @@ fun GlowWord(
     }
 
     Box(modifier = modifier.graphicsLayer {
-        translationX = x
-        translationY = y
+        // V0d：x/y 不再落到 translationX/translationY。
+        // `GlowWordConfig.x/y` 是相对词位的**微抖**（±20px），而 WAITING 态 Folia 会再加
+        // sin(y)*100 / cos(x)*50 的入场偏移。广乐的词位已经由 `WordSlot` 的 padding(marginRight)
+        // 排过一次，再叠一层 100px 级位移就把词推出屏幕（实拍：当前句只露一角、
+        // 右侧粉红残影）——那是入场动画在「已经排好版」的行上重复施加位移。
+        // 舞台 V0e 会重做入场，这里只保留缩放/旋转/透明度。
         scaleX = scale
         scaleY = scale
         alpha = opacity
@@ -290,9 +294,12 @@ private fun WordInk(
     val baseline = layout.getLineBaseline(0).toFloat()
     val originX = layout.getBoundingBox(0).left
 
-    Modifier
-        .fillMaxSize()
-        .drawWithCache {
+    // V0d 修复：这里必须是一个真正的布局节点。原来写成裸的 `Modifier.fillMaxSize()` 表达式，
+    // WordInk 一个节点都没产出（Compose 把它当丢弃值），当前行整行空白、连 onDrawBehind 都不执行。
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .drawWithCache {
             // 光晕要能溢出词盒（text-shadow 本就不受盒边界拘束），这里刻意不裁。
             val outer = TextPaint().apply {
                 isAntiAlias = true
@@ -336,7 +343,8 @@ private fun WordInk(
                 }
                 canvas.drawText(wordText, originX, baseline, body)
             }
-        }
+        },
+    )
 }
 
 /**

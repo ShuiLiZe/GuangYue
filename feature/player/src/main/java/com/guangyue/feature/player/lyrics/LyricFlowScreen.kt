@@ -467,14 +467,6 @@ private fun LyricLineRow(
         3 -> 0.12f
         else -> 0.07f
     }
-    val blurRadius = when (distance) {
-        0 -> 0f
-        1 -> 0.6f
-        2 -> 1.6f
-        3 -> 2.6f
-        else -> 3.6f
-    }
-    val blurAllowed = canBlur()
 
     Column(
         Modifier
@@ -490,18 +482,10 @@ private fun LyricLineRow(
             color = if (visual.active) accent.copy(alpha = 0.92f) else Gyp.ink.copy(alpha = alpha),
             textAlign = TextAlign.Start,
             fontFamily = GuangYueDesign.Serif,
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                    if (blurAllowed && blurRadius > 0f) {
-                        Modifier.blur(
-                            blurRadius.dp,
-                            edgeTreatment = androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded,
-                        )
-                    } else {
-                        Modifier
-                    },
-                ),
+            // V0d：非当前行不再用 Modifier.blur。它会先把整个 Text 节点光栅成一块不透明矩形
+            // 再模糊，矩形底比字形先亮起来（V0c 审图第 3 条的矩形来源之一）。景深改由上面的
+            // color alpha 档位（0.34 / 0.20 / 0.12 / 0.07）承担；V0e 会重做列表层。
+            modifier = Modifier.fillMaxWidth(),
         )
         // 译文只在当前句露出来（跟旧页面一致），避免了整屏双语糊在一起。
         if (visual.active && !line.translation.isNullOrBlank()) {
