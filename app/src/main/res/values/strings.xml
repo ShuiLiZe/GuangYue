@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!--
   广乐界面文案（简体中文为默认语言）。
 
@@ -332,4 +332,48 @@
     <string name="home_wall_empty">这里还没有推荐内容</string>
     <!-- 自拟：同上副句，给一条能走的路 -->
     <string name="home_wall_empty_hint">先搜几首喜欢的歌听一下，推荐和最近播放会慢慢出现。</string>
+
+    <!-- ===== U7 音乐库页（Folia 资料库 / 书库：我的歌单 + 收藏 + 本地 + 最近） ===== -->
+    <!-- zh-CN.ts: 6 "libraryBravais.homeTitle"（「书库」） -->
+    <string name="library_title">书库</string>
+    <!-- zh-CN.ts: 1476 "yourPlaylists"（「您的歌单」） -->
+    <string name="library_playlists_title">您的歌单</string>
+    <!-- zh-CN.ts: 4056 "favorites"（「收藏」） -->
+    <string name="library_favorites_title">收藏</string>
+    <!-- zh-CN.ts: 4057 "favoritesDesc"（「已标星歌曲」） -->
+    <string name="library_favorites_subtitle">已标星歌曲</string>
+    <!-- zh-CN.ts: 563 "sourceLocal"（「本地音乐」） -->
+    <string name="library_local_title">本地音乐</string>
+    <!-- zh-CN.ts: 1652 "exploreRecent"（「最近播放」） -->
+    <string name="library_recent_title">最近播放</string>
+    <!-- zh-CN.ts: 1675 "showAllPlaylists"（「显示全部歌单」），U6 首页推荐歌单的「看全部」入口 -->
+    <string name="library_show_all">显示全部歌单</string>
+    <!-- 自拟：沿用 U6 home_wall_loading 的句式 -->
+    <string name="library_loading">正在载入音乐库…</string>
+    <!-- 自拟：沿用 U6 home_wall_failed 的句式（本地库读不出来） -->
+    <string name="library_failed">音乐库没有读到</string>
+    <!-- 自拟：同上副句，给一条能走的路 -->
+    <string name="library_failed_hint">本地曲库暂时读不出来，稍后重试一次。</string>
+    <!-- zh-CN.ts: 1641 "exploreRetry"（「重试」） -->
+    <string name="library_retry">重试</string>
+    <!-- zh-CN.ts: 9 "libraryBravais.emptyCollection"（「这里还没有内容」） -->
+    <string name="library_empty">这里还没有内容</string>
+    <!-- 自拟：同上副句 -->
+    <string name="library_empty_hint">先搜几首喜欢的歌听一下，歌单、收藏和最近播放会慢慢出现。</string>
+    <!-- 自拟：空态往下走的动作，语义同 home_wall_empty_action -->
+    <string name="library_empty_action">去搜索</string>
+    <!-- zh-CN.ts: 3908 "noPlaylistsFound"（「还没有歌单」） -->
+    <string name="library_empty_playlists">还没有歌单</string>
+    <!-- 自拟：收藏分区为空 -->
+    <string name="library_empty_favorites">还没有收藏的歌曲</string>
+    <!-- zh-CN.ts: 3816 "noLocalMusic"（「暂无本地音乐」） -->
+    <string name="library_empty_local">暂无本地音乐</string>
+    <!-- 自拟：最近播放分区为空 -->
+    <string name="library_empty_recent">还没有听歌记录</string>
+    <!-- 自拟：库页右上角进播放页的按钮名，同 home_wall_open_player -->
+    <string name="library_open_player">播放页</string>
+    <!-- zh-CN.ts: 10 "trackCount"（「{{count}} 首」）→ 手机版每段标题右侧的计数（歌曲段：收藏/本地/最近） -->
+    <string name="library_count">%d 首</string>
+    <!-- 自拟：歌单段计数 —— 歌单论「个」不论「首」，与 [library_count] 分开，调用方按分区选 -->
+    <string name="library_count_playlist">%d 个</string>
 </resources>

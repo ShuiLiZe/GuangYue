@@ -26,6 +26,9 @@ import com.guangyue.feature.library.home.HomeTile
 import com.guangyue.music.ui.home.HomeStrings
 import com.guangyue.music.ui.home.HomeWallScreen
 import com.guangyue.music.ui.home.HomeWallState
+import com.guangyue.music.ui.library.LibraryPageScreen
+import com.guangyue.music.ui.library.LibraryState
+import com.guangyue.music.ui.library.LibraryStrings
 import com.guangyue.feature.library.screen.AboutScreen
 import com.guangyue.feature.library.screen.DownloadScreen
 import com.guangyue.feature.library.screen.LicensesScreen
@@ -61,6 +64,9 @@ object Routes {
     const val SETTINGS = "settings"
     const val LICENSES = "licenses"
     const val ABOUT = "about"
+
+    /** U7 音乐库页（Folia 资料库 / 书库）。 */
+    const val LIBRARY = "library"
 
     /** 取链源（洛雪自定义源）管理页。 */
     const val LX_SOURCES = "lxSources"
@@ -159,6 +165,8 @@ fun GuangYueNavHost(
                         onTogglePlay = { playback.toggle() },
                         // 0.0.9（U2）：首页占位空态的「去搜索」入口（内容墙 U6 再做）。
                         onOpenSearch = { navController.navigate(Routes.SEARCH) },
+                        // U7：推荐歌单段右上角的「看全部」→ 音乐库页。
+                        onOpenLibrary = { navController.navigate(Routes.LIBRARY) },
                         onRetry = { vm.retryWall() },
                     )
                 },
@@ -239,6 +247,40 @@ fun GuangYueNavHost(
                 },
                 miniPlayer = miniPlayer,
                 bottomBar = bottomBar,
+            )
+        }
+
+        // ---------- 二级页：音乐库 ----------
+        // U7：Folia 的资料库 / 书库（我的歌单 / 收藏 / 本地 / 最近四个分区）。
+        composable(Routes.LIBRARY) {
+            val vm: HomeViewModel = hiltViewModel()
+            val playlists by vm.playlistsFlow.collectAsStateWithLifecycle()
+            val favorites by vm.favoriteTiles.collectAsStateWithLifecycle()
+            val local by vm.localTiles.collectAsStateWithLifecycle()
+            val recent by vm.recentTiles.collectAsStateWithLifecycle()
+            val loading by vm.libraryLoading.collectAsStateWithLifecycle()
+            val failed by vm.libraryFailed.collectAsStateWithLifecycle()
+            val state = if (loading) LibraryState.Loading
+            else if (failed) LibraryState.Failed
+            else LibraryState.Content
+
+            LibraryPageScreen(
+                playlists = playlists,
+                favorites = favorites,
+                local = local,
+                recent = recent,
+                strings = libraryStrings(),
+                state = state,
+                onOpenTile = { tile ->
+                    vm.playTracksOf(tile) { tracks, at ->
+                        playback.setQueueFromTracks(tracks, at, true)
+                        navController.navigate(Routes.PLAYER)
+                    }
+                },
+                onOpenSearch = { navController.navigate(Routes.SEARCH) },
+                onOpenPlayer = { navController.navigate(Routes.PLAYER) },
+                onRetry = { vm.retryLibrary() },
+                onBack = { navController.popBackStack() },
             )
         }
 
@@ -479,6 +521,39 @@ internal fun homeStrings(): HomeStrings {
         openPlayer = stringResource(R.string.home_wall_open_player),
         scrollLeft = stringResource(R.string.home_wall_scroll_left),
         scrollRight = stringResource(R.string.home_wall_scroll_right),
+        showAll = stringResource(R.string.library_show_all),
+    )
+}
+
+/**
+ * U7：音乐库页的 19 条中文文案，一次取齐交给 app 侧 [LibraryStrings]。
+ *
+ * 与 [searchStrings] / [homeStrings] 同一套理由：文案本体在
+ * `app/src/main/res/values/strings.xml`，每条都在那里标了 Folia 的 `zh-CN.ts` 键名或「自拟」。
+ */
+@Composable
+internal fun libraryStrings(): LibraryStrings {
+    return LibraryStrings(
+        title = stringResource(R.string.library_title),
+        playlistsTitle = stringResource(R.string.library_playlists_title),
+        favoritesTitle = stringResource(R.string.library_favorites_title),
+        favoritesSubtitle = stringResource(R.string.library_favorites_subtitle),
+        localTitle = stringResource(R.string.library_local_title),
+        recentTitle = stringResource(R.string.library_recent_title),
+        countPattern = stringResource(R.string.library_count),
+        playlistCountPattern = stringResource(R.string.library_count_playlist),
+        loading = stringResource(R.string.library_loading),
+        failed = stringResource(R.string.library_failed),
+        failedHint = stringResource(R.string.library_failed_hint),
+        retry = stringResource(R.string.library_retry),
+        empty = stringResource(R.string.library_empty),
+        emptyHint = stringResource(R.string.library_empty_hint),
+        emptyAction = stringResource(R.string.library_empty_action),
+        emptyPlaylists = stringResource(R.string.library_empty_playlists),
+        emptyFavorites = stringResource(R.string.library_empty_favorites),
+        emptyLocal = stringResource(R.string.library_empty_local),
+        emptyRecent = stringResource(R.string.library_empty_recent),
+        openPlayer = stringResource(R.string.library_open_player),
     )
 }
 
