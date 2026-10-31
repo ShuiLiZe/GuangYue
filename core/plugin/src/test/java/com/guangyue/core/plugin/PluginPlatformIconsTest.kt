@@ -125,6 +125,12 @@ class PluginPlatformIconsTest {
         assertTrue(PluginPlatformIcons.isCodeHost("https://raw.githubusercontent.com/a/b.js"))
         assertTrue(PluginPlatformIcons.isCodeHost("https://hebijunge.github.io/x.js"))
         assertTrue(PluginPlatformIcons.isCodeHost("https://gitee.com/a/b.js"))
+        // P1：主线路是 raw 的加速前缀（gh.padao.fun/https://raw.githubusercontent.com/…），也按代码镜像处理
+        assertTrue(
+            PluginPlatformIcons.isCodeHost(
+                "https://gh.padao.fun/https://raw.githubusercontent.com/hebijunge/musicfree-plugins/master/plugins/qq-source.plugin.v1.9.26.js",
+            ),
+        )
         assertFalse(PluginPlatformIcons.isCodeHost("https://www.kugou.com/favicon.ico"))
         assertFalse(PluginPlatformIcons.isCodeHost("https://y.qq.com/favicon.ico"))
     }

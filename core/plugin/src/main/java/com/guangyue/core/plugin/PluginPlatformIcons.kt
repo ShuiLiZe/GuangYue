@@ -89,5 +89,10 @@ object PluginPlatformIcons {
     }
 
     private val CODE_HOSTS =
-        listOf("githubusercontent.com", "github.io", "github.com", "gitlab.", "gitee.com")
+        listOf(
+            "githubusercontent.com", "github.io", "github.com", "gitlab.", "gitee.com",
+            // P1：主线路加速域名（gh.padao.fun/https://raw.githubusercontent.com/…），
+            // 也只是一层代码镜像，按 host 取 favicon 只会拿到代理站图标。
+            "gh.padao.fun",
+        )
 }

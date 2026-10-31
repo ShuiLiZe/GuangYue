@@ -14,6 +14,7 @@ import com.guangyue.core.plugin.PluginFailureText
 import com.guangyue.core.plugin.PluginManager
 import com.guangyue.core.plugin.PluginMeta
 import com.guangyue.core.plugin.SearchType
+import com.guangyue.core.plugin.SubscriptionRoutes
 import com.guangyue.core.plugin.UpdateCheck
 import com.guangyue.core.prefs.AppPreferences
 import com.guangyue.feature.library.home.HomeTile
@@ -548,6 +549,15 @@ class PluginViewModel @Inject constructor(
                     }
                 }
                 is UpdateCheck.Error -> "检查更新失败：${PluginFailureText.reason(r.message)}"
+                // P1：版本号没变、内容变了（上游原地改 .js）——直接更新，文案不显示新旧版本号。
+                is UpdateCheck.SameVersionChanged -> {
+                    val result = manager.update(plugin.id)
+                    if (result is InstallResult.Success) {
+                        "「${plugin.displayName}」内容有更新（仍是 v${r.current}）"
+                    } else {
+                        "更新失败：" + PluginFailureText.reason((result as? InstallResult.Failure)?.message)
+                    }
+                }
                 UpdateCheck.NoSource -> "该插件没有 srcUrl，无法检查更新"
                 UpdateCheck.Unknown -> "无法检查更新"
             }
@@ -706,8 +716,13 @@ class PluginViewModel @Inject constructor(
 
 /** 插件页的固定常量（不放进 Composable，便于单测）。 */
 object PluginViewModelDefaults {
-    /** 官方插件源（MusicFree 生态的公益音源集合）。 */
-    const val OFFICIAL_SOURCE = "https://hebijunge.github.io/musicfree-plugins/plugins.json"
+    /**
+     * 官方插件源（MusicFree 生态的公益音源集合）。
+     *
+     * P1 起不再是写死的 Pages 全量 `plugins.json`，而是「常用六平台」清单的**主线路**
+     * （gh.padao.fun 加速，实测 < 2s）；Pages 与 jsDelivr 降为备用，下载时自动回退。
+     */
+    val OFFICIAL_SOURCE: String = SubscriptionRoutes.defaultSubscriptionUrl()
 }
 
 /**

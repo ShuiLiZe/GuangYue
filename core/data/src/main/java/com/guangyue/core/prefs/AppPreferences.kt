@@ -68,12 +68,39 @@ class AppPreferences @Inject constructor(
         get() = prefs.getString(KEY_LX_ENABLED, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_LX_ENABLED, value).apply()
 
+    /**
+     * P1：订阅分类（`main` 常用六平台 / `dj` / `radio` / `music` / `all`）。
+     *
+     * 只存数据层与设置项，本版还不做新 UI 页面；未知值一律回落到 `main`。
+     * 分类清单文件是 `sub/<线路>/<分类>.json`，可选分类只换文件名。
+     */
+    var subscriptionCategory: String
+        get() = prefs.getString(KEY_SUB_CATEGORY, "")?.takeIf { it in CATEGORIES } ?: CATEGORIES.first()
+        set(value) = prefs.edit().putString(KEY_SUB_CATEGORY, value).apply()
+
+    /**
+     * P1：订阅线路（`padao` 加速主线路 / `githubio` Pages 备用 / `fastly` jsDelivr 备用）。
+     *
+     * 主线路失败会自动按主 → 备顺序回退，这个键只记「优先走哪条」。未知值回落 `padao`。
+     */
+    var subscriptionLine: String
+        get() = prefs.getString(KEY_SUB_LINE, "")?.takeIf { it in LINES } ?: LINES.first()
+        set(value) = prefs.edit().putString(KEY_SUB_LINE, value).apply()
+
     private companion object {
         const val FILE = "guangyue_prefs"
         const val KEY_DARK = "ui_dark_mode"
         const val KEY_LAST_SOURCE = "search_last_source"
         const val KEY_LX_QUALITY = "lx_default_quality"
         const val KEY_LX_ENABLED = "lx_enabled_ids"
+        const val KEY_SUB_CATEGORY = "plugin_subscription_category"
+        const val KEY_SUB_LINE = "plugin_subscription_line"
+
+        /** 与 `SubscriptionRoutes.Category` 的 id 保持一致（core:plugin 不反向依赖 core:data）。 */
+        val CATEGORIES = listOf("main", "dj", "radio", "music", "all")
+
+        /** 与 `SubscriptionRoutes.Line` 的 id 保持一致。 */
+        val LINES = listOf("padao", "githubio", "fastly")
 
         /** 取链源支持的音质档，由低到高。 */
         val LX_QUALITIES = listOf("128k", "320k", "flac", "flac24bit")

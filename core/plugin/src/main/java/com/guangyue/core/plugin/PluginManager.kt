@@ -82,6 +82,9 @@ class PluginManager @Inject constructor(
         _plugins.value = store.readIndex().ordered()
         _subscriptions.value = store.readSubscriptions().sortedByDescending { it.checkedAt }
         loaded = true
+        // P1：老用户存的是 0.0.8 的内置订阅（Pages 全量 plugins.json），迁到新的常用六平台默认订阅；
+        // 已装插件、排序、开关一律不动，只换订阅地址（旧地址的离线清单也跟着搬过去，换线还有缓存兜底）。
+        migrateLegacySubscriptions()
         if (_catalog.value.isEmpty()) {
             _catalog.value = _subscriptions.value.flatMap { sub ->
                 store.readCachedSource(sub.url)?.plugins?.map { CatalogEntry(it, sub.url) } ?: emptyList()
@@ -101,6 +104,24 @@ class PluginManager @Inject constructor(
     /** 本地是否已装过这个 srcUrl（订阅增量更新时用）。 */
     fun findInstalledBySrc(entryUrl: String): PluginMeta? =
         _plugins.value.firstOrNull { it.srcUrl == entryUrl || it.source == entryUrl }
+
+    /**
+     * P1：跨线路匹配。三条线路（padao / github.io / jsDelivr）只是 URL 前缀不同，插件文件名相同
+     * 就一定是同一个插件，所以换线以后不能再只靠整串 URL 相等来找「本地已装的这个插件」。
+     */
+    fun findInstalledByFileName(entryUrl: String): PluginMeta? {
+        val name = SubscriptionRoutes.relPathOf(entryUrl)?.substringAfterLast('/')?.trim().orEmpty()
+        if (name.isEmpty()) return null
+        return _plugins.value.firstOrNull { meta ->
+            listOfNotNull(meta.srcUrl, meta.source.takeIf { it.startsWith("http") }).any { url ->
+                url.substringAfterLast('/').substringBefore('?').substringBefore('#') == name
+            }
+        }
+    }
+
+    /** 订阅条目对应的本地已装插件：先按原样 URL 找，找不到再按文件名跨线路找。 */
+    fun installedFor(entryUrl: String): PluginMeta? =
+        findInstalledBySrc(entryUrl) ?: findInstalledByFileName(entryUrl)
 
     // ------------------------------------------------------------------ install
 
@@ -129,10 +150,11 @@ class PluginManager @Inject constructor(
             val target = url.trim()
             if (target.isEmpty()) return@withContext InstallResult.Failure("链接为空")
 
-            val text = download(target)
+            // P1：主线路超时/失败自动换备用线路（官方地址三条线路兜底；第三方地址原样一条）。
+            val fetched = downloadResult(target)
                 ?: return@withContext InstallResult.Failure("下载失败：$target")
 
-            val parsed = parseSubscription(text, target)
+            val parsed = parseSubscription(fetched.text, fetched.finalUrl)
             if (parsed != null) {
                 if (parsed.plugins.isEmpty()) {
                     return@withContext InstallResult.Failure("订阅源里没有插件：$target")
@@ -140,8 +162,8 @@ class PluginManager @Inject constructor(
                 recordSubscription(parsed)
                 InstallResult.BatchInstalled(installSubscription(parsed))
             } else {
-                val single = singleEntryUrl(text) ?: target
-                val code = if (single == target) text
+                val single = singleEntryUrl(fetched.text) ?: fetched.finalUrl
+                val code = if (single == fetched.finalUrl) fetched.text
                 else (download(single) ?: return@withContext InstallResult.Failure("下载失败：$single"))
                 installCode(code, single, single.substringAfterLast('/').removeSuffix(".js"))
             }
@@ -164,7 +186,7 @@ class PluginManager @Inject constructor(
                 entries = selected,
                 known = subscriptionsOf(sourceUrl),
                 countAsUpdate = { entry ->
-                    val local = findInstalledBySrc(entry.url)
+                    val local = installedFor(entry.url)
                     local != null && compareVersion(entry.version, local.version) > 0
                 },
             )
@@ -185,6 +207,9 @@ class PluginManager @Inject constructor(
         code: String,
         source: String,
         fallbackName: String? = null,
+        contentHash: String? = null,
+        etag: String? = null,
+        lastModified: String? = null,
     ): InstallResult = withContext(Dispatchers.IO) {
         if (code.isBlank()) {
             val msg = "插件内容为空"
@@ -242,6 +267,10 @@ class PluginManager @Inject constructor(
                 healthAt = existing?.healthAt ?: 0L,
                 installedAt = existing?.installedAt ?: System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis(),
+                // P1：内容指纹 + 响应头缓存标识，供「版本号没变、内容变了」的更新检测用。
+                contentHash = contentHash ?: PluginContentHash.of(code),
+                etag = etag ?: existing?.etag,
+                lastModified = lastModified ?: existing?.lastModified,
             )
             store.writeCode(id, code)
             store.writeMeta(finalMeta)
@@ -361,6 +390,26 @@ class PluginManager @Inject constructor(
     private fun subscriptionsOf(url: String): Subscription? =
         _subscriptions.value.firstOrNull { it.url == url }
 
+    /**
+     * P1：老用户的内置订阅（0.0.8 的 `…/musicfree-plugins/plugins.json`，Pages 全量 57 个）迁移到
+     * 新的「常用六平台」默认订阅（主线路 gh.padao.fun）。只换订阅地址，已装插件与开关/排序一律不动；
+     * 旧地址的离线清单同时搬到新地址下，换线后断网也还有缓存兜底。
+     */
+    private fun migrateLegacySubscriptions() {
+        val subs = _subscriptions.value
+        if (subs.none { SubscriptionRoutes.isLegacy(it.url) }) return
+        val target = DEFAULT_SOURCE_URL
+        val migrated = subs.map { sub ->
+            if (!SubscriptionRoutes.isLegacy(sub.url)) return@map sub
+            store.readCachedSource(sub.url)?.let { old ->
+                store.writeCachedSource(target, old.copy(url = target))
+            }
+            sub.copy(url = target, name = DEFAULT_CATEGORY.name)
+        }.distinctBy { it.url }
+        _subscriptions.value = migrated
+        store.writeSubscriptions(migrated)
+    }
+
     suspend fun forgetSubscription(url: String) = withContext(Dispatchers.IO) {
         val next = _subscriptions.value.filterNot { it.url == url }
         _subscriptions.value = next
@@ -373,8 +422,9 @@ class PluginManager @Inject constructor(
      * 拉取失败时回落到缓存，都失败返回 null。
      */
     suspend fun refreshCatalog(sourceUrl: String): List<CatalogEntry>? = withContext(Dispatchers.IO) {
-        val text = download(sourceUrl)
-        val parsed = text?.let { parseSubscription(it, sourceUrl) }
+        // P1：按线路回退抓清单（主线路失败自动换备用）
+        val fetched = downloadResult(sourceUrl)
+        val parsed = fetched?.let { parseSubscription(it.text, it.finalUrl) }
         if (parsed != null) {
             recordSubscription(parsed)
             parsed.plugins.map { CatalogEntry(it, sourceUrl) }
@@ -389,9 +439,9 @@ class PluginManager @Inject constructor(
             _busy.value = true
             _progress.value = BatchProgress(stage = "拉取订阅源")
             try {
-                val text = download(sourceUrl)
+                val fetched = downloadResult(sourceUrl)
                     ?: return@withContext InstallResult.Failure("订阅源无法访问：$sourceUrl")
-                val parsed = parseSubscription(text, sourceUrl)
+                val parsed = parseSubscription(fetched.text, fetched.finalUrl)
                     ?: return@withContext InstallResult.Failure("这不是一个订阅源：$sourceUrl")
                 if (parsed.plugins.isEmpty()) {
                     return@withContext InstallResult.Failure("订阅源里没有插件")
@@ -429,8 +479,8 @@ class PluginManager @Inject constructor(
 
                 var checked = 0
                 for (sub in subs) {
-                    val text = download(sub.url)
-                    val parsed = text?.let { parseSubscription(it, sub.url) }
+                    val fetched = downloadResult(sub.url)
+                    val parsed = fetched?.let { parseSubscription(it.text, it.finalUrl) }
                     if (parsed == null) {
                         failed += (sub.name.ifBlank { sub.url }) to "订阅源无法访问"
                         continue
@@ -438,18 +488,22 @@ class PluginManager @Inject constructor(
                     recordSubscription(parsed)
                     for (entry in parsed.plugins) {
                         checked++
-                        val local = findInstalledBySrc(entry.url)
+                        // P1：跨线路找本地已装插件；版本号 + 内容指纹双判（版本号没变、内容变了一样更新）。
+                        val local = installedFor(entry.url)
                         if (local == null) {
                             discovered += entry
                             continue
                         }
-                        if (compareVersion(entry.version, local.version) <= 0) continue
-                        val code = download(entry.url)
-                        if (code == null) {
+                        val sameVersion = compareVersion(entry.version, local.version) <= 0
+                        val dl = downloadResult(entry.url)
+                        if (dl == null) {
                             failed += entry.displayName to "下载失败"
                             continue
                         }
-                        when (val r = installCode(code, entry.url, entry.displayName)) {
+                        if (sameVersion && !PluginContentHash.changed(local.contentHash, PluginContentHash.of(dl.text))) {
+                            continue
+                        }
+                        when (val r = installCode(dl.text, entry.url, entry.displayName, dl.contentHash, dl.etag, dl.lastModified)) {
                             is InstallResult.Success -> updated += r.meta
                             is InstallResult.Failure -> failed += entry.displayName to r.message
                             is InstallResult.BatchInstalled -> Unit
@@ -471,7 +525,8 @@ class PluginManager @Inject constructor(
                     if (src in covered) continue
                     checked++
                     when (val c = checkUpdate(meta.id)) {
-                        is UpdateCheck.Available ->
+                        // P1：同版本内容变更也算要更新，不再只认版本号变大。
+                        is UpdateCheck.Available, is UpdateCheck.SameVersionChanged ->
                             (update(meta.id) as? InstallResult.Success)?.let { updated += it.meta }
                         is UpdateCheck.Error -> failed += meta.displayName to c.message
                         else -> Unit
@@ -490,7 +545,8 @@ class PluginManager @Inject constructor(
         source: SubscriptionSource,
         force: Boolean = false,
     ): BatchInstallResult = installEntries(source.plugins, subscriptionsOf(source.url)) { entry ->
-        val local = findInstalledBySrc(entry.url)
+        // P1：只有「版本号变大」才由订阅清单直接判更新；版本号相同时留给安装环节比内容指纹。
+        val local = installedFor(entry.url)
         force || (local != null && compareVersion(entry.version, local.version) > 0)
     }
 
@@ -513,14 +569,15 @@ class PluginManager @Inject constructor(
                     launch(Dispatchers.IO) {
                         try {
                             gate.withPermit {
-                                val local = findInstalledBySrc(entry.url)
+                                // P1：三条线路只是前缀不同，按整串 URL 找不到就按文件名找
+                                val local = installedFor(entry.url)
                                 when {
                                     local == null -> {
-                                        val code = download(entry.url)
-                                        if (code == null) {
+                                        val dl = downloadResult(entry.url)
+                                        if (dl == null) {
                                             synchronized(failed) { failed += entry.displayName to "下载失败" }
                                         } else {
-                                            when (val r = installCode(code, entry.url, entry.displayName)) {
+                                            when (val r = installCode(dl.text, entry.url, entry.displayName, dl.contentHash, dl.etag, dl.lastModified)) {
                                                 is InstallResult.Success ->
                                                     synchronized(installed) { installed += r.meta }
                                                 is InstallResult.Failure ->
@@ -530,25 +587,30 @@ class PluginManager @Inject constructor(
                                         }
                                     }
 
-                                    countAsUpdate(entry) -> {
-                                        val code = download(entry.url)
-                                        if (code == null) {
+                                    else -> {
+                                        // P1：先按版本号判；版本号没变时下载一次比 sha256（同版本原地改也要重装）。
+                                        val dl = downloadResult(entry.url)
+                                        if (dl == null) {
                                             synchronized(failed) { failed += entry.displayName to "下载失败" }
                                         } else {
-                                            val wasEnabled = local.enabled
-                                            when (val r = installCode(code, entry.url, entry.displayName)) {
-                                                is InstallResult.Success -> {
-                                                    if (!wasEnabled) setEnabled(r.meta.id, false)
-                                                    synchronized(updated) { updated += r.meta }
+                                            val asUpdate = countAsUpdate(entry) ||
+                                                PluginContentHash.changed(local.contentHash, dl.contentHash)
+                                            if (!asUpdate) {
+                                                synchronized(skipped) { skipped += entry.displayName }
+                                            } else {
+                                                val wasEnabled = local.enabled
+                                                when (val r = installCode(dl.text, entry.url, entry.displayName, dl.contentHash, dl.etag, dl.lastModified)) {
+                                                    is InstallResult.Success -> {
+                                                        if (!wasEnabled) setEnabled(r.meta.id, false)
+                                                        synchronized(updated) { updated += r.meta }
+                                                    }
+                                                    is InstallResult.Failure ->
+                                                        synchronized(failed) { failed += entry.displayName to r.message }
+                                                    is InstallResult.BatchInstalled -> Unit
                                                 }
-                                                is InstallResult.Failure ->
-                                                    synchronized(failed) { failed += entry.displayName to r.message }
-                                                is InstallResult.BatchInstalled -> Unit
                                             }
                                         }
                                     }
-
-                                    else -> synchronized(skipped) { skipped += entry.displayName }
                                 }
                             }
                         } finally {
@@ -740,21 +802,27 @@ class PluginManager @Inject constructor(
         val meta = find(id) ?: return@withContext UpdateCheck.Unknown
         val url = meta.srcUrl ?: return@withContext UpdateCheck.NoSource
         val remote = runCatching { fetchVersion(url) }.getOrNull()
-            ?: return@withContext UpdateCheck.Error("无法获取远程版本")
-        if (compareVersion(remote, meta.version) > 0) {
-            UpdateCheck.Available(current = meta.version, latest = remote)
-        } else {
-            UpdateCheck.Latest(current = meta.version)
+        val dl = runCatching { downloadResult(url) }.getOrNull()
+        val remoteHash = dl?.contentHash
+        val cmp = remote?.let { compareVersion(it, meta.version) }
+        when {
+            cmp != null && cmp > 0 -> UpdateCheck.Available(current = meta.version, latest = remote)
+            remote == null && remoteHash == null -> UpdateCheck.Error("无法获取远程版本")
+            // P1：版本号没变（或压根没有版本号）时比内容指纹——上游原地改 .js 也要能发现。
+            (cmp == null || cmp == 0) &&
+                PluginContentHash.changed(meta.contentHash, remoteHash.orEmpty()) ->
+                UpdateCheck.SameVersionChanged(current = meta.version)
+            else -> UpdateCheck.Latest(current = meta.version)
         }
     }
 
-    /** 重新下载 `srcUrl` 并重装，保留 enabled 状态。 */
+    /** 重新下载 `srcUrl`（按线路回退）并重装，保留 enabled 状态。 */
     suspend fun update(id: String): InstallResult = withContext(Dispatchers.IO) {
         val meta = find(id) ?: return@withContext InstallResult.Failure("插件不存在")
         val url = meta.srcUrl ?: return@withContext InstallResult.Failure("插件没有 srcUrl，无法更新")
         val wasEnabled = meta.enabled
-        val code = download(url) ?: return@withContext InstallResult.Failure("下载失败：$url")
-        installCode(code, url).also {
+        val dl = downloadResult(url) ?: return@withContext InstallResult.Failure("下载失败：$url")
+        installCode(dl.text, url, contentHash = dl.contentHash, etag = dl.etag, lastModified = dl.lastModified).also {
             if (it is InstallResult.Success && !wasEnabled) setEnabled(it.meta.id, false)
         }
     }
@@ -866,10 +934,28 @@ class PluginManager @Inject constructor(
             ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
     }.getOrNull()
 
-    internal fun download(url: String): String? = runCatching {
-        val req = Request.Builder().url(url).header("User-Agent", PluginRuntime.UA).build()
-        http.newCall(req).execute().use { r -> if (!r.isSuccessful) null else r.body?.string() }
-    }.getOrNull()
+    /**
+     * P1：按线路回退下载，并带上响应头里的 ETag / Last-Modified。
+     *
+     * 官方订阅 / 插件地址先换算出三条线路候选（当前线路优先，再按主 → 备），**逐条试到第一条成功的**；
+     * 用户自贴的第三方地址原样下载一条（[SubscriptionRoutes.candidates] 负责区分）。
+     */
+    internal fun downloadResult(url: String): DownloadResult? {
+        for (candidate in SubscriptionRoutes.candidates(url)) {
+            val r = runCatching {
+                val req = Request.Builder().url(candidate).header("User-Agent", PluginRuntime.UA).build()
+                http.newCall(req).execute().use { resp ->
+                    val body = resp.body?.string()
+                    if (!resp.isSuccessful || body == null) null
+                    else DownloadResult(candidate, body, resp.header("ETag"), resp.header("Last-Modified"))
+                }
+            }.getOrNull()
+            if (r != null) return r
+        }
+        return null
+    }
+
+    internal fun download(url: String): String? = downloadResult(url)?.text
 
     /**
      * MusicFree 的版本号有时在同目录 `<name>.json`，有时直接写在 .js 里。
@@ -910,8 +996,23 @@ class PluginManager @Inject constructor(
     private val gate = Semaphore(BATCH_SIZE)
 
     companion object {
-        /** 内置默认订阅源：官方音源「一键安装 / 更新」。 */
-        const val DEFAULT_SOURCE_URL = "https://hebijunge.github.io/musicfree-plugins/plugins.json"
+        /**
+         * 内置默认订阅源：P1 起改为「常用六平台」清单的**主线路**（gh.padao.fun 加速，实测 < 2s）。
+         *
+         * 备用线路（github.io / fastly.jsdelivr）由 [SubscriptionRoutes.candidates] + [download]
+         * 在主线路超时/失败时自动兜底，不需要在这里重复登记。
+         */
+        val DEFAULT_SOURCE_URL: String = SubscriptionRoutes.defaultSubscriptionUrl()
+
+        /** 默认订阅分类（常用六平台）：设置项与后续 UI 用。 */
+        val DEFAULT_CATEGORY: SubscriptionRoutes.Category get() = SubscriptionRoutes.defaultCategory
+
+        /** 全部可选分类（dj / radio / music / all 等）：数据层，暂不做新 UI 页。 */
+        val SUBSCRIPTION_CATEGORIES: List<SubscriptionRoutes.Category>
+            get() = SubscriptionRoutes.availableCategories
+
+        /** 三条线路（主 → 备）：设置项用它展示「订阅线路」。 */
+        val SUBSCRIPTION_LINES: List<SubscriptionRoutes.Line> get() = SubscriptionRoutes.lines
 
         /** 一批同时下载多少个插件。 */
         const val BATCH_SIZE = 4
@@ -953,4 +1054,18 @@ sealed interface UpdateCheck {
     data class Error(val message: String) : UpdateCheck
     data object NoSource : UpdateCheck
     data object Unknown : UpdateCheck
+
+    /** P1：版本号没变，但远端内容指纹变了（上游原地改 .js，例如 2026-10-31 那次覆盖）。 */
+    data class SameVersionChanged(val current: String) : UpdateCheck
+}
+
+/** P1：一次下载的结果（内容 + 响应头缓存标识 + 实际命中的线路地址）。 */
+data class DownloadResult(
+    val finalUrl: String,
+    val text: String,
+    val etag: String? = null,
+    val lastModified: String? = null,
+) {
+    /** 内容指纹（sha256），「版本号没变、内容变了」就靠它。 */
+    val contentHash: String by lazy { PluginContentHash.of(text) }
 }

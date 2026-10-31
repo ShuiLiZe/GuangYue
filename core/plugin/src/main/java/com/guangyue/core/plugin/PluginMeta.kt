@@ -62,6 +62,16 @@ data class PluginMeta(
     val healthNote: String? = null,
     /** 上次体检时间戳，0 = 从未体检。 */
     val healthAt: Long = 0L,
+    /**
+     * P1：安装时下载内容的 sha256（小写 hex）。上游会**原地改内容不改版本号**
+     * （2026-10-31 六个常用插件就是这样），只比 [version] 会整批漏更新，
+     * 所以更新检测拿它跟远程内容的 sha256 比对，见 [PluginContentHash]。
+     */
+    val contentHash: String? = null,
+    /** P1：远程响应头 ETag（有就用它做廉价比对；没有就回落到 [contentHash]）。 */
+    val etag: String? = null,
+    /** P1：远程响应头 Last-Modified，同上。 */
+    val lastModified: String? = null,
 ) {
     val hasSearch: Boolean get() = functions.isEmpty() || functions.contains("search")
     val hasAlbumSearch: Boolean get() = functions.isEmpty() || functions.contains("searchAlbum")
