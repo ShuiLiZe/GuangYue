@@ -20,10 +20,12 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -67,9 +69,11 @@ import com.guangyue.core.lyrics.WordAlign
  * @param intensity 动画强度（calm / normal / chaotic）
  * @param reduceMotion 系统关闭动画：不做呼吸浮动与辉光动画
  * @param viewportWidthPx 视口宽度（px），用于字号 clamp 与词宽测量
+ * @param viewportHeightPx 视口高度（px），用于当前句舞台高度（Folia 的 h-[70vh]）
  * @param lyricsFontScale 歌词字号倍率（跟系统字号走）
  * @param activeColor / baseColor 高亮色 / 基色（主题色经取色后）
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ClassicLyricLine(
     line: Line,
@@ -78,6 +82,7 @@ internal fun ClassicLyricLine(
     intensity: AnimationIntensity,
     reduceMotion: Boolean,
     viewportWidthPx: Double,
+    viewportHeightPx: Double = 0.0,
     lyricsFontScale: Double,
     activeColor: Color,
     baseColor: Color,
@@ -119,79 +124,69 @@ internal fun ClassicLyricLine(
     val floatY = floatMotion.first
     val floatScale = floatMotion.second
 
-    // 行距：Folia 一次只画当前行、没有行距概念；广乐把当前行插在滚动列表里，必须自己给
-    // 「active 词放大 scale×1.4」预留垂直空间，否则放大的当前行会压到下一行（审图第 1 条）。
-    // 行盒 = 字形高度 + 上下留白：所有词槽位都锁到同一行高，并且永远按「最大放大」预留，
-    // 于是任一时刻拍下的画面里，放大后的当前行也不会碰到上一行/下一行。
-    val rowMinHeight = with(density) {
-        val lineHeightPx = fontSizePx * LINE_HEIGHT_RATIO
-        val overflowPx = lineHeightPx * (ACTIVE_SCALE - 1f) / 2f
-        (lineHeightPx + overflowPx * 2f + lineHeightPx * LINE_GAP_RATIO).toDp()
-    }
-    // 总宽 = 每个词宽 + 内核算出的 marginRight，至少和视口一样宽：这样词距拉满时也不会把
-    // 最后一个词顶出屏幕（Folia classic 的行是 flex-wrap 居中排布，画布是整块 70vh）。
-    val viewportWidthDp = with(density) { viewportWidthPx.toFloat().toDp() }
-    val rowWidth = with(density) {
-        val contentPx = line.words.indices.sumOf { index ->
-            val label = line.words[index].text
-            val w = measureWordWidth(measurer, label, fontSizePx, density)
-            w + (layout.words.getOrNull(index)?.marginRight ?: 0.0)
-        }
-        maxOf(contentPx, viewportWidthPx).toFloat().toDp()
-    }
-    // V0d：外层只负责「行内水平对齐」，不放宽测量约束。
-    // 原来 Row 直接把 `modifier`（外面挂的是 clickable）当唯一修饰符、宽度靠 `widthIn(min=rowWidth)`，
-    // 当前句的 active 放大 + 逐词 x/y 偏移会让 Row 的最终宽度超出视口，Compose 就把整行按
-    // min 宽度排版后溢出到屏幕外（实拍表现为当前句只露出一角、右侧还有粉色残影）。
-    // 这里给 Row 一层 fillMaxWidth 的 Box 做对齐容器，Row 自身恢复原来的约束，不再加 unbounded。
+    // 当前句容器：照抄 Folia `classic/Visualizer.tsx` 行 316–350。
+    //   外层 `w-full h-[70vh] flex items-center justify-center p-8`
+    //   当前句 `flex flex-wrap w-full max-w-6xl content-center ${justifyContent} ${alignItems}`
+    // 关键词是 **flex-wrap**：词是自动换行的流式排布，不是单行 Row。
+    // Folia 里每个词的 x/y 只是 transform（CSS translate），不参与布局，所以词再多只会换行，
+    // 不会被位移推出父容器——广乐之前的 `Row + widthIn(min=rowWidth)` 把词距算进测量宽度，
+    // 长句必然溢出到屏幕外（V0d 实拍表现：当前句只露出一角、右侧粉色残影）。
+    val stageHeight = with(density) {
+        (viewportHeightPx * FOLIA_LINE_STAGE_RATIO).toFloat().toDp()
+    }.coerceAtLeast(FOLIA_LINE_MIN_HEIGHT_DP.dp)
     Box(
-        modifier = Modifier.fillMaxWidth(),
-        contentAlignment = when (layout.line.justifyContent) {
-            LineJustify.CENTER -> Alignment.Center
-            LineJustify.END -> Alignment.CenterEnd
-            else -> Alignment.CenterStart
-        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(stageHeight)
+            .padding(FOLIA_LINE_PADDING_DP.dp),
+        contentAlignment = Alignment.Center,
     ) {
-    Row(
-        modifier = modifier
-            .widthIn(min = rowWidth, max = viewportWidthDp)
-            .heightIn(min = rowMinHeight)
-            .graphicsLayer {
-                translationY = floatY
-                scaleX = floatScale
-                scaleY = floatScale
-            },
-        verticalAlignment = verticalOf(layout.line.alignItems),
-    ) {
-        line.words.forEachIndexed { index, word ->
-            val config = layout.words.getOrNull(index)
-            if (config == null) {
-                PlainWord(word, fontSizeSp, baseColor, fontFamily)
-            } else {
-                WordSlot(config = config, density = density) {
-                    if (profile != null) {
-                        GlowWord(
-                            word = word,
-                            config = config,
-                            profile = profile,
-                            clock = clock,
-                            activeColor = activeColor,
-                            baseColor = baseColor,
-                            intensity = intensity,
-                            enableWordRotation = tuning.enableWordRotation,
-                            fontSizeSp = fontSizeSp,
-                            fontFamily = fontFamily,
-                            reduceMotion = reduceMotion,
-                            isChorus = line.isChorus,
-                            glowStrengthOverride = glowStrengthOverride,
-                        )
-                    } else {
-                        PlainWord(word, fontSizeSp, baseColor, fontFamily)
+        FlowRow(
+            modifier = modifier
+                .fillMaxWidth()
+                .fillMaxWidth()
+                .graphicsLayer {
+                    translationY = floatY
+                    scaleX = floatScale
+                    scaleY = floatScale
+                },
+            // 词距已由内核算出的 marginRight 承担（Folia 也是一样：marginRight 是词间距，
+            // justifyContent 只负责行内水平分布）。这里只用它做对齐，不再额外加间距。
+            horizontalArrangement = horizontalArrangementOf(layout.line.justifyContent),
+            verticalArrangement = Arrangement.spacedBy(
+                with(density) { (fontSizePx * LINE_GAP_RATIO).toDp() },
+            ),
+            itemVerticalAlignment = verticalOf(layout.line.alignItems),
+        ) {
+            line.words.forEachIndexed { index, word ->
+                val config = layout.words.getOrNull(index)
+                if (config == null) {
+                    PlainWord(word, fontSizeSp, baseColor, fontFamily)
+                } else {
+                    WordSlot(config = config, density = density) {
+                        if (profile != null) {
+                            GlowWord(
+                                word = word,
+                                config = config,
+                                profile = profile,
+                                clock = clock,
+                                activeColor = activeColor,
+                                baseColor = baseColor,
+                                intensity = intensity,
+                                enableWordRotation = tuning.enableWordRotation,
+                                fontSizeSp = fontSizeSp,
+                                fontFamily = fontFamily,
+                                reduceMotion = reduceMotion,
+                                isChorus = line.isChorus,
+                                glowStrengthOverride = glowStrengthOverride,
+                            )
+                        } else {
+                            PlainWord(word, fontSizeSp, baseColor, fontFamily)
+                        }
                     }
                 }
             }
         }
-    }
     }
 }
 
@@ -202,18 +197,17 @@ internal fun ClassicLyricLine(
  * 宽度至少覆盖词宽，保证「点这一句」的可点区域不会小于无障碍下限。
  */
 @Composable
-private fun RowScope.WordSlot(
+private fun WordSlot(
     config: com.guangyue.core.lyrics.GlowWordConfig,
     density: Density,
     content: @Composable () -> Unit,
 ) {
     Box(
         modifier = Modifier
+            // 词宽用自身测量（GlowWord/Text 内部）+ 内核算出的右边距，不锁行高：
+            // Folia 的 flex-wrap 由内容决定行高，锁 fillMaxHeight 会让整行高度依赖父容器。
             .padding(end = with(density) { config.marginRight.toFloat().toDp() })
-            // 每个词槽位锁到行高：词盒高度固定，active 放大时只在盒内溢出，不去挤压邻行。
-            .fillMaxHeight(0.999f)
-            .heightIn(min = WordTouchTargetDp.dp)
-            .align(alignSelfOf(config.alignSelf)),
+            .heightIn(min = WordTouchTargetDp.dp),
         contentAlignment = Alignment.Center,
     ) {
         content()
@@ -230,6 +224,24 @@ internal const val ACTIVE_SCALE = 1.4f
 
 // 行与行之间再留 0.12em（Folia classic 的 minMargin 同款比例），保证放大后仍有余量。
 internal const val LINE_GAP_RATIO = 0.12f
+
+// Folia `classic/Visualizer.tsx` 行 316：外层容器 `h-[70vh] p-8`（p-8 = 2rem = 32px）。
+internal const val FOLIA_LINE_STAGE_RATIO = 0.70f
+internal const val FOLIA_LINE_PADDING_DP = 32f
+// 舞台最小高度：手机上 70vh 在横屏/小屏会太矮，给 300dp 兜底。
+internal const val FOLIA_LINE_MIN_HEIGHT_DP = 300f
+// Folia `max-w-6xl` = 72rem = 1152px。
+internal const val FOLIA_LINE_MAX_WIDTH_DP = 1152f
+
+/** Folia 的 `justifyContent` → FlowRow 的水平排布。 */
+@OptIn(ExperimentalLayoutApi::class)
+internal fun horizontalArrangementOf(justify: LineJustify): Arrangement.Horizontal = when (justify) {
+    LineJustify.CENTER -> Arrangement.Center
+    LineJustify.START -> Arrangement.Start
+    LineJustify.END -> Arrangement.End
+    LineJustify.AROUND -> Arrangement.SpaceAround
+    LineJustify.BETWEEN -> Arrangement.SpaceBetween
+}
 /** 兜底：纯文本渲染（不辉光）。只在拿不到渲染档案（行被清空等）时用，保证不崩。 */
 @Composable
 private fun PlainWord(

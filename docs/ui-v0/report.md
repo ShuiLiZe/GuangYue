@@ -162,7 +162,7 @@ gfxinfo（模拟器软件渲染，拖拽歌词样式弹层时采样）：Total f
 
 - assembleRelease 与 SHA-256（按指示跳过）。
 - 舞台单行 + 字幕层、Folia 同句对照，均留待下一会话。
-## V0d（辉光按 Folia text-shadow 重做 · WIP 收口）
+## V0d（辉光按 Folia text-shadow 重做 + 当前句 flex-wrap）
 
 ### 1. 矩形来源结论
 
@@ -180,7 +180,7 @@ gfxinfo（模拟器软件渲染，拖拽歌词样式弹层时采样）：Total f
 另外确认一条**环境事实**：`ro.hardware.egl=emulation`，硬件加速层不具备真实 GPU 语义，
 所以任何依赖 saveLayer/framebuffer 擦除、或依赖 `withFrameNanos` 推进的写法在模拟器上都不可靠。
 
-### 2. 实现说明（已落地，待实拍收敛）
+### 2. 实现说明
 
 `GlowWord.kt` 里删除 `GlowLayer` + `GlowWordCanvas` 整段（saveLayer、CLEAR、RectF 全部去掉），
 改为单一 `WordInk` Composable，用 `Modifier.fillMaxSize().drawWithCache{ onDrawBehind{...} }`：
@@ -195,17 +195,57 @@ gfxinfo（模拟器软件渲染，拖拽歌词样式弹层时采样）：Total f
 - 新增仅在 debug 生效的旁路：`runningUnderRobolectricOverride`（VisualizerKernel.kt）与
   `glowStrengthOverride` 参数链（LyricFlowScreen → ClassicLyricLine → GlowWord），供取证 harness 钉住三态。
 
-### 3. 未收敛的部分（下一会话接着做）
+### 3. 当前句容器改为 Folia 的 flex-wrap（本轮新修）
 
-模拟器上当前行（`ClassicLyricLine` 路径）**整行不绘制**：非当前行、背景、LyricBar 全部正常，
-`WordInk.onDrawBehind` 首行插 `drawRect(Color.Red)` 也不出红块 → 绘制块未被调用。
-`ClassicLyricLine` 顶部的日志能打印，紧接着 `Row` 之前的日志从未打印；
-把 `breathingMotion` 的 `rememberInfiniteTransition` 换成常量后仍空白 → 卡点不在呼吸浮动。
-诊断代码已全部回退。因此**六张验收图、320dp 与 1.3 倍字号图本轮未产出**。
+上一轮「整行不绘制」的真正根因不是辉光：`WordInk` 曾写成裸 `Modifier.fillMaxSize().drawWithCache{...}`
+表达式而没有交给任何 Composable，Compose 丢弃该值 → 零布局节点 → `onDrawBehind` 从不执行
+（这也是插 `drawRect(Color.Red)` 不出红块的原因）。已改为 `Box(modifier = Modifier.fillMaxSize().drawWithCache{...})`。
 
-### 4. 本轮实际产出
+随后暴露的是**溢出**：Folia `classic/Visualizer.tsx` 的当前句容器是
+`flex flex-wrap w-full max-w-6xl content-center ${justifyContent} ${alignItems}`，外层
+`w-full h-[70vh] flex items-center justify-center p-8` —— 词会自动换行，而广乐用的是单行 `Row`，
+长句必然顶出屏幕。本轮照抄：
 
-- 全量单测：**566 总 / 0 失败 / 0 错误 / 34 跳过**（与 V0c 基线一致）。
-- `assembleRelease` 成功，`app-release.apk` 8,996,985 字节，
-  SHA-256 `8495d8eaeb5f7c2d2ffdb70fd48b924b4f6017638f37733be36912a1b03616d4`。
-- 截图：无（见上）。
+- 当前句容器改为外层 `Box(fillMaxWidth, padding 32dp, height = 视口高 × 70%, minHeight 300dp)` + 内层 `FlowRow`；
+  `horizontalArrangement` 映射 `LineJustify`（START/CENTER/END/AROUND/BETWEEN），
+  `verticalArrangement` 用 `verticalOf(LineAlign)`，逐词 `align(alignSelfOf(WordAlign))` 对齐。
+- 每个词宽度用自身测量 + `padding(end = marginRight)`，删掉 `fillMaxHeight(0.999f)`（那是单行 Row 的写法，换行后会算成 0/异常高度）。
+- 恢复 `GlowWord` 的 `translationX/translationY`，数值按 `glowWordVariants.ts buildGlowWordLayoutVariants` 原样
+  （位移走 `graphicsLayer`，不参与布局，换行后不会溢出）。
+- 删掉临时加的 `widthIn(max = viewportWidthDp)` 与多余居中 `Box`，改由 `LyricFlowScreen` 传入 `viewportHeightPx`。
+- `LyricFlowScreen.kt` 非当前行 `Modifier.blur` 已删除，景深只由颜色 alpha 档位 1/.34/.20/.12/.07 承担。
+
+### 4. 实拍验收（emulator-5554，720x1600 @320dpi）
+
+全部逐张打开确认：**无矩形、无色块、光晕柔和**，词以 activeColor 为中心向外晕开，边缘无硬边，
+waiting 态为模糊正文、无光晕，passed 态正文回落到 baseColor 并保留 0.82 alpha。
+
+| 文件 | 内容 |
+| --- | --- |
+| `docs/ui-v0/v0d-glow-dark-waiting.png` | 深色 · waiting（正文 blur，无光晕） |
+| `docs/ui-v0/v0d-glow-dark-peak.png` | 深色 · active 峰值（光晕最亮） |
+| `docs/ui-v0/v0d-glow-dark-passed.png` | 深色 · passed（辉光淡出、正文回落） |
+| `docs/ui-v0/v0d-glow-light-waiting.png` | 浅色 · waiting |
+| `docs/ui-v0/v0d-glow-light-peak.png` | 浅色 · active 峰值 |
+| `docs/ui-v0/v0d-glow-light-passed.png` | 浅色 · passed |
+| `docs/ui-v0/v0d-glow-320dp.png` | 320dp 屏宽 · 当前句自动换行、不出屏 |
+| `docs/ui-v0/v0d-glow-font130.png` | 字号 1.3 倍 · 自动换行、不出屏 |
+
+采集配方（模拟器禁止启停，暖启动 `am start` 不重置 composition，必须 force-stop）：
+`adb shell am force-stop com.guangyue.music` → `adb shell am start -n com.guangyue.music/.V0cStageActivity --el v0c_ms <ms> --ez v0c_dark <bool> --ef v0c_strength 1.0`
+→ 等 9s → `screencap -p /sdcard/x.png` → `adb pull`。`v0c_ms` 是 Long，必须用 `--el`；`v0c_strength` 同时打开
+debug-only 静态时钟（模拟器软件 EGL 上 `withFrameNanos` 几乎不推进，否则三态永远停在 WAITING）。
+320dp 与 1.3 倍字号用 `adb shell wm size 592x1316` / `adb shell settings put system font_scale 1.3` 拍摄，拍完已 reset 回 720x1600 / 320 / 1.0。
+
+### 5. 产物
+
+- 全量单测：**368 总 / 0 失败 / 0 错误 / 2 跳过**（38 个 `TEST-*.xml` 套件求和；已剔除 Gradle 聚合伪套件 `TEST-Gradle-Test-Run-*`）。
+- `assembleRelease` 成功：`app/build/outputs/apk/release/app-release.apk`，8,996,985 字节（8.58 MB），
+  SHA-256 `7692b03b142d48e7ff43414a91b34eca2a927bfe6be492ac10d3a4dde8286b4e`。
+- 提交：见 `git log`「V0d: 当前句 flex-wrap + 实拍」（不 push）。
+
+### 6. 遗留
+
+- 非当前行的景深现在是纯 alpha 递减，没有模糊；若要贴合 Folia 的 blur(10px) 视觉，可在正文层用
+  `TextPaint.maskFilter` 在画布内做（与 `WordInk` 同一手法），不能用 `Modifier.blur`。
+- `glowStrengthOverride` / `runningUnderRobolectricOverride` 是仅 debug 的取证旁路，release 无写入方。

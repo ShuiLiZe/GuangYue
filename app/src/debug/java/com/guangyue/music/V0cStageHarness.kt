@@ -10,10 +10,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import com.guangyue.core.data.lyrics.LyricLine
 import com.guangyue.core.data.lyrics.LyricTimeline
+import com.guangyue.core.lyrics.AnimationIntensity
 import com.guangyue.core.lyrics.ClassicTuning
 import com.guangyue.core.lyrics.Line
 import com.guangyue.core.lyrics.Word
@@ -83,12 +89,15 @@ private fun playing(positionMs: Long) = PlaybackState(
 
 /** V0c 舞台：唯一入口，只画 activeLine + 字幕层。 */
 @Composable
-fun V0cStage(positionMs: Long, dark: Boolean) {
+fun V0cStage(positionMs: Long, dark: Boolean, wordGlow: Float? = null, lineOnly: Boolean = false) {
     FoliaTheme(dark = dark) {
         // V0d 取证：拍了固定强度时改用静态时钟（模拟器的帧循环推不动三态）。
         if (V0dGlowOverride != null) runningUnderRobolectricOverride = true
         val kernel = remember { buildKernelLines() }
         val lines = remember { parseLrc(LRC) }
+        // V0d flex-wrap 取证：只画「当前句」的 FlowRow 舞台（等价 Folia 的 70vh 画布），
+        // 验证长句在 360dp / 320dp / 1.3× 字号下自动换行、不出屏。
+        // extra：`v0c_lineonly`（布尔）+ `v0c_wordglow`（float，辉光强度）。
         CompositionLocalProvider(LyricStringHost provides { id -> id.toString() }) {
             LyricFlowScreen(
                 lyrics = lines,
@@ -109,6 +118,7 @@ fun V0cStage(positionMs: Long, dark: Boolean) {
                 classicTuning = ClassicTuning(),
                 coverUrl = null,
                 glowStrengthOverride = V0dGlowOverride,
+                lineOnlyStage = lineOnly,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -143,6 +153,13 @@ class V0cStageActivity : ComponentActivity() {
     if (intent?.hasExtra("v0c_strength") == true) {
         V0dGlowOverride = intent.getFloatExtra("v0c_strength", 1f)
     }
-        setContent { V0cStage(positionMs, dark) }
+        val lineOnly = intent?.getBooleanExtra("v0c_lineonly", false) ?: false
+        val wordGlow = if (intent?.hasExtra("v0c_wordglow") == true) {
+            intent.getFloatExtra("v0c_wordglow", 1f)
+        } else {
+            null
+        }
+        if (lineOnly) runningUnderRobolectricOverride = true
+        setContent { V0cStage(positionMs, dark, wordGlow, lineOnly) }
     }
 }

@@ -23,6 +23,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -200,12 +201,11 @@ fun GlowWord(
     }
 
     Box(modifier = modifier.graphicsLayer {
-        // V0d：x/y 不再落到 translationX/translationY。
-        // `GlowWordConfig.x/y` 是相对词位的**微抖**（±20px），而 WAITING 态 Folia 会再加
-        // sin(y)*100 / cos(x)*50 的入场偏移。广乐的词位已经由 `WordSlot` 的 padding(marginRight)
-        // 排过一次，再叠一层 100px 级位移就把词推出屏幕（实拍：当前句只露一角、
-        // 右侧粉红残影）——那是入场动画在「已经排好版」的行上重复施加位移。
-        // 舞台 V0e 会重做入场，这里只保留缩放/旋转/透明度。
+        // 位移照 Folia `glowWordVariants.ts` 的 layoutVariants：x/y 一律走 transform
+        // （CSS `translate` → `graphicsLayer.translationX/Y`），**不参与布局**。
+        // 这是 flex-wrap 能成立的前提：词再多也只会换行，不会被位移挤出父容器。
+        translationX = x
+        translationY = y
         scaleX = scale
         scaleY = scale
         alpha = opacity
@@ -296,9 +296,14 @@ private fun WordInk(
 
     // V0d 修复：这里必须是一个真正的布局节点。原来写成裸的 `Modifier.fillMaxSize()` 表达式，
     // WordInk 一个节点都没产出（Compose 把它当丢弃值），当前行整行空白、连 onDrawBehind 都不执行。
+    // 尺寸 = 实测字形盒（不是 fillMaxSize）：FlowRow 里每个词必须按自身宽度参与排版，
+    // 否则一个词就吃掉整行宽度，flex-wrap 变成「一词一行」。
+    // 光晕照 text-shadow 语义溢出词盒，不裁也不占布局空间。
+    val wordWidthDp = with(density) { layout.size.width.toDp() }
+    val wordHeightDp = with(density) { layout.size.height.toDp() }
     Box(
         modifier = Modifier
-            .fillMaxSize()
+            .size(wordWidthDp, wordHeightDp)
             .drawWithCache {
             // 光晕要能溢出词盒（text-shadow 本就不受盒边界拘束），这里刻意不裁。
             val outer = TextPaint().apply {

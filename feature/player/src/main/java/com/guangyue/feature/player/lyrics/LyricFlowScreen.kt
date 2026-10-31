@@ -136,6 +136,8 @@ fun LyricFlowScreen(
     styleLabel: String = "",
     // V0d 取证：非 null 时把当前句的辉光强度钉死（debug harness 用，业务侧恒为 null）。
     glowStrengthOverride: Float? = null,
+    // V0d 取证：只画当前句舞台（debug harness 用）。
+    lineOnlyStage: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val backLabel = str(strings.back)
@@ -193,6 +195,10 @@ fun LyricFlowScreen(
     val viewportWidthPx = with(LocalDensity.current) {
         LocalConfiguration.current.screenWidthDp.dp.toPx().toDouble()
     }
+    // 当前句舞台高度用：Folia 的外层是 h-[70vh]，所以需要视口高度（px）。
+    val viewportHeightPx = with(LocalDensity.current) {
+        LocalConfiguration.current.screenHeightDp.dp.toPx().toDouble()
+    }
 
     // 「流光」逐词画布需要逐帧时间；三态只在 derivedStateOf 里读，整行不会每帧重组。
     // Robolectric 下 withFrameNanos 会把 waitForIdle() 挂住（同 FrameJank 的坑），改用固定时钟。
@@ -204,6 +210,30 @@ fun LyricFlowScreen(
             playingProvider = { playback.isPlaying },
             enabled = !reduceMotion,
         )
+    }
+
+    // V0d 取证：只画当前句的 flex-wrap 舞台（等价 Folia 的 70vh 画布）。
+    if (lineOnlyStage) {
+        Box(Modifier.fillMaxSize().background(Color(0xFF2A1A16))) {
+            if (activeLine != null) {
+                ClassicLyricLine(
+                    line = activeLine,
+                    clock = clock,
+                    tuning = classicTuning,
+                    intensity = AnimationIntensity.NORMAL,
+                    reduceMotion = false,
+                    viewportWidthPx = viewportWidthPx,
+                    viewportHeightPx = viewportHeightPx,
+                    lyricsFontScale = lyricsFontScale,
+                    activeColor = lyricAccent,
+                    baseColor = onBackdrop,
+                    fontFamily = GuangYueDesign.Serif,
+                    glowStrengthOverride = glowStrengthOverride,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        return
     }
 
     // 背景层：Folia FluidBackground —— 取色底色 @0.8 + 放大 1.5× 的模糊封面 + bottom-right overlay 渐变。
@@ -337,6 +367,7 @@ fun LyricFlowScreen(
                                     intensity = AnimationIntensity.NORMAL,
                                     reduceMotion = reduceMotion,
                                     viewportWidthPx = viewportWidthPx,
+                                    viewportHeightPx = viewportHeightPx,
                                     lyricsFontScale = lyricsFontScale,
                                     activeColor = lyricAccent,
                                     baseColor = onBackdrop,
