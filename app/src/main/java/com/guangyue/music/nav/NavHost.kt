@@ -22,8 +22,10 @@ import com.guangyue.music.R
 import com.guangyue.feature.library.design.GuangYueDesign
 import com.guangyue.feature.library.design.GySpace
 import com.guangyue.feature.library.home.FoliaMiniPlayer
-import com.guangyue.feature.library.home.HomeScreen
 import com.guangyue.feature.library.home.HomeTile
+import com.guangyue.music.ui.home.HomeStrings
+import com.guangyue.music.ui.home.HomeWallScreen
+import com.guangyue.music.ui.home.HomeWallState
 import com.guangyue.feature.library.screen.AboutScreen
 import com.guangyue.feature.library.screen.DownloadScreen
 import com.guangyue.feature.library.screen.LicensesScreen
@@ -119,6 +121,12 @@ fun GuangYueNavHost(
             val sheets by vm.sheets.collectAsStateWithLifecycle()
             val plugins by vm.enabledPlugins.collectAsStateWithLifecycle()
             val source by vm.currentSource.collectAsStateWithLifecycle()
+            // U6 首页墙：加载 / 失败从 ViewModel 出，空态由墙自己按数据判。
+            val wallLoading by vm.wallLoading.collectAsStateWithLifecycle()
+            val wallFailed by vm.wallFailed.collectAsStateWithLifecycle()
+            val wallState = if (wallLoading) HomeWallState.Loading
+            else if (wallFailed) HomeWallState.Failed
+            else HomeWallState.Content
 
             LaunchedEffect(source?.id) {
                 if (source != null) {
@@ -129,13 +137,14 @@ fun GuangYueNavHost(
 
             ShellColumn(
                 content = {
-                    HomeScreen(
+                    HomeWallScreen(
                         recommended = vm.recommended(sheets, recent),
                         recent = recent,
                         charts = charts,
                         hasAnyPlugin = plugins.isNotEmpty(),
+                        strings = homeStrings(),
+                        state = wallState,
                         onOpenTile = { tile ->
-                            android.util.Log.d("GYHOME", "onOpenTile key=" + tile.key + " kind=" + tile.kind)
                             vm.playTracksOf(tile) { tracks, at ->
                                 playback.setQueueFromTracks(tracks, at, true)
                                 navController.navigate(Routes.PLAYER)
@@ -150,9 +159,7 @@ fun GuangYueNavHost(
                         onTogglePlay = { playback.toggle() },
                         // 0.0.9（U2）：首页占位空态的「去搜索」入口（内容墙 U6 再做）。
                         onOpenSearch = { navController.navigate(Routes.SEARCH) },
-                        placeholderTitle = stringResource(R.string.home_placeholder_title),
-                        placeholderHint = stringResource(R.string.home_placeholder_hint),
-                        placeholderAction = stringResource(R.string.home_placeholder_action),
+                        onRetry = { vm.retryWall() },
                     )
                 },
                 miniPlayer = miniPlayer,
@@ -439,8 +446,39 @@ internal fun searchStrings(): SearchStrings {
         addToPlaylist = R.string.search_add_to_playlist,
         download = R.string.search_download,
         noSource = R.string.search_no_source,
-        noSourceHint = R.string.search_no_source_hint,
+            noSourceHint = R.string.search_no_source_hint,
         openPlugins = R.string.search_open_plugins,
+    )
+}
+
+/**
+ * U6：首页墙的 19 条中文文案，一次取齐交给 app 侧 [HomeStrings]。
+ *
+ * 与 [searchStrings] 同一套理由：文案本体在 `app/src/main/res/values/strings.xml`，
+ * 每条都在那里标了 Folia 的 `zh-CN.ts` 键名或「自拟」。
+ */
+@Composable
+internal fun homeStrings(): HomeStrings {
+    return HomeStrings(
+        greeting = stringResource(R.string.home_wall_greeting),
+        greetingGuest = stringResource(R.string.home_wall_greeting_guest),
+        search = stringResource(R.string.home_wall_search),
+        recommendTitle = stringResource(R.string.home_wall_recommend_title),
+        recentTitle = stringResource(R.string.home_wall_recent_title),
+        chartsTitle = stringResource(R.string.home_wall_charts_title),
+        loading = stringResource(R.string.home_wall_loading),
+        failed = stringResource(R.string.home_wall_failed),
+        failedHint = stringResource(R.string.home_wall_failed_hint),
+        retry = stringResource(R.string.home_wall_retry),
+        noSource = stringResource(R.string.home_wall_no_source),
+        noSourceHint = stringResource(R.string.home_wall_no_source_hint),
+        noSourceAction = stringResource(R.string.home_wall_no_source_action),
+        empty = stringResource(R.string.home_wall_empty),
+        emptyHint = stringResource(R.string.home_wall_empty_hint),
+        emptyAction = stringResource(R.string.home_wall_empty_action),
+        openPlayer = stringResource(R.string.home_wall_open_player),
+        scrollLeft = stringResource(R.string.home_wall_scroll_left),
+        scrollRight = stringResource(R.string.home_wall_scroll_right),
     )
 }
 

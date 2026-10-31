@@ -22,7 +22,9 @@ import com.guangyue.feature.library.design.GuangYueDesign
 import com.guangyue.feature.library.design.MarbleBackground
 import com.guangyue.feature.library.design.icons.GuangYueIcons
 import com.guangyue.feature.library.home.FoliaMiniPlayer
-import com.guangyue.feature.library.home.HomeScreen
+import com.guangyue.music.nav.homeStrings
+import com.guangyue.music.ui.home.HomeWallScreen
+import com.guangyue.music.ui.home.HomeWallState
 import com.guangyue.feature.library.home.HomeTile
 import com.guangyue.feature.library.home.HomeTileKind
 import com.guangyue.feature.library.screen.AboutScreen
@@ -156,11 +158,13 @@ class ScreenshotTest {
 
     @Composable
     private fun HomeEmpty() {
-        HomeScreen(
+        HomeWallScreen(
             recommended = emptyList(),
             recent = emptyList(),
             charts = emptyList(),
             hasAnyPlugin = false,
+            strings = homeStrings(),
+            state = HomeWallState.Content,
             onOpenTile = {},
             onOpenPlugins = {},
             onOpenPlayer = {},
@@ -169,17 +173,21 @@ class ScreenshotTest {
             playbackProgress = 0f,
             isPlaying = false,
             onTogglePlay = {},
+            onOpenSearch = {},
+            onRetry = {},
             bottomBar = { Bar("home") },
         )
     }
 
     @Composable
     private fun HomeFilled() {
-        HomeScreen(
+        HomeWallScreen(
             recommended = sampleRecommend,
             recent = sampleCharts.take(2),
             charts = sampleCharts,
             hasAnyPlugin = true,
+            strings = homeStrings(),
+            state = HomeWallState.Content,
             onOpenTile = {},
             onOpenPlugins = {},
             onOpenPlayer = {},
@@ -188,6 +196,8 @@ class ScreenshotTest {
             playbackProgress = 0.35f,
             isPlaying = true,
             onTogglePlay = {},
+            onOpenSearch = {},
+            onRetry = {},
             bottomBar = { Bar("home") },
             miniPlayer = { Mini() },
         )

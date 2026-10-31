@@ -294,4 +294,42 @@
     <string name="lyrics_source">歌词</string>
     <!-- zh-CN.ts: 3869 "statusNone"（「无」） -->
     <string name="lyrics_source_none">无</string>
+    <!-- ===== U6 首页墙（Folia home/explore：问候 + 推荐歌单 2 列网格 + 横滑分区） ===== -->
+    <!-- zh-CN.ts: 1613 "welcomeBack"（「欢迎回来」） -->
+    <string name="home_wall_greeting">欢迎回来</string>
+    <!-- zh-CN.ts: 1450 "welcome"（「欢迎使用 Folia」）改成广乐自己的问候 -->
+    <string name="home_wall_greeting_guest">欢迎使用广乐</string>
+    <!-- zh-CN.ts: 1477 "searchPlaceholder"（「搜索音乐...」）压成首页搜索入口 -->
+    <string name="home_wall_search">搜索音乐…</string>
+    <!-- zh-CN.ts: 1655 "neteaseDailyPlaylists"（「每日推荐歌单」）压成推荐段标题 -->
+    <string name="home_wall_recommend_title">推荐歌单</string>
+    <!-- zh-CN.ts: 1652 "exploreRecent"（「最近播放」） -->
+    <string name="home_wall_recent_title">最近播放</string>
+    <!-- zh-CN.ts: 1656 "neteaseCharts"（「排行榜」）压成榜单段标题 -->
+    <string name="home_wall_charts_title">热门榜单</string>
+    <!-- 自拟：首页墙加载中（Folia 走骨架屏，这里给一句中文） -->
+    <string name="home_wall_loading">正在载入推荐内容…</string>
+    <!-- zh-CN.ts: 1640 "exploreFailed"（「推荐内容没有读到」） -->
+    <string name="home_wall_failed">推荐内容没有读到</string>
+    <!-- 自拟：Folia 失败时只弹 toast，没有常驻空态，这里给一句出路 -->
+    <string name="home_wall_failed_hint">检查一下网络，或在我的 · 音源插件管理里换一个音源</string>
+    <!-- zh-CN.ts: 1641 "exploreRetry"（「重试」） -->
+    <string name="home_wall_retry">重试</string>
+    <!-- zh-CN.ts: 1639 "exploreEmpty"（「暂时没有推荐内容」）压成无音源主句 -->
+    <string name="home_wall_no_source">暂时没有推荐内容</string>
+    <!-- 自拟：无音源时的出路说明 -->
+    <string name="home_wall_no_source_hint">装一个官方音源，搜索、榜单和推荐歌单就有了</string>
+    <!-- 自拟：无音源时的动作（Folia exploreEmpty 没有动作，广乐要给出路） -->
+    <string name="home_wall_no_source_action">去添加音源</string>
+    <!-- 自拟：首页无数据但有音源时的动作，复用 U2 的占位动作语义 -->
+    <string name="home_wall_empty_action">去搜索</string>
+    <!-- 自拟：首页问候区右上角进播放页的按钮名 -->
+    <string name="home_wall_open_player">播放页</string>
+    <!-- zh-CN.ts: 1642/1643 "exploreScrollLeft/Right"（「向左滚动」「向右滚动」） -->
+    <string name="home_wall_scroll_left">向左滚动</string>
+    <string name="home_wall_scroll_right">向右滚动</string>
+<!-- 自拟：有音源但墙还是空的主句（Folia exploreEmpty 管的是没料，这里补「有音源」的说法） -->
+    <string name="home_wall_empty">这里还没有推荐内容</string>
+    <!-- 自拟：同上副句，给一条能走的路 -->
+    <string name="home_wall_empty_hint">先搜几首喜欢的歌听一下，推荐和最近播放会慢慢出现。</string>
 </resources>

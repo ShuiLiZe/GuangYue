@@ -108,6 +108,34 @@ class HomeViewModel @Inject constructor(
     private var sheetsLoaded = false
     private var sheetsFor: String? = null
 
+    // ---------- U6 首页墙的四态（loading / failed 只有这两项要从 ViewModel 出，
+    // 空态由「没数据」+ hasAnyPlugin 在 UI 侧判断） ----------
+
+    private val _loadingSheets = MutableStateFlow(false)
+    private val _sheetsFailed = MutableStateFlow(false)
+    private val _chartsFailed = MutableStateFlow(false)
+
+    /** 推荐段或榜单段还在拉：首页墙显示「正在载入推荐内容…」。 */
+    val wallLoading: StateFlow<Boolean> = combine(_loadingSheets, _loadingCharts) { a, b -> a || b }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** 推荐段或榜单段报错：只有真没内容时才显示失败态（有内容优先显示内容）。 */
+    val wallFailed: StateFlow<Boolean> = combine(_sheetsFailed, _chartsFailed) { a, b -> a || b }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** 首页墙「重试」：清掉「已拉过」标记并重新拉推荐段与榜单段。 */
+    fun retryWall() {
+        sheetsLoaded = false
+        sheetsFor = null
+        chartsLoaded = false
+        chartsFor = null
+        _sheetsFailed.value = false
+        _chartsFailed.value = false
+        loadSheetsIfNeeded()
+        loadChartsIfNeeded()
+    }
+
+
     /**
      * 拉一次推荐歌单：只问**当前音源**。
      *
@@ -122,11 +150,20 @@ class HomeViewModel @Inject constructor(
         sheetsLoaded = true
         sheetsFor = source.id
         viewModelScope.launch {
+            _loadingSheets.value = true
+            _sheetsFailed.value = false
             _sheets.value = emptyList()
             _sheetLeaves.value = emptyMap()
             // functions 为空 = 插件没声明能力清单，不代表不支持；直接试一次，拿到空就整段不显示。
-            if (source.functions.isNotEmpty() && !source.hasRecommend) return@launch
-            val tags = runCatching { bridge.getRecommendSheetTags(source.id) }.getOrElse { android.util.Log.d("GYHOME", "tags ERR " + it.message); emptyList() }
+            if (source.functions.isNotEmpty() && !source.hasRecommend) {
+                _loadingSheets.value = false
+                return@launch
+            }
+            val tags = runCatching { bridge.getRecommendSheetTags(source.id) }.getOrElse {
+                android.util.Log.d("GYHOME", "tags ERR " + it.message)
+                _sheetsFailed.value = true
+                emptyList()
+            }
             android.util.Log.d("GYHOME", "tags=" + tags.size)
             val leaves = linkedMapOf<String, JsonObject>()
             val tiles = mutableListOf<HomeTile>()
@@ -145,7 +182,7 @@ class HomeViewModel @Inject constructor(
             for ((id, leaf) in leaves) {
                 android.util.Log.d("GYHOME", "leaf=" + id + " -> " + runCatching { bridge.getRecommendSheets(source.id, leaf, 1).size }.getOrElse { "ERR:" + it.message })
                 val sheetsOfLeaf = runCatching { bridge.getRecommendSheets(source.id, leaf, 1) }
-                    .getOrDefault(emptyList())
+                    .getOrElse { _sheetsFailed.value = true; emptyList() }
                 for (sheet in sheetsOfLeaf) {
                     val name = (sheet["title"] as? JsonPrimitive)?.contentOrNull
                         ?: (sheet["name"] as? JsonPrimitive)?.contentOrNull
@@ -166,6 +203,7 @@ class HomeViewModel @Inject constructor(
             }
             _sheetLeaves.value = leaves
             _sheets.value = tiles.distinctBy { it.key }
+            _loadingSheets.value = false
         }
     }
 
@@ -183,6 +221,7 @@ class HomeViewModel @Inject constructor(
         chartsFor = source.id
         viewModelScope.launch {
             _loadingCharts.value = true
+            _chartsFailed.value = false
             _hasCharts.value = false
             _charts.value = emptyList()
             if (!source.hasTopLists) {
@@ -191,7 +230,8 @@ class HomeViewModel @Inject constructor(
             }
             val items = mutableMapOf<String, MusicItem>()
             val tiles = mutableListOf<HomeTile>()
-            val boards = runCatching { bridge.getTopLists(source.id) }.getOrDefault(emptyList())
+            val boards = runCatching { bridge.getTopLists(source.id) }
+                .getOrElse { _chartsFailed.value = true; emptyList() }
             for (board in boards) {
                 // getTopLists 返回的是树形结构：每个 board 可能自己带一排子榜单（data 数组），
                 // 子项才是能喂给 getTopListDetail 的那一条。
@@ -203,7 +243,7 @@ class HomeViewModel @Inject constructor(
                         ?: (leaf["name"] as? JsonPrimitive)?.contentOrNull
                         ?: "排行榜"
                     val songs = runCatching { bridge.getTopListDetail(source.id, leaf, 1) }
-                        .getOrDefault(emptyList())
+                        .getOrElse { _chartsFailed.value = true; emptyList() }
                     if (songs.isEmpty()) continue
                     val top = songs.first()
                     val key = "board:" + board["id"].let { (it as? JsonPrimitive)?.contentOrNull.orEmpty() } +

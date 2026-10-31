@@ -21,7 +21,9 @@ import com.guangyue.feature.library.design.FoliaNavItem
 import com.guangyue.feature.library.design.GySpace
 import com.guangyue.feature.library.design.icons.GuangYueIcons
 import com.guangyue.feature.library.home.FoliaMiniPlayer
-import com.guangyue.feature.library.home.HomeScreen
+import com.guangyue.music.nav.homeStrings
+import com.guangyue.music.ui.home.HomeWallScreen
+import com.guangyue.music.ui.home.HomeWallState
 import com.guangyue.feature.library.home.HomeTile
 import com.guangyue.feature.library.home.HomeTileKind
 import com.guangyue.feature.library.screen.ProfileScreen
@@ -147,11 +149,13 @@ class U2ShellScreenshotTest {
 
     @Composable
     private fun HomeRoot() {
-        HomeScreen(
+        HomeWallScreen(
             recommended = sampleRecommend,
             recent = sampleTracks,
             charts = sampleTracks,
             hasAnyPlugin = true,
+            strings = homeStrings(),
+            state = HomeWallState.Content,
             onOpenTile = {},
             onOpenPlugins = {},
             onOpenPlayer = {},
@@ -161,6 +165,7 @@ class U2ShellScreenshotTest {
             isPlaying = true,
             onTogglePlay = {},
             onOpenSearch = {},
+            onRetry = {},
         )
     }
 
