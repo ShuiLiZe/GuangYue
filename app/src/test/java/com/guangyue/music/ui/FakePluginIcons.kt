@@ -75,3 +75,23 @@ internal class FakePluginIconFetcherFactory : Fetcher.Factory<Uri> {
         return FakePluginIconFetcher(text)
     }
 }
+
+    private var fakeIconsInstalled = false
+
+    /** 只装一次：Coil 的单例在第一次 `get` 之后就不能再 `setSafe`，两个测试类共用同一个 JVM。 */
+    internal fun installFakePluginIconsOnce() {
+        if (fakeIconsInstalled) return
+        runCatching { coil3.SingletonImageLoader.setSafe(fakePluginIconFactory()) }
+        fakeIconsInstalled = true
+    }
+
+    internal fun fakePluginIconFactory(): coil3.SingletonImageLoader.Factory =
+        object : coil3.SingletonImageLoader.Factory {
+            override fun newImageLoader(context: android.content.Context): coil3.ImageLoader =
+                coil3.ImageLoader.Builder(context)
+                    .memoryCache {
+                        coil3.memory.MemoryCache.Builder().maxSizePercent(context, 0.05).build()
+                    }
+                    .components { add(FakePluginIconFetcherFactory()) }
+                    .build()
+        }

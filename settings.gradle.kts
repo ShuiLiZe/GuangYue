@@ -62,6 +62,8 @@ include(":core:player")
 include(":core:download")
 include(":core:data")
 include(":core:web")
+// V0：歌词渲染内核。纯 Kotlin/JVM，无 Android 依赖，单测直接跑 JVM。
+include(":core:lyrics")
 include(":feature:search")
 include(":feature:player")
 include(":feature:library")

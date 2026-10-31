@@ -4,6 +4,9 @@ plugins {
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.kotlin.serialization) apply false
+    // V0：:core:lyrics 是纯 JVM 模块（歌词内核），需要 Kotlin JVM 插件。
+    // 原先它只在 catalog 里声明过（其他地方用的是 kotlin.android），这里补上才 assign 得动。
+    alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.hilt) apply false
 }

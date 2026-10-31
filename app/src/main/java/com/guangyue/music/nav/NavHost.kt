@@ -7,6 +7,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -17,6 +21,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.guangyue.core.data.lyrics.LyricTimeline
 import com.guangyue.core.player.PlaybackController
 import com.guangyue.music.R
 import com.guangyue.feature.library.design.GuangYueDesign
@@ -43,7 +48,10 @@ import com.guangyue.feature.library.viewmodel.PluginViewModel
 import com.guangyue.feature.player.lyrics.LyricFlowScreen
 import com.guangyue.feature.player.lyrics.LyricStageScreen
 import com.guangyue.feature.player.lyrics.LyricStringHost
+import com.guangyue.feature.player.lyrics.LyricStyleSheet
+import com.guangyue.feature.player.lyrics.LyricStyleStrings
 import com.guangyue.feature.player.screen.IPlayerRoute
+import com.guangyue.feature.player.viewmodel.LyricStyleViewModel
 import com.guangyue.feature.player.viewmodel.LyricsViewModel
 import com.guangyue.feature.search.FoliaSearchScreen
 import com.guangyue.feature.search.SearchStrings
@@ -407,26 +415,65 @@ fun GuangYueNavHost(
 
         // ---------- 全屏播放 / 歌词 ----------
         composable(Routes.PLAYER) {
+            // V0：播放页的「歌词样式」入口。弹层与歌词页共用同一个 ViewModel 与同一份落盘偏好，
+            // 在播放页调完参数、进歌词页立刻生效（对应 Folia 的样式窗口在播放器与歌词页共用一份 tuning）。
+            val styleVm: LyricStyleViewModel = hiltViewModel()
+            val tuning by styleVm.tuning.collectAsStateWithLifecycle()
+            val playerContext = LocalContext.current
+            var styleSheetOpen by rememberSaveable { mutableStateOf(false) }
             IPlayerRoute(
                 playback = playback,
                 playbackState = playbackState,
                 darkMode = darkMode,
                 accent = accent,
                 onOpenLyrics = { navController.navigate(Routes.LYRIC_FLOW) },
+                onOpenLyricStyle = { styleSheetOpen = true },
+                lyricStyleLabel = playerContext.getString(R.string.lyrics_style),
                 onAddToPlaylist = { navController.navigate(Routes.SEARCH) },
                 onBack = { navController.popBackStack() },
             )
+            if (styleSheetOpen) {
+                // 文案按 id 现取（locale / 系统字号变了也能跟上），不能把 id 当字符串直接显示。
+                val sheetContext = playerContext
+                CompositionLocalProvider(
+                    LyricStringHost provides { id -> sheetContext.getString(id) },
+                ) {
+                    LyricStyleSheet(
+                        tuning = tuning,
+                        strings = lyricStyleStrings(),
+                        styleName = sheetContext.getString(R.string.lyrics_style_classic),
+                        onTuning = styleVm::update,
+                        onDismiss = { styleSheetOpen = false },
+                        accent = accent,
+                    )
+                }
+            }
         }
 
         // U5：歌词页。数据仍是既有 LyricsViewModel（插件查词 + LRC 解析 + 逐行同步），
         // 文案/空态/点行跳转由新的 LyricFlowScreen 负责；stage（全屏舞台）路由保持原样。
+        //
+        // V0：在 U5 之上接歌词渲染内核——
+        //   1. 逐行 [LyricLine] 经 [LyricTimeline.toLines] 变成内核 [Line]（无逐字时间时词内按字均分）；
+        //   2. 当前行交给「流光」(classic) 逐词画布，其余行仍是 U5 档位视图；
+        //   3. 封面 url 走封面取色 + 流体背景 + 换歌柔焦（VisualizerBackdrop）；
+        //   4. 顶栏右侧「歌词样式」入口打开 LyricStyleSheet，调参落 AppPreferences。
         composable(Routes.LYRIC_FLOW) {
             val vm: LyricsViewModel = hiltViewModel()
+            val styleVm: LyricStyleViewModel = hiltViewModel()
             val lyric by vm.lyric.collectAsStateWithLifecycle()
             val sync by vm.syncState.collectAsStateWithLifecycle()
             val loading by vm.loading.collectAsStateWithLifecycle()
             val message by vm.message.collectAsStateWithLifecycle()
+            val tuning by styleVm.tuning.collectAsStateWithLifecycle()
             val lyricContext = LocalContext.current
+            var styleSheetOpen by rememberSaveable { mutableStateOf(false) }
+            val kernelLines = remember(lyric) {
+                LyricTimeline.toLines(
+                    lines = lyric.lines,
+                    durationMs = playbackState.durationMs.takeIf { it > 0L },
+                )
+            }
             CompositionLocalProvider(LyricStringHost provides { id -> lyricContext.getString(id) }) {
                 LyricFlowScreen(
                     lyrics = lyric.lines,
@@ -449,7 +496,22 @@ fun GuangYueNavHost(
                     loading = loading,
                     failure = message,
                     darkMode = darkMode,
+                    kernelLines = kernelLines,
+                    classicTuning = tuning,
+                    coverUrl = playbackState.item?.artworkUri,
+                    onOpenStyleSheet = { styleSheetOpen = true },
+                    styleLabel = lyricContext.getString(R.string.lyrics_style),
                 )
+                if (styleSheetOpen) {
+                    LyricStyleSheet(
+                        tuning = tuning,
+                        strings = lyricStyleStrings(),
+                        styleName = lyricContext.getString(R.string.lyrics_style_classic),
+                        onTuning = styleVm::update,
+                        onDismiss = { styleSheetOpen = false },
+                        accent = accent,
+                    )
+                }
             }
         }
 
@@ -522,6 +584,20 @@ internal fun homeStrings(): HomeStrings {
         scrollLeft = stringResource(R.string.home_wall_scroll_left),
         scrollRight = stringResource(R.string.home_wall_scroll_right),
         showAll = stringResource(R.string.library_show_all),
+    )
+}
+
+@Composable
+internal fun lyricStyleStrings(): LyricStyleStrings {
+    return LyricStyleStrings(
+        title = R.string.lyrics_style_settings,
+        classic = R.string.lyrics_style_classic,
+        rotation = R.string.lyrics_style_rotation,
+        breathing = R.string.lyrics_style_breathing,
+        spacing = R.string.lyrics_style_spacing,
+        reset = R.string.lyrics_style_reset,
+        desc = R.string.lyrics_style_desc,
+        close = R.string.lyrics_style_close,
     )
 }
 

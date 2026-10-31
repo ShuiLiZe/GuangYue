@@ -1,4 +1,4 @@
-﻿package com.guangyue.music.ui
+package com.guangyue.music.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -77,7 +77,8 @@ class ScreenshotTest {
 
     @Before
     fun installFakeIcons() {
-        coil3.SingletonImageLoader.setSafe(fakeIcons())
+        // 与 V0LyricStyleScreenshotTest 共用同一个安装点：Coil 单例第一次 get 之后 setSafe 会抛。
+        installFakePluginIconsOnce()
     }
 
     @get:Rule

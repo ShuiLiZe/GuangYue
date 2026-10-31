@@ -19,6 +19,8 @@ ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
 dependencies {
     api(project(":core:plugin"))
+    // V0：歌词渲染内核（纯 Kotlin/JVM），LyricTimeline 适配器把它接到 core:data 的 Lyric 上。
+    api(project(":core:lyrics"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

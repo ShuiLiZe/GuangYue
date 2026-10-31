@@ -1,4 +1,4 @@
-package com.guangyue.feature.player.screen
+﻿package com.guangyue.feature.player.screen
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -108,12 +108,21 @@ fun FoliaPlayerPage(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onSeek: (Float) -> Unit,
-    /** 进度条拖动中用（松手才 seek），用于拖动时把时间改成跟手位置。 */
+    /** 进度条拖动中生效（松手才 seek），用于拖动时把时间改成跟手位置。 */
     onSeekPreview: ((Float) -> Unit)? = null,
     onCycleMode: () -> Unit,
     onToggleLike: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onOpenLyrics: () -> Unit,
+    /**
+     * V0锛氭挱鏀鹃〉銆屾瓕璇嶆牱寮忋€嶅叆鍙ｏ紙鎵撳紑搴曢儴寮瑰眰锛夈€?
+     *
+     * 对应 Folia 的样式窗口入口：Folia 把它挂在播放器设置区；手机上收进动作行第五颗按钮。
+     * 涓?null 鏃朵笉娓叉煋锛堜緥濡傛埅鍥剧敤渚嬨€佹垨涓嶆敮鎸佹牱寮忕殑瀹夸富锛夈€?
+     */
+    onOpenLyricStyle: (() -> Unit)? = null,
+    /** 「歌词样式」按钮文案（带无障碍语义）；feature:player 无资源表，由 app 侧注入。 */
+    lyricStyleLabel: String = "",
     onPickQueueRow: (Int) -> Unit,
     onQuality: () -> Unit,
     onBack: () -> Unit,
@@ -128,7 +137,7 @@ fun FoliaPlayerPage(
     val backdrop = remember(coverColor, accent, darkMode) {
         playerBackdrop(coverColor = coverColor, seed = accent, dark = darkMode)
     }
-    // 渐变底上不再套主题色，文字与控件统一走「当前渐变下的对比色」两档。
+    // 渐变底上不再套主题色，文字与控件统一用「当前渐变下的对比色」两档。
     val onBackdrop = if (backdropUsesDarkInk(backdrop)) Color(0xFF1C1917) else Color(0xFFF7F5F2)
     val onBackdropSoft = onBackdrop.copy(alpha = 0.62f)
     val cardInk = Gyp.ink
@@ -137,6 +146,8 @@ fun FoliaPlayerPage(
     val collapseLabel = str(res.collapse)
     val lyricsLabel = str(res.lyrics)
     val queueLabel = str(res.queue)
+    // V0：样式按钮文案先在组合上下文里算好（`ifEmpty` 的 lambda 不是 @Composable 上下文）。
+    val lyricStyleActionLabel = if (lyricStyleLabel.isBlank()) lyricsLabel else lyricStyleLabel
     val header = playerHeaderText(
         title = playback.item?.title,
         artist = playback.item?.artist,
@@ -160,7 +171,7 @@ fun FoliaPlayerPage(
     val shownPositionMs =
         if (scrubbing) (scrubValue * playback.durationMs).toLong() else playback.positionMs
 
-    // 队列抽屉 / 歌词入口
+    // 闃熷垪鎶藉眽 / 姝岃瘝鍏ュ彛
     var queueOpen by remember { mutableStateOf(initialQueueOpen) }
 
     val enterScale by animateFloatAsState(
@@ -180,7 +191,7 @@ fun FoliaPlayerPage(
             .background(
                 Brush.verticalGradient(backdrop.colors),
             )
-            // 跟手下拉关闭：位移实时跟手，松手按里程决定关闭或回弹。
+            // 跟手下拉关闭：位移实时跟手，松手按里程度决定关闭或回弹。
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
                     onDragEnd = {
@@ -308,7 +319,7 @@ fun FoliaPlayerPage(
 
             Spacer(Modifier.height(GySpace.l))
 
-            // ---------- 底部卡片 ----------
+            // ---------- 搴曢儴鍗＄墖 ----------
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -331,13 +342,15 @@ fun FoliaPlayerPage(
                     onToggleLike = onToggleLike,
                     onAddToPlaylist = onAddToPlaylist,
                     onOpenLyrics = onOpenLyrics,
+                    onOpenLyricStyle = onOpenLyricStyle,
+                    lyricStyleLabel = lyricStyleActionLabel,
                     onCycleMode = onCycleMode,
                     onOpenQueue = { queueOpen = !queueOpen },
                     queueOpen = queueOpen,
                 )
                 Spacer(Modifier.height(GySpace.s))
 
-                // 队列抽屉（Folia 的 Playlist tab 手机化）
+                // 闃熷垪鎶藉眽锛團olia 鐨?Playlist tab 鎵嬫満鍖栵級
                 AnimatedVisibility(
                     visible = queueOpen,
                     enter = slideInVertically(animationSpec = FoliaMotion.move()) { it / 3 } +
@@ -424,7 +437,7 @@ fun FoliaPlayerPage(
 /** 转场起点缩放：迷你条 56dp 高在 800dp 屏上约 0.07，这里取一个看得见的 0.86（外壳可覆盖）。 */
 private const val entryScale: Float = 0.86f
 
-/** 标题字号：Folia 桌面大标题 34sp；360dp 宽的手机取 24sp（两行放得下 20 个汉字）。 */
+/** 标题字号：Folia 桌面大标题 34sp；360dp 宽的手机放 24sp（两行放得下 20 个汉字）。 */
 private val PLAYER_TITLE_SP = 24.sp
 private val PLAYER_TITLE_LINE_SP = 32.sp
 
@@ -447,6 +460,10 @@ private fun PlayerCard(
     onToggleLike: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onOpenLyrics: () -> Unit,
+    /** V0：歌词样式入口；null 时该按钮不渲染。 */
+    onOpenLyricStyle: (() -> Unit)?,
+    /** V0：歌词样式按钮文案（app 侧注入）。 */
+    lyricStyleLabel: String,
     onCycleMode: () -> Unit,
     onOpenQueue: () -> Unit,
     queueOpen: Boolean,
@@ -481,7 +498,7 @@ private fun PlayerCard(
                 accent = FALLBACK_SEED,
                 contentDescription = playback.item?.title,
             )
-            // 无封面兜底：底部压一层同色渐变，把「没有任何图」变成「有质感的色块」。
+            // 鏃犲皝闈㈠厹搴曪細搴曢儴鍘嬩竴灞傚悓鑹叉笎鍙橈紝鎶娿€屾病鏈変换浣曞浘銆嶅彉鎴愩€屾湁璐ㄦ劅鐨勮壊鍧椼€嶃€?
             if (playback.item?.artworkUri.isNullOrBlank()) {
                 Box(
                     Modifier
@@ -532,7 +549,7 @@ private fun PlayerCard(
 
         Spacer(Modifier.height(GySpace.s))
 
-        // 动作行：收藏 / 加入歌单 / 队列 / 歌词
+        // 鍔ㄤ綔琛岋細鏀惰棌 / 鍔犲叆姝屽崟 / 闃熷垪 / 姝岃瘝
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(GySpace.s),
@@ -575,8 +592,20 @@ private fun PlayerCard(
                     fill = Gyp.tint,
                     onClick = onOpenLyrics,
                 )
+                // V0锛氭瓕璇嶆牱寮忓叆鍙ｏ紙Folia 鐨勬牱寮忕獥鍙ｅ湪鎵嬫満涓婃敹鎴愪竴棰楁寜閽?+ 搴曢儴寮瑰眰锛夈€?
+                if (onOpenLyricStyle != null) {
+                    CardAction(
+                        icon = GuangYueIcons.Sparkles,
+                        active = false,
+                        label = lyricStyleLabel,
+                        ink = cardInk,
+                        idle = cardInkSoft,
+                        fill = Gyp.tint,
+                        onClick = onOpenLyricStyle,
+                    )
+                }
             }
-            // U5：原先这里挂着「歌词功能即将上线」的小字占位；歌词页落地后撤掉，
+            // U5锛氬師鍏堣繖閲屾寕鐫€銆屾瓕璇嶅姛鑳藉嵆灏嗕笂绾裤€嶇殑灏忓瓧鍗犱綅锛涙瓕璇嶉〉钀藉湴鍚庢挙鎺夛紝
             // 入口只剩上面那颗「歌词」按钮，右侧留白顶住动作行。
             Spacer(Modifier.weight(1f))
         }
@@ -636,7 +665,7 @@ private fun PlayerCard(
                 idle = cardInkSoft,
                 onClick = onNext,
             )
-            // 队列：Folia 桌面在右上下拉里，手机给一颗常驻键
+            // 闃熷垪锛欶olia 妗岄潰鍦ㄥ彸涓婁笅鎷夐噷锛屾墜鏈虹粰涓€棰楀父椹婚敭
             Box(
                 modifier = Modifier
                     .size(48.dp)
@@ -687,7 +716,7 @@ private fun CardAction(
     }
 }
 
-/** 传输键：48dp 圆（需求要求 ≥48dp；Folia 桌面是 44dp 见 report §3）。 */
+/** 传输键：48dp 圆（需求要求 ≥48dp；Folia 桌面是 44dp，见 report §3）。 */
 @Composable
 private fun TransportButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -818,7 +847,7 @@ private const val QUEUE_VISIBLE = 4
  * 底部悬浮进度胶囊：Folia `player-playing-m412-light.png` 那条 = 左时间 / 2dp 细轨 / 右时间，
  * 右侧再挂一颗音质键（Folia 桌面是 Quality tab，手机压成一颗按钮）。
  *
- * 轨道本体用 Slider 实现以获得拖动 + 无障碍语义，视觉压到 2dp 细线（拇指透明、整条可拖）。
+ * 轨道本体用 Slider 实现以获取拖动 + 无障碍语义，视觉压到 2dp 细线（拇指透明、整条可拖）。
  */
 @Composable
 private fun PlaybackPill(

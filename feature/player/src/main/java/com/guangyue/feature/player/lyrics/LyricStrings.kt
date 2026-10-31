@@ -85,8 +85,8 @@ fun lyricSourceLine(artist: String?, source: String?): String {
 }
 
 /**
- * ��Դ id �� �İ�����ǣ�`app` �� `lyricStrings()`��ע��ֵ��
- * ��ͼ������Ԥ�������� `Context`��Ҳ����ע��������������
+ * 文案 id 到字符串的映射：由 `app` 侧 `lyricStrings()` 注入取值。
+ * 截图用例也预先注入（没有 `Context`），否则注入点拿不到文案。
  */
 val LyricStringHost = androidx.compose.runtime.staticCompositionLocalOf<(Int) -> String> {
     { "" }

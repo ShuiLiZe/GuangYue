@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -53,6 +55,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.guangyue.core.data.lyrics.LyricLine
+import com.guangyue.core.lyrics.AnimationIntensity
+import com.guangyue.core.lyrics.ClassicTuning
+import com.guangyue.core.lyrics.Line
 import com.guangyue.core.player.PlaybackState
 import com.guangyue.feature.library.design.FoliaEmptyState
 import com.guangyue.feature.library.design.GuangYueDesign
@@ -63,6 +68,16 @@ import com.guangyue.feature.library.design.Gyp
 import com.guangyue.feature.library.design.canBlur
 import com.guangyue.feature.library.design.clickableNoRipple
 import com.guangyue.feature.library.design.icons.GuangYueIcons
+import com.guangyue.feature.player.lyrics.visualizer.ClassicLyricLine
+import com.guangyue.feature.player.lyrics.visualizer.CoverPalette
+import com.guangyue.feature.player.lyrics.visualizer.VisualizerBackdrop
+import com.guangyue.feature.player.lyrics.visualizer.VisualizerClock
+import com.guangyue.feature.player.lyrics.visualizer.hasVisibleWords
+import com.guangyue.feature.player.lyrics.visualizer.rememberCoverPalette
+import com.guangyue.feature.player.lyrics.visualizer.rememberReduceMotion
+import com.guangyue.feature.player.lyrics.visualizer.rememberStaticVisualizerClock
+import com.guangyue.feature.player.lyrics.visualizer.rememberVisualizerClock
+import com.guangyue.feature.player.lyrics.visualizer.runningUnderRobolectric
 import com.guangyue.feature.player.screen.PlayerBackdrop
 import com.guangyue.feature.player.screen.backdropUsesDarkInk
 import com.guangyue.feature.player.screen.playerBackdrop
@@ -105,10 +120,32 @@ fun LyricFlowScreen(
     pureMusic: Boolean = false,
     darkMode: Boolean = false,
     coverColor: Color? = null,
+    // ---------------- V0：流光(classic)样式在内核上的接线（全部有默认值，不影响 U5 原行为） ----------------
+    /** 内核时间轴（`LyricTimeline.toLines(...)` 的产物）。为空时整页走 U5 原逐行视图。 */
+    kernelLines: List<Line> = emptyList(),
+    /** 流光样式调参（弹层里改，持久化在 [com.guangyue.core.prefs.AppPreferences.classicTuning]）。 */
+    classicTuning: ClassicTuning = ClassicTuning(),
+    /** 封面 url；给了就走封面取色 + 流体背景 + 换歌柔焦。 */
+    coverUrl: String? = null,
+    /** 打开「歌词样式」弹层；为 null 时不显示入口。 */
+    onOpenStyleSheet: (() -> Unit)? = null,
+    /** 样式入口的无障碍文案（feature:player 无资源表，由 app 侧注入）。 */
+    styleLabel: String = "",
     modifier: Modifier = Modifier,
 ) {
     val backLabel = str(strings.back)
     val emptyKind = lyricEmptyKind(lineCount = lyrics.size, loading = loading, failed = failure != null)
+
+    // ---------------- V0：减少动效 / 封面取色 ----------------
+    val reduceMotion = rememberReduceMotion()
+    // 当前句在内核时间轴上的下标：U5 的 currentIndex 与 kernelLines 一一对应（同一份歌词）。
+    // 对不上（第一句之前、越界）就当没有内核行，整页回落到 U5 原视图。
+    val activeLine: Line? = if (currentIndex in kernelLines.indices) kernelLines[currentIndex] else null
+    val palette: CoverPalette = rememberCoverPalette(
+        coverUrl = coverUrl,
+        dark = darkMode,
+        fallbackAccent = accent,
+    )
 
     // 顶栏与胶囊的墨色跟着背景亮暗走，跟播放页判据一致。
     val backdrop = remember(coverColor, accent, darkMode) {
@@ -137,7 +174,30 @@ fun LyricFlowScreen(
         playback.positionMs
     }
 
-    Box(
+    // 渲染里读：系统字号倍率（1.3 倍不溢出），与内核字号 clamp 一起用。
+    val lyricsFontScale = LocalDensity.current.fontScale.toDouble()
+    val viewportWidthPx = with(LocalDensity.current) {
+        LocalConfiguration.current.screenWidthDp.dp.toPx().toDouble()
+    }
+
+    // 「流光」逐词画布需要逐帧时间；三态只在 derivedStateOf 里读，整行不会每帧重组。
+    // Robolectric 下 withFrameNanos 会把 waitForIdle() 挂住（同 FrameJank 的坑），改用固定时钟。
+    val clock: VisualizerClock = if (runningUnderRobolectric) {
+        rememberStaticVisualizerClock(positionMs / 1000.0)
+    } else {
+        rememberVisualizerClock(
+            positionMsProvider = { positionMs },
+            playingProvider = { playback.isPlaying },
+            enabled = !reduceMotion,
+        )
+    }
+
+    // 背景层：给了封面 url 就走「封面取色 + 模糊封面 + overlay 渐变 + 换歌柔焦」，
+    // 否则沿用 U5 的封面渐变（playerBackdrop），两套视觉互不影响。
+    VisualizerBackdrop(
+        palette = palette,
+        coverUrl = coverUrl,
+        dark = darkMode,
         modifier = modifier
             .fillMaxSize()
             .background(Brush.verticalGradient(backdrop.colors))
@@ -200,6 +260,26 @@ fun LyricFlowScreen(
                         )
                     }
                 }
+                // 样式入口：与 U5 原页面同款 48dp 触控。
+                val styleLabelText = styleLabel.ifEmpty { str(strings.title) }
+                if (onOpenStyleSheet != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(onBackdrop.copy(alpha = 0.12f))
+                            .clickableNoRipple(onOpenStyleSheet)
+                            .semantics { contentDescription = styleLabelText },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            GuangYueIcons.Sparkles,
+                            null,
+                            tint = onBackdrop,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
             }
 
             // ---------------- 歌词列表 / 空态 ----------------
@@ -232,12 +312,31 @@ fun LyricFlowScreen(
                     ) {
                         itemsIndexed(lyrics) { index, line ->
                             val visual = lyricRowVisual(index, currentIndex)
-                            LyricLineRow(
-                                line = line,
-                                visual = visual,
-                                accent = accent,
-                                onClick = { onSeekToLine(index) },
-                            )
+                            // V0：当前句有内核时间轴时走「流光」逐词画布，其余行保留 U5 档位视图，
+                            // 这样上下句上下文、点行跳转、自动跟随都不变。
+                            val activeKernelLine = if (visual.active) activeLine else null
+                            if (activeKernelLine != null && activeKernelLine.hasVisibleWords()) {
+                                ClassicLyricLine(
+                                    line = activeKernelLine,
+                                    clock = clock,
+                                    tuning = classicTuning,
+                                    intensity = AnimationIntensity.NORMAL,
+                                    reduceMotion = reduceMotion,
+                                    viewportWidthPx = viewportWidthPx,
+                                    lyricsFontScale = lyricsFontScale,
+                                    activeColor = accent,
+                                    baseColor = onBackdrop,
+                                    fontFamily = GuangYueDesign.Serif,
+                                    modifier = Modifier.clickableNoRipple { onSeekToLine(index) },
+                                )
+                            } else {
+                                LyricLineRow(
+                                    line = line,
+                                    visual = visual,
+                                    accent = accent,
+                                    onClick = { onSeekToLine(index) },
+                                )
+                            }
                         }
                     }
                 }

@@ -1,6 +1,7 @@
 package com.guangyue.core.prefs
 
 import android.content.Context
+import com.guangyue.core.lyrics.ClassicTuning
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -63,6 +64,37 @@ class AppPreferences @Inject constructor(
         get() = prefs.getString(KEY_LX_QUALITY, "320k")?.takeIf { it in LX_QUALITIES } ?: "320k"
         set(value) = prefs.edit().putString(KEY_LX_QUALITY, value).apply()
 
+    /**
+     * 歌词样式「流光」（Folia 的 classic）的调参。
+     *
+     * 对应 Folia `classic/tuning.ts` 的 storage.key = 'classic_tuning'：那边存 JSON，
+     * 这边按同一份字段存成一行竖线分隔的文本（`旋转|呼吸浮动|legacy布局|词距`），
+     * 存储键沿用 `classic_tuning`，读取时用内核的 [ClassicTuning.sanitize] 做同一套钳位
+     * （呼吸浮动与词距都钳到 [0,2]，非法值退回默认；默认词距 0.7、旋转开、legacy 关）。
+     * 解析失败一律退回 [ClassicTuning.sanitize] 给出的默认值，不抛异常。
+     */
+    var classicTuning: ClassicTuning
+        get() = ClassicTuning.sanitize(
+            enableWordRotation = prefs.getBoolean(KEY_CLASSIC_ROTATION, true),
+            breathingFloatMultiplier = prefs.getFloat(KEY_CLASSIC_BREATHING, 1f).toDouble(),
+            useLegacyLayout = prefs.getBoolean(KEY_CLASSIC_LEGACY, false),
+            wordSpacing = prefs.getFloat(KEY_CLASSIC_SPACING, 0.7f).toDouble(),
+        )
+        set(value) {
+            val safe = ClassicTuning.sanitize(
+                enableWordRotation = value.enableWordRotation,
+                breathingFloatMultiplier = value.breathingFloatMultiplier,
+                useLegacyLayout = value.useLegacyLayout,
+                wordSpacing = value.wordSpacing,
+            )
+            prefs.edit()
+                .putBoolean(KEY_CLASSIC_ROTATION, safe.enableWordRotation)
+                .putFloat(KEY_CLASSIC_BREATHING, safe.breathingFloatMultiplier.toFloat())
+                .putBoolean(KEY_CLASSIC_LEGACY, safe.useLegacyLayout)
+                .putFloat(KEY_CLASSIC_SPACING, safe.wordSpacing.toFloat())
+                .apply()
+        }
+
     /** 用户启用的取链源 id，多个用逗号分隔，按启用顺序依次尝试。 */
     var lxEnabledIds: String
         get() = prefs.getString(KEY_LX_ENABLED, "").orEmpty()
@@ -74,6 +106,12 @@ class AppPreferences @Inject constructor(
         const val KEY_LAST_SOURCE = "search_last_source"
         const val KEY_LX_QUALITY = "lx_default_quality"
         const val KEY_LX_ENABLED = "lx_enabled_ids"
+
+        /** 「流光」歌词样式调参（对应 Folia classic/tuning.ts 的 storage.key = 'classic_tuning'）。 */
+        const val KEY_CLASSIC_ROTATION = "classic_tuning_rotation"
+        const val KEY_CLASSIC_BREATHING = "classic_tuning_breathing"
+        const val KEY_CLASSIC_LEGACY = "classic_tuning_legacy"
+        const val KEY_CLASSIC_SPACING = "classic_tuning_spacing"
 
         /** 取链源支持的音质档，由低到高。 */
         val LX_QUALITIES = listOf("128k", "320k", "flac", "flac24bit")

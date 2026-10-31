@@ -294,6 +294,27 @@
     <string name="lyrics_source">歌词</string>
     <!-- zh-CN.ts: 3869 "statusNone"（「无」） -->
     <string name="lyrics_source_none">无</string>
+    <!-- ===== V0 歌词样式（Folia lyricStyle / visualizer window「歌词样式」窗口手机化） ===== -->
+    <!-- zh-CN.ts: 5363 "lyricStyle"「歌词样式」 -->
+    <string name="lyrics_style">歌词样式</string>
+    <!-- zh-CN.ts: 2495 "lyricsStyleSettings" -->
+    <string name="lyrics_style_settings">歌词样式</string>
+    <!-- zh-CN.ts: 915 "visualizerClassic"「流光」 -->
+    <string name="lyrics_style_classic">流光</string>
+    <!-- classic/tuning.ts: enableWordRotation -->
+    <string name="lyrics_style_rotation">字词旋转</string>
+    <!-- classic/tuning.ts: breathingFloatMultiplier（0–2 倍） -->
+    <string name="lyrics_style_breathing">呼吸浮动</string>
+    <!-- classic/tuning.ts: wordSpacing（0–2 倍） -->
+    <string name="lyrics_style_spacing">词距</string>
+    <!-- classic/tuning.ts: storage.resetNotice 'notifications.classicReset' -->
+    <string name="lyrics_style_reset">恢复默认</string>
+    <!-- zh-CN.ts: 2498 "lyricsStyleSettingsDesc" -->
+    <string name="lyrics_style_desc">当前渲染器附加参数</string>
+    <!-- zh-CN.ts: 2497 "lyricStyleNoOptions"（本段其它样式占位不显示，仅流光可选） -->
+    <string name="lyrics_style_no_options">这个样式没有参数</string>
+    <!-- 自拟：样式弹层的关闭语义（底部弹层下滑关闭，无障碍要有个说法） -->
+    <string name="lyrics_style_close">关闭</string>
     <!-- ===== U6 首页墙（Folia home/explore：问候 + 推荐歌单 2 列网格 + 横滑分区） ===== -->
     <!-- zh-CN.ts: 1613 "welcomeBack"（「欢迎回来」） -->
     <string name="home_wall_greeting">欢迎回来</string>

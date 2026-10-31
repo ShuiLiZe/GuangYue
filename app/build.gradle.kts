@@ -149,7 +149,11 @@ android {
                     "roborazzi.test.record",
                     System.getenv("GUANGYUE_RECORD_SCREENSHOTS") ?: "false",
                 )
-                test.systemProperty("roborazzi.output.dir", "${rootDir}/docs/ui-u7")
+                // V0 歌词样式截图要落到别的目录时传 -ProborazziOutputDir=...（默认仍是 docs/ui-u7）。
+                test.systemProperty(
+                    "roborazzi.output.dir",
+                    (findProperty("roborazziOutputDir") as String?) ?: "${rootDir}/docs/ui-u7",
+                )
                 test.maxHeapSize = "3g"
             }
         }

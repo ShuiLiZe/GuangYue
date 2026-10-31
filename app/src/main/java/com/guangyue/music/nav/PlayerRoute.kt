@@ -58,6 +58,10 @@ fun IPlayerRoute(
     darkMode: Boolean,
     accent: Color,
     onOpenLyrics: () -> Unit,
+    /** V0：播放页「歌词样式」入口（打开底部弹层）；为 null 时不渲染这颗按钮。 */
+    onOpenLyricStyle: (() -> Unit)? = null,
+    /** 「歌词样式」按钮的无障碍文案（app 侧注入 strings.xml 的 id）。 */
+    lyricStyleLabel: String = "",
     onAddToPlaylist: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -151,6 +155,8 @@ fun IPlayerRoute(
             },
             onAddToPlaylist = onAddToPlaylist,
             onOpenLyrics = onOpenLyrics,
+            onOpenLyricStyle = onOpenLyricStyle,
+            lyricStyleLabel = lyricStyleLabel,
             onPickQueueRow = { index ->
                 queueRows.getOrNull(index)?.let { row ->
                     playback.queueSnapshot().getOrNull(row.index)?.let { playback.playNow(it) }
