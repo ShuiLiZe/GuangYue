@@ -118,3 +118,47 @@ gfxinfo（模拟器软件渲染，拖拽歌词样式弹层时采样）：Total f
 | 减少动效 | PASS |
 | gfxinfo 帧统计 | 部分 PASS（模拟器数据，需真机复测） |
 | assembleRelease + SHA-256 | PASS |
+
+---
+
+## V0c 收尾（2026-10-31 21:30，WIP）
+
+本轮只做取证与结论固化，**未改渲染代码**（GlowWord.kt 已还原到 91c86a9）。
+
+| # | 项目 | 结果 | 说明 |
+|---|------|------|------|
+| 1 | 辉光过程 6 帧实拍（emulator-5554） | **FAIL** | 矩形块是**真机缺陷**，不是 Robolectric 软件渲染伪影。见下节三种尝试。 |
+| 2 | 舞台只画 activeLine + 字幕层 | **未做** | LyricFlowScreen.kt 仍是 LazyColumn 多行 + 左对齐档位；VisualizerSubtitleOverlay / subtitleFontSizes 移植未开始。 |
+| 3 | 封面取色流体背景 实拍（浅/深） | **PASS** | `v0c-backdrop-cover-light.png` / `v0c-backdrop-cover-dark.png`（720x1600，内置测试封面 BundledTestCover 取色）。 |
+| 4 | Folia 同句对照 | **FAIL** | _folia-src 本地 dev 未跑通，未出图。 |
+
+### 1. 矩形块取证结论（真机缺陷，非伪影）
+
+装 debug 包到 emulator-5554，用 debug-only 取证入口 `.V0cStageActivity`（`am start ... --ei v0c_ms <ms>`）逐帧实拍。原实现（HEAD 91c86a9）的 `GlowWordCanvas` 用 `canvas.saveLayer + PorterDuff.CLEAR 画字盒 + BlurMaskFilter` 画辉光，在真机 GPU 硬件加速画布上稳定出现**整块矩形底 / 实心色块**，与 Robolectric 截图现象一致 ⇒ 判定为真实渲染缺陷，任务里「若模拟器也出矩形则改为不用 saveLayer」的条件被触发。
+
+三种尝试与结果（完整补丁见 `docs/ui-v0/glow-attempts.patch`）：
+
+1. 字盒 RectF ∪ 字形 Path 作为遮罩 → **仍出整块矩形**（Region 的偶数环绕规则在硬件加速层不生效）。
+2. BlurMaskFilter + 字盒外扩 ∪ 字形 → **仍出矩形**（BlurMaskFilter 在硬件加速画布上退化为「实心矩形 + 模糊」）。
+3. CPU 距离场光晕：PathMeasure 沿字形重采样折线，逐像素求最近距离按高斯权生成 ARGB 位图再 drawBitmap。**零 saveLayer / 零 CLEAR / 零字盒**，某一版参数下实拍确认笔画周围是干净圆形光晕；但随后调参（sigma 3.2f→2.4f、pad 2.5→1.8）重新编译后，实拍又出现深色矩形块与红色色块回归。
+
+⇒ 该方向**未收敛**，本轮不交付；渲染代码全部回退，留待下一会话重做。
+
+### 2. debug-only 取证入口（已随本轮提交）
+
+`app/src/debug/`，仅 debug 源集，不进 release：
+
+- `AndroidManifest.xml`：注册 `.V0cStageActivity`、`.V0cBackgroundActivity`。
+- `V0cStageHarness.kt`：内置 5 句 LRC + `LyricTimeline.toLines` 生成内核 Line，`V0cStage(positionMs, dark)` 渲染 `LyricFlowScreen`；extra `v0c_ms` / `v0c_dark`。
+- `V0cBackgroundActivity.kt`：只画 `rememberCoverBackdrop(BundledTestCover, dark)` → `VisualizerBackdrop`；extra `v0c_dark`。
+
+采图命令（可靠姿势）：`adb shell am force-stop com.guangyue.music` → `am start -n com.guangyue.music/.V0cStageActivity --ei v0c_ms 1300 --ez v0c_dark false` → `Start-Sleep` 19~20s（冷启到画面稳定约 12~20s）→ `adb shell screencap -p /sdcard/a.png` → `adb pull`。`exec-out` 重定向在 PowerShell 下会坏。
+
+### 3. 测试
+
+本轮全量单测：**566 总 / 0 失败 / 0 错误 / 34 跳过**（`.\gradlew.bat --offline test`，BUILD SUCCESSFUL）。
+
+### 4. 本轮未做
+
+- assembleRelease 与 SHA-256（按指示跳过）。
+- 舞台单行 + 字幕层、Folia 同句对照，均留待下一会话。

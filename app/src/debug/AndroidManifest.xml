@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- V0c 取证入口（仅 debug 源集）：固定 LRC 直构 LyricFlowScreen，供模拟器实拍。 -->
+    <application>
+        <activity
+            android:name=".V0cStageActivity"
+            android:exported="true"
+            android:theme="@style/Theme.GuangYue" />
+        <activity
+            android:name=".V0cBackgroundActivity"
+            android:exported="true"
+            android:theme="@style/Theme.GuangYue" />
+    </application>
+</manifest>

@@ -1,0 +1,132 @@
+// V0c 取证专用（仅 debug 源集，release 不含）：
+// 直接以固定 LRC（「为你弹奏萧邦的夜曲」）构图 LyricFlowScreen，
+// 用 extra `v0c_ms` 指定播放时刻、`v0c_dark` 指定浅/深，拍「辉光过程 / 三态 / 字幕层 / 取色背景」。
+package com.guangyue.music
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import com.guangyue.core.data.lyrics.LyricLine
+import com.guangyue.core.data.lyrics.LyricTimeline
+import com.guangyue.core.lyrics.ClassicTuning
+import com.guangyue.core.lyrics.Line
+import com.guangyue.core.lyrics.Word
+import com.guangyue.core.player.MediaOrigin
+import com.guangyue.core.player.PlaybackState
+import com.guangyue.core.player.Quality
+import com.guangyue.core.player.QueueItem
+import com.guangyue.feature.player.lyrics.LyricFlowScreen
+import com.guangyue.feature.player.lyrics.LyricStringHost
+import com.guangyue.feature.player.lyrics.LyricStrings
+import com.guangyue.music.ui.design.Folia
+import com.guangyue.music.ui.design.FoliaTheme
+
+private const val LRC = "[00:00.00]一群嗜血的蚂蚁\n" +
+    "[00:04.00]为你弹奏萧邦的夜曲\n" +
+    "[00:08.00]纪念我死去的爱情\n" +
+    "[00:12.00]跟夜风一样的声\n" +
+    "[00:16.00]我面无表情看孤独的风景\n"
+
+private val TRANSLATIONS = mapOf(
+    "为你弹奏萧邦的夜曲" to "For you I play Chopin's nocturne",
+    "纪念我死去的爱情" to "Remembering my dead love",
+)
+
+private val WORD_SPLIT = mapOf(
+    "为你弹奏萧邦的夜曲" to listOf("为你", "弹奏", "萧邦的", "夜曲"),
+)
+
+/** 极简 LRC：[mm:ss.xx]文本。 */
+private fun parseLrc(raw: String): List<LyricLine> = raw.trim().lines().mapNotNull { row ->
+    val match = Regex("""\[(\d{2}):(\d{2})\.(\d{2})](.*)""").find(row) ?: return@mapNotNull null
+    val (mm, ss, cs, text) = match.destructured
+    LyricLine(
+        timeMs = mm.toLong() * 60_000L + ss.toLong() * 1_000L + cs.toLong() * 10L,
+        text = text,
+    )
+}
+
+private fun buildKernelLines(): List<Line> =
+    LyricTimeline.toLines(parseLrc(LRC), 20_000L).map { line ->
+        val text = line.fullText.trim()
+        val words = WORD_SPLIT[text]
+        if (words == null || words.joinToString("") != text) {
+            line.copy(translation = TRANSLATIONS[text])
+        } else {
+            val span = (line.endTime - line.startTime) / words.size
+            line.copy(
+                words = words.mapIndexed { i, w ->
+                    Word(w, line.startTime + span * i, line.startTime + span * (i + 1))
+                },
+                translation = TRANSLATIONS[text],
+            )
+        }
+    }
+
+/** 播放中：[positionMs] 决定当前行与逐字进度。 */
+private fun playing(positionMs: Long) = PlaybackState(
+    item = QueueItem(
+        key = "v0c", title = "夜曲", artist = "周杰伦", album = "十一月的萧邦",
+        artworkUri = null,
+        origin = MediaOrigin(pluginId = "v0c", trackKey = "v0c", quality = Quality.SUPER),
+    ),
+    isPlaying = true, positionMs = positionMs, durationMs = 20_000L, bufferedMs = 20_000L,
+    shuffle = false, repeatMode = 0, queueSize = 5, index = 1,
+)
+
+/** V0c 舞台：唯一入口，只画 activeLine + 字幕层。 */
+@Composable
+fun V0cStage(positionMs: Long, dark: Boolean) {
+    FoliaTheme(dark = dark) {
+        val kernel = remember { buildKernelLines() }
+        val lines = remember { parseLrc(LRC) }
+        CompositionLocalProvider(LyricStringHost provides { id -> id.toString() }) {
+            LyricFlowScreen(
+                lyrics = lines,
+                currentIndex = 1,
+                strings = V0cStrings,
+                playback = playing(positionMs),
+                accent = Folia.colors.accent,
+                onBack = {},
+                onSeekToLine = {},
+                onManualScroll = {},
+                onTogglePlay = {},
+                onSeek = {},
+                artist = "周杰伦",
+                source = "V0c 取证",
+                darkMode = dark,
+                coverColor = Color(0xFFB4553C),
+                kernelLines = kernel,
+                classicTuning = ClassicTuning(),
+                coverUrl = null,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+/** 取证不需要真实文案：id 转串即可（空态不出现）。 */
+private val V0cStrings = LyricStrings(
+    back = 0, title = 1, play = 2, pause = 3, empty = 4, emptyHint = 5, loading = 6,
+    loadFailed = 7, failedHint = 8, retry = 9, pureMusic = 10, seekBar = 11,
+    sourceLabel = 12, sourceNone = 13,
+)
+
+/**
+ * 入口：
+ * adb shell am start -n com.guangyue.music/.V0cStageActivity --ei v0c_ms 2000 --ez v0c_dark true
+ */
+class V0cStageActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val positionMs = intent?.getLongExtra("v0c_ms", 2_000L) ?: 2_000L
+        val dark = intent?.getBooleanExtra("v0c_dark", true) ?: true
+        setContent { V0cStage(positionMs, dark) }
+    }
+}

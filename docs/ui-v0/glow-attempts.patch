@@ -1,0 +1,222 @@
+﻿diff --git a/feature/player/src/main/java/com/guangyue/feature/player/lyrics/visualizer/GlowWord.kt b/feature/player/src/main/java/com/guangyue/feature/player/lyrics/visualizer/GlowWord.kt
+index 4eef06c..e4bb227 100644
+--- a/feature/player/src/main/java/com/guangyue/feature/player/lyrics/visualizer/GlowWord.kt
++++ b/feature/player/src/main/java/com/guangyue/feature/player/lyrics/visualizer/GlowWord.kt
+@@ -16,6 +16,8 @@
+ //  4. 弹簧：spring(stiffness=200, dampingRatio=20/(2√200)≈0.7071067811865476)，推导见 VisualizerKernel.kt。
+ package com.guangyue.feature.player.lyrics.visualizer
+ 
++import android.graphics.BlurMaskFilter
++import android.graphics.MaskFilter
+ import androidx.compose.animation.animateColorAsState
+ import androidx.compose.animation.core.animateFloatAsState
+ import androidx.compose.animation.core.tween
+@@ -225,10 +227,15 @@ fun GlowWord(
+ /**
+  * 辉光层：外圈 R*0.4 @1.0 + 内圈 R*0.4 @0.7，逐字画在正文 Text 下方。
+  *
+- * 审图第 3 条（帧 2–6 里「弹奏」「萧邦」背后出现浅色矩形底）的根因是辉光曾是一整块铺满的模糊图层：
+- * `Modifier.blur` 会先把节点光栅化成一块实心矩形再高斯模糊。现在 `GlowGlyph` 直接对
+- * 「字形轮廓」(`TextLayoutResult.getPathForRange`) 施加 `BlurMaskFilter`，模糊源只有字形本身，
+- * 字与字之间、字盒空白永远不会被涂上颜色。半径照 Folia wordGlow.ts。
++ * 审图第 3 条（帧 2–6 里「弹奏」「萧邦」背后出现浅色矩形底）的根因链，模拟器实拍逐条验过：
++ *  1. `Modifier.blur` 把节点光栅化成实心矩形再模糊；
++ *  2. 直接对 `BlurMaskFilter` + 字形 Path 绘制时，硬件加速层会退化成「整块实心矩形 + 模糊」，
++ *     再被 CLEAR 遮罩切成字盒矩形，就是一块斜的浅色矩形底（模拟器上照样复现，不是 Robolectric 伪影）。
++ *
++ * 现在与 Folia wordGlow.ts 的 `drop-shadow` 同构、但把模糊搬到离屏位图里做：每个字先在
++ * **ARGB 软件位图**上用字形 Path 画一次带 BlurMaskFilter 的光团（见 [renderGlowTile]），
++ * 再把这张「只有笔画附近有像素」的位图贴上屏幕。不要 saveLayer、不要 CLEAR 遮罩、
++ * 字盒矩形不参与绘制，模糊源只有字形本身。半径照 Folia wordGlow.ts。
+  */
+ @Composable
+ private fun GlowLayer(
+@@ -294,14 +301,13 @@ private fun GlowWordCanvas(
+     val innerPx = with(density) { (innerRadiusCss * WordGlow.DROP_SHADOW_RADIUS_SCALE).toFloat().dp.toPx() }
+     val outerPx = with(density) { (outerRadiusCss * WordGlow.DROP_SHADOW_RADIUS_SCALE).toFloat().dp.toPx() }
+     val argb = color.toArgb()
+-    // 按字取「不含字形的字盒矩形」：高斯模糊会把整块矩形都涂亮，只有用它做
+-    // DST_OUT 遮罩，才能把模糊层裁到字形轮廓上（审图第 3 条：不能出矩形边）。
+-    val boxPaint = remember {
+-        Paint().asFrameworkPaint().apply {
+-            isAntiAlias = true
+-            this.color = android.graphics.Color.BLACK
+-        }
++    // 逐字字形路径：BlurMaskFilter 会沿路径填充后模糊，只有路径是真字形才不会有矩形边。
++    val glyphPaths = remember(layout) {
++        chars.indices.map { index -> layout.getPathForRange(index, index + 1).asAndroidPath() }
+     }
++    // 离屏位图（**自带 alpha 通道**）：BlurMaskFilter 只有作用在带 alpha 的位图上才只模糊
++    // 形状、不填框；直接画在硬件加速层的画布上会被退化成「整块实心矩形 + 模糊」。
++    val bitmapCache = remember { HashMap<String, GlowTile?>() }
+     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+         for (index in chars.indices) {
+             val strength = if (!perChar) {
+@@ -317,42 +323,140 @@ private fun GlowWordCanvas(
+                 )
+             }
+             if (strength <= 0.002f) continue
+-            val path = layout.getPathForRange(index, index + 1)
+-            val box = layout.getBoundingBox(index)
+-            listOf(outerPx to 1.0f, innerPx to WordGlow.DROP_SHADOW_INNER_ALPHA.toFloat()).forEach { pair ->
++            val glyph = glyphPaths[index]
++            val bounds = android.graphics.RectF()
++            glyph.computeBounds(bounds, true)
++            if (bounds.isEmpty) continue
++            listOf(innerPx to WordGlow.DROP_SHADOW_INNER_ALPHA.toFloat(), outerPx to 1.0f).forEach { pair ->
+                 val layerAlpha = (strength * pair.second).coerceIn(0f, 1f)
+                 if (layerAlpha <= 0.001f) return@forEach
+-                drawIntoCanvas { canvas ->
+-                    val nativeParent = canvas.nativeCanvas
+-                    nativeParent.saveLayer(null, null)
+-                    val paint = Paint().asFrameworkPaint().apply {
+-                        this.color = android.graphics.Color.argb(
+-                            (layerAlpha * 255f).toInt().coerceIn(0, 255),
+-                            android.graphics.Color.red(argb),
+-                            android.graphics.Color.green(argb),
+-                            android.graphics.Color.blue(argb),
+-                        )
+-                        // 只画字形轮廓外圈的模糊光：先擦掉字盒内已经落在字形上的部分，
+-                        // 避免「实心字 + 模糊框」叠成矩形底（审图第 3 条）。
+-                        xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
+-                        nativeParent.drawRect(
+-                            android.graphics.RectF(box.left, box.top, box.right, box.bottom),
+-                            this,
+-                        )
+-                        xfermode = null
+-                        maskFilter = android.graphics.BlurMaskFilter(
+-                            pair.first.coerceAtLeast(0.1f),
+-                            android.graphics.BlurMaskFilter.Blur.NORMAL,
+-                        )
++                val radius = pair.first.coerceAtLeast(0.1f)
++                val key = "$index|${radius.toInt()}|$argb"
++                val tile = bitmapCache.getOrPut(key) { renderHaloTile(glyph, radius, argb) }
++                if (tile != null) {
++                    drawIntoCanvas { canvas ->
++                        val paint = android.graphics.Paint().apply {
++                            isAntiAlias = true
++                            alpha = (layerAlpha * 255f).toInt().coerceIn(0, 255)
++                            isFilterBitmap = true
++                        }
++                        canvas.nativeCanvas.drawBitmap(tile.bitmap, tile.left, tile.top, paint)
+                     }
+-                    nativeParent.drawPath(path.asAndroidPath(), paint)
+-                    nativeParent.restore()
+                 }
+             }
+         }
+     }
+ }
+ 
++/**
++ * 把单个字形渲染成「模糊光团」位图：位图按字形的实际包围盒外扩模糊半径开板，
++ * 在**软件位图**上用 BlurMaskFilter 画字形 → 只有字形所在像素有颜色、框内其余像素全透明。
++ * 这样落到屏幕上的光晕永远贴笔画，不会出现矩形底。
++ */
++private data class GlowTile(val bitmap: android.graphics.Bitmap, val left: Float, val top: Float)
++
++private fun renderGlowTile(glyph: android.graphics.Path, radiusPx: Float, argb: Int): GlowTile? {
++    val bounds = android.graphics.RectF()
++    glyph.computeBounds(bounds, true)
++    if (bounds.isEmpty || bounds.width() <= 0f || bounds.height() <= 0f) return null
++    val pad = radiusPx * 2f + 2f
++    val left = kotlin.math.floor(bounds.left - pad).toInt()
++    val top = kotlin.math.floor(bounds.top - pad).toInt()
++    val width = kotlin.math.ceil(bounds.width() + pad * 2f).toInt().coerceAtLeast(1)
++    val height = kotlin.math.ceil(bounds.height() + pad * 2f).toInt().coerceAtLeast(1)
++    if (width > 2048 || height > 2048) return null
++    val bitmap = android.graphics.Bitmap.createBitmap(
++        width,
++        height,
++        android.graphics.Bitmap.Config.ARGB_8888,
++    )
++    val canvas = android.graphics.Canvas(bitmap)
++    canvas.translate(-left.toFloat(), -top.toFloat())
++    val paint = android.graphics.Paint().apply {
++        isAntiAlias = true
++        style = android.graphics.Paint.Style.FILL
++        color = argb
++        maskFilter = android.graphics.BlurMaskFilter(radiusPx, android.graphics.BlurMaskFilter.Blur.NORMAL)
++    }
++    canvas.drawPath(glyph, paint)
++    return GlowTile(bitmap, left.toFloat(), top.toFloat())
++}
++
++/**
++ * 真正的「沿路径模糊」：CPU 端逐像素算「到最近笔画的距离」再取高斯权，不吃平台模糊实现。
++ *
++ * 为什么必须自己算：Android 的 `BlurMaskFilter` 只在「有 alpha 通道的软件位图」上才只模糊形状，
++ * 画到硬件加速画布（Compose 的 Canvas 就是）时会被降级成「实心矩形 + 模糊」；模拟器 GPU 上
++ * 实测就是这样出生的矩形底 —— 跟 Robolectric 无关。这里用 [android.graphics.PathMeasure]
++ * 沿字形路径重采样出笔画折线，再对位图每个像素求最近折点距离，得到只贴笔画的圆形光晕。
++ *
++ * @param maxRadiusPx 光晕最大半径（像素）；距离超过 1.8 倍的像素直接跳过（alpha 已不可见）。
++ */
++private fun renderHaloTile(glyph: android.graphics.Path, maxRadiusPx: Float, argb: Int): GlowTile? {
++    val bounds = android.graphics.RectF()
++    glyph.computeBounds(bounds, true)
++    if (bounds.isEmpty || bounds.width() <= 0f || bounds.height() <= 0f) return null
++    val pad = maxRadiusPx * 1.8f + 2f
++    val left = kotlin.math.floor(bounds.left - pad).toInt()
++    val top = kotlin.math.floor(bounds.top - pad).toInt()
++    val width = kotlin.math.ceil(bounds.width() + pad * 2f).toInt().coerceAtLeast(1)
++    val height = kotlin.math.ceil(bounds.height() + pad * 2f).toInt().coerceAtLeast(1)
++    if (width > 1024 || height > 1024) return null
++
++    // 1. 沿路径重采样出笔画折线（步长 ≤ 1.2px，保证笔画的细横竖都被采到）。
++    val measure = android.graphics.PathMeasure(glyph, false)
++    val length = measure.length
++    if (length <= 0f) return null
++    val samples = (length / SAMPLE_STEP_PX).toInt().coerceIn(8, 6000) + 1
++    val xs = FloatArray(samples)
++    val ys = FloatArray(samples)
++    val pos = FloatArray(2)
++    for (i in 0 until samples) {
++        measure.getPosTan(length * i / (samples - 1), pos, null)
++        xs[i] = pos[0]
++        ys[i] = pos[1]
++    }
++
++    // 2. 逐像素求最近距离 → 高斯权（sigma = 半径/3.2）。收窄是必须的：sigma 太宽时相邻字的
++    //    光团在高亮瞬间会连成一整片深色块（审图第 3 条的反面），Folia 的 drop-shadow
++    //    半径本身也只到 0.4×文字阴影半径。
++    val sigma = (maxRadiusPx / 2.4f).coerceAtLeast(0.30f)
++    val twoSigma2 = 2f * sigma * sigma
++    val limit = maxRadiusPx * 2.5f
++    val limit2 = limit * limit
++    val alpha = android.graphics.Color.alpha(argb)
++    val red = android.graphics.Color.red(argb)
++    val green = android.graphics.Color.green(argb)
++    val blue = android.graphics.Color.blue(argb)
++    val pixels = IntArray(width * height)
++    for (py in 0 until height) {
++        val wy = (top + py + 0.5f)
++        for (px in 0 until width) {
++            val wx = (left + px + 0.5f)
++            var best = Float.MAX_VALUE
++            var i = 0
++            while (i < samples) {
++                val dx = xs[i] - wx
++                val dy = ys[i] - wy
++                val d2 = dx * dx + dy * dy
++                if (d2 < best) best = d2
++                if (best <= 0.25f) break
++                i++
++            }
++            if (best > limit2) continue
++            val a = (alpha * kotlin.math.exp(-best / twoSigma2)).toInt().coerceIn(0, 255)
++            if (a <= 2) continue
++            pixels[py * width + px] = android.graphics.Color.argb(a, red, green, blue)
++        }
++    }
++    val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
++    bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
++    return GlowTile(bitmap, left.toFloat(), top.toFloat())
++}
++
++/** 字形路径重采样步长（像素）：越小越贴合笔画，越大越省 CPU。 */
++private const val SAMPLE_STEP_PX = 1.2f
++
+ /**
+  * 当前时刻某词的辉光强度（0..1）。
+  *
