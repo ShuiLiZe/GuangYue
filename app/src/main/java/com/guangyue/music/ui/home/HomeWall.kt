@@ -127,6 +127,8 @@ data class HomeStrings(
     /** zh-CN.ts 1642/1643 "exploreScrollLeft/Right"「向左滚动」「向右滚动」。 */
     val scrollLeft: String,
     val scrollRight: String,
+    /** U7 补：zh-CN.ts 1675 "showAllPlaylists"「显示全部歌单」——推荐段右上角的「看全部」。 */
+    val showAll: String,
 )
 
 /**
@@ -159,6 +161,7 @@ fun HomeWallScreen(
     onOpenPlugins: () -> Unit,
     onOpenPlayer: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenLibrary: () -> Unit = {},
     playbackTitle: String,
     playbackArtwork: String?,
     playbackProgress: Float,
@@ -256,6 +259,7 @@ fun HomeWallScreen(
                     strings = strings,
                     onOpenTile = onOpenTile,
                     onOpenSearch = onOpenSearch,
+                    onOpenLibrary = onOpenLibrary,
                     playbackTitle = playbackTitle,
                     playbackArtwork = playbackArtwork,
                     playbackProgress = playbackProgress,
@@ -278,6 +282,7 @@ private fun Wall(
     strings: HomeStrings,
     onOpenTile: (HomeTile) -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenLibrary: () -> Unit,
     playbackTitle: String,
     playbackArtwork: String?,
     playbackProgress: Float,
@@ -303,7 +308,38 @@ private fun Wall(
         }
 
         if (recommended.isNotEmpty()) {
-            item("recommend-title") { FoliaSectionTitle(text = strings.recommendTitle) }
+            item("recommend-title") {
+                // U7：标题右侧补「看全部」（Folia `showAllPlaylists`），点进音乐库页。
+                FoliaSectionTitle(
+                    text = strings.recommendTitle,
+                    action = {
+                        Row(
+                            modifier = Modifier
+                                .height(48.dp)
+                                .clip(RoundedCornerShape(GyRadius.field + 4.dp))
+                                .clickable(onClick = onOpenLibrary)
+                                .padding(horizontal = GySpace.s),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(GySpace.xxs),
+                        ) {
+                            Text(
+                                text = strings.showAll,
+                                fontSize = GyText.hint,
+                                lineHeight = GyText.hintHeight,
+                                color = Gyp.t2,
+                                fontFamily = GuangYueDesign.Sans,
+                                maxLines = 1,
+                            )
+                            Icon(
+                                imageVector = GuangYueIcons.ChevronRight,
+                                contentDescription = null,
+                                tint = Gyp.t3,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    },
+                )
+            }
             // 手机上「推荐歌单」= 2 列网格（Folia 桌面是横滑大卡；2 列一屏能看到 4 张封面）。
             item("recommend-grid") {
                 Column {

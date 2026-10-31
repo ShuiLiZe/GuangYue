@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -272,6 +273,46 @@ class HomeViewModel @Inject constructor(
     fun recommended(playlists: List<HomeTile>, recent: List<HomeTile>): List<HomeTile> {
         android.util.Log.d("GYHOME", "recommended sheets=" + playlists.size + " recent=" + recent.size)
         return if (playlists.isNotEmpty()) playlists else recent
+    }
+
+    // ---------- U7 音乐库页：收藏 / 本地两份列表 + 读取状态 ----------
+    //
+    // 「我的」页只要个数（likedCount / downloadedCount），库页要整份列表，所以另开两条流；
+    // 映射沿用 toTile()：key 都是 track:<key>，点一行走既有 playTracksOf 从本地库取回来播。
+
+    /** 本地库读失败标记（Room 快照流，只有读的时候可能抛）。 */
+    private val _libraryFailed = MutableStateFlow(false)
+
+    /** 库页是否读失败；失败时界面显示失败态 + 重试。 */
+    val libraryFailed: StateFlow<Boolean> = _libraryFailed.asStateFlow()
+
+    /** 收藏（已标星）曲目，库页「收藏」分区。 */
+    val favoriteTiles: StateFlow<List<HomeTile>> = tracks.favorites()
+        .catch {
+            _libraryFailed.value = true
+            emit(emptyList())
+        }
+        .map { list -> list.map { it.toTile() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** 本地曲库（下载 / 导入的本地音乐），库页「本地音乐」分区。 */
+    val localTiles: StateFlow<List<HomeTile>> = tracks.localTracks()
+        .catch {
+            _libraryFailed.value = true
+            emit(emptyList())
+        }
+        .map { list -> list.map { it.toTile() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** 库页首帧：三条本地流都还没发出第一份数据前置 true（Room 通常一帧内就到）。 */
+    val libraryLoading: StateFlow<Boolean> =
+        combine(playlistsFlow, favoriteTiles, localTiles) { _, _, _ -> false }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    /** 库页「重试」：清掉失败标记，再摸一次本地库让流重发。 */
+    fun retryLibrary() {
+        _libraryFailed.value = false
+        viewModelScope.launch { runCatching { tracks.count() } }
     }
 
     /** 「我的」页的计数：我喜欢 / 本地下载。 */

@@ -149,7 +149,7 @@ android {
                     "roborazzi.test.record",
                     System.getenv("GUANGYUE_RECORD_SCREENSHOTS") ?: "false",
                 )
-                test.systemProperty("roborazzi.output.dir", "${rootDir}/docs/ui-u6")
+                test.systemProperty("roborazzi.output.dir", "${rootDir}/docs/ui-u7")
                 test.maxHeapSize = "3g"
             }
         }
