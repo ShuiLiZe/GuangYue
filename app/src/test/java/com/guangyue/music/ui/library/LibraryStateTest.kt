@@ -47,4 +47,11 @@ class LibraryStateTest {
         // 模板里没有 %d 时原样返回，不会把数字丢掉换成半句。
         assertEquals("首", countText("首", 3))
     }
+
+    @Test
+    fun playlistCountUsesGeUnitNotShou() {
+        // U7b：歌单段论「个」（3 首歌单 → 「3 个」），歌曲段仍旧论「首」。
+        assertEquals("3 个", countText("%d 个", 3))
+        assertEquals("0 个", countText("%d 个", 0))
+    }
 }

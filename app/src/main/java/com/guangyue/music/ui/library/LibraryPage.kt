@@ -99,8 +99,10 @@ data class LibraryStrings(
     val localTitle: String,
     /** zh-CN.ts 1652 "exploreRecent"「最近播放」。 */
     val recentTitle: String,
-    /** 每段标题右侧的「N 首」（zh-CN.ts 10 "trackCount"）。 */
+    /** 歌曲段（收藏 / 本地 / 最近播放）标题右侧的「N 首」（zh-CN.ts 10 "trackCount"）。 */
     val countPattern: String,
+    /** 歌单段标题右侧的「N 个」——歌单论个，与 [countPattern] 分开。 */
+    val playlistCountPattern: String,
     /** 载入中主句。 */
     val loading: String,
     /** 失败主句。 */
@@ -266,7 +268,7 @@ private fun Sections(
         ),
     ) {
         item("playlists-title") {
-            SectionTitle(strings.playlistsTitle, countText(strings.countPattern, playlists.size))
+            SectionTitle(strings.playlistsTitle, countText(strings.playlistCountPattern, playlists.size))
         }
         if (playlists.isEmpty()) {
             item("playlists-empty") { SectionEmpty(GuangYueIcons.ListMusic, strings.emptyPlaylists) }

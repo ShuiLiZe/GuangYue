@@ -372,6 +372,8 @@
     <string name="library_empty_recent">还没有听歌记录</string>
     <!-- 自拟：库页右上角进播放页的按钮名，同 home_wall_open_player -->
     <string name="library_open_player">播放页</string>
-    <!-- zh-CN.ts: 10 "trackCount"（「{{count}} 首」）→ 手机版每段标题右侧的计数 -->
+    <!-- zh-CN.ts: 10 "trackCount"（「{{count}} 首」）→ 手机版每段标题右侧的计数（歌曲段：收藏/本地/最近） -->
     <string name="library_count">%d 首</string>
+    <!-- 自拟：歌单段计数 —— 歌单论「个」不论「首」，与 [library_count] 分开，调用方按分区选 -->
+    <string name="library_count_playlist">%d 个</string>
 </resources>

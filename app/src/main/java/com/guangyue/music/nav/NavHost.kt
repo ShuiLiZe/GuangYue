@@ -541,6 +541,7 @@ internal fun libraryStrings(): LibraryStrings {
         localTitle = stringResource(R.string.library_local_title),
         recentTitle = stringResource(R.string.library_recent_title),
         countPattern = stringResource(R.string.library_count),
+        playlistCountPattern = stringResource(R.string.library_count_playlist),
         loading = stringResource(R.string.library_loading),
         failed = stringResource(R.string.library_failed),
         failedHint = stringResource(R.string.library_failed_hint),
