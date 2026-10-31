@@ -1,29 +1,45 @@
 package com.guangyue.feature.player.lyrics
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -143,18 +159,12 @@ fun LyricStyleSheet(
 
             Box(Modifier.height(GySpace.s))
 
-            FoliaToggle(
+            // Folia kit/Row.tsx：一行 = 左标签、右控件（`flex min-h-14 items-center`，标签在左、控件在右）。
+            // 原来开关单独一行、标签在下一行（两行错位），这里合成同一行。
+            ToggleRow(
+                label = str(strings.rotation),
                 checked = tuning.enableWordRotation,
                 onChange = { onTuning(tuning.copy(enableWordRotation = it)) },
-            )
-            Text(
-                text = str(strings.rotation),
-                fontSize = 13.sp,
-                color = Gyp.ink,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(44.dp)
-                    .padding(top = 12.dp),
             )
 
             TuningSliderRow(
@@ -194,7 +204,47 @@ fun LyricStyleSheet(
     }
 }
 
-/** 调参滑杆行（0–2 倍，与 `classic/tuning.ts zeroToTwo` 的钳位一致）。 */
+/**
+ * 开关行：照 Folia `kit/Row.tsx` + `panelRows.tsx ToggleRow` —— 一行里「左标签、右开关」，
+ * 行高 min 56dp（`min-h-14`）、右侧留 16dp（`pr-4`）。
+ */
+@Composable
+private fun ToggleRow(
+    label: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clickableNoRipple { onChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            color = Gyp.ink,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Spacer(Modifier.width(24.dp))
+        FoliaToggle(checked = checked, onChange = onChange)
+    }
+}
+
+/**
+ * 调参滑杆行（0–2 倍，与 `classic/tuning.ts zeroToTwo` 的钳位一致）。
+ *
+ * 外观照 Folia `kit/Slider.tsx`
+ * - `stacked` 形态：数值在标签行右端（13px、tabular-nums、`--st-t2`），轨道独占下一行；
+ * - 轨道高 1dp（`h-1`）、全圆角，填充段用 accent、未填充段用 track（`linear-gradient` 的两段）；
+ * - 滑钮 16dp 纯白圆点（`h-4 w-4 bg-white`）+ `0 0 0 1px rgba(0,0,0,0.14), 0 1px 3px rgba(0,0,0,0.35)`
+ *   的双层描边阴影，按下时放大到 1.15 倍（`st-slider:active` 的 transform 缩放）；
+ * - 不用 Material 的默认点状轨道 / 大圆拇指。
+ */
 @Composable
 private fun TuningSliderRow(
     label: String,
@@ -202,35 +252,125 @@ private fun TuningSliderRow(
     accent: Color,
     onChange: (Float) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+        // stacked：标签与数值同一行，数值靠右（Folia Slider stacked 的 `<output class="ml-auto">`）。
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(label, fontSize = 13.sp, color = Gyp.ink)
+            Text(label, fontSize = 14.sp, lineHeight = 20.sp, color = Gyp.ink)
             Text(
-                text = "%.2f×".format(value),
-                fontSize = 12.sp,
-                color = Gyp.inkSoft,
+                text = "%.2fx".format(value),
+                fontSize = 13.sp,
+                color = Gyp.t2,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontFeatureSettings = "tnum",
+                ),
             )
         }
-        Box(Modifier.height(44.dp), contentAlignment = Alignment.Center) {
-            Slider(
+        Spacer(Modifier.height(6.dp))
+        // 轨道：1dp 圆角线 + 白点滑钮，拖动热区 44dp（Folia input 高 20px，手机上抬到 44dp 保触控）。
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            FoliaSlider(
                 value = value,
-                onValueChange = { onChange(it.coerceIn(0f, 2f)) },
-                valueRange = 0f..2f,
-                steps = 19,
-                colors = SliderDefaults.colors(
-                    thumbColor = accent,
-                    activeTrackColor = accent,
-                    inactiveTrackColor = Gyp.track,
-                ),
-                modifier = Modifier.fillMaxWidth(),
+                accent = accent,
+                onChange = onChange,
             )
         }
     }
 }
+
+/**
+ * Folia `kit/Slider.tsx` 的视觉与手感，用 Compose 基础能力重画（不用 Material Slider ——
+ * 它的点状刻度轨道 + 大号拇指与 Folia tuning 面板完全不同）。
+ *
+ * - 轨道：高 1dp（`h-1`）全圆角，未填充段 `Gyp.track`，填充段 accent 线性渐变；
+ * - 滑钮：16dp 纯白圆点（`h-4 w-4 bg-white`），外加 1px 深色描边 + 1px 下偏移阴影；
+ * - 拖动：整个 44dp 高的行都吃手势（pointerInput），换算成 0..2 的值后按 0.1 取整。
+ */
+@Composable
+private fun FoliaSlider(
+    value: Float,
+    accent: Color,
+    onChange: (Float) -> Unit,
+) {
+    val density = LocalDensity.current
+    val thumbDp = 16.dp
+    val thumbInsetPx = with(density) { FoliaSliderThumbInsetDp.dp.toPx() }
+    val trackColor = Gyp.track
+    var trackWidthPx by remember { mutableStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
+    val fraction = (value.coerceIn(0f, 2f) / 2f)
+    val active = Modifier
+        .fillMaxWidth()
+        .height(44.dp)
+        .onSizeChanged { trackWidthPx = it.width.toFloat() }
+        .pointerInput(trackWidthPx, accent) {
+            detectTapGestures(
+                onPress = { offset ->
+                    dragging = true
+                    val usable = (trackWidthPx - thumbInsetPx * 2f).coerceAtLeast(1f)
+                    val raw = ((offset.x - thumbInsetPx) / usable).coerceIn(0f, 1f) * 2f
+                    onChange((raw * 10f).roundToInt() / 10f)
+                    tryAwaitRelease()
+                    dragging = false
+                },
+            )
+        }
+        .pointerInput(trackWidthPx, accent) {
+            detectHorizontalDragGestures(
+                onDragStart = { offset ->
+                    dragging = true
+                    val usable = (trackWidthPx - thumbInsetPx * 2f).coerceAtLeast(1f)
+                    val raw = ((offset.x - thumbInsetPx) / usable).coerceIn(0f, 1f) * 2f
+                    onChange((raw * 10f).roundToInt() / 10f)
+                },
+                onDragEnd = { dragging = false },
+                onDragCancel = { dragging = false },
+                onHorizontalDrag = { change, _ ->
+                    val usable = (trackWidthPx - thumbInsetPx * 2f).coerceAtLeast(1f)
+                    val raw = ((change.position.x - thumbInsetPx) / usable).coerceIn(0f, 1f) * 2f
+                    onChange((raw * 10f).roundToInt() / 10f)
+                },
+            )
+        }
+    Box(modifier = active, contentAlignment = Alignment.CenterStart) {
+        Canvas(Modifier.fillMaxWidth().height(2.dp)) {
+            val trackHeight = size.height
+            drawRoundRect(color = trackColor, cornerRadius = CornerRadius(trackHeight / 2f))
+            val fillEnd = (size.width - thumbInsetPx * 2f) * fraction + thumbInsetPx
+            drawRoundRect(
+                brush = Brush.horizontalGradient(listOf(accent.copy(alpha = 0.92f), accent), startX = 0f, endX = size.width),
+                size = Size(fillEnd.coerceAtLeast(1f), trackHeight),
+                cornerRadius = CornerRadius(trackHeight / 2f),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .padding(start = (FoliaSliderThumbInsetDp.dp * fraction * 2f))
+                .size(if (dragging) 18.dp else thumbDp)
+                .shadow(elevation = 1.dp, shape = CircleShape)
+                .background(Color.White, CircleShape)
+                .border(width = 0.5.dp, color = Color.Black.copy(alpha = 0.14f), shape = CircleShape),
+        )
+    }
+}
+
+/** Folia kit 滑杆：轨道 1dp（`h-1`），滑钮 16dp（`h-4 w-4`），图形本身不做 Material 的默认样式。 */
+private val FoliaSliderTrackDp = 20f
+private val FoliaSliderThumb = Color.White
+
+/** 滑钮中心左右各让出的距离（对应 Folia `THUMB_INSET = 8`）。 */
+private const val FoliaSliderThumbInsetDp = 8f
+
+/** Folia tuning 的 step：0–2 之间按 0.1 取整（zeroToTwo 保留两位小数，滑杆点击数 19 个中间值）。 */
+private const val FOLIA_SLIDER_STEPS = 19
 
 /** 与 U5 同款：弹层里也走 `LyricStringHost`，保证文案与外层同一份资源。 */
 @Composable

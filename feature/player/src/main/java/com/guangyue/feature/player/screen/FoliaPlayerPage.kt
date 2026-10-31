@@ -555,7 +555,13 @@ private fun PlayerCard(
             horizontalArrangement = Arrangement.spacedBy(GySpace.s),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(GySpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            // 审图第 6 条：动作行原本只有 4 颗键（收藏/加歌单/队列/歌词），这行在 320dp 上会换行；
+            // 第 5 颗「歌词样式」进来后必须能横着放下，所以在这里用 weight 均分而不是固定间距。
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(GySpace.xxs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 CardAction(
                     icon = GuangYueIcons.Heart,
                     active = like == LikeState.Liked,

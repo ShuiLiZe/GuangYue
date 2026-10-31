@@ -1,4 +1,4 @@
-package com.guangyue.feature.player.lyrics
+﻿package com.guangyue.feature.player.lyrics
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -73,7 +73,10 @@ import com.guangyue.feature.player.lyrics.visualizer.CoverPalette
 import com.guangyue.feature.player.lyrics.visualizer.VisualizerBackdrop
 import com.guangyue.feature.player.lyrics.visualizer.VisualizerClock
 import com.guangyue.feature.player.lyrics.visualizer.hasVisibleWords
-import com.guangyue.feature.player.lyrics.visualizer.rememberCoverPalette
+import com.guangyue.feature.player.lyrics.visualizer.emphasis
+import com.guangyue.feature.player.lyrics.visualizer.ink
+import com.guangyue.feature.player.lyrics.visualizer.rememberCoverBackdrop
+import com.guangyue.feature.player.lyrics.visualizer.resolveCoverSource
 import com.guangyue.feature.player.lyrics.visualizer.rememberReduceMotion
 import com.guangyue.feature.player.lyrics.visualizer.rememberStaticVisualizerClock
 import com.guangyue.feature.player.lyrics.visualizer.rememberVisualizerClock
@@ -141,17 +144,26 @@ fun LyricFlowScreen(
     // 当前句在内核时间轴上的下标：U5 的 currentIndex 与 kernelLines 一一对应（同一份歌词）。
     // 对不上（第一句之前、越界）就当没有内核行，整页回落到 U5 原视图。
     val activeLine: Line? = if (currentIndex in kernelLines.indices) kernelLines[currentIndex] else null
-    val palette: CoverPalette = rememberCoverPalette(
-        coverUrl = coverUrl,
-        dark = darkMode,
-        fallbackAccent = accent,
-    )
 
-    // 顶栏与胶囊的墨色跟着背景亮暗走，跟播放页判据一致。
-    val backdrop = remember(coverColor, accent, darkMode) {
-        playerBackdrop(coverColor = coverColor, seed = accent, dark = darkMode)
+    // ---------------- 封面取色（Folia colorExtractor + builtin dual theme） ----------------
+    // 封面来源：业务封面优先，没有就用内置测试封面 —— 这样「封面取色 → 流体背景」在真机上始终可见，
+    // 也是审图第 4 条要求的实拍对象。
+    val coverSource = remember(coverUrl) { resolveCoverSource(coverUrl) }
+    val theme = rememberCoverBackdrop(coverSource, darkMode)
+    val palette: CoverPalette = remember(theme) {
+        CoverPalette(
+            backgroundColor = theme.background,
+            primaryColor = theme.primary,
+            accentColor = theme.accent,
+            secondaryColor = theme.secondary,
+            fromCover = theme.fromCover,
+        )
     }
-    val onBackdrop = if (backdropUsesDarkInk(backdrop)) Color(0xFF1C1917) else Color(0xFFF7F5F2)
+    // 墨色走取色主题的 primary（Folia 按 9:1 对比度调过明度）：
+    // 修审图第 5 条「浅色顶栏『歌词』几乎看不见」—— 不再用固定的 0xFF1C1917 / 0xFFF7F5F2 去猜背景亮暗。
+    val onBackdrop = theme.ink
+    // 当前行激活字用取色 accent（与顶栏/胶囊同一套色）。
+    val lyricAccent = theme.emphasis
     val pillInk = if (darkMode) Color(0xFFF4F4F5) else Color(0xFF1C1917)
 
     val listState = rememberLazyListState()
@@ -192,15 +204,13 @@ fun LyricFlowScreen(
         )
     }
 
-    // 背景层：给了封面 url 就走「封面取色 + 模糊封面 + overlay 渐变 + 换歌柔焦」，
-    // 否则沿用 U5 的封面渐变（playerBackdrop），两套视觉互不影响。
+    // 背景层：Folia FluidBackground —— 取色底色 @0.8 + 放大 1.5× 的模糊封面 + bottom-right overlay 渐变。
     VisualizerBackdrop(
         palette = palette,
-        coverUrl = coverUrl,
+        source = coverSource,
         dark = darkMode,
         modifier = modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(backdrop.colors))
             .testTag(LyricRootTag),
     ) {
         Column(
@@ -314,17 +324,19 @@ fun LyricFlowScreen(
                             val visual = lyricRowVisual(index, currentIndex)
                             // V0：当前句有内核时间轴时走「流光」逐词画布，其余行保留 U5 档位视图，
                             // 这样上下句上下文、点行跳转、自动跟随都不变。
-                            val activeKernelLine = if (visual.active) activeLine else null
-                            if (activeKernelLine != null && activeKernelLine.hasVisibleWords()) {
+                            val isCurrentLine = index == currentIndex
+                            // 审图第 2 条：当前句即使没有内核时间轴也要走「流光」画布 —— 旧版走
+                            // LyricLineRow 时当前句只剩一档高亮色，waiting/passed 的字几乎看不见。
+                            if (isCurrentLine && activeLine != null && activeLine.hasVisibleWords()) {
                                 ClassicLyricLine(
-                                    line = activeKernelLine,
+                                    line = activeLine,
                                     clock = clock,
                                     tuning = classicTuning,
                                     intensity = AnimationIntensity.NORMAL,
                                     reduceMotion = reduceMotion,
                                     viewportWidthPx = viewportWidthPx,
                                     lyricsFontScale = lyricsFontScale,
-                                    activeColor = accent,
+                                    activeColor = lyricAccent,
                                     baseColor = onBackdrop,
                                     fontFamily = GuangYueDesign.Serif,
                                     modifier = Modifier.clickableNoRipple { onSeekToLine(index) },

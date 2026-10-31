@@ -8,9 +8,9 @@
 //  1. 三态由播放进度驱动：时间来自 [VisualizerClock]（withFrameNanos 推进），在 derivedStateOf 里读，
 //     只有「三态」这一离散值变化才通知重组——等价 Folia 的「仅 status 变化时 setState」，
 //     不对整行每帧重组。
-//  2. 辉光用「同字两遍模糊文本」叠加实现：内圈 0.4*r1 @ alpha 0.7、外圈 0.4*r2 @ alpha 1.0，
-//     就是 Folia wordGlow.ts 在 Linux 默认走的 drop-shadow 量化路径（text-shadow 会打爆 Chromium
-//     glyph cache，Folia 自己也退到了这条）；半径按时序变化只重走 draw/layer 阶段。
+//  2. 辉光只对「字形轮廓」做高斯模糊：外圈 0.4*r2 @ alpha 1.0、内圈 0.4*r1 @ alpha 0.7，
+//     语义等同 Folia wordGlow.ts 的 drop-shadow；半径按时序变化只重走 draw/layer 阶段。
+//     不能用 Modifier.blur：它先把节点光栅化成实心矩形再模糊，字盒会露矩形底（审图第 3 条）。
 //  3. 逐字扫光（normal 且词内字数 >1）按 Folia 的 charDuration*6 / times[0,0.3,1] / delay=字起点-词起点
 //     逐字推进；单字（CJK）走 peaks[0,1,1] 持续到词尾。
 //  4. 弹簧：spring(stiffness=200, dampingRatio=20/(2√200)≈0.7071067811865476)，推导见 VisualizerKernel.kt。
@@ -20,6 +20,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,11 +31,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.guangyue.core.lyrics.AnimationIntensity
@@ -106,7 +121,9 @@ fun GlowWord(
             }
         }
     }
-
+    // 等待态照 Folia glowWordVariants.waiting：整词 opacity 0 + scale 0.5 + sin/cos 漂移 ——
+    // 但那一套是给「舞台只画当前行」的入场动画准备的；广乐舞台同源，等待中的字还没登场，
+    // 本来就不该看见（主控 m00570 已确认：保持 Folia，不要改透明度）。
     val layout = GlowWordVariants.layoutState(status, config, intensity, enableWordRotation)
     val spring = activeSpring
     val active = status == GlowWordStatus.ACTIVE
@@ -141,6 +158,11 @@ fun GlowWord(
         animationSpec = tween(secondsToMillis(body.colorDurationSeconds), easing = easeByName(body.colorEase)),
         label = "gw-body",
     )
+    val bodyFinal = when {
+        active -> activeColor
+        passed -> baseColor
+        else -> baseColor
+    }
 
     // 正文模糊：waiting 10px → active 0（0.08/0.12/0.2）；passed 维持 0。
     val bodyBlur by animateFloatAsState(
@@ -150,59 +172,33 @@ fun GlowWord(
     )
 
     // ---- 辉光强度：由播放时间求值；用 derivedStateOf 只在强度值变化时重组那一层 ----------------
-    val glowStrength by remember(word, profile, reduceMotion) {
-        derivedStateOf {
-            glowStrengthAt(clock.seconds(), word, profile, reduceMotion)
-        }
-    }
+    // 注意：必须读 `clock.seconds()` 这个 State 本身，不能包在 derivedStateOf 里再读，
+    // 否则快照系统只跟踪内层读取，外层 `glowStrength` 不会在播放时间推进时失效，
+    // 辉光会永远停在第一次算出的强度（截图里表现为一块静止的斜矩形底）。
+    val glowStrength = glowStrengthAt(clock.seconds(), word, profile, reduceMotion)
 
     Box(modifier = modifier.graphicsLayer {
         translationX = x
         translationY = y
         scaleX = scale
         scaleY = scale
-        rotationZ = rotate
         alpha = opacity
+        rotationZ = rotate
     }) {
-        // 辉光层：内圈 + 外圈两遍模糊文本（对应 drop-shadow 的 0.4*r1@0.7 与 0.4*r2@1.0）
-        if (glowStrength > 0.002f && !reduceMotion) {
-            val radii = WordGlow.glowRadii(profile.wordRevealMode)
-            val perChar = remember(word) { GraphemeTimings.buildWordGraphemeTimings(word) }
-            if (perChar.size > 1) {
-                // 逐字扫光：每个字自己的强度（delay = 字起点 - 词起点）
-                androidx.compose.foundation.layout.Row {
-                    perChar.forEach { g ->
-                        val s = glowStrengthAt(
-                            time = clock.seconds(),
-                            word = word,
-                            profile = profile,
-                            reduceMotion = false,
-                            charStartTime = g.startTime,
-                            charEndTime = g.endTime,
-                        )
-                        GlowLayerText(
-                            text = g.char,
-                            style = style,
-                            color = activeColor,
-                            strength = s,
-                            innerRadiusCss = radii.first,
-                            outerRadiusCss = radii.second,
-                        )
-                    }
-                }
-            } else {
-                GlowLayerText(
-                    text = word.text,
-                    style = style,
-                    color = activeColor,
-                    strength = glowStrength,
-                    innerRadiusCss = radii.first,
-                    outerRadiusCss = radii.second,
-                )
-            }
-        }
+        // 辉光层：逐字画在正文下面（字形轮廓模糊，见 GlowLayer/GlowGlyph 的注释）。
+        GlowLayer(
+            word = word,
+            style = style,
+            profile = profile,
+            color = bodyFinal,
+            strength = glowStrength,
+            clock = clock,
+            reduceMotion = reduceMotion,
+        )
 
-        // 正文层：颜色线性过渡 + waiting 模糊
+        // 正文层：颜色线性过渡 + waiting 模糊。透明度完全照 Folia glowWordVariants.body：
+        // waiting 是 baseColor + blur 10px，整词不可见由外层 opacity 0 负责；active 过渡到高亮色；
+        // passed 回到 baseColor（外层 opacity 0.82）。不要再叠自定义 alpha，否则 passed 会「消失」。
         Text(
             text = word.text,
             style = style.copy(color = bodyColor),
@@ -213,7 +209,6 @@ fun GlowWord(
                 Modifier
             },
         )
-
         // 合唱涟漪
         if (isChorus && active) {
             ChorusRipple(
@@ -224,43 +219,152 @@ fun GlowWord(
             )
         }
     }
+
 }
 
 /**
- * 辉光层的一遍模糊文本。内圈半径 0.4·r1、透明度乘 0.7；外圈 0.4·r2、透明度 1.0。
- * 两者叠在同一位置，像素差与 Folia 的 text-shadow(r1, r2) 路径 ≤1/255（Folia 文件头已论证）。
+ * 辉光层：外圈 R*0.4 @1.0 + 内圈 R*0.4 @0.7，逐字画在正文 Text 下方。
+ *
+ * 审图第 3 条（帧 2–6 里「弹奏」「萧邦」背后出现浅色矩形底）的根因是辉光曾是一整块铺满的模糊图层：
+ * `Modifier.blur` 会先把节点光栅化成一块实心矩形再高斯模糊。现在 `GlowGlyph` 直接对
+ * 「字形轮廓」(`TextLayoutResult.getPathForRange`) 施加 `BlurMaskFilter`，模糊源只有字形本身，
+ * 字与字之间、字盒空白永远不会被涂上颜色。半径照 Folia wordGlow.ts。
  */
 @Composable
-private fun GlowLayerText(
-    text: String,
+private fun GlowLayer(
+    word: Word,
+    style: TextStyle,
+    clock: VisualizerClock,
+    strength: Float,
+    profile: GlowWordRenderProfile,
+    color: Color,
+    reduceMotion: Boolean,
+) {
+    if (reduceMotion || strength <= 0.002f) return
+    val radii = WordGlow.glowRadii(profile.wordRevealMode)
+    val graphemes = remember(word) { GraphemeTimings.buildWordGraphemeTimings(word) }
+    val time = clock.seconds()
+    GlowWordCanvas(
+        chars = graphemes.map { it.char },
+        startTimes = graphemes.map { it.startTime },
+        endTimes = graphemes.map { it.endTime },
+        perChar = graphemes.size > 1,
+        fallbackStrength = strength,
+        style = style,
+        color = color,
+        innerRadiusCss = radii.first,
+        outerRadiusCss = radii.second,
+        clockSeconds = time,
+        word = word,
+        profile = profile,
+        reduceMotion = reduceMotion,
+    )
+}
+
+/**
+ * 一个词的全部辉光字，画在同一块画布上（`matchParentSize` = 词盒）。
+ *
+ * 之所以整词一块画布：每个字单独一个 [androidx.compose.foundation.layout.Row] 子项时，
+ * 子项会按自己的测量宽度各自定位，模糊后的字形会整体错位（曾被截图发现「萧邦」跑到屏幕右侧）。
+ * 一块画布 + `TextLayoutResult.getPath` 的原始坐标，字位与正文 Text 完全一致。
+ */
+@Composable
+private fun GlowWordCanvas(
+    chars: List<String>,
+    startTimes: List<Double>,
+    endTimes: List<Double>,
+    perChar: Boolean,
+    fallbackStrength: Float,
     style: TextStyle,
     color: Color,
-    strength: Float,
     innerRadiusCss: Double,
     outerRadiusCss: Double,
+    clockSeconds: Double,
+    word: Word,
+    profile: GlowWordRenderProfile,
+    reduceMotion: Boolean,
 ) {
-    val innerDp = (innerRadiusCss * WordGlow.DROP_SHADOW_RADIUS_SCALE).toFloat().dp
-    val outerDp = (outerRadiusCss * WordGlow.DROP_SHADOW_RADIUS_SCALE).toFloat().dp
-    Box(contentAlignment = Alignment.Center) {
-        // 外圈（半径大、透明度满）：先在底下铺开
-        Text(
-            text = text,
-            style = style,
-            maxLines = 1,
-            color = color.copy(alpha = strength * 1.0f),
-            modifier = Modifier.blur(outerDp, BlurredEdgeTreatment.Unbounded),
-        )
-        // 内圈（半径小、透明度 0.7）：把中心提亮，形成「芯 + 晕」两层
-        Text(
-            text = text,
-            style = style,
-            maxLines = 1,
-            color = color.copy(alpha = strength * WordGlow.DROP_SHADOW_INNER_ALPHA.toFloat()),
-            modifier = Modifier.blur(innerDp, BlurredEdgeTreatment.Unbounded),
-        )
+    if (reduceMotion || fallbackStrength <= 0.002f) return
+    val wordText = remember(chars) { chars.joinToString("") }
+    val measurer = rememberTextMeasurer()
+    val layout = remember(wordText, style, measurer) {
+        measurer.measure(text = AnnotatedString(wordText), style = style, maxLines = 1, softWrap = false)
+    }
+    val density = LocalDensity.current
+    val innerPx = with(density) { (innerRadiusCss * WordGlow.DROP_SHADOW_RADIUS_SCALE).toFloat().dp.toPx() }
+    val outerPx = with(density) { (outerRadiusCss * WordGlow.DROP_SHADOW_RADIUS_SCALE).toFloat().dp.toPx() }
+    val argb = color.toArgb()
+    // 按字取「不含字形的字盒矩形」：高斯模糊会把整块矩形都涂亮，只有用它做
+    // DST_OUT 遮罩，才能把模糊层裁到字形轮廓上（审图第 3 条：不能出矩形边）。
+    val boxPaint = remember {
+        Paint().asFrameworkPaint().apply {
+            isAntiAlias = true
+            this.color = android.graphics.Color.BLACK
+        }
+    }
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        for (index in chars.indices) {
+            val strength = if (!perChar) {
+                fallbackStrength
+            } else {
+                glowStrengthAt(
+                    time = clockSeconds,
+                    word = word,
+                    profile = profile,
+                    reduceMotion = reduceMotion,
+                    charStartTime = startTimes[index],
+                    charEndTime = endTimes[index],
+                )
+            }
+            if (strength <= 0.002f) continue
+            val path = layout.getPathForRange(index, index + 1)
+            val box = layout.getBoundingBox(index)
+            listOf(outerPx to 1.0f, innerPx to WordGlow.DROP_SHADOW_INNER_ALPHA.toFloat()).forEach { pair ->
+                val layerAlpha = (strength * pair.second).coerceIn(0f, 1f)
+                if (layerAlpha <= 0.001f) return@forEach
+                drawIntoCanvas { canvas ->
+                    val nativeParent = canvas.nativeCanvas
+                    nativeParent.saveLayer(null, null)
+                    val paint = Paint().asFrameworkPaint().apply {
+                        this.color = android.graphics.Color.argb(
+                            (layerAlpha * 255f).toInt().coerceIn(0, 255),
+                            android.graphics.Color.red(argb),
+                            android.graphics.Color.green(argb),
+                            android.graphics.Color.blue(argb),
+                        )
+                        // 只画字形轮廓外圈的模糊光：先擦掉字盒内已经落在字形上的部分，
+                        // 避免「实心字 + 模糊框」叠成矩形底（审图第 3 条）。
+                        xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
+                        nativeParent.drawRect(
+                            android.graphics.RectF(box.left, box.top, box.right, box.bottom),
+                            this,
+                        )
+                        xfermode = null
+                        maskFilter = android.graphics.BlurMaskFilter(
+                            pair.first.coerceAtLeast(0.1f),
+                            android.graphics.BlurMaskFilter.Blur.NORMAL,
+                        )
+                    }
+                    nativeParent.drawPath(path.asAndroidPath(), paint)
+                    nativeParent.restore()
+                }
+            }
+        }
     }
 }
 
+/**
+ * 当前时刻某词的辉光强度（0..1）。
+ *
+ * 直接消费内核 [WordGlow.variantFor] 的关键帧与时序：
+ *  - instant / fast：peaks[0,1,0]，times[0,0.35,1] / [0,0.4,1]
+ *  - normal 且词内字数 >1：peaks[0,1,0]，times[0,0.3,1]，时长 charDuration*6，delay = 字起点-词起点
+ *  - normal 单字 / CJK：peaks[0,1,1]，times[0,0.9,1]
+ *  - passed：半径与强度同步淡出（0.12/0.22/0.9）
+ *
+ * @param charStartTime 逐字层传入的该字起点（秒）；整词层传 null
+ * @param charEndTime 逐字层传入的该字终点（秒）
+ */
 /**
  * 合唱涟漪：对应 Folia GlowWord.tsx 的 `h-[150%] aspect-square rounded-full border-1`
  * （initial scale 0.2 / opacity 0.8 → scale 1.5~3.5 / opacity 0，0.5s easeOut）。
@@ -368,9 +472,12 @@ private fun glowStrengthAt(
     val duration = if (variant.transition.duration > 0.0) variant.transition.duration else 0.1
     if (mode == WordRevealMode.NORMAL && total > 1 && charStartTime != null) {
         // 逐字扫光：每个字按住自己的时长闪一下（charDuration*6 已由内核给出）。
-        val local = elapsed / duration
-        if (local >= 1.0) return keyframes.peaks.lastOrNull()?.toFloat() ?: 0f
-        return interpolatePeaks(local, variant.transition.times, keyframes.peaks)
+        // 逐字层已经按「字起点 - 词起点」给了 delay，不能再叠词级 delay（内核 transition.delay
+        // 对逐字 keyframes 也是字级偏移），否则「还没唱到的字」会提前亮起并被模糊成色块。
+        val charLocal = (time - word.startTime - delay) / duration
+        if (charLocal <= 0.0) return 0f
+        if (charLocal >= 1.0) return keyframes.peaks.lastOrNull()?.toFloat() ?: 0f
+        return interpolatePeaks(charLocal, variant.transition.times, keyframes.peaks)
     }
 
     val t = (time - word.startTime) / duration
@@ -432,6 +539,10 @@ internal fun lineContainerSpec(profile: GlowWordRenderProfile): LineContainerSpe
 }
 
 /** 手机适配：一个词的触控目标不小于 48dp（需求「触控 ≥48dp」）。 */
+// Folia glowWordVariants.ts：passed 布局 opacity = chaotic 0.9 / normal 0.82。
+internal const val PASSED_WORD_OPACITY = 0.82f
+
+// 审图第 2 条：waiting（当前行未唱字）在列表里必须可读。
 internal val WordTouchTargetDp = 48f
 
 /** 流光调参在渲染层的入口（样式层用它取「词距 / 旋转 / 呼吸浮动」）。 */

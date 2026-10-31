@@ -1,4 +1,4 @@
-package com.guangyue.music.nav
+﻿package com.guangyue.music.nav
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -15,6 +15,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.guangyue.core.lyrics.Line
 import com.guangyue.core.lyrics.Word
 import com.guangyue.feature.player.lyrics.CoverImage
+import com.guangyue.feature.player.lyrics.visualizer.BundledTestCover
 import com.guangyue.feature.player.lyrics.visualizer.CoverPalette
 import com.guangyue.feature.player.lyrics.LyricFlowScreen
 import com.guangyue.feature.player.lyrics.LyricStyleSheet
@@ -194,7 +195,6 @@ class V0LyricStyleScreenshotTest {
                 coverColor = coverTint,
                 kernelLines = kernelLines(),
                 classicTuning = tuning,
-                coverUrl = null,
             )
         }
     }
@@ -313,7 +313,7 @@ class V0LyricStyleScreenshotTest {
                 secondaryColor = Color(0xFFD8B49E),
                 fromCover = true,
             ),
-            coverUrl = null,
+            source = null,
             dark = false,
             reduceMotion = true,
             modifier = Modifier.fillMaxSize(),
@@ -330,7 +330,7 @@ class V0LyricStyleScreenshotTest {
                 secondaryColor = Color(0xFF7A4E42),
                 fromCover = true,
             ),
-            coverUrl = null,
+            source = null,
             dark = true,
             reduceMotion = true,
             modifier = Modifier.fillMaxSize(),
@@ -347,7 +347,7 @@ class V0LyricStyleScreenshotTest {
                 secondaryColor = Color(0xFF4A2F3E),
                 fromCover = true,
             ),
-            coverUrl = coverFixtureUrl,
+            source = BundledTestCover,
             dark = false,
             reduceMotion = true,
             modifier = Modifier.fillMaxSize(),

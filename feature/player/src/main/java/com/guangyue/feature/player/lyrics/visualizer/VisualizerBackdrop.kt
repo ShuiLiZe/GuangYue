@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,9 +23,11 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -215,18 +218,30 @@ fun rememberCoverPalette(
     }
 }
 
+/** Folia FluidBackground：封面放大倍数（`scale = max(w/iw, h/ih) * 1.5`）。 */
+internal const val COVER_SCALE = 1.5f
+
+/** Folia FluidBackground：封面层不透明度（Web 端 0.3）。 */
+internal const val COVER_OPACITY = 0.3f
+
 /**
- * 视觉背景层：底色渐变 + 模糊封面 + overlay 渐变（换歌时颜色柔焦过渡）。
+ * 视觉背景层：取色背景色 + 模糊封面（放大 1.5×）+ bottom-right overlay 渐变（换歌时颜色柔焦过渡）。
  *
- * @param content 舞台层（歌词画布），装在背景之上、pointerEvents 照常。
+ * 对应 Folia `FluidBackground.tsx`：
+ * - 无封面：`backgroundColor @ opacity 0.8` 铺底 + `linear-gradient(to bottom right, accent, transparent,
+ *   secondary)` @0.4 `mix-blend-mode: overlay`；
+ * - 有封面：封面按 object-cover 绘制、放大 1.5×、模糊 40px×1.5，opacity 0.3，再叠同一条渐变。
+ *
+ * @param source 封面来源：业务封面 [CoverSource.Url] 或内置测试封面 [CoverSource.Bundled]；
+ *   为 null 时按 Folia「无封面」路径只画底色 + 渐变。
+ * @param content 舞台层（歌词画布），装在背景之上。
  */
 @Composable
 fun VisualizerBackdrop(
     palette: CoverPalette,
-    coverUrl: String?,
+    source: CoverSource?,
     dark: Boolean,
     modifier: Modifier = Modifier,
-    /** 减少动效：关掉换歌柔焦与封面淡入（Folia 的 `prefers-reduced-motion` 只在歌词层生效，这里一并关掉背景过渡）。 */
     reduceMotion: Boolean = rememberReduceMotion(),
     content: @Composable () -> Unit = {},
 ) {
@@ -260,29 +275,44 @@ fun VisualizerBackdrop(
     val background = shown.getOrElse(0) { palette.backgroundColor }
     val overlayPrimary = shown.getOrElse(1) { palette.accentColor }
     val overlaySecondary = shown.getOrElse(2) { palette.secondaryColor }
-    // Folia FluidBackground 的两段底色（同一层、opacity 0.8，不是自上而下的白/黑渐变）：
-    //   - 有封面：封面下面的 backgroundColor @0.8，封面盖住它，只在封面到来前露一下；
-    //   - 无封面：整屏就是 backgroundColor @0.8。
-    val wash = if (dark) lerp(Color.Black, background, 0.8f) else lerp(Color.White, background, 0.8f)
+
+    // Folia FluidBackground：底色 `backgroundColor` @0.8，不是白/黑 lerp。
+    // 旧实现 `lerp(White|Black, background, 0.8)` 把浅色压成纯米白、深色压成纯黑（审图第 4 条）；
+    // 现在按源码：不透明底色 + 同色 @0.8 叠加，取色饱和度留在背景上。
+    val wash = background.copy(alpha = 0.8f)
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(wash),
+            .background(background),
     ) {
-        if (!coverUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = ImageRequest.Builder(context).data(coverUrl).crossfade(true).build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .let { if (blurAllowed) it.blur(COVER_BLUR_DP.dp) else it },
-            )
+        Box(Modifier.fillMaxSize().background(wash))
+        if (source != null) {
+            val coverModifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = COVER_SCALE
+                    scaleY = COVER_SCALE
+                    alpha = COVER_OPACITY
+                }
+                .let { if (blurAllowed) it.blur((COVER_BLUR_DP * COVER_SCALE).dp) else it }
+            when (source) {
+                is CoverSource.Url -> AsyncImage(
+                    model = ImageRequest.Builder(context).data(source.value).crossfade(true).build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = coverModifier,
+                )
+                is CoverSource.Bundled -> Image(
+                    painter = painterResource(source.resId),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = coverModifier,
+                )
+            }
         }
-        // Folia：linear-gradient(to bottom right, primary, transparent, secondary) + mix-blend-mode: overlay + 0.4
-        // 注意 Folia 只用 accent/secondary 上 overlay；primaryColor 留给文字/次要控件的对比色，
-        // 上了 overlay 会把画布拍成一片单色（见 docs/ui-v0/report.md「已知不足 1」）。
+        // Folia：linear-gradient(to bottom right, accent, transparent, secondary) + mix-blend-mode: overlay + 0.4
+        // 只用 accent/secondary 上 overlay；primaryColor 留给文字与控件的对比色。
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -291,7 +321,7 @@ fun VisualizerBackdrop(
                     drawRect(
                         brush = Brush.linearGradient(
                             listOf(
-                                palette.accentColor.copy(alpha = 0.9f),
+                                overlayPrimary.copy(alpha = 0.9f),
                                 Color.Transparent,
                                 overlaySecondary.copy(alpha = 0.9f),
                             ),

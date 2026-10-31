@@ -1,4 +1,4 @@
-// 对应 Folia 文件：
+﻿// 对应 Folia 文件：
 //   src/components/visualizer/classic/Visualizer.tsx（行 124–348：逐词布局、呼吸浮动、行容器）
 //   src/components/visualizer/classic/tuning.ts（字词旋转 / 呼吸浮动 / 词距）
 //   src/components/visualizer/GlowWord.tsx（每个词由 GlowWord 渲染）
@@ -23,7 +23,9 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -113,12 +115,35 @@ internal fun ClassicLyricLine(
     val floatY = floatMotion.first
     val floatScale = floatMotion.second
 
+    // 行距：Folia 一次只画当前行、没有行距概念；广乐把当前行插在滚动列表里，必须自己给
+    // 「active 词放大 scale×1.4」预留垂直空间，否则放大的当前行会压到下一行（审图第 1 条）。
+    // 行盒 = 字形高度 + 上下留白：所有词槽位都锁到同一行高，并且永远按「最大放大」预留，
+    // 于是任一时刻拍下的画面里，放大后的当前行也不会碰到上一行/下一行。
+    val rowMinHeight = with(density) {
+        val lineHeightPx = fontSizePx * LINE_HEIGHT_RATIO
+        val overflowPx = lineHeightPx * (ACTIVE_SCALE - 1f) / 2f
+        (lineHeightPx + overflowPx * 2f + lineHeightPx * LINE_GAP_RATIO).toDp()
+    }
+    // 总宽 = 每个词宽 + 内核算出的 marginRight，至少和视口一样宽：这样词距拉满时也不会把
+    // 最后一个词顶出屏幕（Folia classic 的行是 flex-wrap 居中排布，画布是整块 70vh）。
+    val rowWidth = with(density) {
+        val contentPx = line.words.indices.sumOf { index ->
+            val label = line.words[index].text
+            val w = measureWordWidth(measurer, label, fontSizePx, density)
+            w + (layout.words.getOrNull(index)?.marginRight ?: 0.0)
+        }
+        maxOf(contentPx, viewportWidthPx).toFloat().toDp()
+    }
+
     Row(
-        modifier = modifier.graphicsLayer {
-            translationY = floatY
-            scaleX = floatScale
-            scaleY = floatScale
-        },
+        modifier = modifier
+            .widthIn(min = rowWidth)
+            .heightIn(min = rowMinHeight)
+            .graphicsLayer {
+                translationY = floatY
+                scaleX = floatScale
+                scaleY = floatScale
+            },
         verticalAlignment = verticalOf(layout.line.alignItems),
     ) {
         line.words.forEachIndexed { index, word ->
@@ -166,6 +191,8 @@ private fun RowScope.WordSlot(
     Box(
         modifier = Modifier
             .padding(end = with(density) { config.marginRight.toFloat().toDp() })
+            // 每个词槽位锁到行高：词盒高度固定，active 放大时只在盒内溢出，不去挤压邻行。
+            .fillMaxHeight(0.999f)
             .heightIn(min = WordTouchTargetDp.dp)
             .align(alignSelfOf(config.alignSelf)),
         contentAlignment = Alignment.Center,
@@ -174,6 +201,16 @@ private fun RowScope.WordSlot(
     }
 }
 
+// ---------------- 行盒常量 ----------------
+// Folia GlowWord.tsx：lineHeight 1.22（与 GlowWord 内 TextStyle 一致）。
+internal const val LINE_HEIGHT_RATIO = 1.22f
+
+// Folia glowWordVariants.ts：active 布局 scale = config.scale * 1.4（空则 1.5）。
+// 当前行插入滚动列表时必须按这个倍数预留垂直空间，否则放大的字会压到邻行（审图第 1 条）。
+internal const val ACTIVE_SCALE = 1.4f
+
+// 行与行之间再留 0.12em（Folia classic 的 minMargin 同款比例），保证放大后仍有余量。
+internal const val LINE_GAP_RATIO = 0.12f
 /** 兜底：纯文本渲染（不辉光）。只在拿不到渲染档案（行被清空等）时用，保证不崩。 */
 @Composable
 private fun PlainWord(
