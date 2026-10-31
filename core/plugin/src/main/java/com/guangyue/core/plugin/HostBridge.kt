@@ -341,18 +341,35 @@ internal object HostBridge {
 
   // ---------------------------------------------------------------- timers
   // QuickJS has no event loop the host can block on: setTimeout is recorded and fired
-  // synchronously right after the current call returns (see __gy_flushTimers).
+  // when the host pumps (see __gy_flushTimers / __gy_fireDueTimer).
+  //
+  // P2：这里补了一个**虚拟时钟**。MusicFree 是真浏览器/Node 环境，setTimeout 有真实延时，
+  // 于是大量插件用 `Promise.race([源A, withTimeout(源B, 1500)])`、错峰 setTimeout(550/700/850/1000)
+  // 做多路竞速，并用 `Date.now()` 检查 RESOLVE_BUDGET/DEADLINE。宿主此前只有「立刻全触发」一种
+  // 语义 → withTimeout 的兜底永远不触发、竞速退化成串行且会被慢源拖到 40s+（酷我 HYW connect
+  // 超时即典型案例）。现在：定时器按 due 时刻排队，Date.now() 返回虚拟时间，宿主在 job 队列空转
+  // 时把虚拟时钟推进到下一个到期定时器并执行它 —— 语义与浏览器一致，但不需要真的等待。
   var __timers = [];
   var __timerSeq = 1;
-  G.setTimeout = function (fn, delay) {
+  var __realNowFn = Date.now;
+  var __clockBase = __realNowFn();
+  var __clockOffset = 0;
+  G.__gy_realNow = function () { return __realNowFn(); };
+  G.__gy_now = function () { return __clockBase + __clockOffset; };
+  Date.now = function () { return G.__gy_now(); };
+  function __gyPushTimer(fn, delay, args) {
     if (typeof fn !== 'function') return 0;
+    var d = Number(delay) > 0 ? Number(delay) : 0;
     var id = __timerSeq++;
-    __timers.push({ id: id, fn: fn, delay: delay || 0, args: Array.prototype.slice.call(arguments, 2), clear: false });
+    __timers.push({ id: id, fn: fn, delay: d, due: __clockOffset + d, args: args || [], clear: false });
     return id;
+  }
+  G.setTimeout = function (fn, delay) {
+    return __gyPushTimer(fn, delay, Array.prototype.slice.call(arguments, 2));
   };
   G.setInterval = function (fn, delay) {
     // A repeating timer makes no sense in a single-shot invocation: run it once.
-    return G.setTimeout(fn, delay);
+    return __gyPushTimer(fn, delay, Array.prototype.slice.call(arguments, 2));
   };
   G.clearTimeout = function (id) {
     for (var i = 0; i < __timers.length; i++) if (__timers[i].id === id) __timers[i].clear = true;
@@ -360,16 +377,84 @@ internal object HostBridge {
   G.clearInterval = G.clearTimeout;
   G.setImmediate = function (fn) { return G.setTimeout(fn, 0); };
   G.__gy_flushTimers = function () {
-    var pending = __timers;
-    __timers = [];
+    var due = [];
+    var rest = [];
+    for (var i = 0; i < __timers.length; i++) {
+      if (__timers[i].due <= __clockOffset) due.push(__timers[i]); else rest.push(__timers[i]);
+    }
+    __timers = rest;
     var limit = 200;
-    for (var i = 0; i < pending.length && limit-- > 0; i++) {
-      var t = pending[i];
+    for (var j = 0; j < due.length && limit-- > 0; j++) {
+      var t = due[j];
       if (t.clear) continue;
+      if (t.due > __clockOffset) __clockOffset = t.due;
       try { t.fn.apply(null, t.args); } catch (e) {
         try { G.__gy_log('error', 'timer: ' + (e && e.message ? e.message : String(e))); } catch (_) {}
       }
     }
+  };
+  // 推进**一个**定时器：把虚拟时钟跳到它到期的时刻再执行。宿主在 __gy_pump 里发现 job
+  // 队列推不动（等着某个 setTimeout/withTimeout 兜底）时调用它，返回 1 表示确实推进了。
+  G.__gy_fireDueTimer = function () {
+    if (!__timers.length) return 0;
+    var idx = -1, best = Infinity;
+    for (var i = 0; i < __timers.length; i++) {
+      if (__timers[i].clear) continue;
+      if (__timers[i].due < best) { best = __timers[i].due; idx = i; }
+    }
+    if (idx < 0) { __timers = []; return 0; }
+    var t = __timers.splice(idx, 1)[0];
+    if (t.due > __clockOffset) __clockOffset = t.due;
+    try { t.fn.apply(null, t.args); } catch (e) {
+      try { G.__gy_log('error', 'timer: ' + (e && e.message ? e.message : String(e))); } catch (_) {}
+    }
+    return 1;
+  };
+
+  // ---------------------------------------------------------------- AbortController
+  // 0.0.9 / P2：酷我、酷狗、QQ 插件都用 `typeof AbortController === 'function' ? new AbortController() : null`
+  // 给 axios 传 signal，并用定时器在超时后 abort()（弃掉慢源的请求）。QuickJS 没有这个内置对象，
+  // 插件拿到 null 就走不了它的超时取消路径。这里给一个够用的实现：signal.aborted/reason/onabort/
+  // addEventListener/dispatchEvent/throwIfAborted，abort() 触发监听者。宿主侧 axios 不真的断连
+  // （OkHttp 请求已在飞行中），但插件的逻辑分支与 MusicFree 保持一致。
+  var __gyControllers = [];
+  function GyAbortSignal() {
+    this.aborted = false;
+    this.reason = undefined;
+    this.onabort = null;
+    this._listeners = [];
+  }
+  GyAbortSignal.prototype.addEventListener = function (type, fn) {
+    if (type === 'abort' && typeof fn === 'function') this._listeners.push(fn);
+  };
+  GyAbortSignal.prototype.removeEventListener = function (type, fn) {
+    if (type !== 'abort') return;
+    var i = this._listeners.indexOf(fn);
+    if (i >= 0) this._listeners.splice(i, 1);
+  };
+  GyAbortSignal.prototype.dispatchEvent = function () { return true; };
+  GyAbortSignal.prototype.throwIfAborted = function () {
+    if (this.aborted) throw this.reason || new Error('The operation was aborted.');
+  };
+  G.AbortSignal = GyAbortSignal;
+  G.AbortController = function () {
+    var self = this;
+    this.signal = new GyAbortSignal();
+    this.abort = function (reason) {
+      if (self.signal.aborted) return;
+      self.signal.aborted = true;
+      self.signal.reason = reason || new Error('The operation was aborted.');
+      var cb = self.signal.onabort;
+      var ls = self.signal._listeners.slice();
+      if (typeof cb === 'function') { try { cb.call(self.signal, { type: 'abort', target: self.signal }); } catch (_) {} }
+      for (var i = 0; i < ls.length; i++) { try { ls[i].call(self.signal, { type: 'abort', target: self.signal }); } catch (_) {} }
+    };
+    __gyControllers.push(this);
+  };
+  G.__gy_abortAllControllers = function () {
+    var list = __gyControllers;
+    __gyControllers = [];
+    for (var i = 0; i < list.length; i++) { try { if (!list[i].signal.aborted) list[i].abort(); } catch (_) {} }
   };
 
   // ---------------------------------------------------------------- axios
@@ -611,6 +696,19 @@ internal object HostBridge {
       timeout: typeof config.timeout === 'number' ? config.timeout : 0
     });
 
+    // 0.0.9/P2：插件给 axios 传 `signal`（`new AbortController().signal`）做超时取消。宿主这里不发
+    // 真正的断连（OkHttp 请求已经在飞行），但**必须如实走插件写好的 abort 分支**：已经 abort 的
+    // signal 立即以 rejected 链返回，让插件的 `.catch` 把「这条通道超时」算进去，而不是让一个早已
+    // 该被放弃的源把整轮取链拖死。
+    var signal = config.signal;
+    if (signal && signal.aborted) {
+      var abortMsg = signal.reason && signal.reason.message ? signal.reason.message : 'The operation was aborted.';
+      var abortErr = new Error('Network Error: ' + abortMsg);
+      abortErr.name = 'AbortError';
+      abortErr.config = config;
+      return attachChain({ status: 0, headers: {}, data: null, config: config }, abortErr);
+    }
+
     var raw;
     try {
       raw = G.__gy_http(payload);
@@ -764,6 +862,11 @@ internal object HostBridge {
     version: 'v18.0.0',
     nextTick: function (fn) { G.setTimeout(fn, 0); }
   };
+  // P2：多家插件（QQ/酷我/酷狗/网易云）自带 `process.env.AG_DEBUG` 诊断开关，打开后
+  // 会把「选了哪条通道 / 哪一步失败」用 console.error 打出来。宿主默认不开，只有
+  // 诊断用例（系统属性 gy.plugin.debug=1）把 globalThis.__gy_debug 置真时才透出，
+  // 否则线上会凭空多出大量日志。日志经 __gy_log → PluginRuntime.onLog 回宿主。
+  if (G.__gy_debug) G.process.env.AG_DEBUG = '1';
 })()
 """
 
@@ -835,6 +938,9 @@ internal object HostBridge {
     if (!state) return { pending: false, result: JSON.stringify({ ok: false, error: 'pending call lost' }) };
     if (!state.done) return { pending: true };
     G.__gy_pending = null;
+    // 一次调用结算完就把这轮登记的 AbortController 全部 abort：MusicFree 里这些 controller
+    // 的定时器会在超时后弃掉慢源，宿主这里不能留着它们（否则下一次调用还看到 aborted=false 的老实例）。
+    if (typeof G.__gy_abortAllControllers === 'function') { try { G.__gy_abortAllControllers(); } catch (_) {} }
     if (!state.ok) return { pending: false, result: JSON.stringify({ ok: false, error: describeWithStack(state.error) }) };
     var payload = JSON.stringify(state.value === undefined ? null : state.value);
     if (payload === undefined) payload = 'null';
@@ -855,7 +961,17 @@ internal object HostBridge {
       if (typeof G.__gy_drainOneJob !== 'function') break;
       var moved = false;
       try { moved = G.__gy_drainOneJob() > 0; } catch (e) { break; }
-      if (!moved) break;
+      if (!moved) {
+        // P2：job 队列推不动了 —— 插件通常正卡在 `await` 一个 setTimeout/withTimeout 兜底上。
+        // 把虚拟时钟推进到最近一个到期的定时器并执行它（不是「立刻全触发」，到期顺序与
+        // 浏览器一致：先 550ms 错峰，再 1500ms 兜底…），然后继续推队列。
+        if (typeof G.__gy_fireDueTimer === 'function' && G.__gy_fireDueTimer() > 0) {
+          advanced++;
+          if (advanced > 20000) break;
+          continue;
+        }
+        break;
+      }
       advanced++;
       if (advanced > 20000) break;
     }

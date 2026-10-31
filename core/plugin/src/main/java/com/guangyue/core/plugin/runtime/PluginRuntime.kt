@@ -119,6 +119,11 @@ class PluginRuntime(
             // 1) host bridge (CommonJS + axios + timers + console) – plain JS, no plugin code yet
             //    每一步都自己包 try/catch 并带上阶段名：0.0.1 时代所有阶段错误都只有一句
             //    `SyntaxError: expecting ','` + 一个指向别处的行号，完全无法定位是哪一段坏了。
+            //    P2：诊断开关必须在 bridge.js **之前**置真 —— 多家插件在 install 阶段就会读
+            //    `process.env.AG_DEBUG` 决定要不要打日志（开关置晚一天等于没开）。
+            if (System.getProperty("gy.plugin.debug") == "1") {
+                step("debug.js") { exec(runtime, "globalThis.__gy_debug = true;", "debug.js") }
+            }
             step("bridge.js") { exec(runtime, HostBridge.COMMONJS_SHIM, "bridge.js") }
             //    shim 是整条链的地基：装完立刻断言 `__gy_boot` / `__gy_require` 真的存在，
             //    否则后面的报错会伪装成「插件语法错误」，排查时会一路查错方向。
@@ -365,9 +370,13 @@ class PluginRuntime(
                     append(",\"headers\":{")
                     var first = true
                     for (name in resp.headers.names()) {
-                        // 已经解压过就不要再把 Content-Encoding / Content-Length 透给插件，
+                        // 已经解压过就不要再把 Content-Encoding 透给插件，
                         // 否则插件里的 zlib.gunzip 会二次解压报「invalid stored block lengths」。
-                        if (name.equals("Content-Encoding", true) || name.equals("Content-Length", true)) continue
+                        // P2：Content-Length 必须透传 —— axios（MusicFree 的实际运行时）会把响应头
+                        // 原样交给插件，插件里 probeHeadSize/probeLinkMeta 这类「拿回包长度回填 size」
+                        // 的守卫全靠它；此前连同 CE 一起剔除，导致 206 回包也读不到长度、size 恒 0。
+                        // LxRuntime 一直是只剔 CE 的行为，这里与它对齐。
+                        if (name.equals("Content-Encoding", true)) continue
                         if (!first) append(',')
                         first = false
                         append(JsonPrimitive(name)).append(':').append(JsonPrimitive(resp.headers.values(name).joinToString(", ")))

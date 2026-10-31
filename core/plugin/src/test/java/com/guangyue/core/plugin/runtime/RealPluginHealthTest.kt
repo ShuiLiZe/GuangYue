@@ -81,15 +81,25 @@ class RealPluginHealthTest(private val entry: PluginEntry) {
         fun entries(): List<PluginEntry> = HealthCache.entries()
 
         /** 供 [RealPluginHealthTest] 之外统一取用（体检报告生成脚本也走这里）。 */
-        fun runtimeFor(code: String, platform: String) = PluginRuntime(
+        fun runtimeFor(code: String, platform: String) = runtimeFor(
+            code, platform,
+            OkHttpClient.Builder()
+                .connectTimeout(20, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .build(),
+        )
+
+        /**
+         * 带自定义 HTTP 客户端的重载：取证用例（[FiveSourceHttpTapTest] / [PluginSourceMatrixTest]）
+         * 要能塞进一个记录拦截器，看到插件**真实发出的**每一条请求。
+         */
+        @JvmStatic
+        fun runtimeFor(code: String, platform: String, http: OkHttpClient) = PluginRuntime(
             meta = com.guangyue.core.plugin.PluginMeta(
                 id = platform, platform = platform, name = platform, version = "1", source = "health://$platform",
             ),
             code = code,
-            http = OkHttpClient.Builder()
-                .connectTimeout(20, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .build(),
+            http = http,
             preludeProvider = HealthPrelude(prelude),
         )
     }
