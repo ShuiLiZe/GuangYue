@@ -67,6 +67,7 @@ import com.guangyue.feature.library.design.icons.GuangYueIcons
 import com.guangyue.feature.player.lyrics.visualizer.ClassicLyricLine
 import com.guangyue.feature.player.lyrics.visualizer.CoverPalette
 import com.guangyue.feature.player.lyrics.visualizer.fume.FumeBulletinStage
+import com.guangyue.feature.player.lyrics.visualizer.fume.FumeStillFrame
 import com.guangyue.feature.player.lyrics.visualizer.VisualizerBackdrop
 import com.guangyue.feature.player.lyrics.visualizer.VisualizerClock
 import com.guangyue.feature.player.lyrics.visualizer.hasVisibleWords
@@ -143,6 +144,10 @@ fun LyricFlowScreen(
     fumeTuning: FumeTuning = FumeTuning.DEFAULT,
     /** 取证用：>0 时「浮名」镜头按固定 dt 一次推进这么多帧（模拟器帧时间不可靠）。 */
     fumeSettleSteps: Int = 0,
+    /** 取证用：取景定格时刻（秒）。>0 且 [fumeSettleSteps]>0 时，画面固定停在这一时刻。 */
+    fumeSettleTimeSeconds: Double = 0.0,
+    /** 取证用：把落点镜头放在组合期一次算好（模拟器单帧 3–4s，等异步刷新拍不及）。 */
+    fumeStillFrame: Boolean = false,
     /** V1a 自查：浮名舞台画块边界/对焦十字（取景用，正式界面不开）。 */
     fumeDebugFrames: Boolean = false,
     modifier: Modifier = Modifier,
@@ -158,11 +163,14 @@ fun LyricFlowScreen(
 
     // 字幕层内容：当前句翻译；这一句没有可读翻译时改画后面几行的预告（Folia 同款规则）。
     // `showText` 与舞台一致 —— 空态（加载中 / 失败 / 无歌词）时不画字幕。
-    val subtitleContent = remember(activeLine, kernelLines, currentIndex, emptyKind) {
+    // 浮名不画字幕层：Folia 的浮名把整首歌的每一行都排进文章里自己打印，
+    // 当前句若再让字幕层画一遍，就是同一句话在屏上出现两遍、且字幕层是居中小字，
+    // 会和镜头里的放大正文抢视觉（实拍里表现为「浮名画了一遍、居中又画了一遍」）。
+    val subtitleContent = remember(activeLine, kernelLines, currentIndex, emptyKind, lyricStyle) {
         resolveSubtitleOverlayContent(
             activeLine = activeLine,
             nextLines = kernelLines.drop(currentIndex.coerceAtLeast(0) + 1),
-            showText = emptyKind == null,
+            showText = emptyKind == null && lyricStyle != LyricStyle.FUME,
         )
     }
 
@@ -251,6 +259,32 @@ fun LyricFlowScreen(
             .fillMaxSize()
             .testTag(LyricRootTag),
     ) {
+        // ---------------- 浮名：整屏画布（edge-to-edge，系统栏/顶栏/字幕层都浮在它上面） ----------------
+        // 对应 Folia VisualizerFume.tsx:333-350：画布是 VisualizerShell 里 absolute inset-0 的一层，
+        // 视口 = 整屏（ResizeObserver 量的是那个 h-full w-full 的 div），顶栏 / 字幕层 / 播放条
+        // 都是浮在上面的独立层。它**不是**被顶栏和字幕挤压出来的「剩余空间」——
+        // 那是流光(classic)舞台的算法（[ClassicLyricLine] 用 stageHeightPx）。
+        // 所以浮名画布与 [Column] 平级挂在这一层，拿到的 viewport 就是整屏。
+        if (lyricStyle == LyricStyle.FUME && kernelLines.isNotEmpty() && emptyKind == null) {
+            FumeBulletinStage(
+                lineIndex = currentIndex,
+                lines = kernelLines,
+                clock = clock,
+                tuning = fumeTuning,
+                intensity = AnimationIntensity.NORMAL,
+                lyricsFontScale = lyricsFontScale,
+                activeColor = lyricAccent,
+                baseColor = onBackdrop,
+                accentColor = lyricAccent,
+                fontFamily = GuangYueDesign.Serif,
+                reduceMotion = reduceMotion,
+                settleSteps = fumeSettleSteps,
+                settleTargetTime = fumeSettleTimeSeconds,
+                stillCamera = if (fumeStillFrame) FumeStillFrame(fumeSettleSteps.coerceAtLeast(1)) else null,
+                debugFrames = fumeDebugFrames,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         Column(
             Modifier
                 .fillMaxSize()
@@ -355,23 +389,8 @@ fun LyricFlowScreen(
                         onRetry = null,
                     )
                 } else if (lyricStyle == LyricStyle.FUME && kernelLines.isNotEmpty()) {
-                    // V1a「浮名」：整首歌排成一张纸，镜头在纸面上跟着当前句移动。
-                    FumeBulletinStage(
-                        lineIndex = currentIndex,
-                        lines = kernelLines,
-                        clock = clock,
-                        tuning = fumeTuning,
-                        intensity = AnimationIntensity.NORMAL,
-                        lyricsFontScale = lyricsFontScale,
-                        activeColor = lyricAccent,
-                        baseColor = onBackdrop,
-                        accentColor = lyricAccent,
-                        fontFamily = GuangYueDesign.Serif,
-                        reduceMotion = reduceMotion,
-                        settleSteps = fumeSettleSteps,
-                        debugFrames = fumeDebugFrames,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    // 浮名：画布已经铺在整屏那一层（本函数开头），舞台 Box 里留空，
+                    // 只保留顶栏 / 字幕层 / 播放条这些「浮在画布上」的层。
                 } else if (activeLine != null && activeLine.hasVisibleWords()) {
                     // 舞台只画正在唱的这一句（Folia classic/Visualizer.tsx 的 activeLine 分支）。
                     ClassicLyricLine(

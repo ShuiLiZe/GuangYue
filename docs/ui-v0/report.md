@@ -1,4 +1,4 @@
-﻿# V0 歌词内核 · 收尾报告
+# V0 歌词内核 · 收尾报告
 
 分支 `port/u2`（基于 `60824c8`），提交「V0: 歌词内核 + GlowWord + 流光底座」。未 push、未打 tag。
 
@@ -413,3 +413,91 @@ assembleRelease → **BUILD SUCCESSFUL（4m9s）**，app/build/outputs/apk/relea
 Task '.gradle.jvmargs=-Xmx2g' not found）；v0c_variant 是 String extra，要用 --es 传（--ez 会报
 Invalid boolean value: preview）。另外拍摄中途模拟器进程崩过一次（adb devices 变空、qemu 进程消失），
 按同一 AVD gy34 原地重启后继续，分辨率/密度/字号都已核对回默认值。
+
+
+## V1a: 浮名样式内核与镜头
+
+把 Folia 网页端「浮名」（visualizer/fume）的排版与镜头算法移植到 Android，作为 `LyricStyle.FUME`
+的正式实现。内核放在 `core/lyrics`（纯 Kotlin，可 JVM 单测），绘制层放在 `feature/player`。
+`LyricStyle.CLASSIC`（流光）路径一行未动。
+
+### 1. Folia 文件 → Kotlin 文件对照
+
+| Folia（`src/components/visualizer/fume/`） | 广乐（Kotlin） | 说明 |
+|---|---|---|
+| `fumeMath.ts` + `fumeTypes.ts` | `core/lyrics/.../fume/FumeCore.kt`（`FumeMath` / `FumeViewport` / `FumeVariant` / `FumeTuning` / 数据模型） | 数值工具、视口、变体、调参、块与文章的不可变模型 |
+| `fumeArticleLayout.ts` + `fumeTextMeasure.ts` + `tuning.ts` | `core/lyrics/.../fume/FumeArticleLayoutBuilder.kt` | 纸张宽度、列数、字号二分、贪心折行、hero（大标题块）挑选、确定性打散（seeded FNV-1a）、缓存键 |
+| `fumeCamera.ts` + `fumeCameraStep.ts` | `core/lyrics/.../fume/FumeCamera.kt`（`FumeCamera` 纯函数 + `FumeCameraStep` 步进器） | 焦点点、镜头缩放、重定向时长、文章概览镜头、跨屏飞行桥、弹簧积分 |
+| `fumeReveal.ts` | `core/lyrics/.../fume/FumeReveal.kt` | 词/字素打印进度、行内截断时刻（`linePassCutoffTime`） |
+| `fumeTextStyle.ts` | `core/lyrics/.../fume/FumeTextStyles.kt` | 等待/打印/已读三态样式、颜色轨时长、屏幕剔除、静态层透明度 |
+| `fumeCanvasText.ts` + `fumeLiveRaster.ts` | `feature/player/.../visualizer/fume/FumeStage.kt`（`FumeBulletinStage`） | 世界坐标绘制、逐字素墨色（打印/颜色轨/底影/辉光）、打印印戳 |
+| `fumeTextMeasure.ts`（canvas.measureText） | `feature/player/.../visualizer/fume/FumeTextMeasurerAndroid.kt` | 用 `TextMeasurer` 量字宽，结果喂回排版器 |
+| `VisualizerFume.tsx` 的 canvas 挂载层 | `feature/player/.../lyrics/LyricFlowScreen.kt` | 浮名 Canvas 铺在 `VisualizerBackdrop` 的 content 层（整屏），顶栏/播放胶囊浮在它上面 |
+| `useFumeCanvasStage.ts` 的每帧循环 | `FumeStage.kt` 的 `LaunchedEffect` + `withFrameNanos` | 帧时钟取 `VisualizerClock`，相机状态由组件持有 |
+
+单测：`FumeArticleLayoutBuilderTest`、`FumeCameraTest`、`FumeRevealTest`、`FumeTextStylesTest`（均在 `core/lyrics/src/test`）。
+
+### 2. 手机化改动及原因
+
+1. **浮名 Canvas 整屏 edge-to-edge。** Folia 的 canvas 是 `VisualizerShell` 内 `absolute inset-0` 的全屏层，
+   顶栏/字幕/播放条都是浮在其上的独立层。原实现把 `FumeBulletinStage` 挂在被顶栏与字幕层挤压的
+   `weight(1f)` 舞台 Box 里，日志里视口只剩 328×84dp，文章排版被压成一条横缝。
+   现改为在 `VisualizerBackdrop` 的 content lambda 中、与 `Column` 平级渲染，视口变为 360×800dp（整屏，
+   状态栏与导航栏下方区域一并使用）；舞台 Box 内浮名分支留空，`LyricSubtitleOverlay` 在浮名样式下不渲染
+   （Folia 浮名把整首歌排进文章自己打印，字幕层会再补一份居中译文，实拍中表现为同一句出现两遍）。
+   流光走原路径，仍用被挤压后的舞台高度。
+2. **删掉 hero「按块宽等比缩进」。** 前任在 `drawLiveBlock` 里按「块宽 vs 视口宽」给整块加了一层
+   `scale(fitScale)`，Folia 没有这段。已整段删除：镜头的 scale 只由 `FumeCamera.cameraScaleForBlock`
+   决定 —— 目标行高 `clamp(min(视口宽,高) × 0.115, 64, 124)` dp 除以块行高，再 clamp 到 `0.88–2.2`。
+   块比屏幕宽、行尾未唱的字出屏，都是 Folia 原样；长句靠镜头焦点沿正在打印的字素向右平移来读
+   （`FumeCamera.steppedBlockFocusPoint`：`x = clamp(行左 + widthBetweenOffsets(行首, 已打印字素), 行左, 行右)`）。
+3. **dp 世界坐标 + density 一次缩放。** 全部排版与镜头计算都在 dp 空间完成，Canvas 里只在最外层
+   做一次 `scale(density)`，再 `translate(视口中心) → scale(camera.scale) → translate(-camera)`，
+   与 Folia 的 `translate(cx,cy) → scale(s) → translate(-x,-y)` 逐一对应；两处 `scale` 都显式传
+   `pivot = Offset.Zero`，避免 Compose 默认以中心为轴带来的二次偏移。
+4. **文字中线对齐。** `resolveBlockTiming` 给出 `baselineOffset = 行高 × 0.52`（CJK）/ `0.5`（拉丁），
+   绘制时把 `TextLayoutResult` 的顶边拉到 `中线 − 文本高 × 0.5`，与 Folia 的 `textBaseline = middle` 一致。
+5. **固定帧推进替代 `withFrameNanos`。** 模拟器上 `withFrameNanos` 常常只出一帧，实拍无法复现「正在打印」。
+   取景开关 `v0c_fumesteps N` 让镜头以 `staticMode` 直落目标机位并把时间推到该句渲染末尾前 0.05s，
+   `v0c_fumetime T` 指定结算到哪一秒；两者只在 debug 取证源集里生效，业务代码默认关闭。
+6. **文本绘制走 `TextLayoutResult`。** `DrawScope.drawText(TextLayoutResult)` 而不是 `drawText(String)`，
+   否则字宽与排版器的 `measureWidth` 不一致，逐字素定位会漂移。
+
+### 3. 实拍（emulator-5554，720×1600 @320dpi）
+
+| 截图 | 说明 |
+|---|---|
+| `v1a-fume-active-light.png` | `v0c_ms 6000 / dark false / style fume / fumesteps 12`，浅色，当前句放大、正在打印 |
+| `v1a-fume-active-dark.png` | 同参数 `dark true`，深色，其余块仅剩极淡等待底影 |
+| `v1a-classic-regress.png` | `v0c_ms 2000 / style classic`，流光舞台照常，无回归 |
+
+逐张看过：浮名两张里当前句按 `cameraScaleForBlock` 放大到约 2.2 倍，字在屏内、行尾未唱部分出屏，
+块外无多余的居中译文；背景是封面调色板的整屏渐变，顶栏与播放胶囊浮在画布之上，状态栏/导航栏区域
+也被画布覆盖（edge-to-edge 生效）。流光那张仍然是单行居中 + 底部字幕层，与 V0e-fix2 的现状一致。
+
+### 4. 过程中排掉的坑
+
+- 先把屏上那行居中小字误认成「浮名排版没生效」，实为 `LyricSubtitleOverlay` 的译文层叠在上面。
+  定位手段：`uiautomator dump` 看 `TextView` 的 `bounds` 与字号，确认它属于字幕层而不是 Canvas。
+- `Snapshot.withoutReadObservation` 包裹绘制期读取 `cameraState` 并不能修复「只出一帧」，
+  真因是模拟器帧调度；不要在这上面继续做对照实验。
+- 模拟器重启后 debug APK 会丢（`Activity class does not exist`），需 `adb install -r -t` 重装。
+
+### 5. 产物
+
+- `gradlew.bat --offline --no-daemon --max-workers=2 "-Dorg.gradle.jvmargs=-Xmx2g" test` →
+  **BUILD SUCCESSFUL（2m21s）**，58 个真实套件 / **586 例** / 失败 0 / 跳过 2
+  （口径同 V0：`**/build/test-results/test*/*.xml` 的 `tests` 求和，剔除 `TEST-Gradle-Test-Run-*` 聚合伪套件）。
+- `assembleRelease` → **BUILD SUCCESSFUL（6m42s）**，产物 `app/build/outputs/apk/release/app-release.apk`，
+  9,030,557 字节，**SHA-256 = `434EB8A3D9C7C8154EAC6CA4A6146B3ADFCB6D0C31067FAAEF09EC5EE6933783`**。
+- 提交：`V1a: 浮名样式内核与镜头`（`port/u2`，未 push / 未打 tag / 未动 stash）。
+
+### 6. 未做项（归 V1b）
+
+- **tuning 面板**：`FumeTuning`（隐藏打印符号、几何背景开关与不透明度、文字停留比、镜头跟随模式
+  STEPPED/SMOOTH、镜头速度、辉光强度、hero 缩放）已在核心里做了 clamp 与解析，但没有 UI；
+  Folia 的 `tuning.ts` 面板未移植。
+- **几何背景**：`FumeBackground.ts` 的几何形（漂浮方块/线框）与 `FumeBackgroundViewResolver` 的
+  视口选择只留了接口占位，当前固定 `disableGeometricBackground = true`。
+- **上滑换歌 / 双指缩放的手机手势映射**：Folia 靠滚轮与拖拽驱动概览镜头，手机端交互待定。
+- 极长行（超过约 40 字）在 360dp 宽屏上的断行效果尚未与网页端逐像素比对。

@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -98,11 +99,24 @@ internal fun FumeBulletinStage(
     settleSteps: Int = 0,
     /** V1a 自查：画块边界与对焦十字（仅取景用）。 */
     debugFrames: Boolean = false,
+    /**
+     * 取景定格时刻（秒）。仅当 settleSteps>0 或预览（Inspection）时生效：
+     * 镜头与文字活性都按这个时刻算，不跟播放时钟走。
+     */
+    settleTargetTime: Double = 0.0,
+    /**
+     * 取景已经落位的镜头。非 null 时镜头、文字时刻、已读淡出进度全部用它，
+     * 绘制层不再读任何 State、也不再等帧循环 —— 模拟器上单帧开销 3–4s，
+     * 等 Async 落点再刷新几乎必然拍不及。
+     */
+    stillCamera: FumeStillFrame? = null,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
     val inspection = LocalInspectionMode.current
+    // 取景 harness（settleSteps>0 或预览）用固定推进：不跟播放时钟，直接落到 settleTargetTime。
+    val fixedMode = inspection || settleSteps > 0
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val viewport = FumeViewport(
@@ -172,55 +186,52 @@ internal fun FumeBulletinStage(
             mutableStateOf(FumeCameraStep.syncToArticle(FumeCameraStep.initialState(), article))
         }
         var overviewTextRestore by remember(article) { mutableStateOf(0.0) }
+        // 镜头状态。取值发生在 DrawScope 里，如果直接读 State 会让绘制 scope 订阅它，
+        // 之后再画一遍也收不到 draw 请求（排查记录：整屏画布曾因此冻在第一帧）。
+        // 用 Snapshot.withoutReadObservation 取，绘制只做消费者，不订阅。
+        // 另外取景下要立刻拿到刚落地的镜头，所以直接反射当前值。
+        val readCamera: () -> com.guangyue.core.lyrics.fume.FumeCameraState = {
+            Snapshot.withoutReadObservation { cameraState }
+        }
+
+        // 取景落点（settleSteps>0 / 预览）：镜头直接落到 settleTargetTime 这一刻。
+        // 必须在组合期外做——remember 初值里读 article 会导致重组命中缓存、镜头停在旧落点。
+        LaunchedEffect(article, lineIndex, tuning, reduceMotion, settleSteps, settleTargetTime, fixedMode) {
+            if (!fixedMode || reduceMotion) return@LaunchedEffect
+            var state = FumeCameraStep.syncToArticle(FumeCameraStep.initialState(), article)
+            var restore = 0.0
+            repeat(24) {
+                val (next, result) = FumeCameraStep.step(
+                    state,
+                    FumeCameraStepInput(
+                        article = article,
+                        time = settleTargetTime,
+                        nowMs = 0.0,
+                        dt = 1.0 / 60.0,
+                        lineIndex = lineIndex,
+                        viewport = viewport,
+                        overviewCamera = overviewCamera,
+                        overviewStartTime = overviewStartTime,
+                        cameraSpeed = tuning.cameraSpeed,
+                        cameraTrackingMode = tuning.cameraTrackingMode,
+                        staticMode = true,
+                        intensity = intensity,
+                        line = lines.getOrNull(lineIndex),
+                        nextLineStartTime = lines.getOrNull(lineIndex + 1)?.startTime,
+                    ),
+                )
+                state = next
+                restore = result.overviewTextRestoreProgress
+            }
+            cameraState = state
+            overviewTextRestore = restore
+        }
 
         // 逐帧推进镜头（对应 useFumeCanvasStage 每帧的 stepFumeCamera）。
-        // 正式运行走 withFrameNanos；只有 Robolectric / 取景 harness 才用固定 dt 推进 settleSteps 帧
-        // （前者 withFrameNanos 会挂住 waitForIdle，后者模拟器帧时间极不规律、画面不可复现）。
-        LaunchedEffect(article, lineIndex, tuning, reduceMotion, inspection, settleSteps) {
-            val fixedSteps = if (inspection) settleSteps.coerceAtLeast(1) else if (settleSteps > 0) settleSteps else -1
-            if (fixedSteps == 0) return@LaunchedEffect
-            if (fixedSteps > 0 && (reduceMotion || inspection || settleSteps > 0)) {
-                var state = cameraState
-                var restore = 0.0
-                // 推进起点 = 当前画面时刻（秒）；逐帧只往前推 dt，且不越过当前句尾，
-                // 否则会一路推到歌末被误判成 overview 总览。
-                val settleStart = clock.readForDraw()
-                val settleLine = lines.getOrNull(lineIndex)
-                val settleCeiling = if (settleLine == null) {
-                    Double.POSITIVE_INFINITY
-                } else {
-                    maxOf(RenderHints.getLineRenderEndTime(settleLine) - 0.05, settleLine.startTime)
-                }
-                repeat(fixedSteps) { frame ->
-                    val (next, result) = FumeCameraStep.step(
-                        state,
-                        FumeCameraStepInput(
-                            article = article,
-                            time = minOf(settleStart + frame * (1.0 / 60.0), settleCeiling),
-                            nowMs = 0.0,
-                            // Folia 的镜头靠 dt 追赶 + 重定向时长；固定 dt=1/60 在手机 DPI 下
-                            // 弹簧推得极慢，推进 90 帧也到不了目标。这里按帧放大步长，
-                            // 使它等价于「在 settleSteps 帧内走完一次完整重定向」。
-                            dt = 1.0 / 60.0 * 8.0,
-                            lineIndex = lineIndex,
-                            viewport = viewport,
-                            overviewCamera = overviewCamera,
-                            overviewStartTime = overviewStartTime,
-                            cameraSpeed = tuning.cameraSpeed,
-                            cameraTrackingMode = tuning.cameraTrackingMode,
-                            staticMode = true,
-                            intensity = intensity,
-                            line = lines.getOrNull(lineIndex),
-                            nextLineStartTime = lines.getOrNull(lineIndex + 1)?.startTime,
-                        ),
-                    )
-                    state = next
-                    restore = result.overviewTextRestoreProgress
-                }
-                cameraState = state
-                overviewTextRestore = restore
-                return@LaunchedEffect
-            }
+        // 取景（settleSteps>0）与预览（Inspection）走上面对应的落点分支，这里只跑真实帧循环。
+        LaunchedEffect(article, lineIndex, tuning, reduceMotion, settleSteps) {
+            if (fixedMode) return@LaunchedEffect
+            if (reduceMotion) return@LaunchedEffect
             var lastNanos = 0L
             while (true) {
                 withFrameNanos { nanos ->
@@ -228,7 +239,7 @@ internal fun FumeBulletinStage(
                     lastNanos = nanos
                     val time = clock.readForDraw()
                     val (next, result) = FumeCameraStep.step(
-                        cameraState,
+                        readCamera(),
                         FumeCameraStepInput(
                             article = article,
                             time = time,
@@ -252,9 +263,39 @@ internal fun FumeBulletinStage(
             }
         }
 
+        // 取景：组合期就把镜头算到这里（纯计算，不写 State）。绘制层直接用，不订阅任何 State。
+        val stillCamera = stillCamera
+        val settleState = if (stillCamera != null && fixedMode) {
+            var state = FumeCameraStep.syncToArticle(FumeCameraStep.initialState(), article)
+            repeat(stillCamera.steps) {
+                state = FumeCameraStep.step(
+                    state,
+                    FumeCameraStepInput(
+                        article = article,
+                        time = settleTargetTime,
+                        nowMs = 0.0,
+                        dt = 1.0 / 60.0,
+                        lineIndex = lineIndex,
+                        viewport = viewport,
+                        overviewCamera = overviewCamera,
+                        overviewStartTime = overviewStartTime,
+                        cameraSpeed = tuning.cameraSpeed,
+                        cameraTrackingMode = tuning.cameraTrackingMode,
+                        staticMode = true,
+                        intensity = intensity,
+                        line = lines.getOrNull(lineIndex),
+                        nextLineStartTime = lines.getOrNull(lineIndex + 1)?.startTime,
+                    ),
+                ).first
+            }
+            state
+        } else {
+            null
+        }
+
         Canvas(Modifier.fillMaxSize()) {
-            val camera = cameraState.camera
-            val time = clock.readForDraw()
+            val camera = settleState?.camera ?: readCamera().camera
+            val time = if (fixedMode) settleTargetTime else clock.readForDraw()
             val nextStart = lines.getOrNull(lineIndex + 1)?.startTime
 
             // 世界坐标全是 dp（Folia 的 CSS px）。Canvas 是 px，所以在最外层先把整张画布
@@ -271,15 +312,6 @@ internal fun FumeBulletinStage(
                 translate(-camera.x.toFloat(), -camera.y.toFloat())
             }) {
                 val ctx = FumeDrawContext(androidMeasurer, textMeasurer, density, fontFamily)
-                android.util.Log.e(
-                    "FumeBulletinStage",
-                    "draw time=$time cam=${camera.x},${camera.y},${camera.scale} " +
-                        "ovStart=$overviewStartTime ovScale=${overviewCamera.scale} lineIndex=$lineIndex " +
-                        "article=${article.width}x${article.height} blocks=${article.blocks.size} " +
-                        "firstLineW=${article.chronologicalBlocks.firstOrNull()?.renderLines?.firstOrNull()?.width} " +
-                        "firstInner=${article.chronologicalBlocks.firstOrNull()?.innerWidth} " +
-                        "vpx=${viewport.width}x${viewport.height}",
-                )
                 for (block in article.chronologicalBlocks) {
                     if (debugFrames) {
                         drawRect(
@@ -297,7 +329,7 @@ internal fun FumeBulletinStage(
                             ctx, block, timing, time, glowBases, passedFadeDuration, overviewTextRestore,
                         )
                         FumeStaticState.NONE -> drawLiveBlock(
-                            ctx, block, timing, time, glowBases, tuning, accentColor, activeColor, baseColor, viewport,
+                            ctx, block, timing, time, glowBases, tuning, accentColor, activeColor, baseColor,
                         )
                     }
                 }
@@ -305,6 +337,12 @@ internal fun FumeBulletinStage(
         }
     }
 }
+
+/**
+ * 取景参数（只有调试 harness 传）：落点要推进多少帧。
+ * staticMode 下每帧直接落到目标，24 帧足够走完一次完整重定向。
+ */
+class FumeStillFrame(val steps: Int = 24)
 
 /** 绘制一帧要用的量，收在一起免得每个函数传一大串。 */
 private class FumeDrawContext(
@@ -406,7 +444,6 @@ private fun DrawScope.drawLiveBlock(
     accentColor: Color,
     activeColor: Color,
     baseColor: Color,
-    viewport: FumeViewport,
 ) {
     val hero = block.variant == FumeVariant.HERO
     val total = block.graphemes.size
@@ -421,55 +458,44 @@ private fun DrawScope.drawLiveBlock(
     val lineGlowAlpha = ((if (hero) 0.16 else 0.12) + envelope * (if (hero) 0.26 else 0.2)) * tuning.glowIntensity
     val lineGlowBlur = ((if (hero) 12.0 else 8.0) + envelope * block.fontPx * (if (hero) 0.7 else 0.52)) * tuning.glowIntensity
 
-    // 手机化：Folia 的纸页按内容宽度定行宽（innerWidth 常远大于手机视口），块可能比屏幕宽很多。
-    // 手机上不做横向追随，改为按「块宽 vs 视口宽」等比缩进画布，保证整块左右完整可见。
-    val maxLineWidth = block.renderLines.maxOfOrNull { it.width }?.toFloat() ?: 0f
-    val targetWidth = minOf(block.innerWidth.toFloat(), (viewport.width * 0.92).toFloat()) * 0.96f
-    val fitScale = if (maxLineWidth > targetWidth) {
-        (targetWidth / maxLineWidth).coerceIn(0.18f, 1f)
-    } else {
-        1f
-    }
-    withTransform({
-        if (fitScale < 0.999f) {
-            scale(fitScale, fitScale, Offset(block.x.toFloat(), 0f))
-        }
-    }) {
-        for (line in block.renderLines) {
-            val originX = block.lineX(line)
-            val originY = block.baselineY(line, timing)
-            for (glyphOffset in line.start until line.end) {
-                val isPrinted = timing.hasRevealCompleted || glyphOffset < printedCount
-                val isFrontier = printedCount > 0 && glyphOffset == printedCount &&
-                    printedCount < total && !timing.hasRevealCompleted && !timing.hasPassCutoffReached
-                val baseAlpha = when {
-                    timing.hasRevealCompleted || glyphOffset < printedCount -> timing.activeOpacity
-                    glyphOffset == printedCount -> 0.82
-                    else -> timing.waitingOpacity
-                }
-                val ink = resolveGlyphInk(
-                    block, line, glyphOffset, time, timing, baseAlpha, activeColor, baseColor, glowBases,
-                )
-                if (ink.alpha <= 0.002) continue
-                val glyphText = line.graphemes.getOrNull(glyphOffset - line.start) ?: continue
-                val glyphX = originX + line.offsetOf(glyphOffset - line.start).toFloat()
-                val style = ctx.style(block, ink.color.copy(alpha = ink.alpha.toFloat()))
-                val useLineGlow = isPrinted
-                val blur = if (useLineGlow) maxOf(ink.shadowBlur, lineGlowBlur) else ink.shadowBlur
-                val glowColor = if (useLineGlow && lineGlowBlur > ink.shadowBlur) {
-                    accentColor.copy(alpha = (lineGlowAlpha * 1.35).toFloat())
-                } else {
-                    ink.shadowColor
-                }
-                if (blur > 0.5 && glowColor.alpha > 0.002f) {
-                    drawGlow(ctx, block, glyphText, glyphX, originY, style, glowColor, blur)
-                }
-                drawRun(ctx, block, glyphText, glyphX, originY, style)
+    // 镜头的 scale 由 FumeCamera.cameraScaleForBlock 决定（目标行高 = clamp(短边×0.115,64,124)，
+    // scale clamp 0.88–2.2）。块比视口宽是 Folia 的原样：长句靠镜头焦点沿当前字向右平移来读，
+    // 当前正在唱的字必须留在屏内，行尾还没唱到的字出屏可以接受。
+    // （前任自创的 hero「fitScale 等比缩进」已删除 —— Folia fumeCamera.ts 没有这段逻辑。）
+    for (line in block.renderLines) {
+        val originX = block.lineX(line)
+        val originY = block.baselineY(line, timing)
+        for (glyphOffset in line.start until line.end) {
+            val isPrinted = timing.hasRevealCompleted || glyphOffset < printedCount
+            val isFrontier = printedCount > 0 && glyphOffset == printedCount &&
+                printedCount < total && !timing.hasRevealCompleted && !timing.hasPassCutoffReached
+            val baseAlpha = when {
+                timing.hasRevealCompleted || glyphOffset < printedCount -> timing.activeOpacity
+                glyphOffset == printedCount -> 0.82
+                else -> timing.waitingOpacity
+            }
+            val ink = resolveGlyphInk(
+                block, line, glyphOffset, time, timing, baseAlpha, activeColor, baseColor, glowBases,
+            )
+            if (ink.alpha <= 0.002) continue
+            val glyphText = line.graphemes.getOrNull(glyphOffset - line.start) ?: continue
+            val glyphX = originX + line.offsetOf(glyphOffset - line.start).toFloat()
+            val style = ctx.style(block, ink.color.copy(alpha = ink.alpha.toFloat()))
+            val useLineGlow = isPrinted
+            val blur = if (useLineGlow) maxOf(ink.shadowBlur, lineGlowBlur) else ink.shadowBlur
+            val glowColor = if (useLineGlow && lineGlowBlur > ink.shadowBlur) {
+                accentColor.copy(alpha = (lineGlowAlpha * 1.35).toFloat())
+            } else {
+                ink.shadowColor
+            }
+            if (blur > 0.5 && glowColor.alpha > 0.002f) {
+                drawGlow(ctx, block, glyphText, glyphX, originY, style, glowColor, blur)
+            }
+            drawRun(ctx, block, glyphText, glyphX, originY, style)
 
-                // 打印方块（Folia 的 activation block，即 `hidePrintSymbols` 关掉的那层符号）。
-                if (!tuning.hidePrintSymbols && isFrontier && glyphText.isNotBlank()) {
-                    drawPrintStamp(block, line, glyphX, originY, timing, hero, time, accentColor, activeColor)
-                }
+            // 打印方块（Folia 的 activation block，即 `hidePrintSymbols` 关掉的那层符号）。
+            if (!tuning.hidePrintSymbols && isFrontier && glyphText.isNotBlank()) {
+                drawPrintStamp(block, line, glyphX, originY, timing, hero, time, accentColor, activeColor)
             }
         }
     }

@@ -140,6 +140,8 @@ fun V0cStage(
     fumeSteps: Int = 0,
     /** V1a 自查：画块边界与对焦十字。 */
     debugFrames: Boolean = false,
+    /** V1a 取景：浮名画面定格时刻（秒）；缺省 = positionMs/1000。 */
+    fumeAt: Double = -1.0,
 ) {
     val view = LocalView.current
     // V0e 修 Hark 第 1 条：取景 Activity 没有 MainActivity 那段 insets SideEffect，
@@ -160,8 +162,11 @@ fun V0cStage(
         val withTranslation = variant != "preview"
         val isFume = style == "fume"
         val fumeLines = remember(isFume) { if (isFume) buildFumeKernelLines() else emptyList() }
+        // 浮名取景：v0c_fumetime 可以单独指定「画面定格在第几秒」，此时当前句也按它取，
+        // 否则（例如 v0c_ms 13000 落在第 4 句）镜头会按第 4 句落点去算，画面与定位不符。
+        val fumeAtClock = if (fumeAt >= 0.0) fumeAt else positionMs / 1000.0
         val currentIndex = when {
-            isFume -> (positionMs / 4_000L).toInt().coerceIn(0, fumeLines.size - 1)
+            isFume -> ((fumeAtClock * 1000.0).toLong() / 4_000L).toInt().coerceIn(0, fumeLines.size - 1)
             variant == "preview" -> 0
             variant == "interlude" -> -1
             else -> 1
@@ -196,6 +201,8 @@ fun V0cStage(
                 lineOnlyStage = lineOnly,
                 lyricStyle = if (style == "fume") LyricStyle.FUME else LyricStyle.CLASSIC,
                 fumeSettleSteps = fumeSteps,
+                fumeSettleTimeSeconds = fumeAtClock,
+                fumeStillFrame = fumeSteps > 0,
                 fumeDebugFrames = debugFrames,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -256,6 +263,9 @@ class V0cStageActivity : ComponentActivity() {
         val variant = intent?.getStringExtra("v0c_variant") ?: "trans"
         val style = intent?.getStringExtra("v0c_style") ?: "classic"
         val fumeSteps = intent?.getIntExtra("v0c_fumesteps", 0) ?: 0
+        // 取景定格时刻：浮名镜头按这一时刻落地（见 LyricFlowScreen.fumeSettleTimeSeconds）。
+        val fumeSettleTime = intent?.getFloatExtra("v0c_fumetime", -1f) ?: -1f
+        val fumeAt = if (fumeSettleTime >= 0f) fumeSettleTime.toDouble() else positionMs / 1000.0
         val debugFrames = intent?.getBooleanExtra("v0c_debugframes", false) ?: false
         val wordGlow = if (intent?.hasExtra("v0c_wordglow") == true) {
             intent.getFloatExtra("v0c_wordglow", 1f)
@@ -263,6 +273,6 @@ class V0cStageActivity : ComponentActivity() {
             null
         }
         if (lineOnly) runningUnderRobolectricOverride = true
-        setContent { V0cStage(positionMs, dark, wordGlow, lineOnly, variant, style, fumeSteps, debugFrames) }
+        setContent { V0cStage(positionMs, dark, wordGlow, lineOnly, variant, style, fumeSteps, debugFrames, fumeAt) }
     }
 }
