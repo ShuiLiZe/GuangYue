@@ -27,6 +27,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -95,6 +96,8 @@ internal fun FumeBulletinStage(
     reduceMotion: Boolean = false,
     /** 取证用：>0 时不做帧循环，而是按固定 dt 一次性推进这么多帧再画（模拟器帧时间不可靠）。 */
     settleSteps: Int = 0,
+    /** V1a 自查：画块边界与对焦十字（仅取景用）。 */
+    debugFrames: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -103,10 +106,11 @@ internal fun FumeBulletinStage(
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val viewport = FumeViewport(
-            width = with(density) { maxWidth.toPx() }.toDouble(),
-            // 手机化：Folia 的纸页按「视口高」定目标高（2.45×），竖屏舞台只有 800px 高时
-            // 会把整首歌压成一条很矮的横幅。这里按视口宽补一个下限，让纸页接近方形。
-            height = maxOf(with(density) { maxHeight.toPx() }.toDouble(), with(density) { maxWidth.toPx() }.toDouble()),
+            // Folia 的 viewport / 排版 / 相机全部是 CSS px，等价 Android dp。
+            // 这里统一用 dp 世界坐标，只在 Canvas 入口 scale(density) 一次，
+            // 避免出现「用 px 排版却按 dp 定字号」的错位。
+            width = with(density) { maxWidth.toPx() / this.density }.toDouble(),
+            height = with(density) { maxHeight.toPx() / this.density }.toDouble(),
         )
         if (viewport.width <= 0.0 || viewport.height <= 0.0 || lines.none { it.fullText.isNotBlank() }) {
             return@BoxWithConstraints
@@ -253,8 +257,16 @@ internal fun FumeBulletinStage(
             val time = clock.readForDraw()
             val nextStart = lines.getOrNull(lineIndex + 1)?.startTime
 
+            // 世界坐标全是 dp（Folia 的 CSS px）。Canvas 是 px，所以在最外层先把整张画布
+            // 放大 density 倍，此后内部一切（相机、块、字号）都是 dp；scale(camera.scale) 与
+            // 平移顺序严格照 useFumeCanvasStage.ts：translate(视口中心) → scale → translate(-camera)。
+            val densityScale = density.density
             withTransform({
-                translate(size.width * 0.5f, size.height * 0.5f)
+                scale(densityScale, densityScale, Offset.Zero)
+                translate(
+                    (viewport.width * 0.5).toFloat(),
+                    (viewport.height * 0.5).toFloat(),
+                )
                 scale(camera.scale.toFloat(), camera.scale.toFloat(), Offset.Zero)
                 translate(-camera.x.toFloat(), -camera.y.toFloat())
             }) {
@@ -263,9 +275,21 @@ internal fun FumeBulletinStage(
                     "FumeBulletinStage",
                     "draw time=$time cam=${camera.x},${camera.y},${camera.scale} " +
                         "ovStart=$overviewStartTime ovScale=${overviewCamera.scale} lineIndex=$lineIndex " +
-                        "article=${article.width}x${article.height} blocks=${article.blocks.size}",
+                        "article=${article.width}x${article.height} blocks=${article.blocks.size} " +
+                        "firstLineW=${article.chronologicalBlocks.firstOrNull()?.renderLines?.firstOrNull()?.width} " +
+                        "firstInner=${article.chronologicalBlocks.firstOrNull()?.innerWidth} " +
+                        "vpx=${viewport.width}x${viewport.height}",
                 )
                 for (block in article.chronologicalBlocks) {
+                    if (debugFrames) {
+                        drawRect(
+                            color = if (block.sourceLineIndex == lineIndex) Color.Red else Color.Cyan,
+                            topLeft = Offset(block.x.toFloat(), block.y.toFloat()),
+                            size = Size(block.width.toFloat(), block.height.toFloat()),
+                            style = Stroke(width = 1.5f / densityScale / camera.scale.toFloat()),
+                        )
+                        drawCameraCross(block.x + block.width * 0.5, block.y + block.height * 0.5, camera.scale, densityScale)
+                    }
                     if (!FumeTextStyles.isBlockOnScreen(block, camera, viewport)) continue
                     val timing = FumeTextStyles.resolveBlockTiming(block, time, nextStart, tuning.textHoldRatio)
                     when (timing.staticState) {
@@ -273,7 +297,7 @@ internal fun FumeBulletinStage(
                             ctx, block, timing, time, glowBases, passedFadeDuration, overviewTextRestore,
                         )
                         FumeStaticState.NONE -> drawLiveBlock(
-                            ctx, block, timing, time, glowBases, tuning, accentColor, activeColor, baseColor,
+                            ctx, block, timing, time, glowBases, tuning, accentColor, activeColor, baseColor, viewport,
                         )
                     }
                 }
@@ -382,6 +406,7 @@ private fun DrawScope.drawLiveBlock(
     accentColor: Color,
     activeColor: Color,
     baseColor: Color,
+    viewport: FumeViewport,
 ) {
     val hero = block.variant == FumeVariant.HERO
     val total = block.graphemes.size
@@ -396,38 +421,55 @@ private fun DrawScope.drawLiveBlock(
     val lineGlowAlpha = ((if (hero) 0.16 else 0.12) + envelope * (if (hero) 0.26 else 0.2)) * tuning.glowIntensity
     val lineGlowBlur = ((if (hero) 12.0 else 8.0) + envelope * block.fontPx * (if (hero) 0.7 else 0.52)) * tuning.glowIntensity
 
-    for (line in block.renderLines) {
-        val originX = block.lineX(line)
-        val originY = block.baselineY(line, timing)
-        for (glyphOffset in line.start until line.end) {
-            val isPrinted = timing.hasRevealCompleted || glyphOffset < printedCount
-            val isFrontier = printedCount > 0 && glyphOffset == printedCount &&
-                printedCount < total && !timing.hasRevealCompleted && !timing.hasPassCutoffReached
-            val baseAlpha = when {
-                                    timing.hasRevealCompleted || glyphOffset < printedCount -> timing.activeOpacity
-                glyphOffset == printedCount -> 0.82
-                else -> timing.waitingOpacity
-            }
-            val ink = resolveGlyphInk(block, line, glyphOffset, time, timing, baseAlpha, activeColor, baseColor, glowBases)
-            if (ink.alpha <= 0.002) continue
-            val glyphText = line.graphemes.getOrNull(glyphOffset - line.start) ?: continue
-            val glyphX = originX + line.offsetOf(glyphOffset - line.start).toFloat()
-            val style = ctx.style(block, ink.color.copy(alpha = ink.alpha.toFloat()))
-            val useLineGlow = isPrinted
-            val blur = if (useLineGlow) maxOf(ink.shadowBlur, lineGlowBlur) else ink.shadowBlur
-            val glowColor = if (useLineGlow && lineGlowBlur > ink.shadowBlur) {
-                accentColor.copy(alpha = (lineGlowAlpha * 1.35).toFloat())
-            } else {
-                ink.shadowColor
-            }
-            if (blur > 0.5 && glowColor.alpha > 0.002f) {
-                drawGlow(ctx, block, glyphText, glyphX, originY, style, glowColor, blur)
-            }
-            drawRun(ctx, block, glyphText, glyphX, originY, style)
+    // 手机化：Folia 的纸页按内容宽度定行宽（innerWidth 常远大于手机视口），块可能比屏幕宽很多。
+    // 手机上不做横向追随，改为按「块宽 vs 视口宽」等比缩进画布，保证整块左右完整可见。
+    val maxLineWidth = block.renderLines.maxOfOrNull { it.width }?.toFloat() ?: 0f
+    val targetWidth = minOf(block.innerWidth.toFloat(), (viewport.width * 0.92).toFloat()) * 0.96f
+    val fitScale = if (maxLineWidth > targetWidth) {
+        (targetWidth / maxLineWidth).coerceIn(0.18f, 1f)
+    } else {
+        1f
+    }
+    withTransform({
+        if (fitScale < 0.999f) {
+            scale(fitScale, fitScale, Offset(block.x.toFloat(), 0f))
+        }
+    }) {
+        for (line in block.renderLines) {
+            val originX = block.lineX(line)
+            val originY = block.baselineY(line, timing)
+            for (glyphOffset in line.start until line.end) {
+                val isPrinted = timing.hasRevealCompleted || glyphOffset < printedCount
+                val isFrontier = printedCount > 0 && glyphOffset == printedCount &&
+                    printedCount < total && !timing.hasRevealCompleted && !timing.hasPassCutoffReached
+                val baseAlpha = when {
+                    timing.hasRevealCompleted || glyphOffset < printedCount -> timing.activeOpacity
+                    glyphOffset == printedCount -> 0.82
+                    else -> timing.waitingOpacity
+                }
+                val ink = resolveGlyphInk(
+                    block, line, glyphOffset, time, timing, baseAlpha, activeColor, baseColor, glowBases,
+                )
+                if (ink.alpha <= 0.002) continue
+                val glyphText = line.graphemes.getOrNull(glyphOffset - line.start) ?: continue
+                val glyphX = originX + line.offsetOf(glyphOffset - line.start).toFloat()
+                val style = ctx.style(block, ink.color.copy(alpha = ink.alpha.toFloat()))
+                val useLineGlow = isPrinted
+                val blur = if (useLineGlow) maxOf(ink.shadowBlur, lineGlowBlur) else ink.shadowBlur
+                val glowColor = if (useLineGlow && lineGlowBlur > ink.shadowBlur) {
+                    accentColor.copy(alpha = (lineGlowAlpha * 1.35).toFloat())
+                } else {
+                    ink.shadowColor
+                }
+                if (blur > 0.5 && glowColor.alpha > 0.002f) {
+                    drawGlow(ctx, block, glyphText, glyphX, originY, style, glowColor, blur)
+                }
+                drawRun(ctx, block, glyphText, glyphX, originY, style)
 
-            // 打印方块（Folia 的 activation block，即 `hidePrintSymbols` 关掉的那层符号）。
-            if (!tuning.hidePrintSymbols && isFrontier && glyphText.isNotBlank()) {
-                drawPrintStamp(block, line, glyphX, originY, timing, hero, time, accentColor, activeColor)
+                // 打印方块（Folia 的 activation block，即 `hidePrintSymbols` 关掉的那层符号）。
+                if (!tuning.hidePrintSymbols && isFrontier && glyphText.isNotBlank()) {
+                    drawPrintStamp(block, line, glyphX, originY, timing, hero, time, accentColor, activeColor)
+                }
             }
         }
     }
@@ -555,6 +597,40 @@ private fun DrawScope.drawPrintStamp(
     )
 }
 
+/** 段内某一字素的横向落点（文章坐标，dp）：Folia 用 pretext 逐字宽度，这里用整块 advances 累计。 */
+private fun FumeBlock.glyphCenterX(
+    line: FumeRenderLine,
+    segmentIndex: Int,
+    localIndex: Int,
+): Float {
+    val segment = line.segments[segmentIndex]
+    val offsets = segment.measuredGlyphOffsets
+    val mid = if (localIndex + 1 < offsets.size) {
+        (offsets[localIndex] + offsets[localIndex + 1]) * 0.5
+    } else {
+        offsets.getOrElse(localIndex) { segment.width }
+    }
+    return (x + line.left + segment.x + mid).toFloat()
+}
+
+/** V1a 自查：在指定点画一个十字，用来确认相机对焦点落在屏幕中心。 */
+private fun DrawScope.drawCameraCross(cx: Double, cy: Double, scale: Double, densityScale: Float) {
+    val arm = 12.0 / maxOf(scale, 0.001)
+    val w = 1.5f / densityScale / maxOf(scale.toFloat(), 0.001f)
+    drawLine(
+        color = Color.Magenta,
+        start = Offset((cx - arm).toFloat(), cy.toFloat()),
+        end = Offset((cx + arm).toFloat(), cy.toFloat()),
+        strokeWidth = w,
+    )
+    drawLine(
+        color = Color.Magenta,
+        start = Offset(cx.toFloat(), (cy - arm).toFloat()),
+        end = Offset(cx.toFloat(), (cy + arm).toFloat()),
+        strokeWidth = w,
+    )
+}
+
 /** 块内某一行的左端（文章坐标）。 */
 private fun FumeBlock.lineX(line: FumeRenderLine): Float = (x + line.left).toFloat()
 
@@ -570,22 +646,28 @@ private fun FumeDrawContext.style(block: FumeBlock, color: Color): TextStyle = T
     fontFamily = fontFamily,
 )
 
-/** 画一段文字：Compose 的 drawText 以文字盒顶部对齐，这里先用 baseline 反算盒顶。 */
+/**
+ * 画一段文字。
+ *
+ * Folia 用 canvas 的 textBaseline='middle'：给的 y 是文字竖直中线。Compose 的
+ * drawText(textLayoutResult, topLeft) 里 topLeft.y 是排版框顶部，所以
+ * topLeft.y = 中线 y − layout.size.height/2（对应派活方 D 条）。
+ */
 private fun DrawScope.drawRun(
     ctx: FumeDrawContext,
     block: FumeBlock,
     text: String,
     x: Float,
-    baselineY: Float,
+    centerY: Float,
     style: TextStyle,
     useInset: Boolean = true,
 ) {
     if (text.isEmpty()) return
     val layout = ctx.measurer.measure(text = text, style = style)
-    val inset = if (useInset) layout.firstBaseline else 0f
+    val top = if (useInset) centerY - layout.size.height * 0.5f else centerY
     drawText(
         textLayoutResult = layout,
-        topLeft = Offset(x, baselineY - inset),
+        topLeft = Offset(x, top),
     )
 }
 
@@ -598,7 +680,7 @@ private fun DrawScope.drawGlow(
     block: FumeBlock,
     text: String,
     x: Float,
-    baselineY: Float,
+    centerY: Float,
     style: TextStyle,
     glowColor: Color,
     blur: Double,
@@ -607,13 +689,13 @@ private fun DrawScope.drawGlow(
     val radius = blur.coerceIn(0.0, 48.0).toFloat() * 0.5f
     val glowStyle = style.copy(color = glowColor.copy(alpha = glowColor.alpha * 0.34f))
     val layout = ctx.measurer.measure(text = text, style = glowStyle)
-    val inset = layout.firstBaseline
+    val top = centerY - layout.size.height * 0.5f
     val steps = 6
     for (i in 0 until steps) {
         val angle = (i.toFloat() / steps) * 6.28318f
         drawText(
             textLayoutResult = layout,
-            topLeft = Offset(x + cos(angle) * radius, baselineY - inset + sin(angle) * radius),
+            topLeft = Offset(x + cos(angle) * radius, top + sin(angle) * radius),
         )
     }
 }

@@ -143,6 +143,8 @@ fun LyricFlowScreen(
     fumeTuning: FumeTuning = FumeTuning.DEFAULT,
     /** 取证用：>0 时「浮名」镜头按固定 dt 一次推进这么多帧（模拟器帧时间不可靠）。 */
     fumeSettleSteps: Int = 0,
+    /** V1a 自查：浮名舞台画块边界/对焦十字（取景用，正式界面不开）。 */
+    fumeDebugFrames: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val backLabel = str(strings.back)
@@ -367,6 +369,7 @@ fun LyricFlowScreen(
                         fontFamily = GuangYueDesign.Serif,
                         reduceMotion = reduceMotion,
                         settleSteps = fumeSettleSteps,
+                        debugFrames = fumeDebugFrames,
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else if (activeLine != null && activeLine.hasVisibleWords()) {

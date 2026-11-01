@@ -138,6 +138,8 @@ fun V0cStage(
     style: String = "classic",
     /** V1a：浮名镜头固定推进帧数（模拟器帧时间不可靠，见 FumeBulletinStage 的 settleSteps）。 */
     fumeSteps: Int = 0,
+    /** V1a 自查：画块边界与对焦十字。 */
+    debugFrames: Boolean = false,
 ) {
     val view = LocalView.current
     // V0e 修 Hark 第 1 条：取景 Activity 没有 MainActivity 那段 insets SideEffect，
@@ -194,6 +196,7 @@ fun V0cStage(
                 lineOnlyStage = lineOnly,
                 lyricStyle = if (style == "fume") LyricStyle.FUME else LyricStyle.CLASSIC,
                 fumeSettleSteps = fumeSteps,
+                fumeDebugFrames = debugFrames,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -253,12 +256,13 @@ class V0cStageActivity : ComponentActivity() {
         val variant = intent?.getStringExtra("v0c_variant") ?: "trans"
         val style = intent?.getStringExtra("v0c_style") ?: "classic"
         val fumeSteps = intent?.getIntExtra("v0c_fumesteps", 0) ?: 0
+        val debugFrames = intent?.getBooleanExtra("v0c_debugframes", false) ?: false
         val wordGlow = if (intent?.hasExtra("v0c_wordglow") == true) {
             intent.getFloatExtra("v0c_wordglow", 1f)
         } else {
             null
         }
         if (lineOnly) runningUnderRobolectricOverride = true
-        setContent { V0cStage(positionMs, dark, wordGlow, lineOnly, variant, style, fumeSteps) }
+        setContent { V0cStage(positionMs, dark, wordGlow, lineOnly, variant, style, fumeSteps, debugFrames) }
     }
 }
