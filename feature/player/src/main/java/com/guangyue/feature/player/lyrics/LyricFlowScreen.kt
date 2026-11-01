@@ -1,4 +1,4 @@
-package com.guangyue.feature.player.lyrics
+﻿package com.guangyue.feature.player.lyrics
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -484,6 +483,7 @@ internal fun LyricEmpty(
 }
 
 /** 底部胶囊：播放键 + 2dp 进度轨 + 两端等宽时间（跟播放页同观感）。 */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun LyricBar(
     positionMs: Long,
@@ -542,18 +542,35 @@ private fun LyricBar(
                 .height(48.dp),
             contentAlignment = Alignment.Center,
         ) {
+            // Material3 Slider 的默认 thumb 是 20dp 实心白圆，宽度压到 2dp 的轨道上就成了
+            // 进度条左端一个白色圆角块（V0e-fix 审图第 3 条）。Folia 的播放条只有「已播轨道 + 剩余轨道」，
+            // 所以这里把 thumb / 轨道都自己画：2dp 胶囊，圆头。
             Slider(
                 value = progress.coerceIn(0f, 1f),
                 onValueChange = { onScrub(it); onScrubPreview?.invoke(it) },
                 onValueChangeFinished = {},
-                colors = SliderDefaults.colors(
-                    thumbColor = Color.Transparent,
-                    activeTrackColor = pillInk.copy(alpha = 0.85f),
-                    inactiveTrackColor = pillInk.copy(alpha = 0.22f),
-                ),
+                thumb = {},
+                track = { sliderState ->
+                    val fraction = sliderState.value.coerceIn(0f, 1f)
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(2.dp)
+                            .clip(RoundedCornerShape(1.dp))
+                            .background(pillInk.copy(alpha = 0.22f)),
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(fraction)
+                                .height(2.dp)
+                                .clip(RoundedCornerShape(1.dp))
+                                .background(pillInk.copy(alpha = 0.85f)),
+                        )
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(2.dp)
+                    .height(48.dp)
                     .semantics { contentDescription = seekBarLabel },
             )
         }

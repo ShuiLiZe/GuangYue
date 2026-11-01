@@ -1,4 +1,4 @@
-﻿# V0 歌词内核 · 收尾报告
+# V0 歌词内核 · 收尾报告
 
 分支 `port/u2`（基于 `60824c8`），提交「V0: 歌词内核 + GlowWord + 流光底座」。未 push、未打 tag。
 
@@ -280,9 +280,13 @@ debug-only 静态时钟（模拟器软件 EGL 上 `withFrameNanos` 几乎不推�
 | `docs/ui-v0/v0e-preview-dark.png` | 深色 · 无翻译 → 预告 |
 | `docs/ui-v0/v0e-interlude-light.png` | 浅色 · 间奏占位「等待音乐」+ 无字幕 |
 | `docs/ui-v0/v0e-interlude-dark.png` | 深色 · 间奏占位 |
+| `docs/ui-v0/v0e-320dp.png` | 宽 320dp（`wm density 360`，拍完 reset）· 无翻译 → 预告 |
+| `docs/ui-v0/v0e-font130.png` | 系统字号 1.3（`font_scale 1.3`，拍完恢复 1.0）· 无翻译 → 预告 |
 
-深色六张逐张看过：状态栏已随深色切换（无白底条），背景铺满到状态栏/导航栏后面；字幕层停在播放胶囊之上，
-未被导航栏遮挡。320dp / 1.3 倍字号两张见第 4 节。
+八张全部在 V0e-fix 修复后重拍（`v0c_ms = 6000`，拍摄时 `mCurrentFocus` 均为
+`com.guangyue.music/.V0cStageActivity`，无 ANR 弹窗），文件时间 11:31:26 ~ 11:32:53。
+逐张看过：状态栏已随深色切换（无白底条），背景铺满到状态栏/导航栏后面；字幕层停在播放胶囊之上，
+未被导航栏遮挡；播放胶囊里只剩「图标 + 时间 + 进度条」，没有多余的白色圆角块。
 
 ### 3. Roborazzi 截图用例（不依赖模拟器）
 
@@ -305,8 +309,13 @@ Compose 这边不用节点级 `Modifier.blur`（V0d 已证实会把整个节点�
   再用 `Matrix` 按 `(radiusX = 宽/1.15/2 + 40dp, radiusY = 高/1.30/2 + 40dp)` 拉伸成椭圆，
   画在比文字区外扩 40dp / 24dp 的矩形上。半径里的「+40dp」等价于 Folia 的 `blur-2xl` 渐隐带，
   矩形四条边都落在渐变的尾部，所以画面里没有边线。
-- 背景容器由 `fillMaxWidth()` 改为 `wrapContentWidth()`（否则背景会横跨整屏宽度，左右两侧离文字很远，看起来像一块方牌），
-  文字列 `padding(horizontal = 16.dp, vertical = 8.dp)`，背景跟随文字宽度。
+- 背景层基准宽度取 **Column 的实测宽度（= 最宽行宽度）与全部行高度**，再各边外扩 40dp / 24dp：
+  容器本身 `fillMaxWidth()`（这样背景可以四边溢出、不被父级 `pageH` 内边距裁成矩形），
+  子 `Column` 用 `onSizeChanged` 把自身尺寸回填给绘制层。第一版按容器宽度算，320dp / 1.3 倍字号下
+  最长行会跑出背景框外，就是这么修的。
+- 背景**不用** `drawWithCache`（外部状态变化时不一定重算，会留着上一版的半成品宽度），用 `drawBehind`。
+- 文字**不加** `TextStyle(shadow = Shadow(...))`：阴影在字形外按 `blurRadius` 铺一层近似矩形，
+  正是审图里那块「硬边方块」的来源之一。
 - 相关常量：`SUBTITLE_SCRIM_PAD_X = 40.dp`、`SUBTITLE_SCRIM_PAD_Y = 24.dp`、`SUBTITLE_SCRIM_FRINGE = 40.dp`、
   `SUBTITLE_SCRIM_INNER_STOP = 0.62f`。取色仍由调用方传 `scrimColor`（当前取色背景色）。
 
@@ -314,27 +323,33 @@ Compose 这边不用节点级 `Modifier.blur`（V0d 已证实会把整个节点�
 
 - 上缘：`v0e-preview-dark` 在 y=926→932 处 Δ=4/255（约 6px 过渡带）；
 - 下缘：y=1075→1085 之间约 24px 过渡带（Δ≈8/255）；
-- 左右缘：x=36 与 x=683 两道竖线在 y=1150、1170 行为 0 突变（上一版此处是 Δ=15 的硬边）。
+- 左右缘：x=36 与 x=683 两道竖线在 y=1150、1170 行为 0 突变（上一版此处是 Δ=15 的硬边）；
+- `v0e-320dp` / `v0e-font130`：上缘一行内 Δ≈14、左缘在 y=1150 行 0 突变，同为窄过渡带；
+  四行文字（含最长行「我面无表情看孤独的风景」）全部落在暗区内。
 
 结论：硬边矩形已消失，四条边都是 20~40px 级的连续渐隐，与 Folia 的 `blur-2xl` 观感一致。
+
+同一轮还修掉播放胶囊里的白色圆角块：`LyricBar` 原来用 Material3 `Slider` 只把 `thumbColor` 设成透明，
+thumb 仍是 20dp 实心白圆。现改为自绘 —— `thumb = {}`，`track` 画 2dp 圆角胶囊（底 `pillInk@0.22`、
+已播 `pillInk@0.85`），只剩「时间 + 进度条」。
 
 ### 5. 产物
 
 - 全量单测口径：`.\gradlew.bat --offline --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g test` →
-  **BUILD SUCCESSFUL（2m21s），全量通过 0 失败 0 错误**。计数口径 = 各模块
+  **BUILD SUCCESSFUL（1m54s），全量通过 0 失败 0 错误**。计数口径 = 各模块
   `build/test-results/**/TEST-*.xml` 中真实套件的 `tests` 属性求和，剔除 Gradle 聚合伪套件
   `TEST-Gradle-Test-Run-*`（聚合套件内含全部用例的重复计数，V0c/V0d 的「566」就是把它算进去了）：
-  53 个套件 / **550 例** / 失败 0 / 错误 0 / 跳过 2 —— `app` 225、`core/lyrics` 166、`core/player` 6、
+  54 个套件 / **552 例** / 失败 0 / 错误 0 / 跳过 2 —— `app` 225、`core/lyrics` 166、`core/player` 6、
   `core/plugin` 82、`feature/library` 3、`feature/player` 49、`feature/search` 21。
-  其中本轮新增/改写的：`SubtitleOverlayTest` 15 例、`LyricFlowScreenTest` 17 例、`U5LyricsScreenshotTest` 14 例。
-- `assembleRelease`（同一串命令）→ **BUILD SUCCESSFUL（4m59s）**，
+  其中 V0e 新增/改写的：`SubtitleOverlayTest` 15 例、`LyricFlowScreenTest` 17 例、`U5LyricsScreenshotTest` 14 例。
+- `assembleRelease`（同一串命令）→ **BUILD SUCCESSFUL（5m14s）**，
   产物 `app/build/outputs/apk/release/app-release.apk`，8,997,389 字节，
-  **SHA-256 = `A75D60BBC6DE27037CA709709DA904CEF9B40062BD4DD742BE4322D1DB34DD92`**。
-- 提交：`V0e: 舞台单行 + 底部字幕层`（在 `port/u2` 上，未 push / 未打 tag）。
+  **SHA-256 = `74D0F6DEACCE3BCB567C8292BBFBA8F39A2050E6EB786884D2DAEBB6395C6664`**。
+- 提交：`V0e: 舞台单行 + 底部字幕层`（`bbad5f0`）+ `V0e-fix: 字幕层渐变 + 重拍`（在 `port/u2` 上，未 push / 未打 tag）。
 
 ### 6. 未收敛 / 卡点
 
 - 无阻塞项。上一轮的执行环境故障（Windows Job runner 提前退出）在 DSH 重启后消失，
   本轮全部命令（gradle / adb / 截图 / git）都正常跑完。
-- 遗留观察（不影响验收）：预告态（无翻译）时字幕层每句宽度不同，背景块会随文字宽度变化；
-  这是 `wrapContentWidth` 的必然结果，Folia 网页端也是按内容宽度算背景层。
+- 遗留观察（不影响验收）：预告态（无翻译）时字幕层每句宽度不同，背景块会随「最宽行」宽度变化；
+  这是按内容宽度算背景层的必然结果，Folia 网页端也是同一算法。

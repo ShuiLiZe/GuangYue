@@ -1,40 +1,37 @@
-﻿package com.guangyue.feature.player.lyrics
+package com.guangyue.feature.player.lyrics
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Shader
-import androidx.compose.ui.graphics.RadialGradientShader
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.guangyue.core.lyrics.ClassicLayout
@@ -91,18 +88,15 @@ fun resolveSubtitleOverlayContent(
     if (!showText) {
         return SubtitleOverlayContent(lineKey, visible = false, rows = emptyList(), previews = emptyList())
     }
-
     val line = activeLine
     if (line == null) {
         // 没有当前行就没有字幕（Folia 的预告也只在有 activeLine 时给）。
         return SubtitleOverlayContent(lineKey, visible = false, rows = emptyList(), previews = emptyList())
     }
-
     val previewLines = readableLines(nextLines)
     val rows = mutableListOf<SubtitleRow>()
     var nextIndex = 0
     val lineText = line.fullText.trim()
-
     for (source in layout) {
         if (source == SubtitleRowSource.Next) {
             val next = previewLines.getOrNull(nextIndex)
@@ -134,7 +128,6 @@ fun resolveSubtitleOverlayContent(
         }
         rows += SubtitleRow(key = source.name.lowercase(), source = source, text = text!!)
     }
-
     val previews = if (rows.isEmpty() && activeLine != null) previewLines.map { it.fullText.trim() } else emptyList()
     return SubtitleOverlayContent(lineKey, visible = true, rows = rows, previews = previews)
 }
@@ -152,7 +145,7 @@ private val SUBTITLE_SECONDARY_GAP = 4.dp
 /** 渐变里 bg@0.78 对应的色标位置（Folia `bg@0.78 62%`）。 */
 private const val SUBTITLE_SCRIM_INNER_STOP = 0.62f
 
-/** 预告行整体透明度。V0d 已证明 Modifier.blur 会把节点光栅成矩形，层次改由 alpha 承担。 */
+/** 预告行整体透明度。层次由 alpha 承担，不用 Modifier.blur（V0d 已证明会光栅成矩形）。 */
 const val SUBTITLE_PREVIEW_OPACITY = 0.72f
 
 /** 字幕背景层相对文字区的外扩（Folia `-inset-x-10 -inset-y-6`，即 40dp / 24dp）。 */
@@ -168,19 +161,13 @@ val SUBTITLE_SCRIM_FRINGE = 40.dp
 /** 进出场时长（Folia 0.24s easeOut）。 */
 const val SUBTITLE_ENTER_MS = 240
 
-/**
- * 舞台区与字幕层之间的净空：舞台限定在这段净空之上，1.3 倍字号也不会被播放条遮。
- */
+/** 舞台区与字幕层之间的净空：舞台限定在这段净空之上，1.3 倍字号也不会被播放条遮。 */
 val SUBTITLE_STAGE_RESERVE = 56.dp
 
-/**
- * 播放胶囊（56dp）+ 上下 12dp 外边距的预留高度：字幕层要停在胶囊之上，不能压在进度条上。
- */
+/** 播放胶囊（56dp）+ 上下 12dp 外边距的预留高度：字幕层要停在胶囊之上，不能压在进度条上。 */
 val SUBTITLE_BAR_RESERVE = 80.dp
 
-/**
- * 底部字幕层。贴底、水平居中，由调用方保证已在导航栏 inset 与播放条之上。
- */
+/** 底部字幕层。贴底、水平居中，由调用方保证已在导航栏 inset 与播放条之上。 */
 @Composable
 internal fun LyricSubtitleOverlay(
     content: SubtitleOverlayContent,
@@ -199,8 +186,7 @@ internal fun LyricSubtitleOverlay(
     }
 
     val sizes = ClassicLayout.resolveSubtitleFontSizes(1.0)
-    // 校验用：把字号算成 dp 再交给 sp —— sp 已含系统 fontScale，而 lyricsFontScale 与它是同一个值，
-    // 重复相乘会双重放大。
+    // 字号算成 dp 再交给 sp —— sp 已含系统 fontScale，重复相乘会双重放大。
     val primaryDp = clampFontDp(
         sizes.translationMinRem, sizes.translationPreferredVw, sizes.translationMaxRem, viewportWidthDp,
     )
@@ -209,39 +195,45 @@ internal fun LyricSubtitleOverlay(
     ).sp
     val primaryFontSize = primaryDp.sp
     val secondaryFontSize = (primaryDp * SUBTITLE_SECONDARY_SIZE_FACTOR).sp
-    val shadow = Shadow(color = scrimColor.copy(alpha = 0.24f), offset = Offset(0f, 1f), blurRadius = 2f)
+
+    // 背景层按「最宽行宽度 × 全部行高度」算，所以先量 Column 自己（它内部按 wrap 排）。
+    var contentWidthPx by remember { mutableIntStateOf(0) }
+    var contentHeightPx by remember { mutableIntStateOf(0) }
 
     Box(
         modifier = modifier
-            .wrapContentWidth(Alignment.CenterHorizontally)
+            // 本节点独占一整行宽度：背景可以四边溢出，不会被父级 pageH 内边距裁成矩形。
+            .fillMaxWidth()
             .testTag(LyricSubtitleOverlayTag)
+            .drawBehind {
+                // Folia：背景层比文字区外扩 x 40dp / y 24dp，填
+                // radial-gradient(ellipse 115% 130% at center, bg@0.96 0%, bg@0.78 62%, transparent 100%)，
+                // 再整体 blur-2xl 把边缘化掉。这里不碰节点级模糊（V0d 已证明 Modifier.blur 把整节点
+                // 光栅成矩形、边缘变硬），改为按同一套参数自绘椭圆径向渐变，四条边都落在渐隐带里。
+                val padX = SUBTITLE_SCRIM_PAD_X.toPx()
+                val padY = SUBTITLE_SCRIM_PAD_Y.toPx()
+                val textWidth = if (contentWidthPx > 0) contentWidthPx.toFloat() else size.width
+                val textHeight = if (contentHeightPx > 0) contentHeightPx.toFloat() else size.height
+                val boxWidth = textWidth + padX * 2f
+                val boxHeight = textHeight + padY * 2f
+                translate(left = (size.width - boxWidth) / 2f, top = (size.height - boxHeight) / 2f) {
+                    drawEllipseScrim(color = scrimColor, width = boxWidth, height = boxHeight)
+                }
+            }
             .graphicsLayer {
                 alpha = enter.value * SUBTITLE_OVERLAY_OPACITY
                 translationY = (1f - enter.value) * 20.dp.toPx()
-            }
-            .drawWithCache {
-                // Folia 的背景层：比文字区外扩 x 40dp / y 24dp，填充
-                // radial-gradient(ellipse 115% 130% at center, bg@0.96 0%, bg@0.78 62%, transparent 100%)，
-                // 再整体 blur-2xl 把边缘化掉。这里不碰节点级模糊（V0d 已证明 Modifier.blur 会把整节点
-                // 光栅成矩形、边缘变硬），而是按完全相同的参数自绘一条椭圆径向渐变，
-                // 把最外的 transparent stop 再往外推 SUBTITLE_SCRIM_FRINGE，
-                // 于是四条边都在几十 dp 内渐隐到全透明，看不到任何边线（V0e 审图第 1 条）。
-                val padX = SUBTITLE_SCRIM_PAD_X.toPx()
-                val padY = SUBTITLE_SCRIM_PAD_Y.toPx()
-                val boxWidth = size.width + padX * 2f
-                val boxHeight = size.height + padY * 2f
-                onDrawBehind {
-                    // 背景超出文字区，超出部分落在父级的 unbounded 画布上（调用方已留足净空）。
-                    translate(left = -padX, top = -padY) {
-                        drawEllipseScrim(color = scrimColor, width = boxWidth, height = boxHeight)
-                    }
-                }
             },
         contentAlignment = Alignment.Center,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).wrapContentWidth(),
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .onSizeChanged {
+                    contentWidthPx = it.width
+                    contentHeightPx = it.height
+                },
         ) {
             if (content.rows.isNotEmpty()) {
                 content.rows.forEachIndexed { index, row ->
@@ -253,11 +245,11 @@ internal fun LyricSubtitleOverlay(
                         fontWeight = if (secondary) FontWeight.Normal else FontWeight.Medium,
                         fontFamily = fontFamily,
                         textAlign = TextAlign.Center,
-                        style = TextStyle(shadow = shadow),
+                        // 不加文字阴影：Shadow 会在字形外按 blurRadius 铺一层近似矩形，就是审图里的「硬边方块」。
+                        style = TextStyle(),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .padding(top = if (secondary) SUBTITLE_SECONDARY_GAP else 0.dp),
+                        modifier = Modifier.padding(top = if (secondary) SUBTITLE_SECONDARY_GAP else 0.dp),
                     )
                 }
             } else {
@@ -269,7 +261,8 @@ internal fun LyricSubtitleOverlay(
                         fontWeight = FontWeight.Normal,
                         fontFamily = fontFamily,
                         textAlign = TextAlign.Center,
-                        style = TextStyle(shadow = shadow),
+                        // 同上：不加文字阴影。
+                        style = TextStyle(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -286,22 +279,14 @@ internal fun clampFontDp(minRem: Double, preferredVw: Double, maxRem: Double, vi
     val max = (maxRem * 16.0).toFloat()
     return value.coerceIn(min, max)
 }
+
 /**
- * 字幕背景：椭圆径向渐变（对应 CSS
- * `radial-gradient(ellipse <rx> <ry> at center, bg@0.96 0%, bg@0.78 62%, transparent 100%)`）。
+ * 字幕背景：椭圆径向渐变，对应 CSS
+ * `radial-gradient(ellipse <rx> <ry> at center, bg@0.96 0%, bg@0.78 62%, transparent 100%)`。
  *
- * Compose 自带的 [Brush.radialGradient] 只有圆形，靠 drawscope 的 scale 压成椭圆会在外层留下
- * 一层还没缩放的裁剪，画面里就是一块方角。这里改用 shader 直接做椭圆距离场：
- * 中心 0.96、62% 处 0.78、100% 处全透明；半径取「背景矩形 115% × 130% + 渐隐带」，
- * 矩形四条边都落在渐变尾部，不会出现任何硬边。
- */
-/**
- * 字幕背景：椭圆径向渐变（对应 CSS
- * `radial-gradient(ellipse <rx> <ry> at center, bg@0.96 0%, bg@0.78 62%, transparent 100%)`）。
- *
- * 背景比文字区外扩 x 40dp / y 24dp 后，用「单位圆径向渐变 + 矩阵拉伸」得到椭圆，
- * 再叠加 SUBTITLE_SCRIM_FRINGE 的渐隐带，矩形四条边都落在渐变尾部，看不到任何硬边。
- * 不用节点级 Modifier.blur（V0d 已证明它会把整节点光栅成方块）。
+ * 做法是「单位圆径向渐变 + 矩阵拉伸」：先按 115% / 130% 得到椭圆主半径，再各自加一条
+ * [SUBTITLE_SCRIM_FRINGE] 的渐隐带，这样矩形四条边都落在渐变尾部（alpha≈0），看不到硬边。
+ * 不用节点级 Modifier.blur —— V0d 已证明它会把整节点光栅成方块。
  */
 private fun DrawScope.drawEllipseScrim(
     color: Color,
@@ -311,7 +296,9 @@ private fun DrawScope.drawEllipseScrim(
     val radiusX = width / 1.15f / 2f + SUBTITLE_SCRIM_FRINGE.toPx()
     val radiusY = height / 1.30f / 2f + SUBTITLE_SCRIM_FRINGE.toPx()
     val shader = android.graphics.RadialGradient(
-        0f, 0f, 1f,
+        0f,
+        0f,
+        1f,
         intArrayOf(
             color.copy(alpha = 0.96f).toArgb(),
             color.copy(alpha = 0.78f).toArgb(),
