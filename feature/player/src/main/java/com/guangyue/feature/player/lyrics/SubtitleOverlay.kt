@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -16,7 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
@@ -158,6 +159,15 @@ val SUBTITLE_SCRIM_PAD_Y = 24.dp
  */
 val SUBTITLE_SCRIM_FRINGE = 40.dp
 
+/**
+ * 字幕层画布相对文字区的总留白 = 外扩（40dp / 24dp）+ 渐隐带（40dp）。
+ *
+ * 背景必须画在「尺寸已经含这段留白」的节点里 —— 绘制超出节点边界的部分会被节点自身的绘制域裁掉，
+ * V0e-fix 的「上下被一刀横切」就是这么来的。左右方向父级已经有 pageH 内边距可吃，故只取渐隐带。
+ */
+val SUBTITLE_SCRIM_BLEED_X = SUBTITLE_SCRIM_FRINGE
+val SUBTITLE_SCRIM_BLEED_Y = SUBTITLE_SCRIM_PAD_Y + SUBTITLE_SCRIM_FRINGE
+
 /** 进出场时长（Folia 0.24s easeOut）。 */
 const val SUBTITLE_ENTER_MS = 240
 
@@ -200,25 +210,29 @@ internal fun LyricSubtitleOverlay(
     var contentWidthPx by remember { mutableIntStateOf(0) }
     var contentHeightPx by remember { mutableIntStateOf(0) }
 
+
     Box(
         modifier = modifier
-            // 本节点独占一整行宽度：背景可以四边溢出，不会被父级 pageH 内边距裁成矩形。
+            // 留白必须落在「节点自身」的尺寸里 —— 画到节点边界之外的部分会被节点绘制域裁掉，
+            // V0e-fix 的上下硬边就是这么来的。所以先给画布一圈 40dp / 64dp 的 padding，
+            // 背景再在这个不裁剪的画布上按文字尺寸 + 外扩绘制。
+            .padding(SUBTITLE_SCRIM_BLEED_X, SUBTITLE_SCRIM_BLEED_Y)
             .fillMaxWidth()
             .testTag(LyricSubtitleOverlayTag)
-            .drawBehind {
+            // 用带内边距的布局节点量尺寸，把它当作不裁剪的画布：上下各留 64dp 的余量。
+            .drawWithContent {
                 // Folia：背景层比文字区外扩 x 40dp / y 24dp，填
                 // radial-gradient(ellipse 115% 130% at center, bg@0.96 0%, bg@0.78 62%, transparent 100%)，
                 // 再整体 blur-2xl 把边缘化掉。这里不碰节点级模糊（V0d 已证明 Modifier.blur 把整节点
                 // 光栅成矩形、边缘变硬），改为按同一套参数自绘椭圆径向渐变，四条边都落在渐隐带里。
-                val padX = SUBTITLE_SCRIM_PAD_X.toPx()
-                val padY = SUBTITLE_SCRIM_PAD_Y.toPx()
                 val textWidth = if (contentWidthPx > 0) contentWidthPx.toFloat() else size.width
                 val textHeight = if (contentHeightPx > 0) contentHeightPx.toFloat() else size.height
-                val boxWidth = textWidth + padX * 2f
-                val boxHeight = textHeight + padY * 2f
+                val boxWidth = textWidth + SUBTITLE_SCRIM_PAD_X.toPx() * 2f
+                val boxHeight = textHeight + SUBTITLE_SCRIM_PAD_Y.toPx() * 2f
                 translate(left = (size.width - boxWidth) / 2f, top = (size.height - boxHeight) / 2f) {
-                    drawEllipseScrim(color = scrimColor, width = boxWidth, height = boxHeight)
+                    drawEllipseScrim(color = scrimColor, width = boxWidth, height = boxHeight, centerX = boxWidth / 2f, centerY = boxHeight / 2f)
                 }
+                drawContent()
             }
             .graphicsLayer {
                 alpha = enter.value * SUBTITLE_OVERLAY_OPACITY
@@ -292,6 +306,10 @@ private fun DrawScope.drawEllipseScrim(
     color: Color,
     width: Float,
     height: Float,
+    // 椭圆中心：调用处已经 translate 到文字块左上角，所以中心要按文字块自身尺寸算，
+    // 不能用 size（那是整块画布）。
+    centerX: Float = size.width / 2f,
+    centerY: Float = size.height / 2f,
 ) {
     val radiusX = width / 1.15f / 2f + SUBTITLE_SCRIM_FRINGE.toPx()
     val radiusY = height / 1.30f / 2f + SUBTITLE_SCRIM_FRINGE.toPx()
@@ -310,7 +328,7 @@ private fun DrawScope.drawEllipseScrim(
         setLocalMatrix(
             android.graphics.Matrix().apply {
                 setScale(radiusX, radiusY)
-                postTranslate(size.width / 2f, size.height / 2f)
+                postTranslate(centerX, centerY)
             },
         )
     }

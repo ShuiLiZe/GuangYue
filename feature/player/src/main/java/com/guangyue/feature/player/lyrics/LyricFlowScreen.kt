@@ -1,4 +1,4 @@
-﻿package com.guangyue.feature.player.lyrics
+package com.guangyue.feature.player.lyrics
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -396,7 +396,10 @@ fun LyricFlowScreen(
                 scrimColor = theme.background,
                 viewportWidthDp = LocalConfiguration.current.screenWidthDp.toFloat(),
                 fontFamily = GuangYueDesign.Sans,
-                modifier = Modifier.padding(bottom = SUBTITLE_BAR_RESERVE + SUBTITLE_STAGE_RESERVE),
+                modifier = Modifier.padding(
+                    top = SUBTITLE_SCRIM_BLEED_Y,
+                    bottom = SUBTITLE_BAR_RESERVE + SUBTITLE_STAGE_RESERVE + SUBTITLE_SCRIM_BLEED_Y,
+                ),
             )
 
             // ---------------- 底部播放胶囊 ----------------
