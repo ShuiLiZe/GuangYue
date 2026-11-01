@@ -143,6 +143,47 @@ object FumeReveal {
         return FumeMath.clamp(printed, 0.0, graphemeCount.toDouble())
     }
 
+    /**
+     * 对应 Folia 的 `printedGraphemeProgress`（含小数部分）。
+     *
+     * V1a-fix2：以前没有词时间轴的行走 `floor(progress × n)`，等于把进度量化到整字 ——
+     * 镜头于是停在第一个字的左边缘（渲染却按连续宽度推进），实拍表现为「行首永远压在中线、
+     * 正在唱的字贴到屏幕右边」。这里改成连续值，并让第一个字在起唱瞬间就带一点进度，
+     * 与 [printedGraphemeCount]（`+1` 的离散语义）保持一致。
+     */
+    fun continuousPrintedGraphemeProgress(
+        line: Line,
+        wordRanges: List<FumeWordRange>,
+        graphemeCount: Int,
+        currentTime: Double,
+    ): Double {
+        if (graphemeCount == 0) return 0.0
+        if (currentTime < line.startTime) return 0.0
+        if (hasRevealCompletedByLineEnd(line, currentTime)) return graphemeCount.toDouble()
+
+        if (wordRanges.isEmpty()) {
+            val duration = maxOf(line.endTime - line.startTime, 0.12)
+            val progress = FumeMath.clamp((currentTime - line.startTime) / duration, 0.0, 1.0)
+            return FumeMath.clamp(progress * graphemeCount + if (progress > 0.0) 1.0 else 0.0, 0.0, graphemeCount.toDouble())
+        }
+
+        var printed = 0.0
+        for (range in wordRanges) {
+            if (currentTime < range.word.startTime) break
+            val length = maxOf(range.end - range.start, 0)
+            val rangeProgress = wordRevealProgress(range, currentTime)
+            printed = range.start + rangeProgress * length
+            // 这个词还没打完 → 连续进度就停在这里（含小数）；
+            // 打完了继续累加到下一个词。两者都由 rangeProgress 决定，不再用「整字数」的直觉。
+            if (rangeProgress < 1.0) return FumeMath.clamp(printed, 0.0, graphemeCount.toDouble())
+        }
+        return FumeMath.clamp(printed, 0.0, graphemeCount.toDouble())
+    }
+
+    /** 块版本：镜头跟随用（连续，含小数）。 */
+    fun continuousPrintedGraphemeProgress(block: FumeBlock, currentTime: Double): Double =
+        continuousPrintedGraphemeProgress(block.line, block.wordRanges, block.graphemes.size, currentTime)
+
     /** 块版本：绘制层与镜头直接拿 block 用。 */
     fun printedGraphemeCount(block: FumeBlock, currentTime: Double): Int =
         printedGraphemeCount(block.line, block.wordRanges, block.graphemes.size, currentTime)

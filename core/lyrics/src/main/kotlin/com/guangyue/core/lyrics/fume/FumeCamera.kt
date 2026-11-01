@@ -49,26 +49,40 @@ object FumeCamera {
         if (block.renderLines.isEmpty()) {
             return FumeCameraViewTarget(block.x + block.width * 0.5, block.y + block.height * 0.5, 1.0)
         }
-        val effectiveOffset = FumeMath.clamp(printedProgress, 0.0, block.graphemes.size.toDouble())
+        // 上限按最后一行行尾：句末标点常被并进上一行，按字素数夹会让最后几个字走不到。
+        val maxOffset = maxOf(block.graphemes.size.toDouble(), block.renderLines.last().end.toDouble())
+        val effectiveOffset = FumeMath.clamp(printedProgress, 0.0, maxOffset)
 
         fun pointOnLine(lineIndex: Int, offset: Double): FumeCameraViewTarget {
             val line = block.renderLines[lineIndex]
             val clampedOffset = FumeMath.clamp(offset, line.start.toDouble(), line.end.toDouble())
-            val baseOffset = Math.floor(clampedOffset).toInt()
-            val fractional = clampedOffset - baseOffset
-            val baseWidth = block.widthBetweenOffsets(line.start, baseOffset)
-            val localGlyphIndex = baseOffset - line.start
-            val glyphAdvance = line.glyphAdvance(localGlyphIndex)
+            // V1a-fix2：焦点落在「正在唱的那个字」上，而不是永远停在行首。
+            // 见 FumeMath.offsetAnchorX（按该字素在行内的实际 x 取点）。
+            val lineLocal = (clampedOffset - line.start).coerceIn(0.0, line.graphemes.size.toDouble())
+            val whole = Math.floor(lineLocal).toInt()
+            val fractional = lineLocal - whole
+            // 正在唱的这个字素在行内的左右边（字素尺上相邻两档）。
+            val anchorLeft = FumeMath.offsetAnchorX(
+                lineOffset = whole.toDouble(),
+                lineWidth = line.width,
+                graphemeCount = line.graphemes.size,
+            )
+            val anchorRight = FumeMath.offsetAnchorX(
+                lineOffset = (whole + 1).toDouble(),
+                lineWidth = line.width,
+                graphemeCount = line.graphemes.size,
+            )
+            val anchor = anchorLeft + (anchorRight - anchorLeft) * fractional
             val minX = block.x + line.left
             val maxX = minX + line.width
             return FumeCameraViewTarget(
-                x = FumeMath.clamp(minX + baseWidth + glyphAdvance * fractional, minX, maxX),
+                x = FumeMath.clamp(minX + anchor, minX, maxX),
                 y = block.y + line.top + block.lineHeight * 0.5,
                 scale = 1.0,
             )
         }
 
-        val targetLineIndex = block.renderLines.indexOfFirst { effectiveOffset <= it.end }
+        val targetLineIndex = block.renderLines.indexOfFirst { effectiveOffset < it.end }
             .let { if (it < 0) block.renderLines.size - 1 else it }
         val targetLine = block.renderLines[targetLineIndex]
         var point = pointOnLine(targetLineIndex, effectiveOffset)
@@ -365,7 +379,8 @@ object FumeCameraStep {
             val focusPoint = if (input.cameraTrackingMode == FumeCameraTrackingMode.STEPPED) {
                 FumeCamera.steppedBlockFocusPoint(focusBlock, printedCount)
             } else {
-                val progress = FumeReveal.printedGraphemeProgress(focusBlock, input.time)
+                // V1a-fix2：镜头要跟「正在唱的字」，进度必须连续（含小数），不能用整字数。
+                val progress = FumeReveal.continuousPrintedGraphemeProgress(focusBlock, input.time)
                 FumeCamera.smoothBlockFocusPoint(focusBlock, progress)
             }
             targetX = focusPoint.x
@@ -375,6 +390,9 @@ object FumeCameraStep {
             if (retarget.sourceLineIndex != focusBlock.sourceLineIndex) {
                 val line = input.line ?: focusBlock.line
                 val duration = FumeMath.clamp(FumeCamera.cameraRetargetDuration(line) / cameraSpeed, 0.03, 0.3)
+                // V1a-fix2：起点必须是「此刻镜头所在」，也必须是「此刻的焦点」。
+                // 原来的 copy 沿用上一轮的 startedAt / fromX，导致新的一句永远从旧起点起跳、
+                // 重定向相位卡在 0，镜头被 entryFocusBias=1 拽回句首（实拍里行首死压中线就是这个）。
                 retarget = retarget.copy(
                     sourceLineIndex = focusBlock.sourceLineIndex,
                     startedAt = input.time,
@@ -396,7 +414,13 @@ object FumeCameraStep {
         }
 
         val retargetElapsed = maxOf(input.time - retarget.startedAt, 0.0)
-        val retargetPhase = FumeMath.clamp(retargetElapsed / maxOf(retarget.duration, 0.001), 0.0, 1.0)
+        // V1a-fix2：固定帧推进（取景 harness / reduceMotion）没有真实帧时长，重定向相位永远推不动，
+        // entryFocusBias 恒为 1 就会把镜头钉死在句首。这种模式下转场视为已完成，直接跟正在唱的字。
+        val retargetPhase = if (input.staticMode) {
+            1.0
+        } else {
+            FumeMath.clamp(retargetElapsed / maxOf(retarget.duration, 0.001), 0.0, 1.0)
+        }
         val retargetBoost = 1.0 - FumeMath.easeOutCubic(retargetPhase)
         val entryFocusBias = Math.pow(retargetBoost, 0.58)
         val overviewTextRestoreProgress =

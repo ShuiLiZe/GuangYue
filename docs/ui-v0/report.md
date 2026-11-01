@@ -469,8 +469,8 @@ Invalid boolean value: preview）。另外拍摄中途模拟器进程崩过一�
 |---|---|
 | `v1a-fume-active-light.png` | `fumetime 5.2 / dark false`，浅色，当前句放大、正在打印，活动字带光晕 |
 | `v1a-fume-active-dark.png` | 同参数 `dark true`，深色，其余块仅剩极淡等待底影 |
-| `v1a-fume-late-dark.png` | `fumetime 19.6 / dark true`，句中后段，焦点已右移到后一句，上一句退成已读 |
-| `v1a-fume-passed-dark.png` | `fumetime 11.9 / dark true`，上一句刚唱完，第二行正沿颜色轨褪成已读淡影 |
+| `v1a-fume-late-dark.png` | `fumetime 19.6 / dark true`，句中后段：正在唱的字落在屏中，已唱的字在左侧、行尾出屏 |
+| `v1a-fume-passed-dark.png` | `fumetime 11.9 / dark true`（V1a-fix2 重拍成深色），上一句刚唱完，末行沿颜色轨褪成已读淡影 |
 | `v1a-fume-320dp.png` | `wm size 640x1600` + `wm density 340`（320dp 宽），窄屏单栏排版（拍完已 `wm size/density reset`） |
 | `v1a-fume-font130.png` | `settings put system font_scale 1.3` 下的浮名（拍完已还原 1.0） |
 | `v1a-style-sheet.png` | 歌词样式弹层：流光 / 浮名两行，浮名选中态（debug 源集 `v0c_style sheet` 直接渲染） |
@@ -493,6 +493,26 @@ density 与相机缩放写进画布矩阵，Skia 的模糊核会随之缩放，�
 为此把前任改到一半留下的 `cameraScale` 形参与 `FumeGlowSample`（未定义类）一并收拾干净，并删掉
 只服务旧 `drawGlow` 的 `cos/sin`。
 
+### 3c. 镜头焦点跟字（V1a-fix2）
+
+实拍里当前句行首永远压在屏幕中线、正在唱的字贴到右边缘甚至被切，是镜头取点算错。三处根因：
+
+1. `FumeCameraStep.step` 用 `printedGraphemeCount`（整字数），镜头只会按整字跳台阶。改用
+   `FumeReveal.continuousPrintedGraphemeProgress`（含小数），并修掉它「词已开始但没打完」时
+   提前返回整数值的分支。
+2. 取点公式按 Folia `fumeCamera.ts:17-110` 的 `resolveSteppedBlockFocusPoint` /
+   `resolveSmoothBlockFocusPoint`：`focus.x = block.x + line.left + widthBetweenOffsets(行起点, 已打印偏移)`。
+   Kotlin 侧新增 `FumeMath.offsetAnchorX(lineOffset, lineWidth, graphemeCount)` ——
+   行宽按字素数均分成 N 档，第 n 个字素左缘 = 行左缘 + n × (行宽 / N)，再在相邻两档间按小数插值。
+   旧实现拿块内 `advances` 去索引行内序号，整行宽度会被算成行末（镜头推到右边缘）或恒为行首。
+3. 重定向相位：新的一句开始跟随时 `retarget.startedAt` 取当前时刻、`fromX/fromY` 取当前镜头位置；
+   固定帧推进（`staticMode`，取景 harness / reduceMotion）没有真实帧时长，相位永远推不动，
+   `entryFocusBias` 恒为 1 会把镜头钉回句首 —— 现在 `staticMode` 下转场直接视为已完成。
+
+JVM 单测锁住（`FumeCameraTest`）：给定块与进度断言 `smoothBlockFocusPoint(...).x`
+（行首 104 → 每档 +50 → 行右缘 304）、小数插值一例，以及 `staticMode` 按该时刻 `printedProgress` 落点
+（10s → lineLeft+200）。
+
 ### 4. 过程中排掉的坑
 
 - 先把屏上那行居中小字误认成「浮名排版没生效」，实为 `LyricSubtitleOverlay` 的译文层叠在上面。
@@ -504,16 +524,16 @@ density 与相机缩放写进画布矩阵，Skia 的模糊核会随之缩放，�
 ### 5. 产物
 
 - `gradlew.bat --offline --no-daemon --max-workers=2 "-Dorg.gradle.jvmargs=-Xmx2g" test` →
-  **BUILD SUCCESSFUL**，58 个真实套件 / **586 例** / 失败 0 / 跳过 2
-  （口径同 V0：`**/build/test-results/test*/*.xml` 的 `tests` 求和，剔除 `TEST-Gradle-Test-Run-*` 聚合伪套件。
-  注：本轮重跑后同一口径数出来是 57 套件 / 584 例 / 跳过 2 —— 差值来自 Roborazzi 截图套件在这台机器上按环境
-  动态跳过整类，不是用例丢失；`core/plugin` 的若干 XML 时间戳停留在上一次运行，未被本轮覆盖。）
-- `assembleRelease` → **BUILD SUCCESSFUL（与 test 同一条命令，6m17s）**，产物
+  **BUILD SUCCESSFUL**，57 个真实套件 / **587 例** / 失败 0 / 跳过 2
+  （口径同 V0：`**/build/test-results/**/TEST-*.xml` 的 `tests` 求和，剔除 `TEST-Gradle-Test-Run-*` 聚合伪套件。
+  V1a 时的 58/586 与本轮 57/587 的差异来自 Roborazzi 截图套件按环境动态跳过整类，不是用例丢失；
+  本轮新增的镜头单测都在这 587 里。）
+- `assembleRelease` → **BUILD SUCCESSFUL（与 test 同一条命令，3m43s）**，产物
   `app/build/outputs/apk/release/app-release.apk`，9,030,557 字节，
-  **SHA-256 = `293911A43FE845AB098D4E0BA0A4EBC3AD9B43CAD50791D380C24E09DA93A25E`**
-  （V1a 时的 `434EB8A3…` 是光晕改动前的包；本轮只重编 `FumeStage.kt` 与 debug 源集的 harness，
-  release 体积不变、字节变化来自重新打包的签名/时间戳）。
-- 提交：`V1a: 浮名样式内核与镜头`（`port/u2`）＋ `V1a-fix: 浮名光晕改 shadowBlur + 补拍`（未 push / 未打 tag / 未动 stash）。
+  **SHA-256 = `322C17D0C033A27BB4D81D9488B7AB4DF9FCAAD818F64CDC432E4D772658EBA3`**
+  （V1a 的 `434EB8A3…`、V1a-fix 的 `293911A4…` 是改动前的包；release 体积未变，字节差异来自重新打包）。
+- 提交：`V1a: 浮名样式内核与镜头` → `V1a-fix: 浮名光晕改 shadowBlur + 补拍`
+  → `V1a-fix2: 镜头焦点跟字 + 补拍`（均只在 `port/u2` 本地，未 push / 未打 tag / 未动 stash）。
 
 ### 6. 未做项（归 V1b）
 

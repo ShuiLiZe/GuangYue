@@ -55,13 +55,20 @@ class FumeCameraTest {
         )
     }
 
-    private fun renderLine(start: Int, end: Int, left: Double, width: Double, step: Double) =
+    private fun renderLine(
+        start: Int,
+        end: Int,
+        left: Double,
+        width: Double,
+        step: Double,
+        graphemeCount: Int = 0,
+    ) =
         FumeRenderLine(
             id = "l",
             text = "",
             start = start,
             end = end,
-            graphemes = List(end - start) { "字" },
+            graphemes = List(if (graphemeCount > 0) graphemeCount else end - start) { "字" },
             glyphOffsets = List(end - start) { it * step },
             segments = emptyList(),
             left = left,
@@ -86,10 +93,11 @@ class FumeCameraTest {
     @Test
     fun `smooth focus point is continuous in the printed progress`() {
         val target = block(renderLines = listOf(renderLine(0, 4, left = 4.0, width = 200.0, step = 20.0)))
+        // 行宽 200 按 4 个字素均分，每档 50；144=行中线（镜头应当正对正在唱的字）。
         val half = FumeCamera.smoothBlockFocusPoint(target, 2.0)
-        assertEquals(144.0, half.x, 1e-6)
+        assertEquals(204.0, half.x, 1e-6)
         val quarter = FumeCamera.smoothBlockFocusPoint(target, 1.5)
-        assertEquals(134.0, quarter.x, 1e-6)
+        assertEquals(179.0, quarter.x, 1e-6)
     }
 
     @Test
@@ -173,6 +181,98 @@ class FumeCameraTest {
         // 播到 4s 时已经离开 overview，靠近第一个块。
         val blockCenterY = 200.0 + 26.0 * 0.5
         assertTrue(Math.abs(state.camera.y - blockCenterY) < 200.0)
+    }
+
+    // ---- V1a-fix2：镜头焦点必须跟着「正在唱的字」走 ----
+    // 症状：实拍里当前句行首永远落在屏幕中线，正在唱的字贴到右边缘（320dp 下被切掉一半），
+    // 对应 printedProgress=0（= block.x+line.left）。下面三条把整条链子锁住。
+
+    /**
+     * 第二句 8s 起唱、4s 长；块文本 5 个字素，首行只排前 4 个（0..4），末字落到第二行。
+     * 用来验证「按行起点换算行内偏移」而不是拿行内序号去索引块内 advances。
+     */
+    private fun secondLineBlock(): FumeBlock = block(
+        id = "b1",
+        text = "纪念我死去爱",
+        start = 8.0,
+        end = 12.0,
+        renderLines = listOf(renderLine(0, 4, left = 4.0, width = 200.0, step = 20.0)),
+    )
+
+    /** 块起点在时间轴上：起唱 8s、结束 12s（4 个字素各占 1s）。 */
+    private fun secondLineBlock(startTime: Double = 8.0): FumeBlock = block(
+        id = "b1",
+        text = "纪念我死去爱",
+        start = startTime,
+        end = startTime + 4.0,
+        renderLines = listOf(renderLine(0, 4, left = 4.0, width = 200.0, step = 20.0)),
+    )
+
+    private fun settleCameraAt(article: FumeArticleLayout, block: FumeBlock, time: Double): FumeCameraTarget {
+        var state = FumeCameraStep.syncToArticle(FumeCameraStep.initialState(), article)
+        repeat(24) {
+            state = FumeCameraStep.step(
+                state,
+                FumeCameraStepInput(
+                    article = article,
+                    time = time,
+                    nowMs = 0.0,
+                    dt = 1.0 / 60.0,
+                    lineIndex = block.sourceLineIndex,
+                    viewport = FumeViewport(720.0, 1600.0),
+                    overviewCamera = null,
+                    overviewStartTime = Double.MAX_VALUE,
+                    cameraSpeed = 1.0,
+                    cameraTrackingMode = FumeCameraTrackingMode.SMOOTH,
+                    staticMode = true,
+                    intensity = AnimationIntensity.NORMAL,
+                    line = block.line,
+                    nextLineStartTime = null,
+                ),
+            ).first
+        }
+        return state.camera
+    }
+
+    @Test
+    fun `smooth focus point walks past the line head as printing progresses`() {
+        val target = block(renderLines = listOf(renderLine(0, 4, left = 4.0, width = 200.0, step = 20.0)))
+        // 行首：printedProgress=0 → 只剩 block.x + line.left。
+        assertEquals(104.0, FumeCamera.smoothBlockFocusPoint(target, 0.0).x, 1e-6)
+        // 唱到第 4 个字：104 + 4×50（行宽 200 按 4 个字素均分，第 4 个字左缘即行右缘）。
+        assertEquals(304.0, FumeCamera.smoothBlockFocusPoint(target, 4.0).x, 1e-6)
+        // 再往后夹在行右缘，绝不回到行首。
+        assertEquals(304.0, FumeCamera.smoothBlockFocusPoint(target, 4.5).x, 1e-6)
+        // 再往后夹在行右缘 204，绝不回到行首。
+        assertEquals(304.0, FumeCamera.smoothBlockFocusPoint(target, 9.5).x, 1e-6)
+    }
+
+    @Test
+    fun `smooth focus point measures width from the line start offset`() {
+        // 首行从块内 0 开始，末字（块内第 4 个）在第二行：靠行起点换算，不拿行内序号索引。
+        val target = secondLineBlock()
+        val lineLeft = target.x + target.renderLines.single().left
+        assertEquals(lineLeft, FumeCamera.smoothBlockFocusPoint(target, 0.0).x, 1e-6)
+        // 行宽 200 按 4 个字素均分，每档 50。
+        assertEquals(lineLeft + 100.0, FumeCamera.smoothBlockFocusPoint(target, 2.0).x, 1e-6)
+        assertEquals(lineLeft + 200.0, FumeCamera.smoothBlockFocusPoint(target, 4.0).x, 1e-6)
+    }
+
+    @Test
+    fun `static settle camera follows the printed progress of that instant`() {
+        val article = articleOf(listOf(secondLineBlock()))
+        val target = article.blocks.single()
+        val lineLeft = target.x + target.renderLines.single().left
+
+        // 句中 10s（8s 起唱）：必须离开行首，往右走了 2 个字宽（advances 全是 fontPx=20）。
+        val mid = settleCameraAt(article, target, 10.0)
+        assertTrue("镜头停在行首 (x=${mid.x})，没有跟字", mid.x > lineLeft + 20.0)
+        assertEquals(lineLeft + 200.0, mid.x, 1e-3)
+        assertEquals(FumeCamera.cameraScaleForBlock(target, FumeViewport(720.0, 1600.0)), mid.scale, 1e-6)
+
+        // 刚起唱一小会儿就必须已经离开行首。
+        val early = settleCameraAt(article, target, 8.5)
+        assertTrue("起唱 0.5s 后镜头仍停在行首 (x=${early.x})", early.x > lineLeft + 5.0)
     }
 
     /** 构造一个最小可用的文章，方便镜头单测。 */

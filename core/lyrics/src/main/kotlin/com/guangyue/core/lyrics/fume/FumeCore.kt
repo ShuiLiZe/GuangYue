@@ -82,6 +82,19 @@ object FumeMath {
         }
         return out
     }
+
+    /**
+     * 镜头焦点在行内的 x 锚点（对应 Folia `widthBetweenOffsets(prepared, segmentMetas, 行起点, 已打印偏移)`）。
+     *
+     * 语义：把行宽按字素数均分成 N 档，第 n 个字素的左缘 = 行左缘 + n × (行宽 / N)。
+     * 这样既不会被 glyphOffsets 的结尾缺口带偏（行内 glyphOffsets 少最后一项时行末会缩成 0），
+     * 也不会像旧实现那样恒等于行首（画面里当前句永远压在屏幕中线）。
+     */
+    fun offsetAnchorX(lineOffset: Double, lineWidth: Double, graphemeCount: Int): Double {
+        if (graphemeCount <= 0 || lineWidth <= 0.0) return 0.0
+        val slot = if (graphemeCount > 1) lineWidth / graphemeCount.toDouble() else lineWidth
+        return clamp(lineOffset, 0.0, graphemeCount.toDouble()) * slot
+    }
 }
 
 /** 对应 Folia fumeTypes.ts 的 ViewportSize。 */
@@ -171,7 +184,7 @@ data class FumeRenderSegment(
     val measuredGlyphOffsets: List<Double>,
 )
 
-/** 对应 Folia fumeTypes.ts 的 RenderLineSlice。 */
+/** 兼容别名：镜头等旧代码里用的 `FumeRenderLine`，与 [FumeRenderLineSlice] 同构。 */
 data class FumeRenderLine(
     val id: String,
     val text: String,
@@ -185,6 +198,29 @@ data class FumeRenderLine(
     val width: Double,
 )
 
+/**
+ * 块内字素的 x 位移（从这一行的行起点算）。
+ *
+ * 对应 Folia widthBetweenOffsets(prepared, segmentMetas, from, to) 的行内版本：
+ * 行内 glyphOffsets 只覆盖行内起点，最后一个字素的右边由行宽给出，行尾一律按行宽收口。
+ * 镜头取点必须用它，不能拿块 advances 的整首词拼接去索引（V1a-fix2）。
+ */
+/**
+ * 行内「已打印宽度」：对应 Folia widthBetweenOffsets(prepared, segmentMetas, from, to) 的行内版本。
+ *
+ * - 起点取这一行的行左缘（`line.start` 左侧一律 0）；
+ * - 行内 glyphOffsets 只到行内起点 + 各字素起点，最后一字素的右边由行宽给出；
+ * - 终点在行外（≥ line.end）时按行宽收口，所以「整行打印完」等于行宽。
+ */
+fun FumeRenderLine.blockWidthBetween(fromOffset: Int, toOffset: Int): Double {
+    if (toOffset <= fromOffset) return 0.0
+    fun xAt(blockOffset: Int): Double {
+        val local = (blockOffset - start).coerceIn(0, graphemes.size)
+        return if (local >= graphemes.size) width else offsetOf(local)
+    }
+    return maxOf(xAt(toOffset) - xAt(fromOffset), 0.0)
+}
+
 /** 行内某个字素的位置（resolveRenderLineOffset / resolveSegmentGlyphOffset 的产物）。 */
 fun FumeRenderLine.offsetOf(localOffset: Int): Double = when {
     localOffset <= 0 -> 0.0
@@ -193,10 +229,12 @@ fun FumeRenderLine.offsetOf(localOffset: Int): Double = when {
 }
 
 /** 对应 resolveGlyphAdvance(renderLine, index)：下一个偏移减当前，末尾用行宽。 */
-fun FumeRenderLine.glyphAdvance(localIndex: Int): Double {
-    if (localIndex < 0 || localIndex >= graphemes.size) return 0.0
-    val current = glyphOffsets.getOrElse(localIndex) { 0.0 }
-    val next = glyphOffsets.getOrElse(localIndex + 1) { width }
+fun FumeRenderLine.glyphAdvance(lineLocalIndex: Int): Double {
+    // V1a-fix2：入参是「行内第几个字素」。以前拿它直接去索引 glyphOffsets（那是「行内偏移」），
+    // 首行 start=0 时两者恰好同值，第二行起就整体错位，镜头的小数推进跟着算错。
+    if (lineLocalIndex < 0 || lineLocalIndex >= graphemes.size) return 0.0
+    val current = offsetOf(lineLocalIndex)
+    val next = offsetOf(lineLocalIndex + 1)
     return maxOf(next - current, 0.0)
 }
 
