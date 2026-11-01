@@ -80,15 +80,25 @@ private val FUME_TEXTS = listOf(
     "但我知道 天总会亮得比记忆快",
     "于是我把余下的路走得像一首歌",
     "唱完这一句 我就要抬头了",
+    // V1b-1 取证：中英混排一句（英文窄、汉字宽），验镜头取点按实测字宽落在正在唱的字上。
+    "hold on 别急着说再见",
 )
 
-private val FUME_LRC = FUME_TEXTS.mapIndexed { i, text ->
-    val start = i * 4
-    "[%02d:%02d.00]%s".format(start / 60, start % 60, text)
-}.joinToString("\n")
+private const val FUME_LINE_SECONDS = 4
 
-private fun buildFumeKernelLines(): List<Line> =
-    LyricTimeline.toLines(parseLrc(FUME_LRC), (FUME_TEXTS.size + 1) * 4_000L)
+/** 整篇浮名文案的时长上界：锚点句被挪到第 0 秒时，最后一句仍在 76s，留到 84s。 */
+private const val FUME_LRC_SPAN_MS = 24L * FUME_LINE_SECONDS * 1_000L
+
+private fun fumeLrc(anchorLine: Int = 0, anchorTime: Double = 0.0): String =
+    FUME_TEXTS.mapIndexed { i, text ->
+        // V1b-1 取证：把 anchorLine 整句挪到 anchorTime，它的行内时间轴才会覆盖定格时刻，
+        // 「正在唱」的一词进度不再恒为 0（此前整篇都在定格时刻之前，进度被钳成 0）。
+        val start = ((i - anchorLine) * FUME_LINE_SECONDS + anchorTime).toInt()
+        "[%02d:%02d.00]%s".format(start / 60, start % 60, text)
+    }.joinToString("\n")
+
+private fun buildFumeKernelLines(lrc: String = fumeLrc(), totalMs: Long = FUME_LRC_SPAN_MS): List<Line> =
+    LyricTimeline.toLines(parseLrc(lrc), totalMs)
 
 /** 极简 LRC：[mm:ss.xx]文本。 */
 private fun parseLrc(raw: String): List<LyricLine> = raw.trim().lines().mapNotNull { row ->
@@ -145,6 +155,8 @@ fun V0cStage(
     debugFrames: Boolean = false,
     /** V1a 取景：浮名画面定格时刻（秒）；缺省 = positionMs/1000。 */
     fumeAt: Double = -1.0,
+    /** V1b-1 取景：锚点句下标（v0c_fumeline）；-1 = 用 floor(fumeAt/4)。 */
+    fumeAnchor: Int = -1,
 ) {
     val view = LocalView.current
     // V0e 修 Hark 第 1 条：取景 Activity 没有 MainActivity 那段 insets SideEffect，
@@ -164,7 +176,19 @@ fun V0cStage(
         // V0e 三态：trans = 有翻译；preview = 当前句无翻译 → 字幕层改画后面几行预告；interlude = 无当前行 → 舞台占位。
         val withTranslation = variant != "preview"
         val isFume = style == "fume"
-        val fumeLines = remember(isFume) { if (isFume) buildFumeKernelLines() else emptyList() }
+        // V1b-1：锚点句 = 定格时刻落在第几句（v0c_fumeline 可显式指定），
+        // 把这一句整体挪到 0s，镜头/高亮落在第 ceil(fumeAt) 秒的那句上。
+        val anchor = if (fumeAnchor >= 0) fumeAnchor else (fumeAt / FUME_LINE_SECONDS).toInt()
+        val fumeAnchorLine = anchor.coerceIn(0, FUME_TEXTS.size - 1)
+        val fumeLines = remember(isFume, fumeAt, fumeAnchorLine) {
+            if (!isFume) {
+                emptyList()
+            } else if (fumeAt >= 0.0) {
+                buildFumeKernelLines(fumeLrc(fumeAnchorLine, 0.0), (FUME_TEXTS.size + 1) * FUME_LINE_SECONDS * 1_000L)
+            } else {
+                buildFumeKernelLines(fumeLrc(), FUME_LRC_SPAN_MS)
+            }
+        }
         // 浮名取景：v0c_fumetime 可以单独指定「画面定格在第几秒」，此时当前句也按它取，
         // 否则（例如 v0c_ms 13000 落在第 4 句）镜头会按第 4 句落点去算，画面与定位不符。
         val fumeAtClock = if (fumeAt >= 0.0) fumeAt else positionMs / 1000.0
@@ -174,7 +198,7 @@ fun V0cStage(
             variant == "interlude" -> -1
             else -> 1
         }
-        val kernel = remember(withTranslation, isFume) {
+        val kernel = remember(withTranslation, isFume, fumeLines) {
             if (isFume) fumeLines else buildKernelLines(withTranslation)
         }
         // V1a 取证：拍「歌词样式」弹层（浮名条目选中态）。只在 debug 源集，release 无此分支。
@@ -296,13 +320,28 @@ class V0cStageActivity : ComponentActivity() {
         // 取景定格时刻：浮名镜头按这一时刻落地（见 LyricFlowScreen.fumeSettleTimeSeconds）。
         val fumeSettleTime = intent?.getFloatExtra("v0c_fumetime", -1f) ?: -1f
         val fumeAt = if (fumeSettleTime >= 0f) fumeSettleTime.toDouble() else positionMs / 1000.0
+        val fumeAnchor = intent?.getIntExtra("v0c_fumeline", -1) ?: -1
         val debugFrames = intent?.getBooleanExtra("v0c_debugframes", false) ?: false
         val wordGlow = if (intent?.hasExtra("v0c_wordglow") == true) {
             intent.getFloatExtra("v0c_wordglow", 1f)
         } else {
             null
         }
+        // V1b-1 取证：定格在某一句上时，把那一句的时间轴挪到定格时刻附近（见 V0cStage 里的 fumeLines）。
         if (lineOnly) runningUnderRobolectricOverride = true
-        setContent { V0cStage(positionMs, dark, wordGlow, lineOnly, variant, style, fumeSteps, debugFrames, fumeAt) }
+        // V1b-1 取证：把取景参数打一行（adb logcat -s V0cStage），用于在报告里写明拍摄条件。
+        if (style == "fume" && fumeAt >= 0.0) {
+            android.util.Log.i(
+                "V0cStage",
+                "v1b1 fume_at=$fumeAt position_ms=$positionMs steps=$fumeSteps " +
+                    "anchor_line=${if (fumeAnchor >= 0) fumeAnchor else (fumeAt / FUME_LINE_SECONDS).toInt()} " +
+                    "text=${FUME_TEXTS.getOrNull(if (fumeAnchor >= 0) fumeAnchor else (fumeAt / FUME_LINE_SECONDS).toInt())}",
+            )
+        }
+        setContent {
+            V0cStage(
+                positionMs, dark, wordGlow, lineOnly, variant, style, fumeSteps, debugFrames, fumeAt, fumeAnchor,
+            )
+        }
     }
 }

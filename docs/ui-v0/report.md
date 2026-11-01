@@ -544,3 +544,84 @@ JVM 单测锁住（`FumeCameraTest`）：给定块与进度断言 `smoothBlockFo
   视口选择只留了接口占位，当前固定 `disableGeometricBackground = true`。
 - **上滑换歌 / 双指缩放的手机手势映射**：Folia 靠滚轮与拖拽驱动概览镜头，手机端交互待定。
 - 极长行（超过约 40 字）在 360dp 宽屏上的断行效果尚未与网页端逐像素比对。
+
+## V1b-1: 镜头取点改实测字宽（收尾）
+
+### 1. 问题与根因
+
+V1a-fix2 的取点用 `FumeMath.offsetAnchorX`：把行宽按字素数均分成 N 档，第 n 字素左缘 = 行左缘 + n × 行宽/N。
+纯汉字行看不出问题，中英混排一定偏 —— 同一行里 `o` 只有 11dp、`世` 有 20dp，均分档位与实测字形不是一回事，
+行末 `glyphOffsets` 收口、行尾按行宽补齐这些细节均分公式也一条都没吃进去。
+
+### 2. 改法（对齐 Folia）
+
+| Folia（`src/components/visualizer/fume/`） | 广乐实现 |
+|---|---|
+| `fumeTextMeasure.ts:72-90` `widthBetweenOffsets(prepared, segmentMetas, from, to)` | `FumeRenderLine.blockWidthBetween(fromOffset, toOffset)`（行内版，终点 ≥ 行尾按行宽收口） |
+| `fumeTextMeasure.ts:113-122` `resolveGlyphAdvance(renderLine, graphemeIndex)` | `FumeRenderLine.glyphAdvance(lineLocalIndex)`（下一 glyphOffset − 当前，末字素取行宽 − 当前，`max(…, 0)`） |
+| `fumeCamera.ts:83-96` `resolvePointOnRenderLine` | `FumeCamera.centeredGlyphFocusPoint`：`whole = floor(行内偏移)`、`fractional = 偏移 − whole`、`x = block.x + line.left + blockWidthBetween(行起点, 行起点+whole) + glyphAdvance(whole) × (0.5 + fractional)` |
+| `fumeCamera.ts:59-62` `findIndex(l => offset <= l.end)` | `smoothBlockFocusPoint` 的 `indexOfFirst { effectiveOffset <= it.end }`（V1b-1 由 `<` 改回 `<=`） |
+| `fumeCamera.ts:33` `find(l => effectiveOffset <= l.end)` | `steppedBlockFocusPoint` 同一判定 |
+
+- **删掉的**：`FumeMath.offsetAnchorX` 及其 KDoc；`FumeCore.kt` 里 `blockWidthBetween` 上重复的一段 KDoc 合并成一条，
+  并把 V1b-1 的实测宽度口径写进去。
+- **与 Folia 的一处有意偏离**：Folia 的 `x` 是字素左缘 + `advance × fractional`；本仓取**字心**
+  （`advance × (0.5 + fractional)`，V1a-fix3 为修「正在唱的字落在屏宽 60~67%」引入），且不夹到行左/右缘 ——
+  夹取会让末字永远到不了屏心。行末（`offset == 行内字素数`）两边同值：Folia 的 `localGlyphIndex` 越界 ⇒
+  `advance = 0`、`fractional = 0`，本仓 `glyphAdvance(whole)` 同样越界取 0，都落在「行左缘 + 行宽」= 行右缘。
+
+### 3. FumeCameraTest 修正
+
+- `smooth focus point measures width from the line start offset`：行末 `offset = 4.0`（= 行内字素数）断言
+  `x = 行左缘 + 200`（行右缘），注释写明与 `fumeCamera.ts:83-96` 同值的原因；补 `centeredGlyphFocusPoint(…, 4.5).x`
+  与 `line.blockWidthBetween(line.start, line.end) == 200`，确认 200 是逐字推进给出的。
+- 新增 `smooth focus point uses measured glyph widths on a mixed CJK and latin line`：`Hello 世界`
+  `glyphOffsets = 0,11,22,33,44,55,61,81`、行宽 101（8 字素，均分会给 12.625/档）。断言 `blockWidthBetween(0,6) == 61`、
+  `glyphAdvance(6) == 20`、第 7 字素字心 `x = 行左缘 + 71`、小数推进 `6.5 → 81`、行尾 `8.0 / 9.0 → 101`（= 实测行宽）。
+- 新增 `smooth focus point at the line end follows Folia without jumping back`：`offset == 首行 end` 时不回跳首行，
+  取首行末字字心（行宽收口给它 140 的 advance ⇒ 60 + 70 = 130）。
+- 新增 `phone viewport lowers the target line height floor to 40dp` / `short line centres the whole sentence inside the phone viewport` /
+  `long line focus lands on the screen centre`：360dp 短边下限 40、放得下就整句居中、放不下跟字且字心落屏宽 50%±2dp。
+
+### 4. V0cStageHarness（debug 取证，release 不编入，已验证可编译）
+
+1. `FUME_TEXTS` 追加中英混排句「hold on 别急着说再见」。
+2. `LRC` 常量改为 `fun fumeLrc(anchorLine, anchorTime)`：把锚点句整体挪到 `anchorTime`，其行内时间轴才覆盖定格时刻
+   （此前整篇都在定格时刻之前，打印进度被钳成 0，画面只有总览远景、没有「正在唱」）。
+3. 新增 `v0c_fumeline`（int）显式指定锚点句下标；不传时退回 `floor(fumeAt / 4)`。
+4. `V0cStageActivity` 在 `style == "fume" && fumeAt >= 0` 打一行
+   `V0cStage: v1b1 fume_at=… position_ms=… steps=… anchor_line=… text=…`，截图条件直接引这行日志。
+
+### 5. 实拍（emulator-5554，720×1600 @320dpi，v0c_dark true）
+
+| 截图 | 拍摄条件 |
+|---|---|
+| `docs/ui-v0/v1b-1-mixed.png` | `am start … --es v0c_style fume --ef v0c_fumetime 1.5 --ei v0c_fumesteps 24 --ei v0c_fumeline 20 --ez v0c_dark true`，force-stop 后冷启，等 26s `screencap`；logcat `v1b1 fume_at=1.5 … anchor_line=20`。当前句「hold on 别急着说再见」，粉色高亮的正在唱的字是 `h`，镜头把它放在屏宽约 43%（字心约 305px / 720px），是实测宽度的推进位置，不是均分档位 |
+
+被否的取景（记下避免重走）：`fumetime 20.9 / steps 24` 是「凌晨三点的窗」中段（跟字正常，但不是含英文那句）；
+`steps 0` + `v0c_fumetime` 会按真实帧时钟跑，模拟器 `withFrameNanos` 推不动、画面停在 position 末端且构图错乱 —— 取景必须 `steps ≥ 1`。
+
+### 6. 产物
+
+- 单测：`.\gradlew.bat --offline --no-daemon --max-workers=2 "-Dorg.gradle.jvmargs=-Xmx2g" :core:lyrics:test --rerun-tasks`
+  → **BUILD SUCCESSFUL in 35s**；`core/lyrics` 18 个套件 / **208 例** / 失败 0 / 错误 0 / 跳过 0
+  （计数口径：`core/lyrics/build/test-results/test/TEST-*.xml` 的 `tests` 求和；`FumeCameraTest` 15 例全绿）。原始输出末尾：
+
+```
+> Task :core:lyrics:compileKotlin
+w: file:///D:/workspaces/GuangYue-u2/core/lyrics/src/main/kotlin/com/guangyue/core/lyrics/fume/FumeCamera.kt:409:54 Unnecessary non-null assertion (!!) on a non-null receiver of type 'FumeCameraViewTarget'.
+> Task :core:lyrics:compileJava NO-SOURCE
+> Task :core:lyrics:classes UP-TO-DATE
+> Task :core:lyrics:jar
+> Task :core:lyrics:compileTestKotlin
+w: file:///D:/workspaces/GuangYue-u2/core/lyrics/src/test/kotlin/com/guangyue/core/lyrics/GlowWordVariantsTest.kt:53:40 Unnecessary non-null assertion (!!) on a non-null receiver of type 'SpringSpec'.
+> Task :core:lyrics:compileTestJava NO-SOURCE
+> Task :core:lyrics:testClasses UP-TO-DATE
+> Task :core:lyrics:test
+BUILD SUCCESSFUL in 35s
+4 actionable tasks: 4 executed
+```
+
+  两条 `Unnecessary non-null assertion` 都是既有告警（`FumeCamera.kt:409` 的 `input.overviewCamera!!`、`GlowWordVariantsTest.kt:53`），本步未引入。
+- 提交：`bb4ffdd` `V1b-1: 镜头取点改实测字宽 + 重拍中英混排`（`port/u2`，未 push / 未打 tag / 未动 stash）。
+  滑杆相关的 `LyricStyleSheet.kt` 修改与未跟踪的 `FoliaSliderGeometryTest.kt` **未纳入本次提交**，原样留在工作区（V1b-2 范围）。

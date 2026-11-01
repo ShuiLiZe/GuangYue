@@ -25,27 +25,93 @@ object FumeCamera {
     /** 对应跨行混合窗 crossLineBlendWindow。 */
     private const val CROSS_LINE_BLEND_WINDOW = 0.7
 
+    /**
+     * V1a-fix3：手机取景重定 —— 手机短边小于 600dp 时，目标行高下限从 Folia 的 64 降到 40。
+     *
+     * Folia 原值 64 是给桌面定的（`fumeCamera.ts` 的 clamp(minSide×0.115, 64, 124)）。手机上
+     * 360dp 短边时 minSide×0.115 ≈ 41.4，被硬抬到 64，镜头 scale 随之放大到 64/行高，
+     * 整句只放得下 6~7 个字（见 Hark 的 v1a-fume-320dp / late-dark 截图）。
+     */
+    private const val PHONE_MIN_SIDE_DP = 600.0
+    private const val PHONE_MIN_TARGET_LINE_HEIGHT = 40.0
+
+    /** 两侧各留 24dp 的安全区：整句要完整落在 [24dp, 视口宽 − 24dp] 内。 */
+    const val FOCUS_SAFE_INSET_DP = 24.0
+
+    /**
+     * V1a-fix3：当前行能不能整句放进视口？能则返回「整句居中」的镜头点，不能返回 null（改成跟字）。
+     *
+     * 判定用屏幕上实际宽度 = 行宽 × [cameraScaleForBlock]，与「视口宽 − 2×24dp」比较。
+     * 桌面/平板下这个条件几乎总是成立，镜头因此稳定落在句中心，不再跟着字左右晃。
+     */
+    internal fun fitLineFocusPoint(
+        block: FumeBlock,
+        line: FumeRenderLine,
+        viewport: FumeViewport,
+    ): FumeCameraViewTarget? {
+        val availableWidth = viewport.width - FOCUS_SAFE_INSET_DP * 2.0
+        if (availableWidth <= 0.0) return null
+        val screenLineWidth = line.width * cameraScaleForBlock(block, viewport)
+        if (screenLineWidth > availableWidth) return null
+        return FumeCameraViewTarget(
+            x = block.x + line.left + line.width * 0.5,
+            y = block.y + line.top + block.lineHeight * 0.5,
+            scale = 1.0,
+        )
+    }
+
+    /**
+     * 跟字时把镜头放在「第 offset 个字素的字心」上。
+     *
+     * V1a-fix3 修 Hark 报的「正在唱的字落在屏宽 60~67%」：原实现取的是字素**左缘**
+     * （baseWidth + advance×fractional），缺了半个字宽 —— 手机上一个汉字约占屏宽 15%，
+     * 半个字就是 7.5%，加上下行末的跨行混合窗（0.7 字）提前右移、以及非取景帧的 idle
+     * 呼吸浮动 `targetX -= screenFloatX/scale`，实测就偏到了 60~67%。
+     * 现在统一 `advance × (0.5 + fractional)`：字心在屏心时，笔画重心与屏幕中线重合。
+     *
+     * 不再夹到 [行左缘, 行右缘]：夹取会让最后半个字提前贴右壁，末字永远到不了中线。
+     */
+    internal fun centeredGlyphFocusPoint(
+        block: FumeBlock,
+        line: FumeRenderLine,
+        offset: Double,
+    ): FumeCameraViewTarget {
+        val lineLocal = (FumeMath.clamp(offset, line.start.toDouble(), line.end.toDouble()) - line.start)
+            .coerceIn(0.0, line.graphemes.size.toDouble())
+        val whole = Math.floor(lineLocal).toInt()
+        val fractional = lineLocal - whole
+        val baseWidth = line.blockWidthBetween(line.start, (line.start + whole).coerceAtMost(line.end))
+        val glyphAdvance = line.glyphAdvance(whole)
+        return FumeCameraViewTarget(
+            x = block.x + line.left + baseWidth + glyphAdvance * (0.5 + fractional),
+            y = block.y + line.top + block.lineHeight * 0.5,
+            scale = 1.0,
+        )
+    }
+
     /** 对应 resolveSteppedBlockFocusPoint：按「已打印到第几个字素」定位，整数跳。 */
-    fun steppedBlockFocusPoint(block: FumeBlock, printedCount: Int): FumeCameraViewTarget {
+    fun steppedBlockFocusPoint(
+        block: FumeBlock,
+        printedCount: Int,
+        viewport: FumeViewport,
+    ): FumeCameraViewTarget {
         if (block.renderLines.isEmpty()) {
             return FumeCameraViewTarget(block.x + block.width * 0.5, block.y + block.height * 0.5, 1.0)
         }
         val effectiveOffset = FumeMath.clamp(printedCount.toDouble(), 0.0, block.graphemes.size.toDouble())
         val targetLine = block.renderLines.firstOrNull { effectiveOffset <= it.end }
             ?: block.renderLines.last()
-        val minX = block.x + targetLine.left
-        val maxX = minX + targetLine.width
-        val localOffset = FumeMath.clamp(effectiveOffset, targetLine.start.toDouble(), targetLine.end.toDouble())
-        val progressWidth = block.widthBetweenOffsets(targetLine.start, Math.round(localOffset).toInt())
-        return FumeCameraViewTarget(
-            x = FumeMath.clamp(minX + progressWidth, minX, maxX),
-            y = block.y + targetLine.top + block.lineHeight * 0.5,
-            scale = 1.0,
-        )
+        // V1a-fix3：短句整句居中，不跟字、不切字。
+        fitLineFocusPoint(block, targetLine, viewport)?.let { return it }
+        return centeredGlyphFocusPoint(block, targetLine, Math.round(effectiveOffset).toDouble())
     }
 
     /** 对应 resolveSmoothBlockFocusPoint：按连续进度跟随，跨行时在窗口内混合。 */
-    fun smoothBlockFocusPoint(block: FumeBlock, printedProgress: Double): FumeCameraViewTarget {
+    fun smoothBlockFocusPoint(
+        block: FumeBlock,
+        printedProgress: Double,
+        viewport: FumeViewport,
+    ): FumeCameraViewTarget {
         if (block.renderLines.isEmpty()) {
             return FumeCameraViewTarget(block.x + block.width * 0.5, block.y + block.height * 0.5, 1.0)
         }
@@ -53,38 +119,19 @@ object FumeCamera {
         val maxOffset = maxOf(block.graphemes.size.toDouble(), block.renderLines.last().end.toDouble())
         val effectiveOffset = FumeMath.clamp(printedProgress, 0.0, maxOffset)
 
-        fun pointOnLine(lineIndex: Int, offset: Double): FumeCameraViewTarget {
-            val line = block.renderLines[lineIndex]
-            val clampedOffset = FumeMath.clamp(offset, line.start.toDouble(), line.end.toDouble())
-            // V1a-fix2：焦点落在「正在唱的那个字」上，而不是永远停在行首。
-            // 见 FumeMath.offsetAnchorX（按该字素在行内的实际 x 取点）。
-            val lineLocal = (clampedOffset - line.start).coerceIn(0.0, line.graphemes.size.toDouble())
-            val whole = Math.floor(lineLocal).toInt()
-            val fractional = lineLocal - whole
-            // 正在唱的这个字素在行内的左右边（字素尺上相邻两档）。
-            val anchorLeft = FumeMath.offsetAnchorX(
-                lineOffset = whole.toDouble(),
-                lineWidth = line.width,
-                graphemeCount = line.graphemes.size,
-            )
-            val anchorRight = FumeMath.offsetAnchorX(
-                lineOffset = (whole + 1).toDouble(),
-                lineWidth = line.width,
-                graphemeCount = line.graphemes.size,
-            )
-            val anchor = anchorLeft + (anchorRight - anchorLeft) * fractional
-            val minX = block.x + line.left
-            val maxX = minX + line.width
-            return FumeCameraViewTarget(
-                x = FumeMath.clamp(minX + anchor, minX, maxX),
-                y = block.y + line.top + block.lineHeight * 0.5,
-                scale = 1.0,
-            )
-        }
+        fun pointOnLine(lineIndex: Int, offset: Double): FumeCameraViewTarget =
+            centeredGlyphFocusPoint(block, block.renderLines[lineIndex], offset)
 
-        val targetLineIndex = block.renderLines.indexOfFirst { effectiveOffset < it.end }
+        // V1b-1：判定与 Folia 对齐 —— `findIndex(renderLine => offset <= renderLine.end)`
+        // （fumeCamera.ts:59-62，`<=`）。旧写法是 `offset < end`：实测两者在行末给出的点完全相同
+        // （行末一侧的跨行混合窗口 blend 已是 1、取到的就是下一行行首），所以改回 `<=` 不会出现
+        // 行末跳行；见 FumeCameraTest 的 `smooth focus point at the line end follows Folia without
+        // jumping back`。
+        val targetLineIndex = block.renderLines.indexOfFirst { effectiveOffset <= it.end }
             .let { if (it < 0) block.renderLines.size - 1 else it }
         val targetLine = block.renderLines[targetLineIndex]
+        // V1a-fix3：整句放得下就居中整句（长行才继续跟字）。
+        fitLineFocusPoint(block, targetLine, viewport)?.let { return it }
         var point = pointOnLine(targetLineIndex, effectiveOffset)
 
         // 行内快走完时提前把镜头往下一行开头带一点，换行才不会「顿」一下。
@@ -132,7 +179,11 @@ object FumeCamera {
     /** 对应 resolveCameraScaleForBlock：让行高落在视口短的边约 11.5% 的位置。 */
     fun cameraScaleForBlock(block: FumeBlock, viewport: FumeViewport): Double {
         val minViewportSide = maxOf(minOf(viewport.width, viewport.height), 1.0)
-        val targetLineHeight = FumeMath.clamp(minViewportSide * 0.115, 64.0, 124.0)
+        // V1a-fix3：手机下限 40dp（Folia 原值 64 是桌面口径，手机 360dp 时 minSide×0.115≈41
+        // 被抬到 64，镜头放大到只放得下 6~7 个字）。桌面/平板仍用 64。
+        val minTargetLineHeight =
+            if (minViewportSide < PHONE_MIN_SIDE_DP) PHONE_MIN_TARGET_LINE_HEIGHT else 64.0
+        val targetLineHeight = FumeMath.clamp(minViewportSide * 0.115, minTargetLineHeight, 124.0)
         return FumeMath.clamp(targetLineHeight / maxOf(block.lineHeight, 1.0), 0.88, 2.2)
     }
 
@@ -377,11 +428,11 @@ object FumeCameraStep {
         } else if (focusBlock != null) {
             val printedCount = FumeReveal.printedGraphemeCount(focusBlock, input.time)
             val focusPoint = if (input.cameraTrackingMode == FumeCameraTrackingMode.STEPPED) {
-                FumeCamera.steppedBlockFocusPoint(focusBlock, printedCount)
+                FumeCamera.steppedBlockFocusPoint(focusBlock, printedCount, viewport)
             } else {
                 // V1a-fix2：镜头要跟「正在唱的字」，进度必须连续（含小数），不能用整字数。
                 val progress = FumeReveal.continuousPrintedGraphemeProgress(focusBlock, input.time)
-                FumeCamera.smoothBlockFocusPoint(focusBlock, progress)
+                FumeCamera.smoothBlockFocusPoint(focusBlock, progress, viewport)
             }
             targetX = focusPoint.x
             targetY = focusPoint.y

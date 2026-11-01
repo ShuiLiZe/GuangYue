@@ -83,18 +83,9 @@ object FumeMath {
         return out
     }
 
-    /**
-     * 镜头焦点在行内的 x 锚点（对应 Folia `widthBetweenOffsets(prepared, segmentMetas, 行起点, 已打印偏移)`）。
-     *
-     * 语义：把行宽按字素数均分成 N 档，第 n 个字素的左缘 = 行左缘 + n × (行宽 / N)。
-     * 这样既不会被 glyphOffsets 的结尾缺口带偏（行内 glyphOffsets 少最后一项时行末会缩成 0），
-     * 也不会像旧实现那样恒等于行首（画面里当前句永远压在屏幕中线）。
-     */
-    fun offsetAnchorX(lineOffset: Double, lineWidth: Double, graphemeCount: Int): Double {
-        if (graphemeCount <= 0 || lineWidth <= 0.0) return 0.0
-        val slot = if (graphemeCount > 1) lineWidth / graphemeCount.toDouble() else lineWidth
-        return clamp(lineOffset, 0.0, graphemeCount.toDouble()) * slot
-    }
+    // V1b-1：`offsetAnchorX`（行宽按字素数均分取点）已删除 —— 中英混排时均分与实际字形宽度不符，
+    // 镜头取点统一走 `FumeRenderLine.blockWidthBetween`（实测宽度），与 Folia
+    // widthBetweenOffsets + resolveGlyphAdvance 逐项一致。
 }
 
 /** 对应 Folia fumeTypes.ts 的 ViewportSize。 */
@@ -199,18 +190,16 @@ data class FumeRenderLine(
 )
 
 /**
- * 块内字素的 x 位移（从这一行的行起点算）。
- *
- * 对应 Folia widthBetweenOffsets(prepared, segmentMetas, from, to) 的行内版本：
- * 行内 glyphOffsets 只覆盖行内起点，最后一个字素的右边由行宽给出，行尾一律按行宽收口。
- * 镜头取点必须用它，不能拿块 advances 的整首词拼接去索引（V1a-fix2）。
- */
-/**
  * 行内「已打印宽度」：对应 Folia widthBetweenOffsets(prepared, segmentMetas, from, to) 的行内版本。
  *
  * - 起点取这一行的行左缘（`line.start` 左侧一律 0）；
  * - 行内 glyphOffsets 只到行内起点 + 各字素起点，最后一字素的右边由行宽给出；
  * - 终点在行外（≥ line.end）时按行宽收口，所以「整行打印完」等于行宽。
+ *
+ * V1b-1：镜头取点（[FumeCamera.smoothBlockFocusPoint]）用的就是这条「实测宽度」——
+ * 中英混排时各字素 advance 不同，不能再按字素数均分行宽。
+ * 行内 glyphOffsets 只覆盖行内起点，最后一个字素的右边由行宽给出，行尾一律按行宽收口；
+ * 不能用块 advances 的整首词拼接去索引（V1a-fix2）。
  */
 fun FumeRenderLine.blockWidthBetween(fromOffset: Int, toOffset: Int): Double {
     if (toOffset <= fromOffset) return 0.0
