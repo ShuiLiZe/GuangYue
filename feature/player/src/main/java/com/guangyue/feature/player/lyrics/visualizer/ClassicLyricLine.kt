@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.guangyue.core.lyrics.AnimationIntensity
@@ -131,20 +133,27 @@ internal fun ClassicLyricLine(
     // Folia 里每个词的 x/y 只是 transform（CSS translate），不参与布局，所以词再多只会换行，
     // 不会被位移推出父容器——广乐之前的 `Row + widthIn(min=rowWidth)` 把词距算进测量宽度，
     // 长句必然溢出到屏幕外（V0d 实拍表现：当前句只露出一角、右侧粉色残影）。
-    val stageHeight = with(density) {
-        (viewportHeightPx * FOLIA_LINE_STAGE_RATIO).toFloat().toDp()
-    }.coerceAtLeast(FOLIA_LINE_MIN_HEIGHT_DP.dp)
+    // V0e：调用方把「顶栏与字幕层之间的实际剩余高度」传进来，舞台就长在这段净空里：
+    //   - 传了高度（> 0）：外层 `fillMaxHeight()` 吃满这段净空、垂直居中，FlowRow 用
+    //     `heightIn(max = 净空 - 上下内边距)` 兜住换行后的上限，所以 1.3 倍字号也压不到播放条；
+    //   - 没传高度（<= 0，老的整屏调用方）：回退 Folia 的 70vh 画布。
+    // 之前写死 `height(0.70 * 整屏)` 且下限 300dp，1.3 倍字号下第二行会被播放条压住（审图第 2 条）。
+    val availableHeight = with(density) { viewportHeightPx.toFloat().toDp() }
+    val stageModifier = if (viewportHeightPx > 0.0) {
+        Modifier.fillMaxWidth().fillMaxHeight().padding(FOLIA_LINE_PADDING_DP.dp)
+    } else {
+        Modifier.fillMaxWidth().padding(FOLIA_LINE_PADDING_DP.dp)
+    }
+    val stageMaxHeight = ((availableHeight - FOLIA_LINE_PADDING_DP.dp * 2).coerceAtLeast(0.dp))
+        .takeIf { viewportHeightPx > 0.0 } ?: Dp.Unspecified
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(stageHeight)
-            .padding(FOLIA_LINE_PADDING_DP.dp),
+        modifier = stageModifier,
         contentAlignment = Alignment.Center,
     ) {
         FlowRow(
             modifier = modifier
                 .fillMaxWidth()
-                .fillMaxWidth()
+                .heightIn(max = stageMaxHeight)
                 .graphicsLayer {
                     translationY = floatY
                     scaleX = floatScale

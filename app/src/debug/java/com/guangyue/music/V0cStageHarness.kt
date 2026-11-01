@@ -6,9 +6,11 @@ package com.guangyue.music
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -16,7 +18,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.graphics.Color
+import androidx.core.view.WindowCompat
 import com.guangyue.core.data.lyrics.LyricLine
 import com.guangyue.core.data.lyrics.LyricTimeline
 import com.guangyue.core.lyrics.AnimationIntensity
@@ -59,19 +63,20 @@ private fun parseLrc(raw: String): List<LyricLine> = raw.trim().lines().mapNotNu
     )
 }
 
-private fun buildKernelLines(): List<Line> =
+private fun buildKernelLines(withTranslation: Boolean = true): List<Line> =
     LyricTimeline.toLines(parseLrc(LRC), 20_000L).map { line ->
         val text = line.fullText.trim()
+        val translation = if (withTranslation) TRANSLATIONS[text] else null
         val words = WORD_SPLIT[text]
         if (words == null || words.joinToString("") != text) {
-            line.copy(translation = TRANSLATIONS[text])
+            line.copy(translation = translation)
         } else {
             val span = (line.endTime - line.startTime) / words.size
             line.copy(
                 words = words.mapIndexed { i, w ->
                     Word(w, line.startTime + span * i, line.startTime + span * (i + 1))
                 },
-                translation = TRANSLATIONS[text],
+                translation = translation,
             )
         }
     }
@@ -87,21 +92,46 @@ private fun playing(positionMs: Long) = PlaybackState(
     shuffle = false, repeatMode = 0, queueSize = 5, index = 1,
 )
 
-/** V0c 舞台：唯一入口，只画 activeLine + 字幕层。 */
+/** V0c / V0e 舞台：唯一入口，只画 activeLine + 字幕层。 */
 @Composable
-fun V0cStage(positionMs: Long, dark: Boolean, wordGlow: Float? = null, lineOnly: Boolean = false) {
+fun V0cStage(
+    positionMs: Long,
+    dark: Boolean,
+    wordGlow: Float? = null,
+    lineOnly: Boolean = false,
+    variant: String = "trans",
+) {
+    val view = LocalView.current
+    // V0e 修 Hark 第 1 条：取景 Activity 没有 MainActivity 那段 insets SideEffect，
+    // 主题又把 windowLightStatusBar 写死成 true，所以深色下状态栏会是一条白底。
+    // 这里按 darkMode 把图标亮暗切回来（背景层 fillMaxSize 已铺到状态栏后面）。
+    SideEffect {
+        val window = (view.context as? android.app.Activity)?.window ?: return@SideEffect
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
+    }
     FoliaTheme(dark = dark) {
-        // V0d 取证：拍了固定强度时改用静态时钟（模拟器的帧循环推不动三态）。
-        if (V0dGlowOverride != null) runningUnderRobolectricOverride = true
-        val kernel = remember { buildKernelLines() }
+        // V0e 取证：模拟器的 withFrameNanos 推得极慢，帧累积停在 0.1s 左右，所有词都还停在
+        // WAITING（整词 opacity 0），舞台就拍成空白。截图取证一律走静态时钟 = positionMs/1000。
+        runningUnderRobolectricOverride = true
+        // V0e 三态：trans = 有翻译；preview = 当前句无翻译 → 字幕层改画后面几行预告；interlude = 无当前行 → 舞台占位。
+        val withTranslation = variant != "preview"
+        val currentIndex = when (variant) {
+            "preview" -> 0
+            "interlude" -> -1
+            else -> 1
+        }
+        val kernel = remember(withTranslation) { buildKernelLines(withTranslation) }
         val lines = remember { parseLrc(LRC) }
         // V0d flex-wrap 取证：只画「当前句」的 FlowRow 舞台（等价 Folia 的 70vh 画布），
         // 验证长句在 360dp / 320dp / 1.3× 字号下自动换行、不出屏。
         // extra：`v0c_lineonly`（布尔）+ `v0c_wordglow`（float，辉光强度）。
-        CompositionLocalProvider(LyricStringHost provides { id -> id.toString() }) {
+        CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
             LyricFlowScreen(
                 lyrics = lines,
-                currentIndex = 1,
+                currentIndex = currentIndex,
                 strings = V0cStrings,
                 playback = playing(positionMs),
                 accent = Folia.colors.accent,
@@ -125,12 +155,31 @@ fun V0cStage(positionMs: Long, dark: Boolean, wordGlow: Float? = null, lineOnly:
     }
 }
 
-/** 取证不需要真实文案：id 转串即可（空态不出现）。 */
+/** 取证不需要真实文案表：id 直接映射成中文（只取截图里会出现的那几个键）。 */
 private val V0cStrings = LyricStrings(
     back = 0, title = 1, play = 2, pause = 3, empty = 4, emptyHint = 5, loading = 6,
-    loadFailed = 7, failedHint = 8, retry = 9, pureMusic = 10, seekBar = 11,
-    sourceLabel = 12, sourceNone = 13,
+    loadFailed = 7, failedHint = 8, retry = 9, pureMusic = 10, waiting = 11, seekBar = 12,
+    sourceLabel = 13, sourceNone = 14,
 )
+
+private fun v0cString(id: Int): String = when (id) {
+    0 -> "返回"
+    1 -> "歌词"
+    2 -> "播放"
+    3 -> "暂停"
+    4 -> "无可用歌词"
+    5 -> "换一个音源或稍后再试"
+    6 -> "正在匹配最佳歌词…"
+    7 -> "匹配最佳歌词失败"
+    8 -> "稍后再试，或在设置里换一个音源"
+    9 -> "重试"
+    10 -> "纯音乐，无需匹配歌词"
+    11 -> "等待音乐"
+    12 -> "播放进度"
+    13 -> "歌词"
+    14 -> "无"
+    else -> ""
+}
 
 /**
  * 入口：
@@ -147,6 +196,8 @@ internal var V0dGlowOverride: Float? = null
 class V0cStageActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // V0e：取景也走 edge-to-edge，背景铺到状态栏/导航栏后面。
+        enableEdgeToEdge()
         val positionMs = intent?.getLongExtra("v0c_ms", 2_000L) ?: 2_000L
         val dark = intent?.getBooleanExtra("v0c_dark", true) ?: true
     // V0d 取证：给辉光一个固定强度，避开「withFrameNanos 在模拟 EGL 上不推进」导致画面停在 WAITING。
@@ -154,12 +205,13 @@ class V0cStageActivity : ComponentActivity() {
         V0dGlowOverride = intent.getFloatExtra("v0c_strength", 1f)
     }
         val lineOnly = intent?.getBooleanExtra("v0c_lineonly", false) ?: false
+        val variant = intent?.getStringExtra("v0c_variant") ?: "trans"
         val wordGlow = if (intent?.hasExtra("v0c_wordglow") == true) {
             intent.getFloatExtra("v0c_wordglow", 1f)
         } else {
             null
         }
         if (lineOnly) runningUnderRobolectricOverride = true
-        setContent { V0cStage(positionMs, dark, wordGlow, lineOnly) }
+        setContent { V0cStage(positionMs, dark, wordGlow, lineOnly, variant) }
     }
 }

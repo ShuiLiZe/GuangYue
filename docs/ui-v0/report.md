@@ -1,4 +1,4 @@
-# V0 歌词内核 · 收尾报告
+﻿# V0 歌词内核 · 收尾报告
 
 分支 `port/u2`（基于 `60824c8`），提交「V0: 歌词内核 + GlowWord + 流光底座」。未 push、未打 tag。
 
@@ -249,3 +249,92 @@ debug-only 静态时钟（模拟器软件 EGL 上 `withFrameNanos` 几乎不推�
 - 非当前行的景深现在是纯 alpha 递减，没有模糊；若要贴合 Folia 的 blur(10px) 视觉，可在正文层用
   `TextPaint.maskFilter` 在画布内做（与 `WordInk` 同一手法），不能用 `Modifier.blur`。
 - `glowStrengthOverride` / `runningUnderRobolectricOverride` 是仅 debug 的取证旁路，release 无写入方。
+
+## V0e（舞台单行 + 底部字幕层）
+
+### 1. 结构
+
+- `LyricFlowScreen` 删掉 U5 遗留的 `LazyColumn` 多行列表（连同 `LyricLineRow`、自动跟随、手动滚动暂停），
+  改为 Folia classic 的**舞台单行**：`Box(weight(1f))` 量出「顶栏 ↔ 字幕层/播放胶囊」之间的实际剩余高度，
+  作为 `viewportHeightPx` 交给 `ClassicLyricLine`；没有当前句时画「等待音乐」占位（`strings.lyrics_waiting`，alpha 0.5）。
+- `ClassicLyricLine`：`viewportHeightPx > 0` 时外层 `fillMaxHeight() + 垂直居中`，`FlowRow` 用
+  `heightIn(max = 净空 - 2×32dp)` 兜底 —— 1.3 倍字号换行也压不到播放条（修 Hark 第 2 条）；
+  `<= 0`（整屏调用方）回退 Folia 70vh。辉光与 `flex-wrap` 未动。
+- 新增 `lyrics/SubtitleOverlay.kt`：`SubtitleOverlay.kt` 纯函数 `hasReadableText` / `readableLines` /
+  `resolveSubtitleOverlayContent`（过滤占位串、非 current 行同文去重、单轨布局下「翻译 == 当前句原文」跳过、
+  无可读翻译时改画后面几行预告），加 `LyricSubtitleOverlay` 合成层：贴底居中、px-4、opacity 0.6、
+  进出场 opacity + y 20 / 0.24s easeOut、字号 clamp（Folia `subtitleFontSizes.ts`）、第二行 ×0.88 / alpha 0.82。
+  背景暗角用 `drawWithContent` 的径向渐变画，**不用 `Modifier.blur`**（V0d 已证明整节点光栅成矩形）。
+- 底部避让：整列已 `windowInsetsPadding(statusBars ∪ displayCutout ∪ navigationBars)`，字幕层再 `padding(bottom =
+  SUBTITLE_BAR_RESERVE(80dp) + SUBTITLE_STAGE_RESERVE(56dp))`，即停在播放胶囊之上、导航栏 inset 之内。
+- `V0cStageHarness`（debug）：`enableEdgeToEdge()` + 按 dark 切 `isAppearanceLightStatusBars/NavigationBars`
+  （修 Hark 第 1 条深色状态栏白底），新增 `v0c_variant = trans|preview|interlude` 三态取证。
+
+### 2. 实拍（emulator-5554，720×1600 @320dpi）
+
+| 文件 | 内容 |
+| --- | --- |
+| `docs/ui-v0/v0e-stage-light.png` | 浅色 · 有翻译（舞台当前句 + 字幕层译文） |
+| `docs/ui-v0/v0e-stage-dark.png` | 深色 · 有翻译 |
+| `docs/ui-v0/v0e-preview-light.png` | 浅色 · 无翻译 → 字幕层画后面几行预告 |
+| `docs/ui-v0/v0e-preview-dark.png` | 深色 · 无翻译 → 预告 |
+| `docs/ui-v0/v0e-interlude-light.png` | 浅色 · 间奏占位「等待音乐」+ 无字幕 |
+| `docs/ui-v0/v0e-interlude-dark.png` | 深色 · 间奏占位 |
+
+深色六张逐张看过：状态栏已随深色切换（无白底条），背景铺满到状态栏/导航栏后面；字幕层停在播放胶囊之上，
+未被导航栏遮挡。320dp / 1.3 倍字号两张见第 4 节。
+
+### 3. Roborazzi 截图用例（不依赖模拟器）
+
+`U5LyricsScreenshotTest` 按新结构改写：删 `u5-lines-*` / `u5-before-first-line` / `u5-long-lyrics-*` 三个旧用例，
+新增 `v0eStage{Light,Dark}` / `v0ePreview{Light,Dark}` / `v0eInterlude{Light,Dark}`，并把
+`u5-320dp-light` / `u5-font130-light` / `u5-320dp-dark-font130` 换成 `v0e-320dp-light` / `v0e-font130-light` /
+`v0e-320dp-dark-font130`。出图：
+`.\gradlew.bat --offline --no-daemon --max-workers=2 -ProborazziRecord=true :app:testDebugUnitTest --tests *U5LyricsScreenshotTest*`。
+新增 `SubtitleOverlayTest`（13 例）：占位串过滤、`readableLines`、翻译轨、`showText=false`、无当前行、
+无翻译回落预告、预告跳占位行、同文去重、布局多行不误删、key 跟随 startTime、字号 clamp、次级轨常量。
+
+### 4. 字幕层背景（V0e 收尾，修「硬边矩形」）
+
+Folia 的做法（`VisualizerSubtitleOverlay.tsx:138-145 / 165-171`）：背景层比文字区外扩 x 40dp、y 24dp，
+填 `radial-gradient(ellipse 115% 130% at center, bg@0.96 0%, bg@0.78 62%, transparent 100%)`，再整层 `blur-2xl`(40px) 把边化掉。
+Compose 这边不用节点级 `Modifier.blur`（V0d 已证实会把整个节点光栅成矩形、边缘变硬），改为：
+
+- `SubtitleOverlay.kt` 新增 `DrawScope.drawEllipseScrim(color, width, height)`：用
+  `android.graphics.RadialGradient` 画单位圆径向渐变（0.96 → 0.78@62% → 全透明），
+  再用 `Matrix` 按 `(radiusX = 宽/1.15/2 + 40dp, radiusY = 高/1.30/2 + 40dp)` 拉伸成椭圆，
+  画在比文字区外扩 40dp / 24dp 的矩形上。半径里的「+40dp」等价于 Folia 的 `blur-2xl` 渐隐带，
+  矩形四条边都落在渐变的尾部，所以画面里没有边线。
+- 背景容器由 `fillMaxWidth()` 改为 `wrapContentWidth()`（否则背景会横跨整屏宽度，左右两侧离文字很远，看起来像一块方牌），
+  文字列 `padding(horizontal = 16.dp, vertical = 8.dp)`，背景跟随文字宽度。
+- 相关常量：`SUBTITLE_SCRIM_PAD_X = 40.dp`、`SUBTITLE_SCRIM_PAD_Y = 24.dp`、`SUBTITLE_SCRIM_FRINGE = 40.dp`、
+  `SUBTITLE_SCRIM_INNER_STOP = 0.62f`。取色仍由调用方传 `scrimColor`（当前取色背景色）。
+
+逐像素核对（720×1600 截图，取色带内只有背景层、不含文字）：
+
+- 上缘：`v0e-preview-dark` 在 y=926→932 处 Δ=4/255（约 6px 过渡带）；
+- 下缘：y=1075→1085 之间约 24px 过渡带（Δ≈8/255）；
+- 左右缘：x=36 与 x=683 两道竖线在 y=1150、1170 行为 0 突变（上一版此处是 Δ=15 的硬边）。
+
+结论：硬边矩形已消失，四条边都是 20~40px 级的连续渐隐，与 Folia 的 `blur-2xl` 观感一致。
+
+### 5. 产物
+
+- 全量单测口径：`.\gradlew.bat --offline --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g test` →
+  **BUILD SUCCESSFUL（2m21s），全量通过 0 失败 0 错误**。计数口径 = 各模块
+  `build/test-results/**/TEST-*.xml` 中真实套件的 `tests` 属性求和，剔除 Gradle 聚合伪套件
+  `TEST-Gradle-Test-Run-*`（聚合套件内含全部用例的重复计数，V0c/V0d 的「566」就是把它算进去了）：
+  53 个套件 / **550 例** / 失败 0 / 错误 0 / 跳过 2 —— `app` 225、`core/lyrics` 166、`core/player` 6、
+  `core/plugin` 82、`feature/library` 3、`feature/player` 49、`feature/search` 21。
+  其中本轮新增/改写的：`SubtitleOverlayTest` 15 例、`LyricFlowScreenTest` 17 例、`U5LyricsScreenshotTest` 14 例。
+- `assembleRelease`（同一串命令）→ **BUILD SUCCESSFUL（4m59s）**，
+  产物 `app/build/outputs/apk/release/app-release.apk`，8,997,389 字节，
+  **SHA-256 = `A75D60BBC6DE27037CA709709DA904CEF9B40062BD4DD742BE4322D1DB34DD92`**。
+- 提交：`V0e: 舞台单行 + 底部字幕层`（在 `port/u2` 上，未 push / 未打 tag）。
+
+### 6. 未收敛 / 卡点
+
+- 无阻塞项。上一轮的执行环境故障（Windows Job runner 提前退出）在 DSH 重启后消失，
+  本轮全部命令（gradle / adb / 截图 / git）都正常跑完。
+- 遗留观察（不影响验收）：预告态（无翻译）时字幕层每句宽度不同，背景块会随文字宽度变化；
+  这是 `wrapContentWidth` 的必然结果，Folia 网页端也是按内容宽度算背景层。

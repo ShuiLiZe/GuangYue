@@ -32,6 +32,8 @@ data class LyricStrings(
     val retry: Int,
     /** 纯音乐空态主句（Folia "bestLyricsPureMusic"）。 */
     val pureMusic: Int,
+    /** 舞台上「等待音乐」占位（Folia 舞台上这个文案是空串，广乐自拟四字）。 */
+    val waiting: Int,
     /** 进度条无障碍名。 */
     val seekBar: Int,
     /** 歌词来源标签（"lyrics"），跟来源名拼成「歌词 · 网易云」。 */

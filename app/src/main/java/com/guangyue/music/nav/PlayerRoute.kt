@@ -233,6 +233,7 @@ internal fun lyricStrings(): LyricStrings = LyricStrings(
     failedHint = R.string.lyrics_failed_hint,
     retry = R.string.lyrics_retry,
     pureMusic = R.string.lyrics_pure_music,
+    waiting = R.string.lyrics_waiting,
     seekBar = R.string.lyrics_seek_bar,
     sourceLabel = R.string.lyrics_source,
     sourceNone = R.string.lyrics_source_none,

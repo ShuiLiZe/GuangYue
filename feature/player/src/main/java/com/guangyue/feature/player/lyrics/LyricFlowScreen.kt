@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -12,6 +11,7 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,9 +19,6 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -39,23 +36,22 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.guangyue.core.data.lyrics.LyricLine
 import com.guangyue.core.lyrics.AnimationIntensity
+import com.guangyue.core.lyrics.ClassicLayout
 import com.guangyue.core.lyrics.ClassicTuning
 import com.guangyue.core.lyrics.Line
 import com.guangyue.core.player.PlaybackState
@@ -88,19 +84,20 @@ import com.guangyue.feature.player.screen.playerBackdrop
 /**
  * U5 歌词页（Compose 版，取代 U2 的 `LyricFlowScreen`）。
  *
- * 三块，从上到下：
+ * 三块，从上到下（V0e 起换成 Folia classic 的「舞台单行」形态）：
  *  1. 顶栏：返回圆钮 + 「歌词」标题 + 一句「歌手 · 来源」；
- *  2. 歌词列表：逐行随播放高亮，正在唱的那句最大、最近、带强调色，越远越小越淡越糊
- *     （档位与旧 `LyricFlowScreen` 的 `LyricFlowLine` 一致：32/26/22/19/17sp、
- *     1/.34/.20/.12/.07、0/.6/1.6/2.6/3.6dp）；**点任意一行跳到那一句**；
- *  3. 底部胶囊：2dp 进度轨 + 等宽时间，与播放页 [com.guangyue.feature.player.screen.FoliaPlayerPage]
+ *  2. 舞台：**只画正在唱的那一句**（[ClassicLyricLine]，逐词流光 + flex-wrap）；
+ *     没有当前句时画「等待音乐」占位。舞台高度由顶栏与字幕层之间的剩余空间决定，
+ *     1.3 倍字号下换行也不会跑到播放条下面；
+ *  3. 底部字幕层（[LyricSubtitleOverlay]）：当前句的翻译；这一句没有可读翻译时，
+ *     改画后面几行的预告。字幕层贴在播放胶囊之上、导航 inset 之内，不被系统栏遮挡；
+ *  4. 底部播放胶囊：2dp 进度轨 + 等宽时间，与播放页 [com.guangyue.feature.player.screen.FoliaPlayerPage]
  *     的 `PlaybackPill` 同一套观感。
  *
  * 空态（无歌词 / 加载中 / 失败）走 [FoliaEmptyState]，文案全中文、由 [LyricStrings] 注入；
  * 失败副句优先用数据源给的原始原因（`LyricsViewModel` 的 `message`），这时不显示重试按钮
  * ——重试要真去请求音源，归外壳管。
  *
- * 拖动列表时暂停自动跟随（由 `LyricSynchronizer` 记 3 秒），松手后从头跟回正在唱的那句。
  * 背景沿用播放页那条封面渐变，深浅色同一套令牌，320dp 与字体 1.3 都不写死宽度。
  */
 @Composable
@@ -149,6 +146,16 @@ fun LyricFlowScreen(
     // 对不上（第一句之前、越界）就当没有内核行，整页回落到 U5 原视图。
     val activeLine: Line? = if (currentIndex in kernelLines.indices) kernelLines[currentIndex] else null
 
+    // 字幕层内容：当前句翻译；这一句没有可读翻译时改画后面几行的预告（Folia 同款规则）。
+    // `showText` 与舞台一致 —— 空态（加载中 / 失败 / 无歌词）时不画字幕。
+    val subtitleContent = remember(activeLine, kernelLines, currentIndex, emptyKind) {
+        resolveSubtitleOverlayContent(
+            activeLine = activeLine,
+            nextLines = kernelLines.drop(currentIndex.coerceAtLeast(0) + 1),
+            showText = emptyKind == null,
+        )
+    }
+
     // ---------------- 封面取色（Folia colorExtractor + builtin dual theme） ----------------
     // 封面来源：业务封面优先，没有就用内置测试封面 —— 这样「封面取色 → 流体背景」在真机上始终可见，
     // 也是审图第 4 条要求的实拍对象。
@@ -169,17 +176,6 @@ fun LyricFlowScreen(
     // 当前行激活字用取色 accent（与顶栏/胶囊同一套色）。
     val lyricAccent = theme.emphasis
     val pillInk = if (darkMode) Color(0xFFF4F4F5) else Color(0xFF1C1917)
-
-    val listState = rememberLazyListState()
-
-    // 自动跟随：只有同步器没被判为「手动浏览」时才滚。
-    LaunchedEffect(currentIndex) {
-        if (currentIndex >= 0) listState.animateScrollToItem(currentIndex)
-    }
-    // 手指一碰列表就算手动浏览（同步器记 3 秒，之后自己回自动）。
-    LaunchedEffect(listState.isScrollInProgress) {
-        if (listState.isScrollInProgress) onManualScroll()
-    }
 
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
@@ -324,11 +320,20 @@ fun LyricFlowScreen(
                 }
             }
 
-            // ---------------- 歌词列表 / 空态 ----------------
+            // ---------------- 舞台（只画当前句）/ 空态 ----------------
+            // 舞台高度不再取「视口 70%」——那是 Folia 全屏画布的算法，在手机窄高视口里会顶穿
+            // 顶栏与播放条。这里交给 `weight(1f)`：舞台 = 顶栏与「播放条 + 字幕层」之间的剩余空间。
+            // 字幕层用 `padding(bottom = SUPERSCRIPT_RESERVE)` 让出净空，舞台因此天然收在字幕之上，
+            // 1.3 倍字号换行也不会压到播放条（审图第 2 条）。
+            // 舞台高度由剩余空间决定（V0e 修 Hark 第 2 条：1.3 倍字号时当前句第二行会被播放条压住）。
+            // 这里量出这块 Box 的实际高度，交给 ClassicLyricLine 当 viewportHeightPx，
+            // 它内部的 stageHeight 就落在顶栏与字幕层之间，FlowRow 垂直居中，不再按屏幕 70% 撑出视口。
+            var stageHeightPx by remember { mutableIntStateOf(0) }
             Box(
                 Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .onSizeChanged { stageHeightPx = it.height },
                 contentAlignment = Alignment.Center,
             ) {
                 if (emptyKind != null) {
@@ -339,54 +344,61 @@ fun LyricFlowScreen(
                         failure = failure,
                         onRetry = null,
                     )
-                } else {
-                    // 正在唱的那句尽量停在竖直中线：上下各留半屏空白，当前句才不会被顶栏/胶囊挤到边上。
-                    // 高度取列表自己的（`onSizeChanged`），不能拿整屏高度——顶栏与胶囊是兄弟节点。
-                    var listHeightPx by remember { mutableIntStateOf(0) }
-                    val verticalPad = with(LocalDensity.current) { (listHeightPx * 0.32f).toDp() }
-                    LazyColumn(
-                        state = listState,
+                } else if (activeLine != null && activeLine.hasVisibleWords()) {
+                    // 舞台只画正在唱的这一句（Folia classic/Visualizer.tsx 的 activeLine 分支）。
+                    ClassicLyricLine(
+                        line = activeLine,
+                        clock = clock,
+                        tuning = classicTuning,
+                        intensity = AnimationIntensity.NORMAL,
+                        reduceMotion = reduceMotion,
+                        viewportWidthPx = viewportWidthPx,
+                        viewportHeightPx = stageHeightPx.toDouble(),
+                        lyricsFontScale = lyricsFontScale,
+                        activeColor = lyricAccent,
+                        baseColor = onBackdrop,
+                        fontFamily = GuangYueDesign.Serif,
+                        glowStrengthOverride = glowStrengthOverride,
+                        // 舞台 Box 已经居中，内层不能再让 FlowRow 的 fillMaxWidth 把宽度
+                        // 撑到整屏（词距是按内核算出的 marginRight，撑满会溢出）。
                         modifier = Modifier
-                            .fillMaxSize()
-                            .onSizeChanged { listHeightPx = it.height }
-                            .testTag(LyricListTag),
-                        contentPadding = PaddingValues(vertical = verticalPad),
-                    ) {
-                        itemsIndexed(lyrics) { index, line ->
-                            val visual = lyricRowVisual(index, currentIndex)
-                            // V0：当前句有内核时间轴时走「流光」逐词画布，其余行保留 U5 档位视图，
-                            // 这样上下句上下文、点行跳转、自动跟随都不变。
-                            val isCurrentLine = index == currentIndex
-                            // 审图第 2 条：当前句即使没有内核时间轴也要走「流光」画布 —— 旧版走
-                            // LyricLineRow 时当前句只剩一档高亮色，waiting/passed 的字几乎看不见。
-                            if (isCurrentLine && activeLine != null && activeLine.hasVisibleWords()) {
-                                ClassicLyricLine(
-                                    line = activeLine,
-                                    clock = clock,
-                                    tuning = classicTuning,
-                                    intensity = AnimationIntensity.NORMAL,
-                                    reduceMotion = reduceMotion,
-                                    viewportWidthPx = viewportWidthPx,
-                                    viewportHeightPx = viewportHeightPx,
-                                    lyricsFontScale = lyricsFontScale,
-                                    activeColor = lyricAccent,
-                                    baseColor = onBackdrop,
-                                    fontFamily = GuangYueDesign.Serif,
-                                    glowStrengthOverride = glowStrengthOverride,
-                                    modifier = Modifier.clickableNoRipple { onSeekToLine(index) },
-                                )
-                            } else {
-                                LyricLineRow(
-                                    line = line,
-                                    visual = visual,
-                                    accent = accent,
-                                    onClick = { onSeekToLine(index) },
-                                )
-                            }
-                        }
+                            .fillMaxWidth()
+                            .heightIn(max = with(LocalDensity.current) { stageHeightPx.toDp() })
+                            .clickableNoRipple { if (currentIndex >= 0) onSeekToLine(currentIndex) },
+                    )
+                } else {
+                    // 没有当前句（间奏 / 还没开唱）：Folia 的「等待音乐」占位，opacity 0.5。
+                    // 字号走 ClassicLayout.emptyPixelFontSize（clamp(1.5rem, 3.5vw, 2.25rem)），
+                    // 与舞台同样的 px -> sp 折算，避免和系统字号双重放大。
+                    val emptySp = with(LocalDensity.current) {
+                        ClassicLayout.emptyPixelFontSize(
+                            fontScale = lyricsFontScale,
+                            viewportWidthPx = viewportWidthPx,
+                        ).toFloat().toSp()
                     }
+                    Text(
+                        text = str(strings.waiting),
+                        color = theme.secondary.copy(alpha = 0.5f),
+                        fontSize = emptySp,
+                        fontFamily = GuangYueDesign.Serif,
+                        maxLines = 1,
+                        modifier = Modifier.testTag(LyricStagePlaceholderTag),
+                    )
                 }
             }
+
+            // ---------------- 底部字幕层 + 播放胶囊 ----------------
+            // 字幕层固定在底部「导航栏 inset 之上、播放胶囊之上」的预留高度里：
+            // 播放胶囊自身约占 56dp + 上下 24dp，所以字幕层的净空 = 胶囊 + [SUBTITLE_STAGE_RESERVE]。
+            // 舞台的 weight(1f) 因此天然收在字幕层之上，1.3 倍字号换行也压不到播放条（审图第 2 条）。
+            LyricSubtitleOverlay(
+                content = subtitleContent,
+                secondaryColor = theme.secondary,
+                scrimColor = theme.background,
+                viewportWidthDp = LocalConfiguration.current.screenWidthDp.toFloat(),
+                fontFamily = GuangYueDesign.Sans,
+                modifier = Modifier.padding(bottom = SUBTITLE_BAR_RESERVE + SUBTITLE_STAGE_RESERVE),
+            )
 
             // ---------------- 底部播放胶囊 ----------------
             LyricBar(
@@ -469,67 +481,6 @@ internal fun LyricEmpty(
             }
         },
     )
-}
-
-/**
- * 一行歌词：距离档位决定字号 / 不透明度 / 模糊，当前句用强调色。
- *
- * 点击区整行填满且最小 48dp（无障碍触控目标），点一下就 seek 到这一句。
- */
-@Composable
-private fun LyricLineRow(
-    line: LyricLine,
-    visual: LyricRowVisual,
-    accent: Color,
-    onClick: () -> Unit,
-) {
-    val distance = visual.distance
-    val fontSize = when (distance) {
-        0 -> 32
-        1 -> 26
-        2 -> 22
-        3 -> 19
-        else -> 17
-    }
-    val alpha = when (distance) {
-        0 -> 1f
-        1 -> 0.34f
-        2 -> 0.20f
-        3 -> 0.12f
-        else -> 0.07f
-    }
-
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clickableNoRipple(onClick)
-            .padding(vertical = GySpace.xs),
-    ) {
-        Text(
-            text = line.text.ifBlank { " " },
-            fontSize = fontSize.sp,
-            lineHeight = (fontSize * 1.28).sp,
-            fontWeight = FontWeight.SemiBold,
-            color = if (visual.active) accent.copy(alpha = 0.92f) else Gyp.ink.copy(alpha = alpha),
-            textAlign = TextAlign.Start,
-            fontFamily = GuangYueDesign.Serif,
-            // V0d：非当前行不再用 Modifier.blur。它会先把整个 Text 节点光栅成一块不透明矩形
-            // 再模糊，矩形底比字形先亮起来（V0c 审图第 3 条的矩形来源之一）。景深改由上面的
-            // color alpha 档位（0.34 / 0.20 / 0.12 / 0.07）承担；V0e 会重做列表层。
-            modifier = Modifier.fillMaxWidth(),
-        )
-        // 译文只在当前句露出来（跟旧页面一致），避免了整屏双语糊在一起。
-        if (visual.active && !line.translation.isNullOrBlank()) {
-            Text(
-                text = line.translation.orEmpty(),
-                fontSize = GyText.label,
-                lineHeight = GyText.labelHeight,
-                color = Gyp.t2,
-                fontFamily = GuangYueDesign.Sans,
-                modifier = Modifier.padding(top = GySpace.xxs),
-            )
-        }
-    }
 }
 
 /** 底部胶囊：播放键 + 2dp 进度轨 + 两端等宽时间（跟播放页同观感）。 */
@@ -618,8 +569,17 @@ private fun LyricBar(
 
 /** 截图测试用的稳定锚点。 */
 const val LyricRootTag = "u5-lyrics"
+
+/** V0e 起舞台只有一行，列表锚点已废；保留常量避免外壳/测试引用失效。 */
+@Deprecated("V0e 舞台单行已取代 U5 多行列表", ReplaceWith("LyricRootTag"))
 const val LyricListTag = "u5-lyrics-list"
 const val LyricEmptyTag = "u5-lyrics-empty"
+
+/** 舞台「等待音乐」占位（间奏 / 还没开唱）。 */
+const val LyricStagePlaceholderTag = "v0e-stage-placeholder"
+
+/** 底部字幕层。 */
+const val LyricSubtitleOverlayTag = "v0e-subtitle-overlay"
 
 /** 毫秒 → `mm:ss`（Folia LatticeChrome 的等宽时间；小时数并进分钟）。 */
 internal fun formatTime(ms: Long): String {

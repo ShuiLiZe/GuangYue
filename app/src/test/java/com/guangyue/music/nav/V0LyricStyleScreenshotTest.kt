@@ -1,4 +1,4 @@
-﻿package com.guangyue.music.nav
+package com.guangyue.music.nav
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -397,9 +397,10 @@ class V0LyricStyleScreenshotTest {
         failedHint = 9,
         retry = 10,
         pureMusic = 11,
-        seekBar = 12,
-        sourceLabel = 13,
-        sourceNone = 14,
+        waiting = 12,
+        seekBar = 13,
+        sourceLabel = 14,
+        sourceNone = 15,
     )
 
     private fun resolver(strings: LyricStrings, id: Int): String = when (id) {
@@ -414,6 +415,7 @@ class V0LyricStyleScreenshotTest {
         strings.failedHint -> "这首没有歌词可显示，先听音乐吧"
         strings.retry -> "重试"
         strings.pureMusic -> "纯音乐，无需匹配歌词"
+        strings.waiting -> "等待音乐"
         strings.seekBar -> "播放进度"
         strings.sourceLabel -> "歌词"
         else -> "好"

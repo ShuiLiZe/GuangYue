@@ -288,6 +288,9 @@
     <string name="lyrics_retry">重试</string>
     <!-- zh-CN.ts: 358 "bestLyricsPureMusic"（「纯音乐，无需匹配歌词」） -->
     <string name="lyrics_pure_music">纯音乐，无需匹配歌词</string>
+    <!-- 自拟：Folia zh-CN.ts 的 "waitingForMusic" 是空串（舞台上不显示），
+         广乐 stage 需要一个可见的「间奏 / 未开唱」占位，因此自拟这四个字 -->
+    <string name="lyrics_waiting">等待音乐</string>
     <!-- 自拟：歌词页底部进度条的无障碍名（Folia 无 aria） -->
     <string name="lyrics_seek_bar">播放进度</string>
     <!-- zh-CN.ts: 3861 "lyrics"（localMusic 段「歌词」），与来源名拼成「歌词 · 网易云」 -->
