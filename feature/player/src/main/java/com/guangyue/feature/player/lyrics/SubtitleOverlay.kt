@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -200,6 +201,12 @@ internal fun LyricSubtitleOverlay(
     var contentWidthPx by remember { mutableIntStateOf(0) }
     var contentHeightPx by remember { mutableIntStateOf(0) }
 
+    // V0e-fix2：整层透明度只作为「系数」参与，不再用 graphicsLayer/Modifier.alpha 做节点级 alpha 图层。
+    // alpha < 1 的图层会把节点离屏合成、并裁剪到节点边界，drawBehind 里超出节点的上下外扩被切掉，
+    // 暗区上下就成了两条直线（左右方向因为节点还有余量，看起来是渐隐）。
+    val overlayAlpha = enter.value.coerceIn(0f, 1f) * SUBTITLE_OVERLAY_OPACITY
+    val enterShiftY = with(LocalDensity.current) { (1f - enter.value) * 20.dp.toPx() }
+
     Box(
         modifier = modifier
             // 本节点独占一整行宽度：背景可以四边溢出，不会被父级 pageH 内边距裁成矩形。
@@ -210,19 +217,23 @@ internal fun LyricSubtitleOverlay(
                 // radial-gradient(ellipse 115% 130% at center, bg@0.96 0%, bg@0.78 62%, transparent 100%)，
                 // 再整体 blur-2xl 把边缘化掉。这里不碰节点级模糊（V0d 已证明 Modifier.blur 把整节点
                 // 光栅成矩形、边缘变硬），改为按同一套参数自绘椭圆径向渐变，四条边都落在渐隐带里。
+                //
+                // V0e-fix2：本节点上没有任何 alpha 图层，绘制不被裁剪；矩形再向外扩到渐变终点之外，
+                // 所以四条边的 alpha 都是 0，暗区的边只由渐变给出，不可能是直线。
                 val padX = SUBTITLE_SCRIM_PAD_X.toPx()
                 val padY = SUBTITLE_SCRIM_PAD_Y.toPx()
                 val textWidth = if (contentWidthPx > 0) contentWidthPx.toFloat() else size.width
                 val textHeight = if (contentHeightPx > 0) contentHeightPx.toFloat() else size.height
                 val boxWidth = textWidth + padX * 2f
                 val boxHeight = textHeight + padY * 2f
-                translate(left = (size.width - boxWidth) / 2f, top = (size.height - boxHeight) / 2f) {
-                    drawEllipseScrim(color = scrimColor, width = boxWidth, height = boxHeight)
+                translate(top = enterShiftY) {
+                    drawEllipseScrim(
+                        color = scrimColor,
+                        width = boxWidth,
+                        height = boxHeight,
+                        alphaScale = overlayAlpha,
+                    )
                 }
-            }
-            .graphicsLayer {
-                alpha = enter.value * SUBTITLE_OVERLAY_OPACITY
-                translationY = (1f - enter.value) * 20.dp.toPx()
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -230,6 +241,8 @@ internal fun LyricSubtitleOverlay(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .padding(horizontal = 16.dp, vertical = 8.dp)
+                // 只做位移（不设 alpha）：文字与 scrim 的进场位移保持一致，材质不再进离屏图层。
+                .graphicsLayer { translationY = enterShiftY }
                 .onSizeChanged {
                     contentWidthPx = it.width
                     contentHeightPx = it.height
@@ -240,7 +253,9 @@ internal fun LyricSubtitleOverlay(
                     val secondary = index > 0
                     Text(
                         text = row.text,
-                        color = secondaryColor.copy(alpha = if (secondary) SUBTITLE_SECONDARY_OPACITY else 1f),
+                        color = secondaryColor.copy(
+                            alpha = (if (secondary) SUBTITLE_SECONDARY_OPACITY else 1f) * overlayAlpha,
+                        ),
                         fontSize = if (secondary) secondaryFontSize else primaryFontSize,
                         fontWeight = if (secondary) FontWeight.Normal else FontWeight.Medium,
                         fontFamily = fontFamily,
@@ -256,7 +271,7 @@ internal fun LyricSubtitleOverlay(
                 content.previews.forEach { text ->
                     Text(
                         text = text,
-                        color = secondaryColor.copy(alpha = SUBTITLE_PREVIEW_OPACITY),
+                        color = secondaryColor.copy(alpha = SUBTITLE_PREVIEW_OPACITY * overlayAlpha),
                         fontSize = upcomingFontSize,
                         fontWeight = FontWeight.Normal,
                         fontFamily = fontFamily,
@@ -292,16 +307,20 @@ private fun DrawScope.drawEllipseScrim(
     color: Color,
     width: Float,
     height: Float,
+    alphaScale: Float,
 ) {
-    val radiusX = width / 1.15f / 2f + SUBTITLE_SCRIM_FRINGE.toPx()
-    val radiusY = height / 1.30f / 2f + SUBTITLE_SCRIM_FRINGE.toPx()
+    if (alphaScale <= 0f) return
+    val fringe = SUBTITLE_SCRIM_FRINGE.toPx()
+    val radiusX = width / 1.15f / 2f + fringe
+    val radiusY = height / 1.30f / 2f + fringe
     val shader = android.graphics.RadialGradient(
         0f,
         0f,
         1f,
         intArrayOf(
-            color.copy(alpha = 0.96f).toArgb(),
-            color.copy(alpha = 0.78f).toArgb(),
+            // 整层透明度乘进渐变的颜色里（而不是套节点级 alpha 图层）。
+            color.copy(alpha = 0.96f * alphaScale).toArgb(),
+            color.copy(alpha = 0.78f * alphaScale).toArgb(),
             0,
         ),
         floatArrayOf(0f, SUBTITLE_SCRIM_INNER_STOP, 1f),
@@ -310,6 +329,7 @@ private fun DrawScope.drawEllipseScrim(
         setLocalMatrix(
             android.graphics.Matrix().apply {
                 setScale(radiusX, radiusY)
+                // 渐变中心 = 节点中心（文字在这里居中），四个方向对称。
                 postTranslate(size.width / 2f, size.height / 2f)
             },
         )
@@ -317,9 +337,13 @@ private fun DrawScope.drawEllipseScrim(
     drawIntoCanvas { canvas ->
         val paint = Paint().apply {
             this.shader = shader
-            alpha = 1f
+            this.alpha = 1f
             blendMode = BlendMode.SrcOver
         }
-        canvas.drawRect(0f, 0f, size.width, size.height, paint)
+        // V0e-fix2：矩形向外扩到渐变终点（alpha=0）之外，四边的 alpha 都是 0 —— 暗区边界只由
+        // 渐变本身给出。旧写法矩形只覆盖节点本身，下边还比节点底少 PAD_Y，再被节点 alpha 图层
+        // 裁到节点边界，于是上、下各出现一条直线。
+        val bleed = maxOf(radiusX, radiusY) + fringe
+        canvas.drawRect(-bleed, -bleed, size.width + bleed, size.height + bleed, paint)
     }
 }

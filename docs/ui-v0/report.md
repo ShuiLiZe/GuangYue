@@ -1,4 +1,4 @@
-# V0 歌词内核 · 收尾报告
+﻿# V0 歌词内核 · 收尾报告
 
 分支 `port/u2`（基于 `60824c8`），提交「V0: 歌词内核 + GlowWord + 流光底座」。未 push、未打 tag。
 
@@ -353,3 +353,63 @@ thumb 仍是 20dp 实心白圆。现改为自绘 —— `thumb = {}`，`track` �
   本轮全部命令（gradle / adb / 截图 / git）都正常跑完。
 - 遗留观察（不影响验收）：预告态（无翻译）时字幕层每句宽度不同，背景块会随「最宽行」宽度变化；
   这是按内容宽度算背景层的必然结果，Folia 网页端也是同一算法。
+
+
+## V0e-fix2: 字幕暗区不裁剪
+
+**问题**：2e7665b 的字幕暗区左右已渐隐，但上下被一刀切成直线（preview / 320dp / font130 里第 4 行
+「我面无表情看孤独的风景」一半落在暗区外；stage 的英文译文那条暗带上下也是直边）。
+
+**根因（与 Hark 判断一致，已核实）**：画 scrim 的 Box 同时挂了
+.graphicsLayer { alpha = enter.value * SUBTITLE_OVERLAY_OPACITY; translationY = ... }，
+alpha 恒为 0.6×enter < 1 → 该节点永远走离屏图层，绘制内容被裁到节点边界；而旧 drawEllipseScrim
+用 canvas.drawRect(0, 0, size.width, size.height) 铺渐变，实际矩形覆盖的是 y ∈ [-PAD_Y, H-PAD_Y]
+（上侧外扩 24dp 被图层裁掉 = 节点顶一条直线；下侧比节点底少 24dp = 节点底上方一条直线）。
+左右方向矩形越界落到屏幕外，所以看不到直边。
+
+**修法**（只改 feature/player/.../lyrics/SubtitleOverlay.kt，其余文件零改动）：
+1. 删掉含 scrim 节点上的 graphicsLayer(alpha=…)；整层透明度改为 overlayAlpha = enter.value × 0.6
+   乘进渐变的三个色标（0.96α / 0.78α / 0）与文字颜色（主行 ×0.82（次级轨）×overlayAlpha、
+   预告行 ×0.72×overlayAlpha）。进场动画保留，改为只做 translationY 位移（ENTER × (1-enter)，20dp），
+   对 Column 与 scrim 同时生效，位移不产生图层裁剪。
+2. 渐变中心改为节点中心（文字居中处），绘制矩形向外扩到渐变终点之外
+   （bleed = max(radiusX, radiusY) + SUBTITLE_SCRIM_FRINGE，四边画到 -bleed … size+bleed）。
+   矩形四边的 alpha 都是 0，**暗区边界只由渐变本身给出**，任何节点级裁剪都不再可能造成直边。
+3. 未动：舞台位置/尺寸、LyricFlowScreen 的 padding(bottom = BAR_RESERVE + STAGE_RESERVE)、
+   单行换行、辉光、播放胶囊、字幕层的屏幕位置与字号。逐张对比 2e7665b 截图，文字位置完全一致。
+
+**实拍**（emulator-5554，720×1600 @320dpi，v0c_ms = 6000，mCurrentFocus 均为
+com.guangyue.music/.V0cStageActivity，无 ANR 弹窗）。8 张 docs/ui-v0/v0e-*.png 全部重拍：
+
+| 文件 | 拍摄条件 | 时间 |
+| --- | --- | --- |
+| v0e-stage-light.png | v0c_dark false，有翻译 | 12:22 |
+| v0e-stage-dark.png | v0c_dark true，有翻译 | 12:28 |
+| v0e-preview-light.png | v0c_variant preview，浅色 | 12:31 |
+| v0e-preview-dark.png | v0c_variant preview，深色 | 12:46 |
+| v0e-interlude-{light,dark}.png | v0c_variant interlude，间奏占位 | 12:46 |
+| v0e-320dp.png | wm density 360 拍完 wm density reset | 12:47 |
+| v0e-font130.png | font_scale 1.3 拍完恢复 1.0 | 12:48 |
+
+放大逐张审图（字幕区裁到 y 860~1260 再 2 倍放大，新旧左右并排）：
+- stage：旧图译文那圈暗带上下是两条直线横贯全宽；新图是完整椭圆，上缘在文字上方约 240px 开始渐暗、
+  下缘渐隐到胶囊之上，**四边均无直线**；英文译文位置与旧图逐像素一致。
+- preview / 320dp / font130：4 行全部落在暗区内，第 4 行「我面无表情看孤独的风景」下沿距暗区
+  下缘仍有渐变余量；左右无竖边、上下无横边。font130 里第 4 行文字外接矩形 y=1050~1098 仍在椭圆内。
+- interlude：无字幕、无暗区，与 V0e 一致（无回归）。
+- 数值核对（取横向 x=0~200 的无文字背景列，逐行均值，y 860~1260）：
+  preview-light 最大行间跳变 0.74/255、preview-dark 0.80、interlude 0.47~0.52；
+  stage-light 12.57 与 font130 8.50 的跳变都出现在「文字字形边缘」那一行（stage 的 x=0~200 里有译文左侧笔画），
+  不是背景台阶；同一 x 带里 y 上下一行即可恢复，属文字不是暗区边。
+
+**产物**：test → **BUILD SUCCESSFUL（1m16s）**，53 个真实套件 / **550 例** / 失败 0 / 错误 0 / 跳过 2
+（app 225、core/lyrics 166、core/player 6、core/plugin 80、feature/library 3、feature/player 49、
+feature/search 21；口径同上，剔除 TEST-Gradle-Test-Run-* 聚合套件）；
+assembleRelease → **BUILD SUCCESSFUL（4m9s）**，app/build/outputs/apk/release/app-release.apk 8,997,389 字节，
+**SHA-256 = 25CB6085D008A3E7CD1939B6332359172E0A317D03102BCF116C508AF05FC702**。
+提交：V0e-fix2: 字幕暗区不裁剪（port/u2，未 push / 未打 tag / 未动 stash）。
+
+**过程中排掉的两个坑**：-Dorg.gradle.jvmargs=-Xmx2g 在 PowerShell 里必须加引号（否则被拆成
+Task '.gradle.jvmargs=-Xmx2g' not found）；v0c_variant 是 String extra，要用 --es 传（--ez 会报
+Invalid boolean value: preview）。另外拍摄中途模拟器进程崩过一次（adb devices 变空、qemu 进程消失），
+按同一 AVD gy34 原地重启后继续，分辨率/密度/字号都已核对回默认值。
