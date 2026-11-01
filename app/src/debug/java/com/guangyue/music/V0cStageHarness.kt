@@ -34,6 +34,7 @@ import com.guangyue.core.player.QueueItem
 import com.guangyue.feature.player.lyrics.LyricFlowScreen
 import com.guangyue.feature.player.lyrics.LyricStringHost
 import com.guangyue.feature.player.lyrics.LyricStrings
+import com.guangyue.feature.player.lyrics.LyricStyle
 import com.guangyue.feature.player.lyrics.visualizer.runningUnderRobolectricOverride
 import com.guangyue.music.ui.design.Folia
 import com.guangyue.music.ui.design.FoliaTheme
@@ -52,6 +53,39 @@ private val TRANSLATIONS = mapOf(
 private val WORD_SPLIT = mapOf(
     "为你弹奏萧邦的夜曲" to listOf("为你", "弹奏", "萧邦的", "夜曲"),
 )
+
+/**
+ * V1a 浮名取证：18 句原创中文歌词（与 v1a-folia-ref.png 同一份文案，每句 4s）。
+ * 浮名是「整首歌排成一篇文章」，句子太少看不出镜头在文章里移动，所以单独给一份长文案。
+ */
+private val FUME_TEXTS = listOf(
+    "既然无法结伴 就听我把话讲完",
+    "灯一盏一盏熄灭 街道留给我一个人",
+    "风把旧信封翻到最后一页",
+    "你说过的话像雪 落地就没有回声",
+    "我把脚步放轻 怕惊醒睡着的光",
+    "凌晨三点的窗 只肯收留沉默",
+    "有些名字念旧了 会自己发热",
+    "我在纸上写诗 写完就撕成雪",
+    "日子过得很慢 慢得像一场等待",
+    "雨落进旧铁皮屋顶 是一首完整的歌",
+    "你走以后 房间学会了屏住呼吸",
+    "我把想念放在窗台 让它自己发芽",
+    "所有的告别都后来才懂",
+    "烟火升到一半就散场",
+    "我还没学会在人群里安静",
+    "但我知道 天总会亮得比记忆快",
+    "于是我把余下的路走得像一首歌",
+    "唱完这一句 我就要抬头了",
+)
+
+private val FUME_LRC = FUME_TEXTS.mapIndexed { i, text ->
+    val start = i * 4
+    "[%02d:%02d.00]%s".format(start / 60, start % 60, text)
+}.joinToString("\n")
+
+private fun buildFumeKernelLines(): List<Line> =
+    LyricTimeline.toLines(parseLrc(FUME_LRC), (FUME_TEXTS.size + 1) * 4_000L)
 
 /** 极简 LRC：[mm:ss.xx]文本。 */
 private fun parseLrc(raw: String): List<LyricLine> = raw.trim().lines().mapNotNull { row ->
@@ -100,6 +134,10 @@ fun V0cStage(
     wordGlow: Float? = null,
     lineOnly: Boolean = false,
     variant: String = "trans",
+    /** V1a：`"classic"` = 流光（默认），`"fume"` = 浮名。 */
+    style: String = "classic",
+    /** V1a：浮名镜头固定推进帧数（模拟器帧时间不可靠，见 FumeBulletinStage 的 settleSteps）。 */
+    fumeSteps: Int = 0,
 ) {
     val view = LocalView.current
     // V0e 修 Hark 第 1 条：取景 Activity 没有 MainActivity 那段 insets SideEffect，
@@ -118,12 +156,17 @@ fun V0cStage(
         runningUnderRobolectricOverride = true
         // V0e 三态：trans = 有翻译；preview = 当前句无翻译 → 字幕层改画后面几行预告；interlude = 无当前行 → 舞台占位。
         val withTranslation = variant != "preview"
-        val currentIndex = when (variant) {
-            "preview" -> 0
-            "interlude" -> -1
+        val isFume = style == "fume"
+        val fumeLines = remember(isFume) { if (isFume) buildFumeKernelLines() else emptyList() }
+        val currentIndex = when {
+            isFume -> (positionMs / 4_000L).toInt().coerceIn(0, fumeLines.size - 1)
+            variant == "preview" -> 0
+            variant == "interlude" -> -1
             else -> 1
         }
-        val kernel = remember(withTranslation) { buildKernelLines(withTranslation) }
+        val kernel = remember(withTranslation, isFume) {
+            if (isFume) fumeLines else buildKernelLines(withTranslation)
+        }
         val lines = remember { parseLrc(LRC) }
         // V0d flex-wrap 取证：只画「当前句」的 FlowRow 舞台（等价 Folia 的 70vh 画布），
         // 验证长句在 360dp / 320dp / 1.3× 字号下自动换行、不出屏。
@@ -149,6 +192,8 @@ fun V0cStage(
                 coverUrl = null,
                 glowStrengthOverride = V0dGlowOverride,
                 lineOnlyStage = lineOnly,
+                lyricStyle = if (style == "fume") LyricStyle.FUME else LyricStyle.CLASSIC,
+                fumeSettleSteps = fumeSteps,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -206,12 +251,14 @@ class V0cStageActivity : ComponentActivity() {
     }
         val lineOnly = intent?.getBooleanExtra("v0c_lineonly", false) ?: false
         val variant = intent?.getStringExtra("v0c_variant") ?: "trans"
+        val style = intent?.getStringExtra("v0c_style") ?: "classic"
+        val fumeSteps = intent?.getIntExtra("v0c_fumesteps", 0) ?: 0
         val wordGlow = if (intent?.hasExtra("v0c_wordglow") == true) {
             intent.getFloatExtra("v0c_wordglow", 1f)
         } else {
             null
         }
         if (lineOnly) runningUnderRobolectricOverride = true
-        setContent { V0cStage(positionMs, dark, wordGlow, lineOnly, variant) }
+        setContent { V0cStage(positionMs, dark, wordGlow, lineOnly, variant, style, fumeSteps) }
     }
 }

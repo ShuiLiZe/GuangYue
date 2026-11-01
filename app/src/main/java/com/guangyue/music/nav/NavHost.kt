@@ -419,6 +419,8 @@ fun GuangYueNavHost(
             // 在播放页调完参数、进歌词页立刻生效（对应 Folia 的样式窗口在播放器与歌词页共用一份 tuning）。
             val styleVm: LyricStyleViewModel = hiltViewModel()
             val tuning by styleVm.tuning.collectAsStateWithLifecycle()
+            // V1a：当前样式（流光 / 浮名）—— 弹层选中态与歌词画布共用这一份。
+            val style by styleVm.style.collectAsStateWithLifecycle()
             val playerContext = LocalContext.current
             var styleSheetOpen by rememberSaveable { mutableStateOf(false) }
             IPlayerRoute(
@@ -445,6 +447,10 @@ fun GuangYueNavHost(
                         onTuning = styleVm::update,
                         onDismiss = { styleSheetOpen = false },
                         accent = accent,
+                        // V1a：样式切换 —— 选中态留在弹层里，所以 onStyle 不跟着关弹层。
+                        style = style,
+                        fumeName = sheetContext.getString(R.string.lyrics_style_fume),
+                        onStyle = styleVm::pickStyle,
                     )
                 }
             }
@@ -466,6 +472,8 @@ fun GuangYueNavHost(
             val loading by vm.loading.collectAsStateWithLifecycle()
             val message by vm.message.collectAsStateWithLifecycle()
             val tuning by styleVm.tuning.collectAsStateWithLifecycle()
+            // V1a：当前样式（流光 / 浮名），同一份 styleVm —— 播放页切好、这里直接生效。
+            val style by styleVm.style.collectAsStateWithLifecycle()
             val lyricContext = LocalContext.current
             var styleSheetOpen by rememberSaveable { mutableStateOf(false) }
             val kernelLines = remember(lyric) {
@@ -501,6 +509,10 @@ fun GuangYueNavHost(
                     coverUrl = playbackState.item?.artworkUri,
                     onOpenStyleSheet = { styleSheetOpen = true },
                     styleLabel = lyricContext.getString(R.string.lyrics_style),
+                    // V1a：把当前样式透传给歌词画布（流光 / 浮名切换后立刻换渲染器）。
+                    // 参数由 fume-draw 加在 LyricFlowScreen 末尾（默认 CLASSIC）；若该层尚未落地，
+                    // 本行会在统一收口时由 lead 处理。
+                    lyricStyle = style,
                 )
                 if (styleSheetOpen) {
                     LyricStyleSheet(
@@ -510,6 +522,9 @@ fun GuangYueNavHost(
                         onTuning = styleVm::update,
                         onDismiss = { styleSheetOpen = false },
                         accent = accent,
+                        style = style,
+                        fumeName = lyricContext.getString(R.string.lyrics_style_fume),
+                        onStyle = styleVm::pickStyle,
                     )
                 }
             }
@@ -598,6 +613,8 @@ internal fun lyricStyleStrings(): LyricStyleStrings {
         reset = R.string.lyrics_style_reset,
         desc = R.string.lyrics_style_desc,
         close = R.string.lyrics_style_close,
+        // V1a：「浮名」（Folia key `ui.visualizerFume`）。
+        fume = R.string.lyrics_style_fume,
     )
 }
 

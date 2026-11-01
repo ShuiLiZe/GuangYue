@@ -19,6 +19,7 @@ import com.guangyue.feature.player.lyrics.visualizer.BundledTestCover
 import com.guangyue.feature.player.lyrics.visualizer.CoverPalette
 import com.guangyue.feature.player.lyrics.LyricFlowScreen
 import com.guangyue.feature.player.lyrics.LyricStyleSheet
+import com.guangyue.feature.player.lyrics.LyricStyle
 import com.guangyue.feature.player.lyrics.LyricStyleStrings
 import com.guangyue.feature.player.lyrics.LyricStrings
 import com.guangyue.feature.player.lyrics.visualizer.VisualizerBackdrop
@@ -365,6 +366,8 @@ class V0LyricStyleScreenshotTest {
                 styleName = "流光",
                 onTuning = {},
                 onDismiss = {},
+                // V1a：样式列表两项，第二项「浮名」（styles.fume = 9 → styleResolver 出中文）。
+                fumeName = "浮名",
             )
         }
     }
@@ -379,6 +382,9 @@ class V0LyricStyleScreenshotTest {
                 styleName = "流光",
                 onTuning = {},
                 onDismiss = {},
+                fumeName = "浮名",
+                // 深色那帧顺手把选中态拍到「浮名」上，两张图合起来覆盖两种选中态。
+                style = LyricStyle.FUME,
             )
         }
     }
@@ -430,11 +436,14 @@ class V0LyricStyleScreenshotTest {
         reset = 6,
         desc = 7,
         close = 8,
+        // V1a：「浮名」样式名（真实入口是 R.string.lyrics_style_fume，测试里给 id 9）。
+        fume = 9,
     )
 
     private fun styleResolver(strings: LyricStyleStrings, id: Int): String = when (id) {
         strings.title -> "歌词样式"
         strings.classic -> "流光"
+        strings.fume -> "浮名"
         strings.rotation -> "字词旋转"
         strings.breathing -> "呼吸浮动"
         strings.spacing -> "词距"

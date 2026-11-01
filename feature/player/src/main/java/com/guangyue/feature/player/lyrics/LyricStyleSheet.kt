@@ -65,10 +65,13 @@ import kotlin.math.roundToInt
  * 手机化改动（原因见 docs/ui-v0/report.md）：
  * 1. Folia 的样式窗口是桌面浮窗（拖拽/多列预览），手机上改成 `ModalBottomSheet`，与 U4 的
  *    `QualityPickerSheet` 同一范式（56dp 行高、14dp 圆角、选中底色 accent@0.10）。
- * 2. 本段只列出「流光」一项，并且不显示其它样式占位（brief 要求）；Folia 的样式窗口会列出全部
- *    内置渲染器。
+ * 2. V1a 起列出两项：「流光」(classic) 与「浮名」(fume) —— 对应 Folia 的
+ *    `zh-CN.ts:915 "visualizerClassic"` 与 `ui.visualizerFume`；其余内置渲染器仍不列。
  * 3. 实时预览：Folia 在浮窗里有独立预览画布；这里直接让歌词页本身实时生效（弹层只列参数，
  *    调整后立刻作用于身后的歌词画布），省一块预览资源。
+ * 4. V1a 的样式行只切样式、**不**关弹层：选中态（右侧 accent 圆 + Check）要在原地看得见，
+ *    与 Folia 样式窗口「点一下立刻换渲染器、窗口留着」的手感一致；下滑 / 点外部才关。
+ * 5. tuning 面板仍只服务「流光」（V1b 才补「浮名」自己那套 tuning UI）。
  */
 
 /** 弹层文案表：与 `app/src/main/res/values/strings.xml` 的「V0 歌词样式」段逐键对应。 */
@@ -82,6 +85,14 @@ data class LyricStyleStrings(
     val reset: Int,
     val desc: Int,
     val close: Int,
+    /**
+     * V1a：「浮名」（Folia key `ui.visualizerFume`）的样式名。
+     *
+     * 放构造参数末尾并给默认值 0：既有调用点（V0 截图用例 / 旧 NavHost）不传也不会编译失败；
+     * 真实入口（NavHost）与测试都显式传值。0 不是合法资源 id，[LyricStringHost.current] 收到 0
+     * 时由宿主兜底，不会把 0 当文案显示。
+     */
+    val fume: Int = 0,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -93,6 +104,12 @@ fun LyricStyleSheet(
     onTuning: (ClassicTuning) -> Unit,
     onDismiss: () -> Unit,
     accent: Color = Gyp.accent,
+    /** V1a：当前选中样式（默认 [LyricStyle.CLASSIC]，老调用点不传也保持「流光」选中）。 */
+    style: LyricStyle = LyricStyle.CLASSIC,
+    /** V1a：「浮名」的样式名文案（文案 id 现取现用，这里只收已解析好的中文）。 */
+    fumeName: String = "",
+    /** V1a：点样式行 → 只切换样式，**不**关弹层（让用户看到选中态，对应 Folia 样式窗口的即选即显）。 */
+    onStyle: (LyricStyle) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -124,38 +141,22 @@ fun LyricStyleSheet(
                 modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
             )
 
-            // 样式列表：本段唯一可选「流光」（classic）
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(vertical = 4.dp)
-                    .background(accent.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
-                    .clickableNoRipple { onDismiss() }
-                    .padding(horizontal = 14.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(styleName, fontSize = 15.sp, color = Gyp.ink)
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .background(accent, RoundedCornerShape(999.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = GuangYueIcons.Check,
-                            contentDescription = null,
-                            tint = Gyp.onAccent,
-                            modifier = Modifier.size(13.dp),
-                        )
-                    }
-                }
-            }
+            // 样式列表：V1a 两项 —— 「流光」(classic) 与「浮名」(fume)。
+            // 与 Folia 样式窗口一致：一行 = 左样式名、右选中标记；点击只切样式、不关弹层。
+            StyleRow(
+                name = styleName,
+                selected = style == LyricStyle.CLASSIC,
+                accent = accent,
+                onClick = { onStyle(LyricStyle.CLASSIC) },
+            )
+            StyleRow(
+                // 文案 id 现取现用：这里拿的是 NavHost 已解析好的中文，绝不把 id 当字符串显示。
+                // fumeName 缺失（老调用点 / 只传 styleName）时退回 classic 名，避免空行。
+                name = fumeName.ifBlank { styleName },
+                selected = style == LyricStyle.FUME,
+                accent = accent,
+                onClick = { onStyle(LyricStyle.FUME) },
+            )
 
             Box(Modifier.height(GySpace.s))
 
@@ -200,6 +201,66 @@ fun LyricStyleSheet(
                 }
             }
             Box(Modifier.height(GySpace.m))
+        }
+    }
+}
+
+/**
+ * 样式行（V1a）：一行 = 左侧样式名 + 右侧选中标记。
+ *
+ * 外观沿用 V0 唯一的「流光」行：56dp 高（≥48dp 触控）、14dp 圆角、accent@0.10 底；
+ * 右侧 20dp accent 实心圆 + Check 只在**选中**时显示 —— 未选中时用等宽 Spacer 占位，
+ * 保证两行文字左端对齐、320dp 窄屏不因标记出现/消失而抖动或溢出。
+ * 点击走 [clickableNoRipple]（与弹层其它行同一手感），且**不**触发关闭。
+ */
+@Composable
+private fun StyleRow(
+    name: String,
+    selected: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .padding(vertical = 4.dp)
+            .background(accent.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
+            .clickableNoRipple(onClick)
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = name,
+                fontSize = 15.sp,
+                color = Gyp.ink,
+                maxLines = 1,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(Modifier.width(16.dp))
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .background(accent, RoundedCornerShape(999.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = GuangYueIcons.Check,
+                        contentDescription = null,
+                        tint = Gyp.onAccent,
+                        modifier = Modifier.size(13.dp),
+                    )
+                }
+            } else {
+                // 未选中：占位不画标记，两行右侧留白一致（HeightIn 保持 56dp 行高不塌）。
+                Box(Modifier.size(20.dp))
+            }
         }
     }
 }

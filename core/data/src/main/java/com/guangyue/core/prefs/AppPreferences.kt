@@ -100,12 +100,34 @@ class AppPreferences @Inject constructor(
         get() = prefs.getString(KEY_LX_ENABLED, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_LX_ENABLED, value).apply()
 
+    /**
+     * 当前歌词渲染样式的落盘 id（V1a）。
+     *
+     * 对应 Folia `src/components/visualizer/registry.tsx` 里被选中的 `VISUALIZER_REGISTRY` 项：
+     * 那边把样式 id 存进全局 store，这边存进同一个 SharedPreferences。
+     *
+     * 这里**只存 String**（"classic" / "fume"），默认 "classic"：`core/data` 不能依赖
+     * `feature:player`，所以 `String? → 枚举` 的解析留在 feature 侧的
+     * `LyricStyle.fromId`（未知 / 空值一律回落 CLASSIC），本层不做枚举校验 —— 也因此
+     * 即便用户偏好里是个已删除的样式 id，读出来也是原样一个字符串，界面层能安全回落。
+     */
+    var lyricStyleId: String
+        get() = prefs.getString(KEY_LYRIC_STYLE, DEFAULT_LYRIC_STYLE)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: DEFAULT_LYRIC_STYLE
+        set(value) = prefs.edit().putString(KEY_LYRIC_STYLE, value).apply()
+
     private companion object {
         const val FILE = "guangyue_prefs"
         const val KEY_DARK = "ui_dark_mode"
         const val KEY_LAST_SOURCE = "search_last_source"
         const val KEY_LX_QUALITY = "lx_default_quality"
         const val KEY_LX_ENABLED = "lx_enabled_ids"
+
+        /** 歌词样式 id（V1a）：对应「流光」(classic)，也是未知值的回落目标。 */
+        const val KEY_LYRIC_STYLE = "lyrics_style_id"
+        const val DEFAULT_LYRIC_STYLE = "classic"
 
         /** 「流光」歌词样式调参（对应 Folia classic/tuning.ts 的 storage.key = 'classic_tuning'）。 */
         const val KEY_CLASSIC_ROTATION = "classic_tuning_rotation"

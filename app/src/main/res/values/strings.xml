@@ -304,6 +304,8 @@
     <string name="lyrics_style_settings">歌词样式</string>
     <!-- zh-CN.ts: 915 "visualizerClassic"「流光」 -->
     <string name="lyrics_style_classic">流光</string>
+    <!-- zh-CN.ts: "ui.visualizerFume"「浮名」 -->
+    <string name="lyrics_style_fume">浮名</string>
     <!-- classic/tuning.ts: enableWordRotation -->
     <string name="lyrics_style_rotation">字词旋转</string>
     <!-- classic/tuning.ts: breathingFloatMultiplier（0–2 倍） -->

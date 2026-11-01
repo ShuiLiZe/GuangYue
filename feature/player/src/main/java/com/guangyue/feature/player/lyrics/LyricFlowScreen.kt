@@ -1,4 +1,4 @@
-﻿package com.guangyue.feature.player.lyrics
+package com.guangyue.feature.player.lyrics
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -53,6 +53,7 @@ import com.guangyue.core.lyrics.AnimationIntensity
 import com.guangyue.core.lyrics.ClassicLayout
 import com.guangyue.core.lyrics.ClassicTuning
 import com.guangyue.core.lyrics.Line
+import com.guangyue.core.lyrics.fume.FumeTuning
 import com.guangyue.core.player.PlaybackState
 import com.guangyue.feature.library.design.FoliaEmptyState
 import com.guangyue.feature.library.design.GuangYueDesign
@@ -65,6 +66,7 @@ import com.guangyue.feature.library.design.clickableNoRipple
 import com.guangyue.feature.library.design.icons.GuangYueIcons
 import com.guangyue.feature.player.lyrics.visualizer.ClassicLyricLine
 import com.guangyue.feature.player.lyrics.visualizer.CoverPalette
+import com.guangyue.feature.player.lyrics.visualizer.fume.FumeBulletinStage
 import com.guangyue.feature.player.lyrics.visualizer.VisualizerBackdrop
 import com.guangyue.feature.player.lyrics.visualizer.VisualizerClock
 import com.guangyue.feature.player.lyrics.visualizer.hasVisibleWords
@@ -134,6 +136,13 @@ fun LyricFlowScreen(
     glowStrengthOverride: Float? = null,
     // V0d 取证：只画当前句舞台（debug harness 用）。
     lineOnlyStage: Boolean = false,
+    // ---------------- V1a：样式切换（流光 / 浮名） ----------------
+    /** 当前歌词样式；[LyricStyle.FUME] 时舞台改画「浮名」整篇文章 + 镜头。 */
+    lyricStyle: LyricStyle = LyricStyle.CLASSIC,
+    /** 「浮名」调参；V1b 才做面板，这里先吃默认值。 */
+    fumeTuning: FumeTuning = FumeTuning.DEFAULT,
+    /** 取证用：>0 时「浮名」镜头按固定 dt 一次推进这么多帧（模拟器帧时间不可靠）。 */
+    fumeSettleSteps: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     val backLabel = str(strings.back)
@@ -342,6 +351,23 @@ fun LyricFlowScreen(
                         pureMusic = pureMusic,
                         failure = failure,
                         onRetry = null,
+                    )
+                } else if (lyricStyle == LyricStyle.FUME && kernelLines.isNotEmpty()) {
+                    // V1a「浮名」：整首歌排成一张纸，镜头在纸面上跟着当前句移动。
+                    FumeBulletinStage(
+                        lineIndex = currentIndex,
+                        lines = kernelLines,
+                        clock = clock,
+                        tuning = fumeTuning,
+                        intensity = AnimationIntensity.NORMAL,
+                        lyricsFontScale = lyricsFontScale,
+                        activeColor = lyricAccent,
+                        baseColor = onBackdrop,
+                        accentColor = lyricAccent,
+                        fontFamily = GuangYueDesign.Serif,
+                        reduceMotion = reduceMotion,
+                        settleSteps = fumeSettleSteps,
+                        modifier = Modifier.fillMaxSize(),
                     )
                 } else if (activeLine != null && activeLine.hasVisibleWords()) {
                     // 舞台只画正在唱的这一句（Folia classic/Visualizer.tsx 的 activeLine 分支）。
