@@ -476,7 +476,22 @@ object FumeCameraStep {
         val camera = state.camera
         var nextCamera: FumeCameraTarget
         val shouldUseBridge = retarget.bridgeMode != FumeBridgeMode.NONE && retargetPhase < 1.0
-        if (shouldUseBridge) {
+        if (input.staticMode) {
+            // 固定帧推进（Robolectric / 取景 harness，也用于 reduceMotion）：Folia 的弹簧追赶依赖
+            // 真实帧时长，固定 dt 下会推得极慢、画面停在途中。这里直接落到目标，
+            // 等价于「重定向已完成」的那一帧。
+            nextCamera = camera.copy(
+                x = targetX,
+                y = targetY,
+                scale = targetScale,
+                focusX = targetX,
+                focusY = targetY,
+                focusScale = targetScale,
+                velocityX = 0.0,
+                velocityY = 0.0,
+                velocityScale = 0.0,
+            )
+        } else if (shouldUseBridge) {
             val easeOut = retarget.bridgeMode == FumeBridgeMode.OVERVIEW
             val bridged: Triple<Double, Double, Double> = if (easeOut) {
                 val bridgePhase = FumeMath.easeOutCubic(retargetPhase)

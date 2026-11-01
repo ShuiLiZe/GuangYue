@@ -104,7 +104,9 @@ internal fun FumeBulletinStage(
     BoxWithConstraints(modifier.fillMaxSize()) {
         val viewport = FumeViewport(
             width = with(density) { maxWidth.toPx() }.toDouble(),
-            height = with(density) { maxHeight.toPx() }.toDouble(),
+            // 手机化：Folia 的纸页按「视口高」定目标高（2.45×），竖屏舞台只有 800px 高时
+            // 会把整首歌压成一条很矮的横幅。这里按视口宽补一个下限，让纸页接近方形。
+            height = maxOf(with(density) { maxHeight.toPx() }.toDouble(), with(density) { maxWidth.toPx() }.toDouble()),
         )
         if (viewport.width <= 0.0 || viewport.height <= 0.0 || lines.none { it.fullText.isNotBlank() }) {
             return@BoxWithConstraints
@@ -168,26 +170,34 @@ internal fun FumeBulletinStage(
         var overviewTextRestore by remember(article) { mutableStateOf(0.0) }
 
         // 逐帧推进镜头（对应 useFumeCanvasStage 每帧的 stepFumeCamera）。
-        // Robolectric / 模拟器上 withFrameNanos 不可靠（前者挂住 waitForIdle，后者帧时间极不规律），
-        // 所以两种情况都改用「固定 dt 一次性推进 settleSteps 帧」：画面确定、可复现。
+        // 正式运行走 withFrameNanos；只有 Robolectric / 取景 harness 才用固定 dt 推进 settleSteps 帧
+        // （前者 withFrameNanos 会挂住 waitForIdle，后者模拟器帧时间极不规律、画面不可复现）。
         LaunchedEffect(article, lineIndex, tuning, reduceMotion, inspection, settleSteps) {
-            val fixedSteps = when {
-                reduceMotion || inspection -> 0
-                settleSteps > 0 -> settleSteps
-                else -> -1
-            }
+            val fixedSteps = if (inspection) settleSteps.coerceAtLeast(1) else if (settleSteps > 0) settleSteps else -1
             if (fixedSteps == 0) return@LaunchedEffect
-            if (fixedSteps > 0) {
+            if (fixedSteps > 0 && (reduceMotion || inspection || settleSteps > 0)) {
                 var state = cameraState
                 var restore = 0.0
-                repeat(fixedSteps) {
+                // 推进起点 = 当前画面时刻（秒）；逐帧只往前推 dt，且不越过当前句尾，
+                // 否则会一路推到歌末被误判成 overview 总览。
+                val settleStart = clock.readForDraw()
+                val settleLine = lines.getOrNull(lineIndex)
+                val settleCeiling = if (settleLine == null) {
+                    Double.POSITIVE_INFINITY
+                } else {
+                    maxOf(RenderHints.getLineRenderEndTime(settleLine) - 0.05, settleLine.startTime)
+                }
+                repeat(fixedSteps) { frame ->
                     val (next, result) = FumeCameraStep.step(
                         state,
                         FumeCameraStepInput(
                             article = article,
-                            time = clock.readForDraw() + it * (1.0 / 60.0),
+                            time = minOf(settleStart + frame * (1.0 / 60.0), settleCeiling),
                             nowMs = 0.0,
-                            dt = 1.0 / 60.0,
+                            // Folia 的镜头靠 dt 追赶 + 重定向时长；固定 dt=1/60 在手机 DPI 下
+                            // 弹簧推得极慢，推进 90 帧也到不了目标。这里按帧放大步长，
+                            // 使它等价于「在 settleSteps 帧内走完一次完整重定向」。
+                            dt = 1.0 / 60.0 * 8.0,
                             lineIndex = lineIndex,
                             viewport = viewport,
                             overviewCamera = overviewCamera,
