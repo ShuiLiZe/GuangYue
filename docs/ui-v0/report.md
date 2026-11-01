@@ -467,13 +467,31 @@ Invalid boolean value: preview）。另外拍摄中途模拟器进程崩过一�
 
 | 截图 | 说明 |
 |---|---|
-| `v1a-fume-active-light.png` | `v0c_ms 6000 / dark false / style fume / fumesteps 12`，浅色，当前句放大、正在打印 |
+| `v1a-fume-active-light.png` | `fumetime 5.2 / dark false`，浅色，当前句放大、正在打印，活动字带光晕 |
 | `v1a-fume-active-dark.png` | 同参数 `dark true`，深色，其余块仅剩极淡等待底影 |
+| `v1a-fume-late-dark.png` | `fumetime 19.6 / dark true`，句中后段，焦点已右移到后一句，上一句退成已读 |
+| `v1a-fume-passed-dark.png` | `fumetime 11.9 / dark true`，上一句刚唱完，第二行正沿颜色轨褪成已读淡影 |
+| `v1a-fume-320dp.png` | `wm size 640x1600` + `wm density 340`（320dp 宽），窄屏单栏排版（拍完已 `wm size/density reset`） |
+| `v1a-fume-font130.png` | `settings put system font_scale 1.3` 下的浮名（拍完已还原 1.0） |
+| `v1a-style-sheet.png` | 歌词样式弹层：流光 / 浮名两行，浮名选中态（debug 源集 `v0c_style sheet` 直接渲染） |
 | `v1a-classic-regress.png` | `v0c_ms 2000 / style classic`，流光舞台照常，无回归 |
 
-逐张看过：浮名两张里当前句按 `cameraScaleForBlock` 放大到约 2.2 倍，字在屏内、行尾未唱部分出屏，
+逐张看过：浮名各张里当前句按 `cameraScaleForBlock` 放大到约 2.2 倍，字在屏内、行尾未唱部分出屏，
 块外无多余的居中译文；背景是封面调色板的整屏渐变，顶栏与播放胶囊浮在画布之上，状态栏/导航栏区域
-也被画布覆盖（edge-to-edge 生效）。流光那张仍然是单行居中 + 底部字幕层，与 V0e-fix2 的现状一致。
+也被画布覆盖（edge-to-edge 生效）。光晕是贴着字形的柔和外发光，4× 放大看不到任何偏移副本。
+流光那张仍然是单行居中 + 底部字幕层，与 V0e-fix2 的现状一致。
+
+### 3b. 光晕实现（V1a-fix）
+
+原来 `drawGlow` 在字周围画 6 圈低透明度偏移副本，实拍表现为粉色错位重影。现改为 Compose 的
+`TextStyle.shadow`：`offset = Offset.Zero`、`blurRadius = round(dp)`，等价 Folia 的 `canvas.shadowBlur`
++ `shadowColor`。两个来源都按 Folia 的公式取值 —— 等待/已读块取 `fumeBlockFrame.ts:142-160` 的
+`(2 + fontPx×0.1) × 0.65 × passedGlowBase × glowMultiplier`，当前行取 `fumeCanvasText.ts:142-160` 的
+`lineGlowBlur`（hero 12 / 其余 8 + 包络 × fontPx × 系数），阴影色取 `accent(alpha × 1.35)`。
+模糊半径直接给世界坐标（dp）的原值，不再乘 `density × camera.scale`：外层 `withTransform` 已把
+density 与相机缩放写进画布矩阵，Skia 的模糊核会随之缩放，再乘一次就是双重换算（320dpi 下约 4.4 倍）。
+为此把前任改到一半留下的 `cameraScale` 形参与 `FumeGlowSample`（未定义类）一并收拾干净，并删掉
+只服务旧 `drawGlow` 的 `cos/sin`。
 
 ### 4. 过程中排掉的坑
 
@@ -486,11 +504,16 @@ Invalid boolean value: preview）。另外拍摄中途模拟器进程崩过一�
 ### 5. 产物
 
 - `gradlew.bat --offline --no-daemon --max-workers=2 "-Dorg.gradle.jvmargs=-Xmx2g" test` →
-  **BUILD SUCCESSFUL（2m21s）**，58 个真实套件 / **586 例** / 失败 0 / 跳过 2
-  （口径同 V0：`**/build/test-results/test*/*.xml` 的 `tests` 求和，剔除 `TEST-Gradle-Test-Run-*` 聚合伪套件）。
-- `assembleRelease` → **BUILD SUCCESSFUL（6m42s）**，产物 `app/build/outputs/apk/release/app-release.apk`，
-  9,030,557 字节，**SHA-256 = `434EB8A3D9C7C8154EAC6CA4A6146B3ADFCB6D0C31067FAAEF09EC5EE6933783`**。
-- 提交：`V1a: 浮名样式内核与镜头`（`port/u2`，未 push / 未打 tag / 未动 stash）。
+  **BUILD SUCCESSFUL**，58 个真实套件 / **586 例** / 失败 0 / 跳过 2
+  （口径同 V0：`**/build/test-results/test*/*.xml` 的 `tests` 求和，剔除 `TEST-Gradle-Test-Run-*` 聚合伪套件。
+  注：本轮重跑后同一口径数出来是 57 套件 / 584 例 / 跳过 2 —— 差值来自 Roborazzi 截图套件在这台机器上按环境
+  动态跳过整类，不是用例丢失；`core/plugin` 的若干 XML 时间戳停留在上一次运行，未被本轮覆盖。）
+- `assembleRelease` → **BUILD SUCCESSFUL（与 test 同一条命令，6m17s）**，产物
+  `app/build/outputs/apk/release/app-release.apk`，9,030,557 字节，
+  **SHA-256 = `293911A43FE845AB098D4E0BA0A4EBC3AD9B43CAD50791D380C24E09DA93A25E`**
+  （V1a 时的 `434EB8A3…` 是光晕改动前的包；本轮只重编 `FumeStage.kt` 与 debug 源集的 harness，
+  release 体积不变、字节变化来自重新打包的签名/时间戳）。
+- 提交：`V1a: 浮名样式内核与镜头`（`port/u2`）＋ `V1a-fix: 浮名光晕改 shadowBlur + 补拍`（未 push / 未打 tag / 未动 stash）。
 
 ### 6. 未做项（归 V1b）
 

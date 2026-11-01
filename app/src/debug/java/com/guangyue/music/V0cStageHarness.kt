@@ -35,6 +35,9 @@ import com.guangyue.feature.player.lyrics.LyricFlowScreen
 import com.guangyue.feature.player.lyrics.LyricStringHost
 import com.guangyue.feature.player.lyrics.LyricStrings
 import com.guangyue.feature.player.lyrics.LyricStyle
+import com.guangyue.feature.player.lyrics.LyricStyleSheet
+import com.guangyue.music.nav.lyricStyleStrings
+import com.guangyue.feature.player.lyrics.visualizer.fume.fumeGlowOverride
 import com.guangyue.feature.player.lyrics.visualizer.runningUnderRobolectricOverride
 import com.guangyue.music.ui.design.Folia
 import com.guangyue.music.ui.design.FoliaTheme
@@ -174,6 +177,20 @@ fun V0cStage(
         val kernel = remember(withTranslation, isFume) {
             if (isFume) fumeLines else buildKernelLines(withTranslation)
         }
+        // V1a 取证：拍「歌词样式」弹层（浮名条目选中态）。只在 debug 源集，release 无此分支。
+        if (style == "sheet") {
+            CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
+                LyricStyleSheet(
+                    tuning = ClassicTuning(),
+                    strings = lyricStyleStrings(),
+                    styleName = v0cString(R.string.lyrics_style_classic),
+                    onTuning = {},
+                    onDismiss = {},
+                    style = LyricStyle.FUME,
+                    fumeName = v0cString(R.string.lyrics_style_fume),
+                )
+            }
+        } else {
         val lines = remember { parseLrc(LRC) }
         // V0d flex-wrap 取证：只画「当前句」的 FlowRow 舞台（等价 Folia 的 70vh 画布），
         // 验证长句在 360dp / 320dp / 1.3× 字号下自动换行、不出屏。
@@ -207,6 +224,7 @@ fun V0cStage(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        }
     }
 }
 
@@ -233,6 +251,16 @@ private fun v0cString(id: Int): String = when (id) {
     12 -> "播放进度"
     13 -> "歌词"
     14 -> "无"
+    // 「歌词样式」弹层文案（与 res/values/strings.xml 的 V0 歌词样式段一致）
+    R.string.lyrics_style_settings -> "歌词样式"
+    R.string.lyrics_style_desc -> "选一种排版与动效"
+    R.string.lyrics_style_classic -> "流光"
+    R.string.lyrics_style_fume -> "浮名"
+    R.string.lyrics_style_rotation -> "字词旋转"
+    R.string.lyrics_style_breathing -> "呼吸浮动"
+    R.string.lyrics_style_spacing -> "词距"
+    R.string.lyrics_style_reset -> "恢复默认"
+    R.string.lyrics_style_close -> "关闭"
     else -> ""
 }
 
@@ -258,6 +286,8 @@ class V0cStageActivity : ComponentActivity() {
     // V0d 取证：给辉光一个固定强度，避开「withFrameNanos 在模拟 EGL 上不推进」导致画面停在 WAITING。
     if (intent?.hasExtra("v0c_strength") == true) {
         V0dGlowOverride = intent.getFloatExtra("v0c_strength", 1f)
+        // V1a 取证：同一开关同时钉住浮名的辉光强度，拍光晕时不用赌帧。
+        fumeGlowOverride = V0dGlowOverride
     }
         val lineOnly = intent?.getBooleanExtra("v0c_lineonly", false) ?: false
         val variant = intent?.getStringExtra("v0c_variant") ?: "trans"

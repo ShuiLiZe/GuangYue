@@ -8,8 +8,9 @@
 //  - Folia 的位图快照缓存（createStaticBlockSnapshot + drawImage）在手机上收益不大却要多一层位图，
 //    这里统一走即时绘制：waiting / active / passed 三态直接按同一套逐字素逻辑画，
 //    已读淡出用 standard / dimmed 两层 alpha 叠加，得到与快照 cross-fade 相同的观感；
-//  - 辉光不用任何 blur 节点：按「多层文字阴影」在字周围补画若干圈低透明度副本，
-//    既不会像 Modifier.blur 那样把整块节点光栅化成矩形底（V0d 教训），也不会有越界裁切（V0e 教训）。
+//  - 辉光走 TextStyle.shadow（offset 恒为 Offset.Zero + blurRadius），等价 Folia 的 canvas
+//    `shadowBlur` + `shadowColor`：光晕与正文同位同形、只有模糊，既不会像 Modifier.blur 那样把
+//    整块节点光栅化成矩形底（V0d 教训），也不会像旧的「多圈偏移副本」在字周围留下错位重影。
 package com.guangyue.feature.player.lyrics.visualizer.fume
 
 import androidx.compose.foundation.Canvas
@@ -27,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -65,8 +67,6 @@ import com.guangyue.core.lyrics.fume.glyphAdvance
 import com.guangyue.core.lyrics.fume.offsetOf
 import com.guangyue.feature.player.lyrics.visualizer.VisualizerClock
 import com.guangyue.core.lyrics.fume.fontWeight as fumeFontWeight
-import kotlin.math.cos
-import kotlin.math.sin
 
 /** 逐字素要画成什么样（对应 Folia drawFumeLiveBlock 里每字素那份 fill/shadow 状态）。 */
 private class GlyphInk(
@@ -75,6 +75,15 @@ private class GlyphInk(
     val shadowBlur: Double,
     val shadowColor: Color,
 )
+
+/**
+ * V1a 取证：非 null 时把浮名辉光强度钉在这个值上（只给 debug 取景用）。
+ *
+ * 模拟器软件渲染下单帧要几百毫秒，行辉光的包络峰值几乎撞不上，光晕强弱拍出来全凭运气；
+ * 这个开关只改一份本地 copy，不写 State、不进 release 逻辑（release 源集不设置它）。
+ */
+/** 公开只因为 debug 源集的取景 harness 要写它；业务代码只读这里。 */
+var fumeGlowOverride: Float? = null
 
 /**
  * 「浮名」舞台：把整首歌词排成一张纸，镜头在里面移动。
@@ -112,6 +121,8 @@ internal fun FumeBulletinStage(
     stillCamera: FumeStillFrame? = null,
     modifier: Modifier = Modifier,
 ) {
+    // V1a 取证：debug 源集可把辉光强度钉住（模拟器上按帧采样，光晕最亮的那一帧很难撞上）。
+    val tuning = fumeGlowOverride?.let { tuning.copy(glowIntensity = it.toDouble()) } ?: tuning
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
     val inspection = LocalInspectionMode.current
@@ -352,6 +363,12 @@ private class FumeDrawContext(
     val fontFamily: FontFamily,
 )
 
+/**
+ * 一次辉光采样：模糊半径（世界坐标 dp，等价 Folia 的 shadowBlur）与阴影颜色。
+ * 对应 Folia `fumeCanvasText.ts` 里成对出现的 `shadowBlur` + `shadowColor`。
+ */
+private class FumeGlowSample(val blur: Double, val color: Color)
+
 /** waiting：整块一层极淡的主色（对应 Folia 的 waiting 快照）。 */
 private fun DrawScope.drawWaitingBlock(ctx: FumeDrawContext, block: FumeBlock, timing: FumeBlockTiming) {
     val style = ctx.style(block, Color.White.copy(alpha = timing.waitingOpacity.toFloat()))
@@ -386,14 +403,10 @@ private fun DrawScope.drawPlainBlock(
         val blur = if (isWaiting) 0.0 else FumeTextStyles.passedShadowBlur(block, passedStyle, glowBases.passedGlowBase)
         val textColor = Color.White.copy(alpha = (opacity * alpha).toFloat())
         val glowColor = Color.White.copy(alpha = (passedStyle.shadowAlphaBase * alpha).toFloat())
-        val style = ctx.style(block, textColor)
+        val glow = if (blur > 0.0 && glowColor.alpha > 0.002f) FumeGlowSample(blur, glowColor) else null
+        val style = ctx.style(block, textColor, glow)
         for (line in block.renderLines) {
-            val originX = block.lineX(line)
-            val originY = block.baselineY(line, timing)
-            if (blur > 0.5 && glowColor.alpha > 0.002f) {
-                drawGlow(ctx, block, line.text, originX, originY, style, glowColor, blur)
-            }
-            drawRun(ctx, block, line.text, originX, originY, style)
+            drawRun(ctx, block, line.text, block.lineX(line), block.baselineY(line, timing), style)
         }
     }
 }
@@ -418,14 +431,10 @@ private fun DrawScope.drawPassedBlock(
         val blur = FumeTextStyles.passedShadowBlur(block, passedStyle, glowBases.passedGlowBase)
         val textColor = Color.White.copy(alpha = (passedStyle.opacity * alpha).toFloat())
         val glowColor = Color.White.copy(alpha = (passedStyle.shadowAlphaBase * alpha).toFloat())
-        val style = ctx.style(block, textColor)
+        val glow = if (blur > 0.0 && glowColor.alpha > 0.002f) FumeGlowSample(blur, glowColor) else null
+        val style = ctx.style(block, textColor, glow)
         for (line in block.renderLines) {
-            val originX = block.lineX(line)
-            val originY = block.baselineY(line, timing)
-            if (blur > 0.5 && glowColor.alpha > 0.002f) {
-                drawGlow(ctx, block, line.text, originX, originY, style, glowColor, blur)
-            }
-            drawRun(ctx, block, line.text, originX, originY, style)
+            drawRun(ctx, block, line.text, block.lineX(line), block.baselineY(line, timing), style)
         }
     }
 }
@@ -450,13 +459,22 @@ private fun DrawScope.drawLiveBlock(
     if (total == 0) return
     val printedCount = FumeReveal.printedGraphemeCount(block, time)
 
-    // 行辉光：正在唱的这一行整行带一圈主色光晕（Folia lineGlowAlpha / lineGlowBlur）。
+    // 行辉光：正在唱的这一行整行带一圈活动色光晕。等价 Folia 先画一遍「只有 shadowBlur 的整行
+    // 文字」（fumeCanvasText.ts:145-185）再逐字素盖上去：形状与位置跟正文完全一致、没有位移，
+    // 所以不会再出现旧实现那种「多圈偏移副本」的重影。
     val lineProgress = FumeReveal.visualProgressWithCutoff(
         block.line.startTime, timing.lineDuration, time, timing.linePassCutoffTime,
     )
     val envelope = FumeMath.resolveDelayedGlowEnvelope(lineProgress, 0.8)
     val lineGlowAlpha = ((if (hero) 0.16 else 0.12) + envelope * (if (hero) 0.26 else 0.2)) * tuning.glowIntensity
     val lineGlowBlur = ((if (hero) 12.0 else 8.0) + envelope * block.fontPx * (if (hero) 0.7 else 0.52)) * tuning.glowIntensity
+    if (lineGlowAlpha > 0.002 && lineGlowBlur > 0.0) {
+        val glow = FumeGlowSample(lineGlowBlur, accentColor.copy(alpha = (lineGlowAlpha * 1.35).toFloat()))
+        val glowStyle = ctx.style(block, Color.Transparent, glow)
+        for (line in block.renderLines) {
+            drawRun(ctx, block, line.text, block.lineX(line), block.baselineY(line, timing), glowStyle)
+        }
+    }
 
     // 镜头的 scale 由 FumeCamera.cameraScaleForBlock 决定（目标行高 = clamp(短边×0.115,64,124)，
     // scale clamp 0.88–2.2）。块比视口宽是 Folia 的原样：长句靠镜头焦点沿当前字向右平移来读，
@@ -480,17 +498,14 @@ private fun DrawScope.drawLiveBlock(
             if (ink.alpha <= 0.002) continue
             val glyphText = line.graphemes.getOrNull(glyphOffset - line.start) ?: continue
             val glyphX = originX + line.offsetOf(glyphOffset - line.start).toFloat()
-            val style = ctx.style(block, ink.color.copy(alpha = ink.alpha.toFloat()))
-            val useLineGlow = isPrinted
-            val blur = if (useLineGlow) maxOf(ink.shadowBlur, lineGlowBlur) else ink.shadowBlur
-            val glowColor = if (useLineGlow && lineGlowBlur > ink.shadowBlur) {
-                accentColor.copy(alpha = (lineGlowAlpha * 1.35).toFloat())
+            // 单字 shadow 只在整行辉光不覆盖它时才用（Folia：整行辉光画在下面，字素自身的
+            // shadowBlur 仍按 fillStyle 走，两处叠加但都没有位移）。
+            val glyphGlow = if (ink.shadowBlur > 0.0 && ink.shadowColor.alpha > 0.002f) {
+                FumeGlowSample(ink.shadowBlur, ink.shadowColor)
             } else {
-                ink.shadowColor
+                null
             }
-            if (blur > 0.5 && glowColor.alpha > 0.002f) {
-                drawGlow(ctx, block, glyphText, glyphX, originY, style, glowColor, blur)
-            }
+            val style = ctx.style(block, ink.color.copy(alpha = ink.alpha.toFloat()), glyphGlow)
             drawRun(ctx, block, glyphText, glyphX, originY, style)
 
             // 打印方块（Folia 的 activation block，即 `hidePrintSymbols` 关掉的那层符号）。
@@ -664,12 +679,35 @@ private fun FumeBlock.lineX(line: FumeRenderLine): Float = (x + line.left).toFlo
 private fun FumeBlock.baselineY(line: FumeRenderLine, timing: FumeBlockTiming): Float =
     (y + line.top + timing.baselineOffset).toFloat()
 
-/** 一段文字的统一样式（颜色每次不同，其余固定）。 */
-private fun FumeDrawContext.style(block: FumeBlock, color: Color): TextStyle = TextStyle(
+/**
+ * 一段文字的统一样式（颜色每次不同，其余固定）。
+ *
+ * 辉光走 TextStyle.shadow，等价 Folia 的 canvas `shadowBlur` + `shadowColor`：偏移固定
+ * Offset.Zero（Folia 从不设 shadowOffsetX/Y），只有模糊半径，因此光晕与正文同位同形、不会错位。
+ *
+ * blurRadius 直接给世界坐标（dp）的原值：外层 withTransform 已经把 density 与相机缩放写进
+ * 画布矩阵，Skia 的模糊核会跟着矩阵一起缩放，光晕随镜头放大而放大。这里再乘一次
+ * density × camera.scale 就是双重换算（320dpi 下约 4.4 倍），会把光晕糊成一团。
+ */
+private fun FumeDrawContext.style(
+    block: FumeBlock,
+    color: Color,
+    glow: FumeGlowSample? = null,
+): TextStyle = TextStyle(
     color = color,
     fontSize = with(density) { block.fontPx.toFloat().toSp() },
     fontWeight = FontWeight(block.variant.fumeFontWeight()),
     fontFamily = fontFamily,
+    shadow = if (glow != null && glow.blur > 0.0 && glow.color.alpha > 0.002f) {
+        Shadow(
+            color = glow.color,
+            offset = Offset.Zero,
+            // Folia fumeCanvasText.ts:386 把 shadowBlur 取整到整像素。
+            blurRadius = Math.round(glow.blur).toFloat().coerceAtLeast(0f),
+        )
+    } else {
+        null
+    },
 )
 
 /**
@@ -695,35 +733,6 @@ private fun DrawScope.drawRun(
         textLayoutResult = layout,
         topLeft = Offset(x, top),
     )
-}
-
-/**
- * 辉光：不用任何 blur 节点，而是在文字周围画若干圈低透明度副本（多层文字阴影）。
- * 圈数固定，半径随 blur 走，观感接近 Folia 的 shadowBlur。
- */
-private fun DrawScope.drawGlow(
-    ctx: FumeDrawContext,
-    block: FumeBlock,
-    text: String,
-    x: Float,
-    centerY: Float,
-    style: TextStyle,
-    glowColor: Color,
-    blur: Double,
-) {
-    if (text.isEmpty() || glowColor.alpha <= 0.002f) return
-    val radius = blur.coerceIn(0.0, 48.0).toFloat() * 0.5f
-    val glowStyle = style.copy(color = glowColor.copy(alpha = glowColor.alpha * 0.34f))
-    val layout = ctx.measurer.measure(text = text, style = glowStyle)
-    val top = centerY - layout.size.height * 0.5f
-    val steps = 6
-    for (i in 0 until steps) {
-        val angle = (i.toFloat() / steps) * 6.28318f
-        drawText(
-            textLayoutResult = layout,
-            topLeft = Offset(x + cos(angle) * radius, top + sin(angle) * radius),
-        )
-    }
 }
 
 /** 把两个颜色按比例混起来，并带上目标 alpha（对应 Folia 的 mixColors(..., alpha)）。 */
