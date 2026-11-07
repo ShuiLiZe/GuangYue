@@ -685,3 +685,11 @@ BUILD SUCCESSFUL in 35s
 - 手机化：Folia 默认槽位是「循环 + 歌词时间轴」，手机右槽换成下一首（原迷你条就有）；封面缩略图去掉（Folia 胶囊没有）。
 - 截图用 Robolectric（`GUANGYUE_RECORD_SCREENSHOTS=true`，U2ShellScreenshotTest 喂了时间与模式槽）：`p2-mini-capsule-{light,dark}.png`。模拟器上 B 站源取不到链，实机态待真机。
 - 提交：`db5a1dc`、`a596e2e` 及截图提交。
+
+## P2b 舞台播放胶囊折叠 / 展开（2026-11-08）
+
+- 依据 Folia `FloatingPlayerControls.tsx`：折叠态 CollapsedView 只有「时间 · 进度 · 时长」；展开态三行网格（居中歌名 / 左槽·48dp 实心播放键·右槽 / 进度行）。
+- 舞台底部胶囊：默认折叠（56dp，点一下展开）；展开为 rounded 30 + p-3：歌名（点它收起）、播放模式（顺序/单曲/随机循环）、实心播放键（底 = 胶囊墨色）、下一首、可拖进度（松手 seek）。5 秒无操作自动收起（Folia 鼠标移开即收，手机用计时）。
+- 修 bug：P1a 起舞台进度拖动后 `scrubbing` 永远为 true、从不调用 `onSeek`——拖完进度卡死、不跳转；现在松手 `onSeek(scrubValue)` 并复位。
+- 截图用例：U5LyricsScreenshotTest 新增 `p2bBarExpanded{Light,Dark}`（`initialBarExpanded`，Robolectric 下不自动收起）。实拍 `p2b-bar-expanded-{light,dark}.png`。U5 套件 16/0。
+- 提交：`046de78`、`daf422c`、`60cd6e0` 及截图提交。
