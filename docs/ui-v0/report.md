@@ -636,3 +636,14 @@ BUILD SUCCESSFUL in 35s
 - 测试：`:feature:player:testDebugUnitTest` 6 套件 68 例 0 失败（新增 `StagePanelTest` 4 例）。`:app:installDebug` 成功。
 - 实拍：`docs/ui-v0/p1b-panel-{cover,controls,queue,quality}-dark.png`、`p1b-panel-cover-light.png`。
 - 提交：`4e7d3cc`、`d5336d3`、`f49e9ba`（port/u2 已 push）。PLAYER 路由暂留（无入口），后续确认无引用后删。
+
+## B2 Bravais 集合层（2026-11-08，Hark 直接做）
+
+- 依据 Folia `library/suites/bravais/BravaisCollection.tsx`（集合 = 同一面墙换成集合曲目）、`BravaisSeamCollection.tsx / BravaisSeamCrumbs.tsx / BravaisFocusCardBody.tsx`。
+- 首页墙：歌单 / 推荐歌单 / 榜单（PLAYLIST/SHEET/STATION）聚焦卡右下多一颗「进入」键（ArrowUpRight），再点一下聚焦卡也是进入；单曲仍是播放。
+- 新路由 `collection`：墙数据换成该集合曲目（TRACK 砖，点开聚焦卡可播放 / 加入队列，播放时整个集合作队列从该曲开始）；缝换成集合信息条（高 148）：面包屑「‹ 广乐 / 歌单」返回、集合名 22/800、「N 首 · 歌单」或加载中 / 失败 / 空（点击重试），右侧「播放全部」实心胶囊 +「随机」。
+- HomeViewModel 新增 `loadTracksOf`（空 / 出错也回调），集合页与首页共用 HOME 栈的 ViewModel（推荐歌单取曲依赖首页已拉的分类叶子）。
+- 未移：收藏星标、过滤输入、列表面板、「⋯ 更多」、补页、集合飞入转场 collectionFlight、歌手页。
+- 已知：模拟器上酷我推荐歌单 getMusicSheetInfo 返回 0 首（插件侧，归 M8），所以实拍是加载态；单测未新增（纯 UI 接线）。
+- 实拍：`b2-focus-enter.png`（聚焦卡进入键）、`b2-collection-light.png`（集合信息条）、`p1b-panel-open-key-light.png`（面板开时圆键反色为关闭键）。
+- 提交：`c009355`、`bf218e1` 及实拍提交（port/u2 已 push）。
