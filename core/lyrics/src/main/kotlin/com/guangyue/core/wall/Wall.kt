@@ -182,3 +182,15 @@ object WallWave {
     fun outDelay(stagger: Long) = MAX_DELAY_MS - stagger
     fun inDelay(stagger: Long) = EXIT_TOTAL_MS + stagger
 }
+
+/** 对应 wall/flipPlan.ts：同页签内数据变化时的翻牌。错开 18ms/格、上限 420ms；转出 150ms、转进 210ms。 */
+object WallFlip {
+    const val STAGGER_MS_PER_CELL = 18.0
+    const val MAX_DELAY_MS = 420.0
+    const val OUT_MS = 150
+    const val IN_MS = 210
+
+    /** 首页的翻牌起点是横缝（seam-edges y = 0）：只按到缝的竖直距离错开，方向恒为 +1。 */
+    fun delayFromSeam(centerY: Double, seamY: Double = 0.0, m: WallMetrics = Bravais.METRICS): Long =
+        minOf(MAX_DELAY_MS, kotlin.math.abs(centerY - seamY) / m.pitch * STAGGER_MS_PER_CELL).toLong()
+}

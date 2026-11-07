@@ -11,7 +11,7 @@
 //  1. 平移 + 惯性；B1c 起点一下砖 → 整块按 blockReflows 让位、该砖长到 6×6 并显示标题（聚焦卡简化版：
 //     标题 / 副标题 / 播放键，Folia BravaisFocusCardBody 的链接行、队列、菜单未移），镜头 0.42s 移到它中心；
 //     再点它才播放，点空画框收起。
-//  B1e：首次挂载与换页签走整墙入场 / 出场→入场波次（bravaisWallWave）；同页签内数据变化的绕 Y 翻牌（flipPlan）未移。
+//  B1e：首次挂载与换页签走整墙入场 / 出场→入场波次（bravaisWallWave）；同页签内数据变化走绕 Y 翻牌（flipPlan，起点为横缝）。
 //  2. 条目有限：按排名填满前 N 个槽，其余是空画框（Folia bravaisFiniteWall 也是这样收尾）。
 //  3. 排名原点 = 初始镜头中心；拖动时不重排（Folia 同：排名只在换数据时重算）。
 package com.guangyue.music.ui.home
@@ -39,8 +39,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.graphicsLayer
 import com.guangyue.core.wall.WallWave
+import com.guangyue.core.wall.WallFlip
+import androidx.compose.runtime.mutableLongStateOf
 import kotlinx.coroutines.delay
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -101,7 +104,7 @@ fun BravaisWall(
     modifier: Modifier = Modifier,
 ) {
     // B1d：缝（Seam）横条的页签 = 墙的数据来源；第 0 个是「全部」（各段按 key 去重拼起来）。
-    var tab by remember { mutableStateOf(0) }
+    var tab by rememberSaveable { mutableStateOf(0) }  // 进播放页再回来保留页签
     val tiles = remember(sections, tab) {
         if (tab == 0) sections.flatMap { it.second }.distinctBy { it.key } else sections.getOrNull(tab - 1)?.second.orEmpty()
     }
@@ -186,6 +189,8 @@ fun BravaisWall(
                     // 显示中的内容 + 抬起量（1 = 抬起淡出，0 = 落定）。出场完才换成 target。
                     var tile by remember { mutableStateOf(target) }
                     val lift = remember { Animatable(if (waveToken == firstToken) 1f else 0f) }
+                    val rot = remember { Animatable(0f) }
+                    val lastWave = remember { mutableLongStateOf(waveToken) }
                     val cornerX = camX.value.toDouble()
                     val cornerY = camY.value.toDouble()
                     LaunchedEffect(waveToken, target) {
@@ -199,6 +204,16 @@ fun BravaisWall(
                             return@LaunchedEffect
                         }
                         if (tile == target) return@LaunchedEffect
+                        if (lastWave.longValue == waveToken) {
+                            // 同一页签里数据变了：绕 Y 翻牌，从横缝向两边错开（flipPlan，origin = seam-edges y）。
+                            delay(WallFlip.delayFromSeam(base.y + base.height / 2.0))
+                            rot.animateTo(90f, tween(WallFlip.OUT_MS, easing = FLIP_OUT))
+                            tile = target
+                            rot.snapTo(-90f)
+                            rot.animateTo(0f, tween(WallFlip.IN_MS, easing = FLIP_IN))
+                            return@LaunchedEffect
+                        }
+                        lastWave.longValue = waveToken
                         if (age > WallWave.inDelay(st) + WallWave.IN_MS) { tile = target; lift.snapTo(0f); return@LaunchedEffect }
                         delay((WallWave.outDelay(st) - age).coerceAtLeast(0))
                         lift.animateTo(1f, tween(WallWave.OUT_MS, easing = RISE))
@@ -226,6 +241,8 @@ fun BravaisWall(
                                 scaleX = k
                                 scaleY = k
                                 alpha = 1f - p
+                                rotationY = rot.value
+                                cameraDistance = (1400.0 * scale).toFloat() * this.density  // CSS perspective(1400px)，世界单位
                             },
                     ) {
                         val face = tile
@@ -266,6 +283,8 @@ fun BravaisWall(
 /** 入场落回 cubic-bezier(.2,.9,.3,1.04)、出场抬起 cubic-bezier(.4,0,1,1)（BravaisTile.tsx）。 */
 private val LAND = CubicBezierEasing(0.2f, 0.9f, 0.3f, 1.04f)
 private val RISE = CubicBezierEasing(0.4f, 0f, 1f, 1f)
+private val FLIP_OUT = CubicBezierEasing(0.55f, 0f, 0.9f, 0.45f)
+private val FLIP_IN = CubicBezierEasing(0.2f, 0.7f, 0.25f, 1f)
 
 /** 对应 bravaisConstants BRAVAIS_SEAM_ROW_HOME_HEIGHT = 72。 */
 private const val SEAM_HOME_HEIGHT = 72f

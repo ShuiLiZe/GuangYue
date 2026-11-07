@@ -73,4 +73,10 @@ class WallTest {
         assertEquals(280L, WallWave.outDelay(60))
         assertEquals(680L, WallWave.inDelay(60))
     }
+
+    @Test
+    fun flipDelayFromSeam() {
+        assertEquals(36L, WallFlip.delayFromSeam(-272.0))
+        assertEquals(420L, WallFlip.delayFromSeam(99999.0))
+    }
 }
