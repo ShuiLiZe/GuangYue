@@ -50,7 +50,6 @@ import com.guangyue.feature.player.lyrics.LyricStageScreen
 import com.guangyue.feature.player.lyrics.LyricStringHost
 import com.guangyue.feature.player.lyrics.LyricStyleSheet
 import com.guangyue.feature.player.lyrics.LyricStyleStrings
-import com.guangyue.feature.player.screen.IPlayerRoute
 import com.guangyue.feature.player.viewmodel.LyricStyleViewModel
 import com.guangyue.feature.player.viewmodel.LyricsViewModel
 import com.guangyue.feature.search.FoliaSearchScreen
@@ -64,7 +63,6 @@ object Routes {
     const val HOME = "home"
     const val SEARCH = "search"
     const val PROFILE = "profile"
-    const val PLAYER = "player"
     const val LYRIC_FLOW = "lyricFlow"
     const val LYRIC_STAGE = "lyricStage"
     /** B2：Bravais 集合层（歌单 / 榜单 / 电台的曲目墙）。 */
@@ -600,62 +598,6 @@ fun GuangYueNavHost(
 
         composable(Routes.ABOUT) {
             AboutScreen(onBack = { navController.popBackStack() })
-        }
-
-        // ---------- 全屏播放 / 歌词 ----------
-        composable(Routes.PLAYER) {
-            // V0：播放页的「歌词样式」入口。弹层与歌词页共用同一个 ViewModel 与同一份落盘偏好，
-            // 在播放页调完参数、进歌词页立刻生效（对应 Folia 的样式窗口在播放器与歌词页共用一份 tuning）。
-            val styleVm: LyricStyleViewModel = hiltViewModel()
-            val tuning by styleVm.tuning.collectAsStateWithLifecycle()
-            // V1a：当前样式（流光 / 浮名）—— 弹层选中态与歌词画布共用这一份。
-            val style by styleVm.style.collectAsStateWithLifecycle()
-            val playerContext = LocalContext.current
-            var styleSheetOpen by rememberSaveable { mutableStateOf(false) }
-            IPlayerRoute(
-                playback = playback,
-                playbackState = playbackState,
-                darkMode = darkMode,
-                accent = accent,
-                // P1a：播放主视图是歌词舞台（Folia 无独立大封面播放页），封面卡退为舞台上打开的面板。
-                onOpenLyrics = {
-                    if (navController.previousBackStackEntry?.destination?.route == Routes.LYRIC_FLOW) navController.popBackStack()
-                    else navController.navigate(Routes.LYRIC_FLOW)
-                },
-                onOpenLyricStyle = { styleSheetOpen = true },
-                lyricStyleLabel = playerContext.getString(R.string.lyrics_style),
-                onAddToPlaylist = { navController.navigate(Routes.SEARCH) },
-                onBack = { navController.popBackStack() },
-            )
-            if (styleSheetOpen) {
-                // 文案按 id 现取（locale / 系统字号变了也能跟上），不能把 id 当字符串直接显示。
-                val sheetContext = playerContext
-                CompositionLocalProvider(
-                    LyricStringHost provides { id -> sheetContext.getString(id) },
-                ) {
-                    LyricStyleSheet(
-                        tuning = tuning,
-                        strings = lyricStyleStrings(),
-                        styleName = sheetContext.getString(R.string.lyrics_style_classic),
-                        onTuning = styleVm::update,
-                        onDismiss = { styleSheetOpen = false },
-                        accent = accent,
-                        // V1a：样式切换 —— 选中态留在弹层里，所以 onStyle 不跟着关弹层。
-                        style = style,
-                        fumeName = sheetContext.getString(R.string.lyrics_style_fume),
-                        onStyle = styleVm::pickStyle,
-                        fumeTuning = styleVm.fumeTuning.collectAsStateWithLifecycle().value,
-                        onFumeTuning = styleVm::updateFume,
-                        partitaName = sheetContext.getString(R.string.lyrics_style_partita),
-                        partitaTuning = styleVm.partitaTuning.collectAsStateWithLifecycle().value,
-                        onPartitaTuning = styleVm::updatePartita,
-                        tiltTuning = styleVm.tiltTuning.collectAsStateWithLifecycle().value,
-                        onTiltTuning = styleVm::updateTilt,
-                        claddaghTuning = styleVm.claddaghTuning.collectAsStateWithLifecycle().value,
-                        onCladdaghTuning = styleVm::updateCladdagh,
-                    )
-                }
-            }
         }
 
         // U5：歌词页。数据仍是既有 LyricsViewModel（插件查词 + LRC 解析 + 逐行同步），

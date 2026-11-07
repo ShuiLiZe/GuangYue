@@ -25,7 +25,6 @@ class ShellNavTest {
     fun bottomBarHiddenOnEveryNonTopLevelDestination() {
         // 二级页与全屏页：都不该出现底栏（Folia 只在主视图挂底栏）。
         listOf(
-            Routes.PLAYER,
             Routes.LYRIC_FLOW,
             Routes.LYRIC_STAGE,
             Routes.PLUGINS,
@@ -82,7 +81,6 @@ class ShellNavTest {
         // 子页（插件管理 / 设置 / 下载…）必须让 NavController 先 pop，回到它自己的 Tab。
         assertEquals(null, ShellNav.backTarget(Routes.PLUGINS, isTopLevel = false))
         assertEquals(null, ShellNav.backTarget(Routes.SETTINGS, isTopLevel = false))
-        assertEquals(null, ShellNav.backTarget(Routes.PLAYER, isTopLevel = false))
     }
 
     // ---------- U5：歌词页是播放页的下级页面 ----------
