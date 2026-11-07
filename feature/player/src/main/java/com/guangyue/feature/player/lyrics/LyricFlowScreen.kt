@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -196,7 +197,7 @@ fun LyricFlowScreen(
         resolveSubtitleOverlayContent(
             activeLine = activeLine,
             nextLines = kernelLines.drop(currentIndex.coerceAtLeast(0) + 1),
-            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL,
+            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET,
         )
     }
 
@@ -363,6 +364,31 @@ fun LyricFlowScreen(
                 fontFamily = GuangYueDesign.Serif,
             )
         }
+        // P3 莫奈：海报版面一层（歌手 / 竖线 / 大标题 / 专辑 / 歌词轨），让出顶栏与底部胶囊。
+        if (lyricStyle == LyricStyle.MONET && kernelLines.isNotEmpty() && emptyKind == null) {
+            com.guangyue.feature.player.lyrics.visualizer.MonetLyricStage(
+                lines = kernelLines,
+                currentIndex = currentIndex,
+                clock = clock,
+                title = playback.item?.title.orEmpty(),
+                artist = artist.orEmpty(),
+                album = playback.item?.album.orEmpty(),
+                lyricsFontScale = lyricsFontScale,
+                primaryColor = onBackdrop,
+                secondaryColor = theme.secondary,
+                backgroundColor = theme.background,
+                fontFamily = GuangYueDesign.Serif,
+                topReserve = 64.dp,
+                bottomReserve = 104.dp,
+                reduceMotion = reduceMotion,
+                onSeekToLine = onSeekToLine,
+                modifier = Modifier.windowInsetsPadding(
+                    WindowInsets.statusBars
+                        .union(WindowInsets.displayCutout)
+                        .union(WindowInsets.navigationBars),
+                ),
+            )
+        }
         Column(
             Modifier
                 .fillMaxSize()
@@ -399,7 +425,7 @@ fun LyricFlowScreen(
                     )
                 }
                 Spacer(Modifier.width(GySpace.l))
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f).alpha(if (lyricStyle == LyricStyle.MONET && kernelLines.isNotEmpty() && emptyKind == null) 0f else 1f)) {
                     // P1a：舞台成了播放主视图，顶栏写歌名（Folia 舞台左上衬线标题），没有歌时退回「歌词」。
                     Text(
                         text = playback.item?.title?.takeIf { it.isNotBlank() } ?: str(strings.title),
@@ -470,7 +496,7 @@ fun LyricFlowScreen(
                         failure = failure,
                         onRetry = null,
                     )
-                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL || lyricStyle == LyricStyle.CLADDAGH) && kernelLines.isNotEmpty()) {
+                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL || lyricStyle == LyricStyle.CLADDAGH || lyricStyle == LyricStyle.MONET) && kernelLines.isNotEmpty()) {
                     // 浮名：画布已经铺在整屏那一层（本函数开头），舞台 Box 里留空，
                     // 只保留顶栏 / 字幕层 / 播放条这些「浮在画布上」的层。
                 } else if (lyricStyle == LyricStyle.TILT && activeLine != null && activeLine.hasVisibleWords()) {

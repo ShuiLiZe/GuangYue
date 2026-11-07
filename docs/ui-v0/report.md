@@ -693,3 +693,12 @@ BUILD SUCCESSFUL in 35s
 - 修 bug：P1a 起舞台进度拖动后 `scrubbing` 永远为 true、从不调用 `onSeek`——拖完进度卡死、不跳转；现在松手 `onSeek(scrubValue)` 并复位。
 - 截图用例：U5LyricsScreenshotTest 新增 `p2bBarExpanded{Light,Dark}`（`initialBarExpanded`，Robolectric 下不自动收起）。实拍 `p2b-bar-expanded-{light,dark}.png`。U5 套件 16/0。
 - 提交：`046de78`、`daf422c`、`60cd6e0` 及截图提交。
+
+## P3「莫奈」样式：海报版面（2026-11-08，Hark 直接做）
+
+- 依据 Folia `visualizer/monet/VisualizerMonet.tsx`（左列：斜体歌手 clamp(1rem,1.8vw,1.8rem)@0.96 → 1×56 渐隐竖线 → 大标题 clamp(1.45rem,3.3vw,2.8rem) 600 两行截断 + 背景色投影 → 专辑大写 14@secondary0.84）、`MonetLyricsRail.tsx / monetRailLayout.ts`（当前句落在轨高 46%，前后行按 0.9^(d-1) 缩小、等待行比已唱行亮、按距离模糊，行距 active 18 / inactive 14，弹簧滚动）、`MonetRailLine.tsx`（当前句底色 primary@0.34，逐词填到 @0.98）。zh-CN `ui.visualizerMonet` = 莫奈，排在样式列表回环之后（order 90）。
+- 这就是基准 player-playing-m412 左上那组「斜体歌手 + 竖线 + 大标题」——它是莫奈样式的版面，不是舞台通用顶栏，所以做成第八个样式而不是改所有样式的顶栏。选莫奈时顶栏只留返回键（标题由海报承担），字幕层不画（译文排在每句下）。
+- 不做（手机/数据原因）：右侧肖像（Folia 本身 `hidden md:flex`，手机不显示）、莫奈背景 worker（沿用封面取色流体 + 通用几何）、底部频谱、浮动装饰、关键词着色、说明胶囊（无 theme.description 数据）。
+- 点轨道上任一行跳到该句；减少动效时不做弹簧与模糊。
+- 测试：`MonetRailTest` 4 例（档位、CSS clamp、逐词着色保留空格）。`:app:installDebug` 通过。
+- 实拍：`p3-monet-dark.png`、`p3-monet-light.png`（V0cStageActivity `--es v0c_style monet`），并排对照 `p3-monet-compare.jpg`（左为基准）。

@@ -36,6 +36,9 @@ enum class LyricStyle(val id: String) {
 
     /** 「回环」：Folia claddagh（V2e：歌词排在倾斜椭圆轨道上，句间隔 180°，当前字转到焦点）。 */
     CLADDAGH("claddagh"),
+
+    /** 「莫奈」：Folia monet（P3：海报版面——斜体歌手 + 竖线 + 大标题 + 专辑 + 左侧歌词轨；手机不画肖像）。无参数。 */
+    MONET("monet"),
     ;
 
     companion object {

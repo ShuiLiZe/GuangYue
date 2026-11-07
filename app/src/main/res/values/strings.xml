@@ -326,6 +326,8 @@
     <string name="lyrics_style_cadenza">心象</string>
     <!-- zh-CN.ts ui.visualizerStill -->
     <string name="lyrics_style_still">静止</string>
+    <!-- zh-CN.ts ui.visualizerMonet -->
+    <string name="lyrics_style_monet">莫奈</string>
     <!-- zh-CN.ts ui.visualizerTilt / options.tilt* -->
     <string name="lyrics_style_tilt">倾诉</string>
     <!-- zh-CN.ts ui.visualizerCladdagh / options.claddagh* -->

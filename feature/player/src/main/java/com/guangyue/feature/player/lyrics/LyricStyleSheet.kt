@@ -142,6 +142,8 @@ data class LyricStyleStrings(
     val noOptions: Int = 0,
     /** V2c：「静止」（Folia `ui.visualizerStill`）。 */
     val still: Int = 0,
+    /** P3：「莫奈」（Folia `ui.visualizerMonet`）。 */
+    val monet: Int = 0,
     /** V2d：「倾诉」与参数（Folia `ui.visualizerTilt` / `options.tilt*`）。 */
     val tilt: Int = 0,
     /** V2e：「回环」与参数（Folia `ui.visualizerCladdagh` / `options.claddagh*`）。 */
@@ -311,6 +313,7 @@ private fun LyricStylePanelContent(
                 LyricStyle.FUME to fumeName.ifBlank { styleName },
                 LyricStyle.TILT to (if (strings.tilt != 0) str(strings.tilt) else ""),
                 LyricStyle.CLADDAGH to (if (strings.claddagh != 0) str(strings.claddagh) else ""),
+                LyricStyle.MONET to (if (strings.monet != 0) str(strings.monet) else ""),
                 LyricStyle.STILL to (if (strings.still != 0) str(strings.still) else ""),
             )
             styleRows.forEach { (rowStyle, rowName) ->
@@ -335,7 +338,7 @@ private fun LyricStylePanelContent(
                     accent = accent,
                     onTuning = onFumeTuning,
                 )
-            } else if (style == LyricStyle.CADENZA || style == LyricStyle.STILL) {
+            } else if (style == LyricStyle.CADENZA || style == LyricStyle.STILL || style == LyricStyle.MONET) {
                 // Folia cadenza/entry.tsx 没有 renderSettingsPanel：窗口里显示「这个样式没有参数」。
                 Text(
                     text = str(strings.noOptions),
@@ -383,7 +386,7 @@ private fun LyricStylePanelContent(
                     .clickableNoRipple {
                         // 恢复默认只作用于当前样式（Folia 各模式各自的 handleReset*Tuning）。
                         when (style) {
-                            LyricStyle.CADENZA, LyricStyle.STILL -> Unit
+                            LyricStyle.CADENZA, LyricStyle.STILL, LyricStyle.MONET -> Unit
                             LyricStyle.TILT -> onTiltTuning(TiltTuning.DEFAULT)
                             LyricStyle.CLADDAGH -> onCladdaghTuning(CladdaghTuning.DEFAULT)
                             LyricStyle.FUME -> onFumeTuning(FumeTuning.DEFAULT)
