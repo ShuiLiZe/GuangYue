@@ -160,7 +160,10 @@ fun SettingsScreen(
                 }
                 Spacer(Modifier.height(GySpace.l))
             }
-            LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
+            LazyColumn(
+                contentPadding = PaddingValues(start = GySpace.pageH, end = GySpace.pageH, bottom = 40.dp),
+                verticalArrangement = Arrangement.spacedBy(GySpace.group),
+            ) {
                 if (shown.isEmpty()) {
                     item(key = "none") {
                         Text(
