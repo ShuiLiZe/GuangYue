@@ -1,5 +1,11 @@
 package com.guangyue.feature.player.lyrics
 
+import androidx.compose.ui.text.style.TextOverflow
+
+import androidx.compose.ui.text.style.TextAlign
+
+import androidx.compose.animation.animateContentSize
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -138,6 +144,11 @@ fun LyricFlowScreen(
     panelOpen: Boolean = false,
     /** P1c：歌词时间轴偏移（ms，正数歌词更晚）；逐字时钟按「播放时间 - 偏移」走。 */
     lyricOffsetMs: Long = 0L,
+    /** P2b：展开胶囊的右槽下一首、左槽播放模式。 */
+    onNext: (() -> Unit)? = null,
+    modeIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    modeLabel: String = "",
+    onCycleMode: (() -> Unit)? = null,
     /** 样式入口的无障碍文案（feature:player 无资源表，由 app 侧注入）。 */
     styleLabel: String = "",
     // V0d 取证：非 null 时把当前句的辉光强度钉死（debug harness 用，业务侧恒为 null）。
@@ -566,6 +577,15 @@ fun LyricFlowScreen(
                     onTogglePlay = onTogglePlay,
                     onScrub = { scrubbing = true; scrubValue = it },
                     onScrubPreview = onSeekPreview,
+                    onScrubEnd = {
+                        onSeek(scrubValue)
+                        scrubbing = false
+                    },
+                    title = playback.item?.title.orEmpty(),
+                    onNext = onNext,
+                    modeIcon = modeIcon,
+                    modeLabel = modeLabel,
+                    onCycleMode = onCycleMode,
                 )
                 if (onOpenPanel != null) {
                     val panelPill = if (darkMode) Color(0xFF17171A).copy(alpha = 0.55f) else Color.White.copy(alpha = 0.62f)
@@ -671,6 +691,14 @@ internal fun LyricEmpty(
 
 /** 底部胶囊：播放键 + 2dp 进度轨 + 两端等宽时间（跟播放页同观感）。 */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+/**
+ * 舞台底部播放胶囊（P2b：Folia `FloatingPlayerControls` 折叠 / 展开两态）。
+ *
+ * 折叠：一条胶囊只有「时间 · 进度 · 时长」（Folia CollapsedView，h-8 px-4 的手机放大版 56dp）；点一下展开。
+ * 展开：rounded 30 + p-3，三行——居中歌名、左模式 / 中 48dp 实心播放键 / 右下一首、可拖的进度行；
+ * 5 秒无操作或点歌名收起（Folia 鼠标移开即收，手机用计时代替）。
+ * 拖进度：松手才 seek（修 P1a 起拖动后不 seek、进度卡在拖动值的问题）。
+ */
 @Composable
 private fun LyricBar(
     modifier: Modifier = Modifier,
@@ -684,91 +712,139 @@ private fun LyricBar(
     onTogglePlay: () -> Unit,
     onScrub: (Float) -> Unit,
     onScrubPreview: ((Float) -> Unit)?,
+    onScrubEnd: () -> Unit = {},
+    title: String = "",
+    onNext: (() -> Unit)? = null,
+    modeIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    modeLabel: String = "",
+    onCycleMode: (() -> Unit)? = null,
 ) {
     val seekBarLabel = str(labels.seekBar)
     val playLabel = str(labels.play)
     val pauseLabel = str(labels.pause)
     val pill = if (dark) Color(0xFF17171A).copy(alpha = 0.55f) else Color.White.copy(alpha = 0.62f)
-    Row(
+    var expanded by remember { mutableStateOf(false) }
+    var touch by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    LaunchedEffect(expanded, touch) {
+        if (expanded) {
+            kotlinx.coroutines.delay(5_000)
+            expanded = false
+        }
+    }
+    val shape = RoundedCornerShape(if (expanded) 30.dp else GyRadius.capsule)
+    Column(
         modifier
             .fillMaxWidth()
             .padding(vertical = GySpace.l)
-            .height(56.dp)
-            .clip(RoundedCornerShape(GyRadius.capsule))
+            .clip(shape)
             .background(pill)
-            .padding(horizontal = GySpace.l),
-        verticalAlignment = Alignment.CenterVertically,
+            .animateContentSize(),
     ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .clickableNoRipple(onTogglePlay)
-                .semantics {
-                    contentDescription = if (playing) pauseLabel else playLabel
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                if (playing) GuangYueIcons.Pause else GuangYueIcons.Play,
-                null,
-                tint = pillInk,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-        Spacer(Modifier.width(GySpace.xs))
-        Text(
-            text = formatTime(positionMs),
-            fontSize = 11.sp,
-            color = pillInk.copy(alpha = 0.7f),
-            fontFamily = FontFamily.Monospace,
-        )
-        Spacer(Modifier.width(GySpace.s))
-        Box(
-            Modifier
-                .weight(1f)
-                .height(48.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            // Material3 Slider 的默认 thumb 是 20dp 实心白圆，宽度压到 2dp 的轨道上就成了
-            // 进度条左端一个白色圆角块（V0e-fix 审图第 3 条）。Folia 的播放条只有「已播轨道 + 剩余轨道」，
-            // 所以这里把 thumb / 轨道都自己画：2dp 胶囊，圆头。
-            Slider(
-                value = progress.coerceIn(0f, 1f),
-                onValueChange = { onScrub(it); onScrubPreview?.invoke(it) },
-                onValueChangeFinished = {},
-                thumb = {},
-                track = { sliderState ->
-                    val fraction = sliderState.value.coerceIn(0f, 1f)
+        if (!expanded) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clickableNoRipple { expanded = true; touch++ }
+                    .semantics { contentDescription = if (playing) "$pauseLabel / 展开播放控制" else "$playLabel / 展开播放控制" }
+                    .padding(horizontal = GySpace.pageH),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(formatTime(positionMs), fontSize = 11.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+                Spacer(Modifier.width(GySpace.s))
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(2.dp)
+                        .clip(RoundedCornerShape(1.dp))
+                        .background(pillInk.copy(alpha = 0.22f)),
+                ) {
                     Box(
                         Modifier
-                            .fillMaxWidth()
+                            .fillMaxWidth(progress.coerceIn(0f, 1f))
                             .height(2.dp)
                             .clip(RoundedCornerShape(1.dp))
-                            .background(pillInk.copy(alpha = 0.22f)),
+                            .background(pillInk.copy(alpha = 0.85f)),
+                    )
+                }
+                Spacer(Modifier.width(GySpace.s))
+                Text(formatTime(durationMs), fontSize = 11.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+            }
+        } else {
+            Column(Modifier.fillMaxWidth().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = pillInk,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).clickableNoRipple { expanded = false },
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                        if (modeIcon != null && onCycleMode != null) {
+                            Box(
+                                Modifier.size(40.dp).clip(CircleShape).clickableNoRipple { onCycleMode(); touch++ }
+                                    .semantics { contentDescription = modeLabel },
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(modeIcon, null, tint = pillInk.copy(alpha = 0.8f), modifier = Modifier.size(20.dp)) }
+                        }
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Box(
+                        Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(pillInk)
+                            .clickableNoRipple { onTogglePlay(); touch++ }
+                            .semantics { contentDescription = if (playing) pauseLabel else playLabel },
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth(fraction)
-                                .height(2.dp)
-                                .clip(RoundedCornerShape(1.dp))
-                                .background(pillInk.copy(alpha = 0.85f)),
+                        Icon(
+                            if (playing) GuangYueIcons.Pause else GuangYueIcons.Play,
+                            null,
+                            tint = if (dark) Color(0xFF17171A) else Color.White,
+                            modifier = Modifier.size(20.dp),
                         )
                     }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .semantics { contentDescription = seekBarLabel },
-            )
+                    Spacer(Modifier.width(16.dp))
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                        if (onNext != null) {
+                            Box(
+                                Modifier.size(40.dp).clip(CircleShape).clickableNoRipple { onNext(); touch++ }
+                                    .semantics { contentDescription = "下一首" },
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(GuangYueIcons.SkipForward, null, tint = pillInk.copy(alpha = 0.8f), modifier = Modifier.size(20.dp)) }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(formatTime(positionMs), fontSize = 11.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+                    Spacer(Modifier.width(GySpace.s))
+                    Slider(
+                        value = progress.coerceIn(0f, 1f),
+                        onValueChange = { onScrub(it); onScrubPreview?.invoke(it); touch++ },
+                        onValueChangeFinished = onScrubEnd,
+                        thumb = {},
+                        track = { sliderState ->
+                            val fraction = sliderState.value.coerceIn(0f, 1f)
+                            Box(
+                                Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)).background(pillInk.copy(alpha = 0.22f)),
+                            ) {
+                                Box(Modifier.fillMaxWidth(fraction).height(2.dp).clip(RoundedCornerShape(1.dp)).background(pillInk.copy(alpha = 0.85f)))
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(36.dp).semantics { contentDescription = seekBarLabel },
+                    )
+                    Spacer(Modifier.width(GySpace.s))
+                    Text(formatTime(durationMs), fontSize = 11.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+                }
+            }
         }
-        Spacer(Modifier.width(GySpace.s))
-        Text(
-            text = formatTime(durationMs),
-            fontSize = 11.sp,
-            color = pillInk.copy(alpha = 0.7f),
-            fontFamily = FontFamily.Monospace,
-        )
     }
 }
 
