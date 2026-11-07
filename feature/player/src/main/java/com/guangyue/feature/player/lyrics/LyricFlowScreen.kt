@@ -566,12 +566,21 @@ fun LyricFlowScreen(
                 )
                 if (onOpenPanel != null) {
                     val panelPill = if (darkMode) Color(0xFF17171A).copy(alpha = 0.55f) else Color.White.copy(alpha = 0.62f)
+                    // P1b：面板打开时圆键反色成实心关闭键（Folia 基准 player-panel-*-m412：浅色黑底白 X）。
+                    val keyBg by androidx.compose.animation.animateColorAsState(
+                        if (panelOpen) (if (darkMode) Color(0xFFF4F4F5) else Color(0xFF18181B)) else panelPill,
+                        label = "panelKeyBg",
+                    )
+                    val keyInk by androidx.compose.animation.animateColorAsState(
+                        if (panelOpen) (if (darkMode) Color(0xFF18181B) else Color.White) else pillInk,
+                        label = "panelKeyInk",
+                    )
                     Spacer(Modifier.width(GySpace.s))
                     Box(
                         Modifier
                             .size(56.dp)
                             .clip(CircleShape)
-                            .background(panelPill)
+                            .background(keyBg)
                             .clickableNoRipple(onOpenPanel)
                             .semantics { contentDescription = if (panelOpen) "关闭面板" else "播放面板" },
                         contentAlignment = Alignment.Center,
@@ -580,7 +589,7 @@ fun LyricFlowScreen(
                             Icon(
                                 if (opened) GuangYueIcons.X else GuangYueIcons.SlidersHorizontal,
                                 null,
-                                tint = pillInk,
+                                tint = keyInk,
                                 modifier = Modifier.size(20.dp),
                             )
                         }
