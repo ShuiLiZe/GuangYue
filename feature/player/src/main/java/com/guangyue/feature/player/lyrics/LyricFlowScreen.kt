@@ -197,7 +197,7 @@ fun LyricFlowScreen(
         resolveSubtitleOverlayContent(
             activeLine = activeLine,
             nextLines = kernelLines.drop(currentIndex.coerceAtLeast(0) + 1),
-            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET && lyricStyle != LyricStyle.PENDOLO,
+            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET && lyricStyle != LyricStyle.PENDOLO && lyricStyle != LyricStyle.NEBBIA,
         )
     }
 
@@ -389,6 +389,18 @@ fun LyricFlowScreen(
                 ),
             )
         }
+        // P5 雾笺：整屏夜色玻璃（Folia 外壳 inset-0 背景 #05070a），歌词排在全屏上、不让顶栏。
+        if (lyricStyle == LyricStyle.NEBBIA && kernelLines.isNotEmpty() && emptyKind == null) {
+            com.guangyue.feature.player.lyrics.visualizer.NebbiaStage(
+                lines = kernelLines,
+                clock = clock,
+                lyricsFontScale = lyricsFontScale,
+                accentColor = lyricAccent,
+                fontFamily = GuangYueDesign.Serif,
+                reduceMotion = reduceMotion,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         // P4 时计：钟轮在左缘正中，歌词沿弧线排布；让出顶栏与底部胶囊。
         if (lyricStyle == LyricStyle.PENDOLO && kernelLines.isNotEmpty() && emptyKind == null) {
             com.guangyue.feature.player.lyrics.visualizer.PendoloStage(
@@ -519,7 +531,7 @@ fun LyricFlowScreen(
                         failure = failure,
                         onRetry = null,
                     )
-                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL || lyricStyle == LyricStyle.CLADDAGH || lyricStyle == LyricStyle.MONET || lyricStyle == LyricStyle.PENDOLO) && kernelLines.isNotEmpty()) {
+                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL || lyricStyle == LyricStyle.CLADDAGH || lyricStyle == LyricStyle.MONET || lyricStyle == LyricStyle.PENDOLO || lyricStyle == LyricStyle.NEBBIA) && kernelLines.isNotEmpty()) {
                     // 浮名：画布已经铺在整屏那一层（本函数开头），舞台 Box 里留空，
                     // 只保留顶栏 / 字幕层 / 播放条这些「浮在画布上」的层。
                 } else if (lyricStyle == LyricStyle.TILT && activeLine != null && activeLine.hasVisibleWords()) {

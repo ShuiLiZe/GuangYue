@@ -710,3 +710,13 @@ BUILD SUCCESSFUL in 35s
 - 不做：WebGL 机芯（摆轮 / 游丝 / 行星齿轮 / 日内瓦机构 / 平衡轮图标）、智能动感冲击波、副歌光晕与标记、表盘封面（Folia 默认关）。扫光改逐词着色。
 - 测试：`PendoloGeometryTest` 3 例 + `MonetRailTest` 4 例 0 失败；`:app:installDebug` 通过。
 - 实拍：`p4-pendolo-{dark,light}.png`（`--es v0c_style pendolo`）。手机窄屏下当前句 + 译文块较高，下一句贴得近但不重叠。
+
+## P5a 删除 PLAYER 旧整页路由（2026-11-08 06:05）
+- P1b 起面板已是舞台浮卡，全仓无 navigate(Routes.PLAYER) 入口；删除 NavHost 的 composable(Routes.PLAYER) 块、Routes.PLAYER 常量与 IPlayerRoute import，ShellNavTest 去掉两处引用。提交 95a1d86。
+
+## P5b 雾笺样式（Folia nebbia 手机版，2026-11-08 06:25）
+- 新增 LyricStyle.NEBBIA（id `nebbia`，中文「雾笺」= zh-CN.ts ui.visualizerNebbia），无参数；接法同莫奈/时计（strings、弹层列表与无参数分支、NavHost 两处、PlayerRoute、V0cStageHarness 两处、LyricFlowScreen 整屏层）。
+- visualizer/NebbiaStage.kt：夜色散景光斑 + 底部街灯暖光；离屏图层铺雾（冷灰、下浓上淡、凝结细点），歌词字形以 BlendMode.DstOut 逐字擦开（宽软描边 + 实心），中日韩逐字、拉丁按词，字的擦开时刻取逐词时间、词内均分。
+- 排版：三个槽位 0.26/0.51/0.76H 轮换（第 i 与 i+3 句共槽），字号从 min(0.085H, 0.17W) 往下试到多行 ≤ 0.2H；横向左/中/右按句子种子挑，逐字 ±3.5° 倾斜。
+- 时间：句子在下一句开唱与本句唱完取晚者后再留 1.5 s，之后 8 s 被雾吞回（Folia breathFade 8）；共槽的 i+3 句开唱时强制清零。约 28% 的字收笔挂水珠，0.8 s 后缓慢下淌。
+- 未做：WebGL 折射/城市建筑缓存/雨刷颠簸/哈气/片尾曲名。单测 NebbiaTimingTest（2 例）。实拍 docs/ui-v0/p5-nebbia-9000.png、p5-nebbia-14000.png、p5-nebbia-pair.jpg。

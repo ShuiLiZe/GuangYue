@@ -42,6 +42,9 @@ enum class LyricStyle(val id: String) {
 
     /** 「时计」：Folia pendolo（P4：歌词沿钟轮弧线一格格推进 + 线框钟芯；手机不做 WebGL 机芯）。无参数。 */
     PENDOLO("pendolo"),
+
+    /** 「雾笺」：Folia nebbia（P5：夜色玻璃起雾，歌词逐字被手指擦开、水珠下淌、旧句被雾吞回；手机不做 WebGL 折射）。无参数。 */
+    NEBBIA("nebbia"),
     ;
 
     companion object {

@@ -146,6 +146,8 @@ data class LyricStyleStrings(
     val monet: Int = 0,
     /** P4：「时计」（Folia `ui.visualizerPendolo`）。 */
     val pendolo: Int = 0,
+    /** P5：「雾笺」（Folia `ui.visualizerNebbia`）。 */
+    val nebbia: Int = 0,
     /** V2d：「倾诉」与参数（Folia `ui.visualizerTilt` / `options.tilt*`）。 */
     val tilt: Int = 0,
     /** V2e：「回环」与参数（Folia `ui.visualizerCladdagh` / `options.claddagh*`）。 */
@@ -317,6 +319,7 @@ private fun LyricStylePanelContent(
                 LyricStyle.CLADDAGH to (if (strings.claddagh != 0) str(strings.claddagh) else ""),
                 LyricStyle.MONET to (if (strings.monet != 0) str(strings.monet) else ""),
                 LyricStyle.PENDOLO to (if (strings.pendolo != 0) str(strings.pendolo) else ""),
+                LyricStyle.NEBBIA to (if (strings.nebbia != 0) str(strings.nebbia) else ""),
                 LyricStyle.STILL to (if (strings.still != 0) str(strings.still) else ""),
             )
             styleRows.forEach { (rowStyle, rowName) ->
@@ -341,7 +344,7 @@ private fun LyricStylePanelContent(
                     accent = accent,
                     onTuning = onFumeTuning,
                 )
-            } else if (style == LyricStyle.CADENZA || style == LyricStyle.STILL || style == LyricStyle.MONET || style == LyricStyle.PENDOLO) {
+            } else if (style == LyricStyle.CADENZA || style == LyricStyle.STILL || style == LyricStyle.MONET || style == LyricStyle.PENDOLO || style == LyricStyle.NEBBIA) {
                 // Folia cadenza/entry.tsx 没有 renderSettingsPanel：窗口里显示「这个样式没有参数」。
                 Text(
                     text = str(strings.noOptions),
@@ -389,7 +392,7 @@ private fun LyricStylePanelContent(
                     .clickableNoRipple {
                         // 恢复默认只作用于当前样式（Folia 各模式各自的 handleReset*Tuning）。
                         when (style) {
-                            LyricStyle.CADENZA, LyricStyle.STILL, LyricStyle.MONET, LyricStyle.PENDOLO -> Unit
+                            LyricStyle.CADENZA, LyricStyle.STILL, LyricStyle.MONET, LyricStyle.PENDOLO, LyricStyle.NEBBIA -> Unit
                             LyricStyle.TILT -> onTiltTuning(TiltTuning.DEFAULT)
                             LyricStyle.CLADDAGH -> onCladdaghTuning(CladdaghTuning.DEFAULT)
                             LyricStyle.FUME -> onFumeTuning(FumeTuning.DEFAULT)
