@@ -110,7 +110,7 @@ fun GuangYueNavHost(
                 progress = playbackState.progress,
                 isPlaying = playbackState.isPlaying,
                 onTogglePlay = { playback.toggle() },
-                onOpen = { navController.navigate(Routes.PLAYER) },
+                onOpen = { navController.navigate(Routes.LYRIC_FLOW) },
                 modifier = Modifier.padding(
                     start = GySpace.pageH,
                     end = GySpace.pageH,
@@ -167,7 +167,7 @@ fun GuangYueNavHost(
                             onOpenTile = { tile ->
                                 vm.playTracksOf(tile) { tracks, at ->
                                     playback.setQueueFromTracks(tracks, at, true)
-                                    navController.navigate(Routes.PLAYER)
+                                    navController.navigate(Routes.LYRIC_FLOW)
                                 }
                             },
                         )
@@ -189,11 +189,11 @@ fun GuangYueNavHost(
                         onOpenTile = { tile ->
                             vm.playTracksOf(tile) { tracks, at ->
                                 playback.setQueueFromTracks(tracks, at, true)
-                                navController.navigate(Routes.PLAYER)
+                                navController.navigate(Routes.LYRIC_FLOW)
                             }
                         },
                         onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
-                        onOpenPlayer = { navController.navigate(Routes.PLAYER) },
+                        onOpenPlayer = { navController.navigate(Routes.LYRIC_FLOW) },
                         playbackTitle = playbackState.item?.title ?: "",
                         playbackArtwork = playbackState.item?.artworkUri,
                         playbackProgress = playbackState.progress,
@@ -227,7 +227,7 @@ fun GuangYueNavHost(
                         onPlay = { index ->
                             vm.playFrom(index) { items, at ->
                                 playback.setQueue(items, at, true)
-                                navController.navigate(Routes.PLAYER)
+                                navController.navigate(Routes.LYRIC_FLOW)
                             }
                         },
                         onAddToSheet = { item -> vm.addToCurrentSheet(item) },
@@ -271,7 +271,7 @@ fun GuangYueNavHost(
                         onOpenPlaylist = { tile ->
                             home.playTracksOf(tile) { tracks, at ->
                                 playback.setQueueFromTracks(tracks, at, true)
-                                navController.navigate(Routes.PLAYER)
+                                navController.navigate(Routes.LYRIC_FLOW)
                             }
                         },
                         onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
@@ -310,11 +310,11 @@ fun GuangYueNavHost(
                 onOpenTile = { tile ->
                     vm.playTracksOf(tile) { tracks, at ->
                         playback.setQueueFromTracks(tracks, at, true)
-                        navController.navigate(Routes.PLAYER)
+                        navController.navigate(Routes.LYRIC_FLOW)
                     }
                 },
                 onOpenSearch = { navController.navigate(Routes.SEARCH) },
-                onOpenPlayer = { navController.navigate(Routes.PLAYER) },
+                onOpenPlayer = { navController.navigate(Routes.LYRIC_FLOW) },
                 onRetry = { vm.retryLibrary() },
                 onBack = { navController.popBackStack() },
             )
@@ -414,7 +414,7 @@ fun GuangYueNavHost(
                         0,
                         true,
                     )
-                    navController.navigate(Routes.PLAYER)
+                    navController.navigate(Routes.LYRIC_FLOW)
                 },
                 vm = vm,
             )
@@ -456,7 +456,11 @@ fun GuangYueNavHost(
                 playbackState = playbackState,
                 darkMode = darkMode,
                 accent = accent,
-                onOpenLyrics = { navController.navigate(Routes.LYRIC_FLOW) },
+                // P1a：播放主视图是歌词舞台（Folia 无独立大封面播放页），封面卡退为舞台上打开的面板。
+                onOpenLyrics = {
+                    if (navController.previousBackStackEntry?.destination?.route == Routes.LYRIC_FLOW) navController.popBackStack()
+                    else navController.navigate(Routes.LYRIC_FLOW)
+                },
                 onOpenLyricStyle = { styleSheetOpen = true },
                 lyricStyleLabel = playerContext.getString(R.string.lyrics_style),
                 onAddToPlaylist = { navController.navigate(Routes.SEARCH) },
@@ -549,6 +553,7 @@ fun GuangYueNavHost(
                     classicTuning = tuning,
                     coverUrl = playbackState.item?.artworkUri,
                     onOpenStyleSheet = { styleSheetOpen = true },
+                    onOpenPanel = { navController.navigate(Routes.PLAYER) },
                     styleLabel = lyricContext.getString(R.string.lyrics_style),
                     // V1a：把当前样式透传给歌词画布（流光 / 浮名切换后立刻换渲染器）。
                     // 参数由 fume-draw 加在 LyricFlowScreen 末尾（默认 CLASSIC）；若该层尚未落地，

@@ -317,6 +317,23 @@ fun FoliaPlayerPage(
                 }
             }
 
+
+            // 播放失败提示：放在标题区下面（原来浮在顶部会压住标题），仍只给「换音源」一条出路。
+            val failure = playback.error
+            if (!failure.isNullOrBlank()) {
+                Spacer(Modifier.height(GySpace.s))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(GyRadius.row))
+                        .background(Gyp.danger.copy(alpha = 0.16f))
+                        .padding(horizontal = GySpace.m, vertical = GySpace.s),
+                ) {
+                    Text(text = failure, fontSize = GyText.hint, color = Gyp.danger, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    Text(text = str(res.retryHint), fontSize = GyText.hint, color = onBackdropSoft)
+                }
+            }
+
             Spacer(Modifier.height(GySpace.l))
 
             // ---------- 搴曢儴鍗＄墖 ----------
@@ -400,37 +417,6 @@ fun FoliaPlayerPage(
             }
         }
 
-        // 播放失败提示：贴在卡片上方，仍然只给「换音源」一条出路（沿用 0.0.7 的结论）。
-        val failure = playback.error
-        if (!failure.isNullOrBlank()) {
-            Box(
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(top = 64.dp, start = GySpace.pageH, end = GySpace.pageH),
-            ) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(GyRadius.row))
-                        .background(Gyp.danger.copy(alpha = 0.16f))
-                        .padding(horizontal = GySpace.m, vertical = GySpace.s),
-                ) {
-                    Text(
-                        text = failure,
-                        fontSize = GyText.hint,
-                        color = Gyp.danger,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = str(res.retryHint),
-                        fontSize = GyText.hint,
-                        color = onBackdropSoft,
-                    )
-                }
-            }
-        }
     }
 }
 

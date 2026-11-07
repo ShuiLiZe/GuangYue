@@ -132,6 +132,8 @@ fun LyricFlowScreen(
     coverUrl: String? = null,
     /** 打开「歌词样式」弹层；为 null 时不显示入口。 */
     onOpenStyleSheet: (() -> Unit)? = null,
+    /** P1a：舞台底部胶囊右侧的「面板」键（Folia 播放条旁的 sliders 键），打开封面/队列面板；null 不画。 */
+    onOpenPanel: (() -> Unit)? = null,
     /** 样式入口的无障碍文案（feature:player 无资源表，由 app 侧注入）。 */
     styleLabel: String = "",
     // V0d 取证：非 null 时把当前句的辉光强度钉死（debug harness 用，业务侧恒为 null）。
@@ -380,14 +382,16 @@ fun LyricFlowScreen(
                 }
                 Spacer(Modifier.width(GySpace.l))
                 Column(Modifier.weight(1f)) {
+                    // P1a：舞台成了播放主视图，顶栏写歌名（Folia 舞台左上衬线标题），没有歌时退回「歌词」。
                     Text(
-                        text = str(strings.title),
+                        text = playback.item?.title?.takeIf { it.isNotBlank() } ?: str(strings.title),
                         fontSize = GyText.title,
                         lineHeight = GyText.titleHeight,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         color = onBackdrop,
-                        fontFamily = GuangYueDesign.Sans,
+                        fontFamily = GuangYueDesign.Serif,
                         maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                     val sub = lyricSourceLine(artist = artist, source = source)
                     if (sub.isNotEmpty()) {
@@ -544,18 +548,36 @@ fun LyricFlowScreen(
             )
 
             // ---------------- 底部播放胶囊 ----------------
-            LyricBar(
-                positionMs = positionMs,
-                durationMs = playback.durationMs,
-                progress = progress,
-                playing = playback.isPlaying,
-                pillInk = pillInk,
-                dark = darkMode,
-                labels = strings,
-                onTogglePlay = onTogglePlay,
-                onScrub = { scrubbing = true; scrubValue = it },
-                onScrubPreview = onSeekPreview,
-            )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                LyricBar(
+                    modifier = Modifier.weight(1f),
+                    positionMs = positionMs,
+                    durationMs = playback.durationMs,
+                    progress = progress,
+                    playing = playback.isPlaying,
+                    pillInk = pillInk,
+                    dark = darkMode,
+                    labels = strings,
+                    onTogglePlay = onTogglePlay,
+                    onScrub = { scrubbing = true; scrubValue = it },
+                    onScrubPreview = onSeekPreview,
+                )
+                if (onOpenPanel != null) {
+                    val panelPill = if (darkMode) Color(0xFF17171A).copy(alpha = 0.55f) else Color.White.copy(alpha = 0.62f)
+                    Spacer(Modifier.width(GySpace.s))
+                    Box(
+                        Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(panelPill)
+                            .clickableNoRipple(onOpenPanel)
+                            .semantics { contentDescription = "播放面板" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(GuangYueIcons.SlidersHorizontal, null, tint = pillInk, modifier = Modifier.size(20.dp))
+                    }
+                }
+            }
         }
     }
 }
@@ -630,6 +652,7 @@ internal fun LyricEmpty(
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun LyricBar(
+    modifier: Modifier = Modifier,
     positionMs: Long,
     durationMs: Long,
     progress: Float,
@@ -646,7 +669,7 @@ private fun LyricBar(
     val pauseLabel = str(labels.pause)
     val pill = if (dark) Color(0xFF17171A).copy(alpha = 0.55f) else Color.White.copy(alpha = 0.62f)
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .padding(vertical = GySpace.l)
             .height(56.dp)
