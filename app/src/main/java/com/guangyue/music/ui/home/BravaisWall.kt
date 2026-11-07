@@ -9,7 +9,7 @@
 // B1b：首页 Bravais 墙（无限平铺、可拖动）。
 // 手机化 / 未移：
 //  1. 平移 + 惯性；B1c 起点一下砖 → 整块按 blockReflows 让位、该砖长到 6×6 并显示标题（聚焦卡简化版：
-//     标题 / 副标题 / 播放键，Folia BravaisFocusCardBody 的链接行、队列、菜单未移），镜头 0.42s 移到它中心；
+//     标题 / 来源行 / 立即播放 + 加入队列（B1g），Folia 的歌手专辑链接、菜单未移），镜头 0.42s 移到它中心；
 //     再点它才播放，点空画框收起。
 //  B1e：首次挂载与换页签走整墙入场 / 出场→入场波次（bravaisWallWave）；同页签内数据变化走绕 Y 翻牌（flipPlan，起点为横缝）。
 //  2. 条目有限：按排名填满前 N 个槽，其余是空画框（Folia bravaisFiniteWall 也是这样收尾）。
@@ -101,6 +101,7 @@ fun BravaisWall(
     groundColor: Color,
     onOpenTile: (HomeTile) -> Unit,
     onOpenSearch: () -> Unit,
+    onEnqueueTile: (HomeTile) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     // B1d：缝（Seam）横条的页签 = 墙的数据来源；第 0 个是「全部」（各段按 key 去重拼起来）。
@@ -249,7 +250,7 @@ fun BravaisWall(
                         if (face == null) {
                             WallFrame(inkColor) { if (!dragging) expanded = null }
                         } else {
-                            Poster(face, inkColor, groundColor, scale, isOpen) {
+                            Poster(face, inkColor, groundColor, scale, isOpen, onPlay = { onOpenTile(face) }, onEnqueue = { onEnqueueTile(face) }) {
                                 if (dragging) return@Poster
                                 if (isOpen) onOpenTile(face) else expand(base)
                             }
@@ -340,7 +341,10 @@ private fun WallFrame(ink: Color, onClick: () -> Unit) {
 
 /** 一块砖：方角封面铺满；歌单 / 电台顶部留 16 单位给两条「纸边」（Lattice.css is-kind-playlist）。 */
 @Composable
-private fun Poster(tile: HomeTile, ink: Color, ground: Color, scale: Double, open: Boolean, onClick: () -> Unit) {
+private fun Poster(
+    tile: HomeTile, ink: Color, ground: Color, scale: Double, open: Boolean,
+    onPlay: () -> Unit = {}, onEnqueue: () -> Unit = {}, onClick: () -> Unit,
+) {
     val stacked = !open && tile.kind == HomeTileKind.PLAYLIST || tile.kind == HomeTileKind.SHEET || tile.kind == HomeTileKind.STATION
     val top = if (stacked) (16 * scale).toFloat().dp else 0.dp
     Box(Modifier.fillMaxSize().clickable(onClick = onClick)) {
@@ -372,34 +376,52 @@ private fun Poster(tile: HomeTile, ink: Color, ground: Color, scale: Double, ope
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            if (open) FocusCopy(tile)
+            if (open) FocusCopy(tile, onPlay, onEnqueue)
         }
     }
 }
 
-/** 聚焦卡文字（简化）：底部渐暗 + 标题 / 副标题 + 播放键（Folia lattice-poster-copy：左右 32 / 底 28，按墙缩放）。 */
+/**
+ * 聚焦卡文字（BravaisFocusCardBody）：底部渐暗，大标题、来源行（歌手 · 类型），底部两个按钮：纯图标「立即播放」
+ * 与「加入队列」（点过显示「✓ 已加入队列」）。歌手 / 专辑链接、更多菜单、正在播放时的暂停与「进入」键未移。
+ */
 @Composable
-private fun FocusCopy(tile: HomeTile) {
+private fun FocusCopy(tile: HomeTile, onPlay: () -> Unit, onEnqueue: () -> Unit) {
+    var queued by remember(tile.key) { mutableStateOf(false) }
+    val kindLabel = when (tile.kind) {
+        HomeTileKind.TRACK -> "歌曲"
+        HomeTileKind.ALBUM -> "专辑"
+        HomeTileKind.STATION -> "电台"
+        else -> "歌单"
+    }
     Box(
         Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(0.45f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.72f))),
+            .background(Brush.verticalGradient(0.35f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.78f))),
     ) {
-        Row(
-            Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(tile.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (tile.subtitle.isNotBlank()) {
-                    Text(tile.subtitle, color = Color.White.copy(alpha = 0.72f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 14.dp)) {
+            Text(tile.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                listOf(tile.subtitle, kindLabel).filter { it.isNotBlank() }.joinToString(" · "),
+                color = Color.White.copy(alpha = 0.72f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(40.dp).background(Color.White, CircleShape).clickable(onClick = onPlay),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(GuangYueIcons.Play, contentDescription = "立即播放", tint = Color.Black) }
+                Box(
+                    Modifier
+                        .padding(start = 10.dp)
+                        .height(40.dp)
+                        .background(Color.White.copy(alpha = if (queued) 0.10f else 0.18f), CircleShape)
+                        .clickable { onEnqueue(); queued = true }
+                        .padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(if (queued) "✓ 已加入队列" else "+ 加入队列", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
-            }
-            Box(
-                Modifier.size(40.dp).background(Color.White, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(GuangYueIcons.Play, contentDescription = null, tint = Color.Black)
             }
         }
     }

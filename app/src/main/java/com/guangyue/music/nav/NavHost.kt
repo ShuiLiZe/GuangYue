@@ -163,6 +163,7 @@ fun GuangYueNavHost(
                             inkColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
                             groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
                             onOpenSearch = { navController.navigate(Routes.SEARCH) },
+                            onEnqueueTile = { tile -> vm.playTracksOf(tile) { tracks, _ -> playback.appendTracks(tracks) } },
                             onOpenTile = { tile ->
                                 vm.playTracksOf(tile) { tracks, at ->
                                     playback.setQueueFromTracks(tracks, at, true)

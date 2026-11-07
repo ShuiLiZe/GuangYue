@@ -279,6 +279,26 @@ class PlaybackController @Inject constructor(
     fun setQueueFromTracks(tracks: List<TrackEntity>, startIndex: Int = 0, play: Boolean = true) =
         setQueue(tracks.map { QueueItem.of(it) }, startIndex, play)
 
+    /**
+     * 加入队列（Folia 聚焦卡「加入队列」）：追加到队尾；已在队列里的先挪走再放到队尾。队列为空时等同 setQueue 但不自动播放。
+     */
+    fun appendTracks(tracks: List<TrackEntity>) {
+        if (tracks.isEmpty()) return
+        val items = tracks.map { QueueItem.of(it) }
+        if (queue.isEmpty()) { setQueue(items, 0, play = false); return }
+        val keys = items.map { it.key }.toSet()
+        val currentKey = queue.getOrNull(player.currentMediaItemIndex)?.key
+        for (i in queue.indices.reversed()) {
+            if (queue[i].key in keys && queue[i].key != currentKey) { queue.removeAt(i); player.removeMediaItem(i) }
+        }
+        val fresh = items.filter { it.key != currentKey }
+        val remembered = fresh.mapNotNull { it.toCachedTrack() }
+        if (remembered.isNotEmpty()) scope.launch { try { remembered.forEach { this@PlaybackController.tracks.cache(it) } } catch (_: Throwable) { } }
+        queue += fresh
+        player.addMediaItems(fresh.map { it.toMediaItem() })
+        publish()
+    }
+
     /** Play a single track without disturbing the rest of the queue. */
     fun playNow(item: QueueItem) {
         if (queue.none { it.key == item.key }) queue.add(0, item)
