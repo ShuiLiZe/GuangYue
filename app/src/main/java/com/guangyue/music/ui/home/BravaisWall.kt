@@ -107,6 +107,13 @@ fun BravaisWall(
     onEnterTile: ((HomeTile) -> Unit)? = null,
     /** B2：集合层。非 null 时缝换成集合信息条（面包屑返回 + 大标题 + 「N 首」+ 播放全部 / 随机），不画首页页签。 */
     collection: SeamCollection? = null,
+    /** B1h：正在播放的那块（聚焦卡的播放键变暂停 / 继续，多一颗「进入播放页」）。 */
+    isCurrent: (HomeTile) -> Boolean = { false },
+    playing: Boolean = false,
+    onTogglePlayback: () -> Unit = {},
+    onEnterPlayback: (() -> Unit)? = null,
+    /** B1h：「已在队列」按真实队列判断。 */
+    isQueued: (HomeTile) -> Boolean = { false },
 ) {
     // B1d：缝（Seam）横条的页签 = 墙的数据来源；第 0 个是「全部」（各段按 key 去重拼起来）。
     var tab by rememberSaveable { mutableStateOf(0) }  // 进播放页再回来保留页签
@@ -260,6 +267,11 @@ fun BravaisWall(
                                 onPlay = { onOpenTile(face) },
                                 onEnqueue = { onEnqueueTile(face) },
                                 onEnter = enter?.let { { it(face) } },
+                                current = isCurrent(face),
+                                playing = playing,
+                                onToggle = onTogglePlayback,
+                                onEnterPlayback = onEnterPlayback,
+                                inQueue = isQueued(face),
                             ) {
                                 if (dragging) return@Poster
                                 if (isOpen) (enter ?: onOpenTile)(face) else expand(base)
@@ -447,7 +459,10 @@ private fun WallFrame(ink: Color, onClick: () -> Unit) {
 @Composable
 private fun Poster(
     tile: HomeTile, ink: Color, ground: Color, scale: Double, open: Boolean,
-    onPlay: () -> Unit = {}, onEnqueue: () -> Unit = {}, onEnter: (() -> Unit)? = null, onClick: () -> Unit,
+    onPlay: () -> Unit = {}, onEnqueue: () -> Unit = {}, onEnter: (() -> Unit)? = null,
+    current: Boolean = false, playing: Boolean = false, onToggle: () -> Unit = {}, onEnterPlayback: (() -> Unit)? = null,
+    inQueue: Boolean = false,
+    onClick: () -> Unit,
 ) {
     val stacked = !open && tile.kind == HomeTileKind.PLAYLIST || tile.kind == HomeTileKind.SHEET || tile.kind == HomeTileKind.STATION
     val top = if (stacked) (16 * scale).toFloat().dp else 0.dp
@@ -480,7 +495,7 @@ private fun Poster(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            if (open) FocusCopy(tile, onPlay, onEnqueue, onEnter)
+            if (open) FocusCopy(tile, onPlay, onEnqueue, onEnter, current, playing, onToggle, onEnterPlayback, inQueue)
         }
     }
 }
@@ -490,8 +505,13 @@ private fun Poster(
  * 与「加入队列」（点过显示「✓ 已加入队列」）。歌手 / 专辑链接、更多菜单、正在播放时的暂停与「进入」键未移。
  */
 @Composable
-private fun FocusCopy(tile: HomeTile, onPlay: () -> Unit, onEnqueue: () -> Unit, onEnter: (() -> Unit)? = null) {
-    var queued by remember(tile.key) { mutableStateOf(false) }
+private fun FocusCopy(
+    tile: HomeTile, onPlay: () -> Unit, onEnqueue: () -> Unit, onEnter: (() -> Unit)? = null,
+    current: Boolean = false, playing: Boolean = false, onToggle: () -> Unit = {}, onEnterPlayback: (() -> Unit)? = null,
+    inQueue: Boolean = false,
+) {
+    var tapped by remember(tile.key) { mutableStateOf(false) }
+    val queued = tapped || inQueue
     val kindLabel = when (tile.kind) {
         HomeTileKind.TRACK -> "歌曲"
         HomeTileKind.ALBUM -> "专辑"
@@ -511,20 +531,33 @@ private fun FocusCopy(tile: HomeTile, onPlay: () -> Unit, onEnqueue: () -> Unit,
                 modifier = Modifier.padding(top = 2.dp),
             )
             Row(Modifier.padding(top = 12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // 正在播放的这块：播放键 = 暂停 / 继续，旁边「进入播放页」（BravaisFocusCardBody toggles + enterPlayback）。
                 Box(
-                    Modifier.size(40.dp).background(Color.White, CircleShape).clickable(onClick = onPlay),
+                    Modifier.size(40.dp).background(Color.White, CircleShape).clickable(onClick = if (current) onToggle else onPlay),
                     contentAlignment = Alignment.Center,
-                ) { Icon(GuangYueIcons.Play, contentDescription = "立即播放", tint = Color.Black) }
+                ) {
+                    Icon(
+                        if (current && playing) GuangYueIcons.Pause else GuangYueIcons.Play,
+                        contentDescription = if (current) (if (playing) "暂停" else "继续播放") else "立即播放",
+                        tint = Color.Black,
+                    )
+                }
+                if (current && onEnterPlayback != null) {
+                    Box(
+                        Modifier.padding(start = 10.dp).size(40.dp).background(Color.White.copy(alpha = 0.18f), CircleShape).clickable(onClick = onEnterPlayback),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(GuangYueIcons.Maximize, contentDescription = "进入播放页", tint = Color.White, modifier = Modifier.size(18.dp)) }
+                }
                 Box(
                     Modifier
                         .padding(start = 10.dp)
                         .height(40.dp)
                         .background(Color.White.copy(alpha = if (queued) 0.10f else 0.18f), CircleShape)
-                        .clickable { onEnqueue(); queued = true }
+                        .clickable { if (!queued) { onEnqueue(); tapped = true } }
                         .padding(horizontal = 16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(if (queued) "✓ 已加入队列" else "+ 加入队列", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(if (queued) "✓ 已在队列" else "+ 加入队列", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
                 if (onEnter != null) {
                     Spacer(Modifier.weight(1f))

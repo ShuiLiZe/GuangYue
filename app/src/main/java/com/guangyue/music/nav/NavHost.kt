@@ -126,6 +126,16 @@ fun GuangYueNavHost(
         }
     }
 
+    // B1h：聚焦卡的「正在播放 / 已在队列」按真实播放器判断。砖的 key：首页单曲 track:<key>，集合页 ctrack:<i>:<key>。
+    val queueKeys = remember(playbackState.queueSize, playbackState.item?.key) { playback.queueSnapshot().map { it.key }.toSet() }
+    fun tileTrackKey(t: com.guangyue.feature.library.home.HomeTile): String? = when {
+        t.key.startsWith("track:") -> t.key.removePrefix("track:")
+        t.key.startsWith("ctrack:") -> t.key.removePrefix("ctrack:").substringAfter(":")
+        else -> null
+    }
+    val wallIsCurrent: (com.guangyue.feature.library.home.HomeTile) -> Boolean = { t -> tileTrackKey(t)?.let { it == playbackState.item?.key } == true }
+    val wallIsQueued: (com.guangyue.feature.library.home.HomeTile) -> Boolean = { t -> tileTrackKey(t)?.let { it in queueKeys } == true }
+
     // B2：进入的集合（HomeTile 不可序列化；进程被杀后集合页回首页）。
     var openedCollection by remember { mutableStateOf<com.guangyue.feature.library.home.HomeTile?>(null) }
 
@@ -169,6 +179,11 @@ fun GuangYueNavHost(
                             groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
                             onOpenSearch = { navController.navigate(Routes.SEARCH) },
                             onEnqueueTile = { tile -> vm.playTracksOf(tile) { tracks, _ -> playback.appendTracks(tracks) } },
+                            isCurrent = wallIsCurrent,
+                            isQueued = wallIsQueued,
+                            playing = playbackState.isPlaying,
+                            onTogglePlayback = { playback.toggle() },
+                            onEnterPlayback = { navController.navigate(Routes.LYRIC_FLOW) },
                             onEnterTile = { tile ->
                                 openedCollection = tile
                                 navController.navigate(Routes.COLLECTION)
@@ -271,6 +286,11 @@ fun GuangYueNavHost(
                                 navController.navigate(Routes.LYRIC_FLOW)
                             }
                         },
+                            isCurrent = wallIsCurrent,
+                            isQueued = wallIsQueued,
+                            playing = playbackState.isPlaying,
+                            onTogglePlayback = { playback.toggle() },
+                            onEnterPlayback = { navController.navigate(Routes.LYRIC_FLOW) },
                         collection = com.guangyue.music.ui.home.SeamCollection(
                             name = tile.title,
                             kindLabel = kindLabel,
