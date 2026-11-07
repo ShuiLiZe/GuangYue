@@ -197,7 +197,7 @@ fun LyricFlowScreen(
         resolveSubtitleOverlayContent(
             activeLine = activeLine,
             nextLines = kernelLines.drop(currentIndex.coerceAtLeast(0) + 1),
-            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET,
+            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET && lyricStyle != LyricStyle.PENDOLO,
         )
     }
 
@@ -389,6 +389,29 @@ fun LyricFlowScreen(
                 ),
             )
         }
+        // P4 时计：钟轮在左缘正中，歌词沿弧线排布；让出顶栏与底部胶囊。
+        if (lyricStyle == LyricStyle.PENDOLO && kernelLines.isNotEmpty() && emptyKind == null) {
+            com.guangyue.feature.player.lyrics.visualizer.PendoloStage(
+                lines = kernelLines,
+                currentIndex = currentIndex,
+                clock = clock,
+                lyricsFontScale = lyricsFontScale,
+                primaryColor = onBackdrop,
+                secondaryColor = theme.secondary,
+                accentColor = lyricAccent,
+                backgroundColor = theme.background,
+                fontFamily = GuangYueDesign.Serif,
+                reduceMotion = reduceMotion,
+                onSeekToLine = onSeekToLine,
+                modifier = Modifier
+                    .windowInsetsPadding(
+                        WindowInsets.statusBars
+                            .union(WindowInsets.displayCutout)
+                            .union(WindowInsets.navigationBars),
+                    )
+                    .padding(top = 56.dp, bottom = 96.dp),
+            )
+        }
         Column(
             Modifier
                 .fillMaxSize()
@@ -496,7 +519,7 @@ fun LyricFlowScreen(
                         failure = failure,
                         onRetry = null,
                     )
-                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL || lyricStyle == LyricStyle.CLADDAGH || lyricStyle == LyricStyle.MONET) && kernelLines.isNotEmpty()) {
+                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL || lyricStyle == LyricStyle.CLADDAGH || lyricStyle == LyricStyle.MONET || lyricStyle == LyricStyle.PENDOLO) && kernelLines.isNotEmpty()) {
                     // 浮名：画布已经铺在整屏那一层（本函数开头），舞台 Box 里留空，
                     // 只保留顶栏 / 字幕层 / 播放条这些「浮在画布上」的层。
                 } else if (lyricStyle == LyricStyle.TILT && activeLine != null && activeLine.hasVisibleWords()) {

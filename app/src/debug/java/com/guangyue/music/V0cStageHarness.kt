@@ -289,6 +289,7 @@ fun V0cStage(
                     "cadenza" -> LyricStyle.CADENZA
                     "still" -> LyricStyle.STILL
                     "monet" -> LyricStyle.MONET
+                    "pendolo" -> LyricStyle.PENDOLO
                     "tilt" -> LyricStyle.TILT
                     "claddagh" -> LyricStyle.CLADDAGH
                     else -> LyricStyle.CLASSIC
@@ -341,6 +342,7 @@ private fun v0cString(id: Int): String = when (id) {
     R.string.lyrics_style_cadenza -> "心象"
     R.string.lyrics_style_still -> "静止"
     R.string.lyrics_style_monet -> "莫奈"
+    R.string.lyrics_style_pendolo -> "时计"
     R.string.lyrics_style_tilt -> "倾诉"
     R.string.lyrics_style_claddagh -> "回环"
     R.string.lyrics_style_cl_focus -> "主歌词放大倍率"

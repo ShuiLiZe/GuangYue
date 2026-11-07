@@ -702,3 +702,11 @@ BUILD SUCCESSFUL in 35s
 - 点轨道上任一行跳到该句；减少动效时不做弹簧与模糊。
 - 测试：`MonetRailTest` 4 例（档位、CSS clamp、逐词着色保留空格）。`:app:installDebug` 通过。
 - 实拍：`p3-monet-dark.png`、`p3-monet-light.png`（V0cStageActivity `--es v0c_style monet`），并排对照 `p3-monet-compare.jpg`（左为基准）。
+
+## P4「时计」样式：钟轮弧线歌词（2026-11-08，Hark 直接做）
+
+- 依据 Folia `visualizer/pendolo/VisualizerPendolo.tsx` + `pendoloGeometry.ts`（轮心 (0, 0.5)、半径 0.42·min(w,h)、100° 弧 9 行一窗、行块高时角距加宽 (h1+h2+24)/(2R)、透明度 max(0.12, cos(0.75a)^2.5·(1−0.18d))、当前句 ×1.25、其余 max(0.7, 1−0.08d)、文字自身转 0.35a、左中为原点）、`pendoloTimeline.ts`（110° 可见、边缘 28° 渐隐）、`pendoloClockworkDraw2d.ts` + `pendoloClockworkScene.ts`（subtle 档 m=0.6：中心暗渐变 1.65R、五道导环、60 刻度、36 齿主轮、六辐内轮、斜面双环、扭索纹 48 道、12 铆钉、中心小齿轮反转 2.5 倍）、`PendoloActiveLyricSweep.tsx`（当前句底 primary@0.52，填 mix(primary, accent, 0.32)）。zh-CN `ui.visualizerPendolo` = 时计，样式列表排在莫奈后（order 100）。
+- 擒纵：tick 弹簧追当前句下标，整轮按 −(tick−当前)·角距转，钟芯齿轮跟着同一角度走。点弧上任一行跳到该句。减少动效时直接落位。
+- 不做：WebGL 机芯（摆轮 / 游丝 / 行星齿轮 / 日内瓦机构 / 平衡轮图标）、智能动感冲击波、副歌光晕与标记、表盘封面（Folia 默认关）。扫光改逐词着色。
+- 测试：`PendoloGeometryTest` 3 例 + `MonetRailTest` 4 例 0 失败；`:app:installDebug` 通过。
+- 实拍：`p4-pendolo-{dark,light}.png`（`--es v0c_style pendolo`）。手机窄屏下当前句 + 译文块较高，下一句贴得近但不重叠。

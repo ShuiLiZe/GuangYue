@@ -39,6 +39,9 @@ enum class LyricStyle(val id: String) {
 
     /** 「莫奈」：Folia monet（P3：海报版面——斜体歌手 + 竖线 + 大标题 + 专辑 + 左侧歌词轨；手机不画肖像）。无参数。 */
     MONET("monet"),
+
+    /** 「时计」：Folia pendolo（P4：歌词沿钟轮弧线一格格推进 + 线框钟芯；手机不做 WebGL 机芯）。无参数。 */
+    PENDOLO("pendolo"),
     ;
 
     companion object {

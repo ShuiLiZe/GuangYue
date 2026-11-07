@@ -237,6 +237,7 @@ fun StagePanelHost(
             LyricStyle.CADENZA -> R.string.lyrics_style_cadenza
             LyricStyle.STILL -> R.string.lyrics_style_still
             LyricStyle.MONET -> R.string.lyrics_style_monet
+            LyricStyle.PENDOLO -> R.string.lyrics_style_pendolo
             LyricStyle.TILT -> R.string.lyrics_style_tilt
             LyricStyle.CLADDAGH -> R.string.lyrics_style_claddagh
         },
