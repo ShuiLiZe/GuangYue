@@ -64,4 +64,13 @@ class WallTest {
         }
         assertEquals(null, BlockTemplates.reflow(0, 0, 12))
     }
+
+    @Test
+    fun waveStaggerMatchesFolia() {
+        assertEquals(0L, WallWave.stagger(-10.0, -10.0, 0.0, 0.0))
+        assertEquals(60L, WallWave.stagger(136.0, 136.0, 0.0, 0.0))
+        assertEquals(340L, WallWave.stagger(5000.0, 0.0, 0.0, 0.0))
+        assertEquals(280L, WallWave.outDelay(60))
+        assertEquals(680L, WallWave.inDelay(60))
+    }
 }

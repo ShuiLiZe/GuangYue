@@ -161,3 +161,24 @@ object RankSlots {
         return order
     }
 }
+
+/**
+ * 对应 bravais/bravaisWallWave.ts：换页签时整墙出场 → 入场。错开量按砖离视口左上角的「对角步数」算，
+ * 每格 30ms、上限 340ms；出场 280ms（delay = 340 - 错开），入场 420ms（delay = 620 + 错开），抬起 90 单位并缩到 0.88。
+ */
+object WallWave {
+    const val LIFT = 90.0
+    const val STAGGER_MS_PER_CELL = 30.0
+    const val MAX_DELAY_MS = 340L
+    const val OUT_MS = 280
+    const val IN_MS = 420
+    const val EXIT_TOTAL_MS = MAX_DELAY_MS + OUT_MS
+
+    fun stagger(x: Double, y: Double, cornerLeft: Double, cornerTop: Double, m: WallMetrics = Bravais.METRICS): Long {
+        val steps = maxOf(0.0, x - cornerLeft) + maxOf(0.0, y - cornerTop)
+        return minOf(MAX_DELAY_MS.toDouble(), steps / m.pitch * STAGGER_MS_PER_CELL).toLong()
+    }
+
+    fun outDelay(stagger: Long) = MAX_DELAY_MS - stagger
+    fun inDelay(stagger: Long) = EXIT_TOTAL_MS + stagger
+}

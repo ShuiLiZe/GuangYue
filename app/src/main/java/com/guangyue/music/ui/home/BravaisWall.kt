@@ -10,7 +10,8 @@
 // 手机化 / 未移：
 //  1. 平移 + 惯性；B1c 起点一下砖 → 整块按 blockReflows 让位、该砖长到 6×6 并显示标题（聚焦卡简化版：
 //     标题 / 副标题 / 播放键，Folia BravaisFocusCardBody 的链接行、队列、菜单未移），镜头 0.42s 移到它中心；
-//     再点它才播放，点空画框收起。翻牌、缝（Seam）页面留到后面。
+//     再点它才播放，点空画框收起。
+//  B1e：首次挂载与换页签走整墙入场 / 出场→入场波次（bravaisWallWave）；同页签内数据变化的绕 Y 翻牌（flipPlan）未移。
 //  2. 条目有限：按排名填满前 N 个槽，其余是空画框（Folia bravaisFiniteWall 也是这样收尾）。
 //  3. 排名原点 = 初始镜头中心；拖动时不重排（Folia 同：排名只在换数据时重算）。
 package com.guangyue.music.ui.home
@@ -35,7 +36,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import com.guangyue.core.wall.WallWave
+import kotlinx.coroutines.delay
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.horizontalScroll
@@ -124,6 +130,9 @@ fun BravaisWall(
             RankSlots.rank(pool, ox, oy).take(tiles.size).mapIndexed { i, s -> s.key to tiles[i] }.toMap()
         }
         var dragging by remember { mutableStateOf(false) }
+        // B1e 整墙入场：首次挂载与每次换页签各算一次（token）；入场窗口过了才进视口的砖不动（Folia entrance.until）。
+        val waveToken = remember(tab) { System.nanoTime() }
+        val firstToken = remember { waveToken }
         var expanded by remember { mutableStateOf<String?>(null) }
         val expandedAt = expanded?.let { WallSlots.parseKey(it) }
         val reflowed = remember(expanded) {
@@ -173,7 +182,30 @@ fun BravaisWall(
             WallSlots.collect(view).forEach { base ->
                 key(base.key) {
                     val slot = reflowed[base.key] ?: base
-                    val tile = ranked[base.key]
+                    val target = ranked[base.key]
+                    // 显示中的内容 + 抬起量（1 = 抬起淡出，0 = 落定）。出场完才换成 target。
+                    var tile by remember { mutableStateOf(target) }
+                    val lift = remember { Animatable(if (waveToken == firstToken) 1f else 0f) }
+                    val cornerX = camX.value.toDouble()
+                    val cornerY = camY.value.toDouble()
+                    LaunchedEffect(waveToken, target) {
+                        val st = WallWave.stagger(base.x, base.y, cornerX, cornerY)
+                        val age = (System.nanoTime() - waveToken) / 1_000_000
+                        if (waveToken == firstToken && tile == target) {
+                            // 首次入场：保持抬起，按错开落回；窗口过了直接落定。
+                            if (age > WallWave.MAX_DELAY_MS + WallWave.IN_MS) { lift.snapTo(0f); return@LaunchedEffect }
+                            delay((st - age).coerceAtLeast(0))
+                            lift.animateTo(0f, tween(WallWave.IN_MS, easing = LAND))
+                            return@LaunchedEffect
+                        }
+                        if (tile == target) return@LaunchedEffect
+                        if (age > WallWave.inDelay(st) + WallWave.IN_MS) { tile = target; lift.snapTo(0f); return@LaunchedEffect }
+                        delay((WallWave.outDelay(st) - age).coerceAtLeast(0))
+                        lift.animateTo(1f, tween(WallWave.OUT_MS, easing = RISE))
+                        tile = target
+                        delay((WallWave.inDelay(st) - (System.nanoTime() - waveToken) / 1_000_000).coerceAtLeast(0))
+                        lift.animateTo(0f, tween(WallWave.IN_MS, easing = LAND))
+                    }
                     val isOpen = base.key == expanded
                     val spec = tween<Float>(360, easing = FastOutSlowInEasing)
                     val sx by animateFloatAsState(slot.x.toFloat(), spec, label = "x")
@@ -186,14 +218,23 @@ fun BravaisWall(
                         Modifier
                             .offset { IntOffset((x * density.density).roundToInt(), (y * density.density).roundToInt()) }
                             .size((sw * scale).toFloat().dp, (sh * scale).toFloat().dp)
-                            .zIndex(if (isOpen) 20f else 0f),
+                            .zIndex(if (isOpen) 20f else 0f)
+                            .graphicsLayer {
+                                val p = lift.value
+                                translationY = -(WallWave.LIFT * scale).toFloat() * this.density * p
+                                val k = 1f - 0.12f * p
+                                scaleX = k
+                                scaleY = k
+                                alpha = 1f - p
+                            },
                     ) {
-                        if (tile == null) {
+                        val face = tile
+                        if (face == null) {
                             WallFrame(inkColor) { if (!dragging) expanded = null }
                         } else {
-                            Poster(tile, inkColor, groundColor, scale, isOpen) {
+                            Poster(face, inkColor, groundColor, scale, isOpen) {
                                 if (dragging) return@Poster
-                                if (isOpen) onOpenTile(tile) else expand(base)
+                                if (isOpen) onOpenTile(face) else expand(base)
                             }
                         }
                     }
@@ -221,6 +262,10 @@ fun BravaisWall(
         }
     }
 }
+
+/** 入场落回 cubic-bezier(.2,.9,.3,1.04)、出场抬起 cubic-bezier(.4,0,1,1)（BravaisTile.tsx）。 */
+private val LAND = CubicBezierEasing(0.2f, 0.9f, 0.3f, 1.04f)
+private val RISE = CubicBezierEasing(0.4f, 0f, 1f, 1f)
 
 /** 对应 bravaisConstants BRAVAIS_SEAM_ROW_HOME_HEIGHT = 72。 */
 private const val SEAM_HOME_HEIGHT = 72f
