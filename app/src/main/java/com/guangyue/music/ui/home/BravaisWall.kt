@@ -349,7 +349,7 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color) {
             val meta = when {
                 c.loading -> "加载中…"
                 c.failed -> "加载失败，点此重试"
-                c.count == 0 -> "这个${c.kindLabel}没有取到曲目（音源未返回），点此重试"
+                c.count == 0 -> "没有取到曲目 · 点此重试"
                 c.count != null -> "${c.count} 首 · ${c.kindLabel}"
                 else -> c.kindLabel
             }
