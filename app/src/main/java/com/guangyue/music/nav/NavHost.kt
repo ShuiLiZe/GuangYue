@@ -122,6 +122,25 @@ fun GuangYueNavHost(
                 playLabel = stringResource(R.string.mini_play),
                 pauseLabel = stringResource(R.string.mini_pause),
                 nextLabel = stringResource(R.string.mini_next),
+                positionMs = playbackState.positionMs,
+                durationMs = playbackState.durationMs,
+                modeIcon = when (com.guangyue.feature.player.screen.playerMode(playbackState.shuffle, playbackState.repeatMode)) {
+                    com.guangyue.feature.player.screen.PlayerMode.Shuffle -> com.guangyue.feature.library.design.icons.GuangYueIcons.Shuffle
+                    com.guangyue.feature.player.screen.PlayerMode.LoopOne -> com.guangyue.feature.library.design.icons.GuangYueIcons.Repeat
+                    com.guangyue.feature.player.screen.PlayerMode.Sequential -> com.guangyue.feature.library.design.icons.GuangYueIcons.ListMusic
+                },
+                modeLabel = when (com.guangyue.feature.player.screen.playerMode(playbackState.shuffle, playbackState.repeatMode)) {
+                    com.guangyue.feature.player.screen.PlayerMode.Shuffle -> "随机播放"
+                    com.guangyue.feature.player.screen.PlayerMode.LoopOne -> "单曲循环"
+                    com.guangyue.feature.player.screen.PlayerMode.Sequential -> "顺序播放"
+                },
+                onCycleMode = {
+                    val t = com.guangyue.feature.player.screen.nextPlayerModeTarget(
+                        com.guangyue.feature.player.screen.playerMode(playbackState.shuffle, playbackState.repeatMode),
+                    )
+                    playback.setShuffle(t.shuffle)
+                    playback.setRepeatMode(t.repeatMode)
+                },
             )
         }
     }

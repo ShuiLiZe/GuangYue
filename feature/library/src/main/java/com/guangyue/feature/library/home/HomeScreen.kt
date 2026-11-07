@@ -21,9 +21,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.guangyue.feature.library.design.GuangYueDesign
 import com.guangyue.feature.library.design.GyRadius
@@ -52,10 +54,12 @@ data class HomeTile(
 enum class HomeTileKind { PLAYLIST, ALBUM, TRACK, STATION, SHEET }
 
 /**
- * 迷你播放条（0.0.9(U2) 起的外壳组件，U6 沿用）。
+ * 浮动播放胶囊（P2：Folia `FloatingPlayerControls` 展开态，基准 screenshots-v2/m412-*-mini-bar）。
  *
- * 56dp 胶囊 + 38dp 封面 + 36dp 播放键 + 48dp「下一首」；位置由 `ShellColumn` 管：在底栏之上、
- * 内容之下，手势条 inset 由底栏自吃，所以这里不需要再吃 inset。
+ * 三行网格（grid-cols-[1fr_auto_1fr]）：第一行居中歌名 14/700（点它进播放舞台）；第二行左右两个槽位
+ * （Folia 默认是循环模式 + 歌词，手机上左 = 播放模式、右 = 下一首）夹着 48dp 实心圆播放键（底 = 主字色、
+ * 图标 = 底色）；第三行「时间 · 2dp 进度条 · 时长」。外壳 rounded-full + p-3 + 玻璃（浅 white/60、深 black/40）+ shadow-2xl。
+ * 位置仍由 `ShellColumn` 管：底栏之上、内容之下。
  */
 @Composable
 fun FoliaMiniPlayer(
@@ -71,101 +75,103 @@ fun FoliaMiniPlayer(
     playLabel: String = "播放",
     pauseLabel: String = "暂停",
     nextLabel: String = "下一首",
+    /** 有时长时第三行显示「当前 / 总长」。 */
+    positionMs: Long = 0L,
+    durationMs: Long = 0L,
+    /** 左槽：播放模式（图标 + 点按循环）；null 时左槽空。 */
+    modeIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    modeLabel: String = "",
+    onCycleMode: (() -> Unit)? = null,
 ) {
-    Row(
+    val shape = RoundedCornerShape(30.dp)
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = GySpace.m, vertical = GySpace.xs)
-            .height(56.dp)
-            .clip(RoundedCornerShape(GyRadius.capsule))
-            .glassPanel(corner = GyRadius.capsule)
-            .clickable(onClick = onOpen)
-            .padding(horizontal = GySpace.s),
-        verticalAlignment = Alignment.CenterVertically,
+            .androidxShadow(shape)
+            .clip(shape)
+            .glassPanel(corner = 30.dp)
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
+        Text(
+            text = title,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = Gyp.ink,
+            fontFamily = GuangYueDesign.Sans,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(GyRadius.field))
-                .background(Gyp.fill2),
-            contentAlignment = Alignment.Center,
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp)
+                .clickable(onClick = onOpen),
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (artwork != null) {
-                AsyncImage(model = artwork, contentDescription = title, modifier = Modifier.fillMaxSize())
-            } else {
-                Icon(
-                    imageVector = GuangYueIcons.Music,
-                    contentDescription = null,
-                    tint = Gyp.t3,
-                    modifier = Modifier.size(16.dp),
-                )
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                if (modeIcon != null && onCycleMode != null) {
+                    SlotKey(modeIcon, modeLabel, onCycleMode)
+                }
             }
-        }
-        Spacer(Modifier.width(GySpace.m))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = title,
-                fontSize = GyText.label,
-                lineHeight = GyText.labelHeight,
-                fontWeight = FontWeight.Medium,
-                color = Gyp.ink,
-                fontFamily = GuangYueDesign.Sans,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = subtitle,
-                fontSize = GyText.hint,
-                lineHeight = GyText.hintHeight,
-                color = Gyp.t2,
-                fontFamily = GuangYueDesign.Sans,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(GySpace.xxs))
-            ProgressLine(progress = progress)
-        }
-        Spacer(Modifier.width(GySpace.s))
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(Gyp.accent)
-                .clickable(onClick = onTogglePlay),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = if (isPlaying) GuangYueIcons.Pause else GuangYueIcons.Play,
-                contentDescription = if (isPlaying) pauseLabel else playLabel,
-                tint = Gyp.onAccent,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        // 0.0.9（U2）：「下一首」——Folia 桌面悬浮条上没有这一颗（桌面靠 hover 出的
-        // 悬浮控件 / 快捷键），手机版按需求补一颗 48dp 触控的图标按钮。
-        if (onNext != null) {
-            Spacer(Modifier.width(GySpace.xs))
+            Spacer(Modifier.width(16.dp))
             Box(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .clickable(onClick = onNext),
+                    .background(Gyp.ink)
+                    .clickable(onClick = onTogglePlay),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = GuangYueIcons.SkipForward,
-                    contentDescription = nextLabel,
-                    tint = Gyp.ink,
+                    imageVector = if (isPlaying) GuangYueIcons.Pause else GuangYueIcons.Play,
+                    contentDescription = if (isPlaying) pauseLabel else playLabel,
+                    tint = Gyp.page,
                     modifier = Modifier.size(20.dp),
                 )
             }
+            Spacer(Modifier.width(16.dp))
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (onNext != null) SlotKey(GuangYueIcons.SkipForward, nextLabel, onNext)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth().height(16.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(miniTime(positionMs), fontSize = 11.sp, color = Gyp.ink.copy(alpha = 0.6f), fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+            Spacer(Modifier.width(8.dp))
+            ProgressLine(progress = progress, modifier = Modifier.weight(1f), fill = Gyp.ink)
+            Spacer(Modifier.width(8.dp))
+            Text(miniTime(durationMs), fontSize = 11.sp, color = Gyp.ink.copy(alpha = 0.6f), fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
         }
     }
 }
 
+@Composable
+private fun SlotKey(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Box(
+        Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = label, tint = Gyp.ink.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
+    }
+}
+
+private fun Modifier.androidxShadow(shape: androidx.compose.ui.graphics.Shape): Modifier =
+    this.then(Modifier.shadow(elevation = 18.dp, shape = shape, ambientColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.25f), spotColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.25f)))
+
+private fun miniTime(ms: Long): String {
+    val s = (ms.coerceAtLeast(0L) / 1000).toInt()
+    return "%02d:%02d".format(s / 60, s % 60)
+}
+
 /** 一条 2dp 的进度线（Folia 进度条高 2px，圆角 4px，底 `--st-track`、前景强调色）。 */
 @Composable
-fun ProgressLine(progress: Float, modifier: Modifier = Modifier) {
+fun ProgressLine(progress: Float, modifier: Modifier = Modifier, fill: androidx.compose.ui.graphics.Color = Gyp.accent) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -178,7 +184,7 @@ fun ProgressLine(progress: Float, modifier: Modifier = Modifier) {
                 .fillMaxWidth(progress.coerceIn(0f, 1f))
                 .fillMaxHeight()
                 .clip(CircleShape)
-                .background(Gyp.accent),
+                .background(fill),
         )
     }
 }
