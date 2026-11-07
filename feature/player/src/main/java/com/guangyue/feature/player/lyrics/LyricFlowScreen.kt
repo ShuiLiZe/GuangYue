@@ -266,6 +266,15 @@ fun LyricFlowScreen(
             .fillMaxSize()
             .testTag(LyricRootTag),
     ) {
+        // Folia backgrounds/common：通用几何背景（静止不画背景；浮名按自己的「通用几何图形」开关）。
+        if (lyricStyle != LyricStyle.STILL && !(lyricStyle == LyricStyle.FUME && fumeTuning.disableGeometricBackground)) {
+            com.guangyue.feature.player.lyrics.visualizer.GeometricBackgroundLayer(
+                seed = (coverUrl ?: "").hashCode().toLong(),
+                secondaryColor = theme.secondary,
+                accentColor = lyricAccent,
+                paused = !playback.isPlaying || reduceMotion,
+            )
+        }
         // ---------------- 浮名：整屏画布（edge-to-edge，系统栏/顶栏/字幕层都浮在它上面） ----------------
         // 对应 Folia VisualizerFume.tsx:333-350：画布是 VisualizerShell 里 absolute inset-0 的一层，
         // 视口 = 整屏（ResizeObserver 量的是那个 h-full w-full 的 div），顶栏 / 字幕层 / 播放条
