@@ -456,6 +456,8 @@ fun GuangYueNavHost(
                         partitaName = sheetContext.getString(R.string.lyrics_style_partita),
                         partitaTuning = styleVm.partitaTuning.collectAsStateWithLifecycle().value,
                         onPartitaTuning = styleVm::updatePartita,
+                        tiltTuning = styleVm.tiltTuning.collectAsStateWithLifecycle().value,
+                        onTiltTuning = styleVm::updateTilt,
                     )
                 }
             }
@@ -479,6 +481,7 @@ fun GuangYueNavHost(
             val tuning by styleVm.tuning.collectAsStateWithLifecycle()
             val fumeTuning by styleVm.fumeTuning.collectAsStateWithLifecycle()
             val partitaTuning by styleVm.partitaTuning.collectAsStateWithLifecycle()
+            val tiltTuning by styleVm.tiltTuning.collectAsStateWithLifecycle()
             // V1a：当前样式（流光 / 浮名），同一份 styleVm —— 播放页切好、这里直接生效。
             val style by styleVm.style.collectAsStateWithLifecycle()
             val lyricContext = LocalContext.current
@@ -522,6 +525,7 @@ fun GuangYueNavHost(
                     lyricStyle = style,
                     fumeTuning = fumeTuning,
                     partitaTuning = partitaTuning,
+                    tiltTuning = tiltTuning,
                 )
                 if (styleSheetOpen) {
                     LyricStyleSheet(
@@ -539,6 +543,8 @@ fun GuangYueNavHost(
                         partitaName = lyricContext.getString(R.string.lyrics_style_partita),
                         partitaTuning = partitaTuning,
                         onPartitaTuning = styleVm::updatePartita,
+                        tiltTuning = tiltTuning,
+                        onTiltTuning = styleVm::updateTilt,
                     )
                 }
             }
@@ -631,6 +637,15 @@ internal fun lyricStyleStrings(): LyricStyleStrings {
         fume = R.string.lyrics_style_fume,
         partita = R.string.lyrics_style_partita,
         cadenza = R.string.lyrics_style_cadenza,
+        still = R.string.lyrics_style_still,
+        tilt = R.string.lyrics_style_tilt,
+        tiltSplitProbability = R.string.lyrics_style_tilt_split,
+        tiltStyleProbability = R.string.lyrics_style_tilt_style,
+        tiltColorScheme = R.string.lyrics_style_tilt_scheme,
+        tiltSchemeDefault = R.string.lyrics_style_tilt_scheme_default,
+        tiltSchemeSwap = R.string.lyrics_style_tilt_scheme_swap,
+        tiltSchemeAccentAll = R.string.lyrics_style_tilt_scheme_accent,
+        tiltSchemePrimaryAll = R.string.lyrics_style_tilt_scheme_primary,
         noOptions = R.string.lyrics_style_no_options,
         partitaGuideLines = R.string.lyrics_style_partita_guide,
         partitaSemanticLayout = R.string.lyrics_style_partita_semantic,

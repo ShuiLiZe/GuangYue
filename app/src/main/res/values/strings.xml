@@ -324,6 +324,17 @@
     <string name="lyrics_style_partita">云阶</string>
     <!-- zh-CN.ts ui.visualizerCadenze -->
     <string name="lyrics_style_cadenza">心象</string>
+    <!-- zh-CN.ts ui.visualizerStill -->
+    <string name="lyrics_style_still">静止</string>
+    <!-- zh-CN.ts ui.visualizerTilt / options.tilt* -->
+    <string name="lyrics_style_tilt">倾诉</string>
+    <string name="lyrics_style_tilt_split">分行概率</string>
+    <string name="lyrics_style_tilt_style">斜体强调概率</string>
+    <string name="lyrics_style_tilt_scheme">配色方案</string>
+    <string name="lyrics_style_tilt_scheme_default">双色1</string>
+    <string name="lyrics_style_tilt_scheme_swap">双色2</string>
+    <string name="lyrics_style_tilt_scheme_accent">单色1</string>
+    <string name="lyrics_style_tilt_scheme_primary">单色2</string>
     <!-- ===== V2a 云阶参数（zh-CN.ts options.partita*） ===== -->
     <string name="lyrics_style_partita_guide">引导线</string>
     <string name="lyrics_style_partita_semantic">语义排列</string>

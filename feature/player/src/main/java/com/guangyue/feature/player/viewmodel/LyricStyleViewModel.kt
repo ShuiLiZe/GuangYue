@@ -14,6 +14,7 @@ import androidx.lifecycle.viewModelScope
 import com.guangyue.core.lyrics.ClassicTuning
 import com.guangyue.core.lyrics.fume.FumeTuning
 import com.guangyue.core.lyrics.PartitaTuning
+import com.guangyue.core.lyrics.TiltTuning
 import com.guangyue.core.prefs.AppPreferences
 import com.guangyue.feature.player.lyrics.LyricStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -54,6 +55,16 @@ class LyricStyleViewModel @Inject constructor(
     /** V2a：「云阶」调参（Folia `partita/tuning.ts`，storage.key = 'partita_tuning'）。 */
     private val _partitaTuning = MutableStateFlow(preferences.partitaTuning)
     val partitaTuning: StateFlow<PartitaTuning> = _partitaTuning.asStateFlow()
+
+    /** V2d：「倾诉」调参（Folia `tilt/tuning.ts`，storage.key = 'tilt_tuning'）。 */
+    private val _tiltTuning = MutableStateFlow(preferences.tiltTuning)
+    val tiltTuning: StateFlow<TiltTuning> = _tiltTuning.asStateFlow()
+
+    fun updateTilt(tuning: TiltTuning) {
+        val safe = TiltTuning.sanitize(tuning.splitProbability, tuning.tiltStyleProbability, tuning.colorScheme)
+        _tiltTuning.value = safe
+        viewModelScope.launch { preferences.tiltTuning = safe }
+    }
 
     fun updatePartita(tuning: PartitaTuning) {
         val safe = PartitaTuning.sanitize(tuning.showGuideLines, tuning.useSemanticLayout, tuning.staggerMin, tuning.staggerMax)

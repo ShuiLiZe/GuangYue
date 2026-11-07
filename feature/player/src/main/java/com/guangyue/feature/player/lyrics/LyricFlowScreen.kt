@@ -143,6 +143,8 @@ fun LyricFlowScreen(
     lyricStyle: LyricStyle = LyricStyle.CLASSIC,
     /** 「浮名」调参；V1b 才做面板，这里先吃默认值。 */
     fumeTuning: FumeTuning = FumeTuning.DEFAULT,
+    /** V2d：「倾诉」调参（Folia tilt/tuning.ts）。 */
+    tiltTuning: com.guangyue.core.lyrics.TiltTuning = com.guangyue.core.lyrics.TiltTuning.DEFAULT,
     /** V2a：「云阶」调参（Folia partita/tuning.ts）。 */
     partitaTuning: com.guangyue.core.lyrics.PartitaTuning = com.guangyue.core.lyrics.PartitaTuning.DEFAULT,
     /** 取证用：>0 时「浮名」镜头按固定 dt 一次推进这么多帧（模拟器帧时间不可靠）。 */
@@ -173,7 +175,7 @@ fun LyricFlowScreen(
         resolveSubtitleOverlayContent(
             activeLine = activeLine,
             nextLines = kernelLines.drop(currentIndex.coerceAtLeast(0) + 1),
-            showText = emptyKind == null && lyricStyle != LyricStyle.FUME,
+            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL,
         )
     }
 
@@ -304,6 +306,18 @@ fun LyricFlowScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        // V2c 静止：Folia 整屏一层（absolute inset-0）+ 暗角；字幕层不画（译文由本层自己排在每句下）。
+        if (lyricStyle == LyricStyle.STILL && kernelLines.isNotEmpty() && emptyKind == null) {
+            com.guangyue.feature.player.lyrics.visualizer.StillVignette(dark = darkMode)
+            com.guangyue.feature.player.lyrics.visualizer.StillLyricStage(
+                lines = kernelLines,
+                currentIndex = currentIndex,
+                lyricsFontScale = lyricsFontScale,
+                primaryColor = onBackdrop,
+                secondaryColor = theme.secondary,
+                fontFamily = GuangYueDesign.Serif,
+            )
+        }
         Column(
             Modifier
                 .fillMaxSize()
@@ -409,9 +423,24 @@ fun LyricFlowScreen(
                         failure = failure,
                         onRetry = null,
                     )
-                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA) && kernelLines.isNotEmpty()) {
+                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL) && kernelLines.isNotEmpty()) {
                     // 浮名：画布已经铺在整屏那一层（本函数开头），舞台 Box 里留空，
                     // 只保留顶栏 / 字幕层 / 播放条这些「浮在画布上」的层。
+                } else if (lyricStyle == LyricStyle.TILT && activeLine != null && activeLine.hasVisibleWords()) {
+                    // V2d 倾诉（Folia VisualizerTilt 的 activeLine 分支）。
+                    com.guangyue.feature.player.lyrics.visualizer.TiltLyricLine(
+                        line = activeLine,
+                        clock = clock,
+                        tuning = tiltTuning,
+                        lyricsFontScale = lyricsFontScale,
+                        primaryColor = onBackdrop,
+                        accentColor = lyricAccent,
+                        fontFamily = GuangYueDesign.Serif,
+                        reduceMotion = reduceMotion,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickableNoRipple { if (currentIndex >= 0) onSeekToLine(currentIndex) },
+                    )
                 } else if (lyricStyle == LyricStyle.PARTITA && activeLine != null && activeLine.hasVisibleWords()) {
                     // V2a 云阶：当前句切 chunk 竖排错落（Folia VisualizerPartita 的 activeLine 分支）。
                     val stageDensity = LocalDensity.current

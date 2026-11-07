@@ -207,9 +207,9 @@ fun V0cStage(
         // V1b-2：弹层是半透明毛玻璃，身后必须有一层真实的播放页画面，实拍才看得出「透」。
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
-        if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita") {
+        if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt") {
             CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
-                if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita") {
+                if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt") {
                     LyricFlowScreen(
                         lyrics = remember { parseLrc(LRC) },
                         currentIndex = 1,
@@ -248,6 +248,7 @@ fun V0cStage(
                         style = when (style) {
                             "sheetclassic" -> LyricStyle.CLASSIC
                             "sheetpartita" -> LyricStyle.PARTITA
+                            "sheettilt" -> LyricStyle.TILT
                             else -> LyricStyle.FUME
                         },
                         fumeName = v0cString(R.string.lyrics_style_fume),
@@ -285,6 +286,8 @@ fun V0cStage(
                     "fume" -> LyricStyle.FUME
                     "partita" -> LyricStyle.PARTITA
                     "cadenza" -> LyricStyle.CADENZA
+                    "still" -> LyricStyle.STILL
+                    "tilt" -> LyricStyle.TILT
                     else -> LyricStyle.CLASSIC
                 },
                 fumeSettleSteps = fumeSteps,
@@ -333,6 +336,15 @@ private fun v0cString(id: Int): String = when (id) {
     R.string.lyrics_style_close -> "关闭"
     R.string.lyrics_style_partita -> "云阶"
     R.string.lyrics_style_cadenza -> "心象"
+    R.string.lyrics_style_still -> "静止"
+    R.string.lyrics_style_tilt -> "倾诉"
+    R.string.lyrics_style_tilt_split -> "分行概率"
+    R.string.lyrics_style_tilt_style -> "斜体强调概率"
+    R.string.lyrics_style_tilt_scheme -> "配色方案"
+    R.string.lyrics_style_tilt_scheme_default -> "双色1"
+    R.string.lyrics_style_tilt_scheme_swap -> "双色2"
+    R.string.lyrics_style_tilt_scheme_accent -> "单色1"
+    R.string.lyrics_style_tilt_scheme_primary -> "单色2"
     R.string.lyrics_style_no_options -> "这个样式没有参数"
     R.string.lyrics_style_partita_guide -> "引导线"
     R.string.lyrics_style_partita_semantic -> "语义排列"

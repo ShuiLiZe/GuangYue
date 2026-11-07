@@ -58,6 +58,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.guangyue.core.lyrics.ClassicTuning
 import com.guangyue.core.lyrics.PartitaTuning
+import com.guangyue.core.lyrics.TiltColorScheme
+import com.guangyue.core.lyrics.TiltTuning
 import com.guangyue.core.lyrics.fume.FumeCameraTrackingMode
 import com.guangyue.core.lyrics.fume.FumeTuning
 import com.guangyue.feature.library.design.GyMotion
@@ -137,6 +139,17 @@ data class LyricStyleStrings(
     /** V2b：「心象」样式名（Folia `ui.visualizerCadenze`）与「这个样式没有参数」（`lyricStyleNoOptions`）。 */
     val cadenza: Int = 0,
     val noOptions: Int = 0,
+    /** V2c：「静止」（Folia `ui.visualizerStill`）。 */
+    val still: Int = 0,
+    /** V2d：「倾诉」与参数（Folia `ui.visualizerTilt` / `options.tilt*`）。 */
+    val tilt: Int = 0,
+    val tiltSplitProbability: Int = 0,
+    val tiltStyleProbability: Int = 0,
+    val tiltColorScheme: Int = 0,
+    val tiltSchemeDefault: Int = 0,
+    val tiltSchemeSwap: Int = 0,
+    val tiltSchemeAccentAll: Int = 0,
+    val tiltSchemePrimaryAll: Int = 0,
 )
 
 @Composable
@@ -164,6 +177,8 @@ fun LyricStyleSheet(
     partitaName: String = "",
     partitaTuning: PartitaTuning = PartitaTuning.DEFAULT,
     onPartitaTuning: (PartitaTuning) -> Unit = {},
+    tiltTuning: TiltTuning = TiltTuning.DEFAULT,
+    onTiltTuning: (TiltTuning) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -191,6 +206,8 @@ fun LyricStyleSheet(
             partitaName = partitaName,
             partitaTuning = partitaTuning,
             onPartitaTuning = onPartitaTuning,
+            tiltTuning = tiltTuning,
+            onTiltTuning = onTiltTuning,
         )
     }
 }
@@ -216,6 +233,8 @@ private fun LyricStylePanelContent(
     partitaName: String = "",
     partitaTuning: PartitaTuning = PartitaTuning.DEFAULT,
     onPartitaTuning: (PartitaTuning) -> Unit = {},
+    tiltTuning: TiltTuning = TiltTuning.DEFAULT,
+    onTiltTuning: (TiltTuning) -> Unit = {},
 ) {
     // Folia `index.css:163-168` `.theme-glass-panel`：`--bg-color` 85% 底 + `--text-primary` 12% 描边。
     // 面板改用 `--st-card` 一族（与弹层其它行同源），透明度取 85%，透出身后的封面调色板。
@@ -291,6 +310,22 @@ private fun LyricStylePanelContent(
                     onClick = { onStyle(LyricStyle.PARTITA) },
                 )
             }
+            if (strings.tilt != 0) {
+                StyleRow(
+                    name = str(strings.tilt),
+                    selected = style == LyricStyle.TILT,
+                    accent = accent,
+                    onClick = { onStyle(LyricStyle.TILT) },
+                )
+            }
+            if (strings.still != 0) {
+                StyleRow(
+                    name = str(strings.still),
+                    selected = style == LyricStyle.STILL,
+                    accent = accent,
+                    onClick = { onStyle(LyricStyle.STILL) },
+                )
+            }
             if (strings.cadenza != 0) {
                 StyleRow(
                     name = str(strings.cadenza),
@@ -311,7 +346,7 @@ private fun LyricStylePanelContent(
                     accent = accent,
                     onTuning = onFumeTuning,
                 )
-            } else if (style == LyricStyle.CADENZA) {
+            } else if (style == LyricStyle.CADENZA || style == LyricStyle.STILL) {
                 // Folia cadenza/entry.tsx 没有 renderSettingsPanel：窗口里显示「这个样式没有参数」。
                 Text(
                     text = str(strings.noOptions),
@@ -319,6 +354,8 @@ private fun LyricStylePanelContent(
                     color = Gyp.t2,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                 )
+            } else if (style == LyricStyle.TILT) {
+                TiltTuningRows(tuning = tiltTuning, strings = strings, accent = accent, onTuning = onTiltTuning)
             } else if (style == LyricStyle.PARTITA) {
                 PartitaTuningRows(
                     tuning = partitaTuning,
@@ -355,7 +392,8 @@ private fun LyricStylePanelContent(
                     .clickableNoRipple {
                         // 恢复默认只作用于当前样式（Folia 各模式各自的 handleReset*Tuning）。
                         when (style) {
-                            LyricStyle.CADENZA -> Unit
+                            LyricStyle.CADENZA, LyricStyle.STILL -> Unit
+                            LyricStyle.TILT -> onTiltTuning(TiltTuning.DEFAULT)
                             LyricStyle.FUME -> onFumeTuning(FumeTuning.DEFAULT)
                             LyricStyle.PARTITA -> onPartitaTuning(PartitaTuning.DEFAULT)
                             else -> onTuning(ClassicTuning())
@@ -805,6 +843,8 @@ fun LyricStyleSheetPreview(
     partitaName: String = "",
     partitaTuning: PartitaTuning = PartitaTuning.DEFAULT,
     onPartitaTuning: (PartitaTuning) -> Unit = {},
+    tiltTuning: TiltTuning = TiltTuning.DEFAULT,
+    onTiltTuning: (TiltTuning) -> Unit = {},
 ) {
     LyricStylePanelContent(
         tuning = tuning,
@@ -820,6 +860,8 @@ fun LyricStyleSheetPreview(
         partitaName = partitaName,
         partitaTuning = partitaTuning,
         onPartitaTuning = onPartitaTuning,
+        tiltTuning = tiltTuning,
+        onTiltTuning = onTiltTuning,
     )
 }
 
@@ -1022,5 +1064,42 @@ private fun PartitaTuningRows(
         accent = accent,
         min = 0f, max = 180f, step = 5f, format = ::formatPixels,
         onChange = { emit(tuning.copy(staggerMax = it.toDouble())) },
+    )
+}
+
+
+/** V2d「倾诉参数」，照 Folia `TiltSettingsPanel`：配色方案（四段）→ 分行概率 → 斜体强调概率（0..1，步长 0.05，百分比）。 */
+@Composable
+private fun TiltTuningRows(
+    tuning: TiltTuning,
+    strings: LyricStyleStrings,
+    accent: Color,
+    onTuning: (TiltTuning) -> Unit,
+) {
+    fun emit(t: TiltTuning) = onTuning(TiltTuning.sanitize(t.splitProbability, t.tiltStyleProbability, t.colorScheme))
+    SegmentedRow(
+        label = str(strings.tiltColorScheme),
+        options = listOf(
+            TiltColorScheme.DEFAULT to str(strings.tiltSchemeDefault),
+            TiltColorScheme.SWAP to str(strings.tiltSchemeSwap),
+            TiltColorScheme.ACCENT_ALL to str(strings.tiltSchemeAccentAll),
+            TiltColorScheme.PRIMARY_ALL to str(strings.tiltSchemePrimaryAll),
+        ),
+        selected = tuning.colorScheme,
+        onChange = { emit(tuning.copy(colorScheme = it)) },
+    )
+    TuningSliderRow(
+        label = str(strings.tiltSplitProbability),
+        value = tuning.splitProbability.toFloat(),
+        accent = accent,
+        min = 0f, max = 1f, step = 0.05f, format = ::formatPercent,
+        onChange = { emit(tuning.copy(splitProbability = it.toDouble())) },
+    )
+    TuningSliderRow(
+        label = str(strings.tiltStyleProbability),
+        value = tuning.tiltStyleProbability.toFloat(),
+        accent = accent,
+        min = 0f, max = 1f, step = 0.05f, format = ::formatPercent,
+        onChange = { emit(tuning.copy(tiltStyleProbability = it.toDouble())) },
     )
 }

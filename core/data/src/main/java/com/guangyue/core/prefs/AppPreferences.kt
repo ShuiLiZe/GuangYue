@@ -3,6 +3,8 @@ package com.guangyue.core.prefs
 import android.content.Context
 import com.guangyue.core.lyrics.ClassicTuning
 import com.guangyue.core.lyrics.PartitaTuning
+import com.guangyue.core.lyrics.TiltColorScheme
+import com.guangyue.core.lyrics.TiltTuning
 import com.guangyue.core.lyrics.fume.FumeCameraTrackingMode
 import com.guangyue.core.lyrics.fume.FumeTuning
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -130,6 +132,21 @@ class AppPreferences @Inject constructor(
                 .apply()
         }
 
+    /** V2d：「倾诉」调参（Folia tilt/tuning.ts storage.key = 'tilt_tuning'）。 */
+    var tiltTuning: TiltTuning
+        get() = TiltTuning.sanitize(
+            split = prefs.getFloat(KEY_TILT_SPLIT, TiltTuning.DEFAULT.splitProbability.toFloat()).toDouble(),
+            tilt = prefs.getFloat(KEY_TILT_STYLE, TiltTuning.DEFAULT.tiltStyleProbability.toFloat()).toDouble(),
+            scheme = TiltColorScheme.fromId(prefs.getString(KEY_TILT_SCHEME, null)),
+        )
+        set(value) {
+            prefs.edit()
+                .putFloat(KEY_TILT_SPLIT, value.splitProbability.toFloat())
+                .putFloat(KEY_TILT_STYLE, value.tiltStyleProbability.toFloat())
+                .putString(KEY_TILT_SCHEME, value.colorScheme.id)
+                .apply()
+        }
+
     /** V2a：「云阶」调参（Folia partita/tuning.ts storage.key = 'partita_tuning'），读写过 [PartitaTuning.sanitize]。 */
     var partitaTuning: PartitaTuning
         get() = PartitaTuning.sanitize(
@@ -187,6 +204,9 @@ class AppPreferences @Inject constructor(
         const val KEY_CLASSIC_LEGACY = "classic_tuning_legacy"
         const val KEY_CLASSIC_SPACING = "classic_tuning_spacing"
 
+        const val KEY_TILT_SPLIT = "tilt_tuning_split"
+        const val KEY_TILT_STYLE = "tilt_tuning_style"
+        const val KEY_TILT_SCHEME = "tilt_tuning_scheme"
         const val KEY_PARTITA_GUIDE = "partita_tuning_guide"
         const val KEY_PARTITA_SEMANTIC = "partita_tuning_semantic"
         const val KEY_PARTITA_MIN = "partita_tuning_stagger_min"

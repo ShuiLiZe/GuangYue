@@ -27,6 +27,12 @@ enum class LyricStyle(val id: String) {
 
     /** 「心象」：Folia cadenza 渲染器（V2b：整句拆词散落、主词居中放大、碰撞避让）。Folia 无参数面板。 */
     CADENZA("cadenza"),
+
+    /** 「静止」：Folia still（V2c：三行静态居中 + 暗角，不做动画，最省资源）。无参数。 */
+    STILL("still"),
+
+    /** 「倾诉」：Folia tilt（V2d：长句断成 1–4 段，随机一段斜体强调，逐字脉动）。 */
+    TILT("tilt"),
     ;
 
     companion object {
