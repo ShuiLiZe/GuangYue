@@ -300,61 +300,28 @@ private fun LyricStylePanelContent(
                 modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
             )
 
-            // 样式列表：V1a 两项 —— 「流光」(classic) 与「浮名」(fume)。
-            // 与 Folia 样式窗口一致：一行 = 左样式名、右选中标记；点击只切样式、不关弹层。
-            StyleRow(
-                name = styleName,
-                selected = style == LyricStyle.CLASSIC,
-                accent = accent,
-                onClick = { onStyle(LyricStyle.CLASSIC) },
-            )
-            StyleRow(
-                // 文案 id 现取现用：这里拿的是 NavHost 已解析好的中文，绝不把 id 当字符串显示。
+            // 样式列表：按 Folia registry 的 order 排（classic 30 → cadenza 40 → partita 50 → fume 60
+            // → tilt 70 → claddagh 80 → still 130）。一行 = 左样式名、右选中标记；点击只切样式、不关弹层。
+            // 文案 id 现取现用：这里拿的是 NavHost 已解析好的中文，绝不把 id 当字符串显示。
+            val styleRows = listOf(
+                LyricStyle.CLASSIC to styleName,
+                LyricStyle.CADENZA to (if (strings.cadenza != 0) str(strings.cadenza) else ""),
+                LyricStyle.PARTITA to partitaName,
                 // fumeName 缺失（老调用点 / 只传 styleName）时退回 classic 名，避免空行。
-                name = fumeName.ifBlank { styleName },
-                selected = style == LyricStyle.FUME,
-                accent = accent,
-                onClick = { onStyle(LyricStyle.FUME) },
+                LyricStyle.FUME to fumeName.ifBlank { styleName },
+                LyricStyle.TILT to (if (strings.tilt != 0) str(strings.tilt) else ""),
+                LyricStyle.CLADDAGH to (if (strings.claddagh != 0) str(strings.claddagh) else ""),
+                LyricStyle.STILL to (if (strings.still != 0) str(strings.still) else ""),
             )
-            if (partitaName.isNotBlank()) {
-                StyleRow(
-                    name = partitaName,
-                    selected = style == LyricStyle.PARTITA,
-                    accent = accent,
-                    onClick = { onStyle(LyricStyle.PARTITA) },
-                )
-            }
-            if (strings.tilt != 0) {
-                StyleRow(
-                    name = str(strings.tilt),
-                    selected = style == LyricStyle.TILT,
-                    accent = accent,
-                    onClick = { onStyle(LyricStyle.TILT) },
-                )
-            }
-            if (strings.claddagh != 0) {
-                StyleRow(
-                    name = str(strings.claddagh),
-                    selected = style == LyricStyle.CLADDAGH,
-                    accent = accent,
-                    onClick = { onStyle(LyricStyle.CLADDAGH) },
-                )
-            }
-            if (strings.still != 0) {
-                StyleRow(
-                    name = str(strings.still),
-                    selected = style == LyricStyle.STILL,
-                    accent = accent,
-                    onClick = { onStyle(LyricStyle.STILL) },
-                )
-            }
-            if (strings.cadenza != 0) {
-                StyleRow(
-                    name = str(strings.cadenza),
-                    selected = style == LyricStyle.CADENZA,
-                    accent = accent,
-                    onClick = { onStyle(LyricStyle.CADENZA) },
-                )
+            styleRows.forEach { (rowStyle, rowName) ->
+                if (rowName.isNotBlank()) {
+                    StyleRow(
+                        name = rowName,
+                        selected = style == rowStyle,
+                        accent = accent,
+                        onClick = { onStyle(rowStyle) },
+                    )
+                }
             }
 
             Box(Modifier.height(GySpace.s))
