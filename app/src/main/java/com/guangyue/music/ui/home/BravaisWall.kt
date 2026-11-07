@@ -349,6 +349,7 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color) {
             val meta = when {
                 c.loading -> "加载中…"
                 c.failed -> "加载失败，点此重试"
+                c.count == 0 -> "这个${c.kindLabel}没有取到曲目（音源未返回），点此重试"
                 c.count != null -> "${c.count} 首 · ${c.kindLabel}"
                 else -> c.kindLabel
             }
@@ -359,7 +360,7 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color) {
                 maxLines = 1,
                 modifier = Modifier
                     .weight(1f)
-                    .then(if (c.failed) Modifier.clickable(onClick = c.onRetry) else Modifier),
+                    .then(if (c.failed || c.count == 0) Modifier.clickable(onClick = c.onRetry) else Modifier),
             )
             val ready = !c.loading && !c.failed && (c.count ?: 0) > 0
             Row(

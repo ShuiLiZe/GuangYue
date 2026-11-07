@@ -330,8 +330,22 @@ class HomeViewModel @Inject constructor(
      * 歌单卡片取该歌单的曲目；**榜单卡片**重新找当前音源把整张榜单的曲目拉一次（而不是只播
      * 缓存里那一首）；最近播放的曲目走本地库。
      */
+    /** B2：集合页取曲目，空 / 失败也回调（null = 出错）。 */
+    fun loadTracksOf(tile: HomeTile, onDone: (List<TrackEntity>?) -> Unit) {
+        viewModelScope.launch {
+            onDone(runCatching { resolveTracks(tile) }.getOrNull())
+        }
+    }
+
     fun playTracksOf(tile: HomeTile, onReady: (List<TrackEntity>, Int) -> Unit) {
         viewModelScope.launch {
+            val list = resolveTracks(tile)
+            if (list.isNotEmpty()) onReady(list, 0)
+        }
+    }
+
+    private suspend fun resolveTracks(tile: HomeTile): List<TrackEntity> {
+        run {
             val list = when (tile.kind) {
                 HomeTileKind.PLAYLIST -> {
                     val id = tile.key.substringAfter("playlist:").toLongOrNull()
@@ -351,7 +365,7 @@ class HomeViewModel @Inject constructor(
                 }
             }
             android.util.Log.d("GYHOME", "playTracksOf kind=" + tile.kind + " key=" + tile.key + " n=" + list.size + " src=" + currentSource.value?.id)
-            if (list.isNotEmpty()) onReady(list, 0)
+            return list
         }
     }
 

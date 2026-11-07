@@ -237,11 +237,7 @@ fun GuangYueNavHost(
             LaunchedEffect(tile.key, attempt) {
                 failed = false
                 tracks = null
-                var got = false
-                vm.playTracksOf(tile) { list, _ -> tracks = list; got = true }
-                // playTracksOf 空结果不回调：给 12s，没回来算失败。
-                kotlinx.coroutines.delay(12_000)
-                if (!got) failed = true
+                vm.loadTracksOf(tile) { list -> if (list == null) failed = true else tracks = list }
             }
             val list = tracks.orEmpty()
             val trackTiles = remember(list) {
