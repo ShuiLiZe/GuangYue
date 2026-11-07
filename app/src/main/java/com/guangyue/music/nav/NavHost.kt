@@ -720,6 +720,16 @@ fun GuangYueNavHost(
                     onOpenPanel = { panelOpen = !panelOpen },
                     panelOpen = panelOpen,
                     lyricOffsetMs = lyricOffset,
+                    onNext = { playback.next() },
+                    modeIcon = stageModeIcon(playbackState.shuffle, playbackState.repeatMode),
+                    modeLabel = stageModeLabel(playbackState.shuffle, playbackState.repeatMode),
+                    onCycleMode = {
+                        val t = com.guangyue.feature.player.screen.nextPlayerModeTarget(
+                            com.guangyue.feature.player.screen.playerMode(playbackState.shuffle, playbackState.repeatMode),
+                        )
+                        playback.setShuffle(t.shuffle)
+                        playback.setRepeatMode(t.repeatMode)
+                    },
                     styleLabel = lyricContext.getString(R.string.lyrics_style),
                     // V1a：把当前样式透传给歌词画布（流光 / 浮名切换后立刻换渲染器）。
                     // 参数由 fume-draw 加在 LyricFlowScreen 末尾（默认 CLASSIC）；若该层尚未落地，
@@ -933,4 +943,17 @@ internal fun libraryStrings(): LibraryStrings {
     )
 }
 
+/** P2b：播放模式 → 胶囊左槽图标 / 文案（顺序 = ListMusic、单曲 = Repeat、随机 = Shuffle）。 */
+internal fun stageModeIcon(shuffle: Boolean, repeatMode: Int) =
+    when (com.guangyue.feature.player.screen.playerMode(shuffle, repeatMode)) {
+        com.guangyue.feature.player.screen.PlayerMode.Shuffle -> com.guangyue.feature.library.design.icons.GuangYueIcons.Shuffle
+        com.guangyue.feature.player.screen.PlayerMode.LoopOne -> com.guangyue.feature.library.design.icons.GuangYueIcons.Repeat
+        com.guangyue.feature.player.screen.PlayerMode.Sequential -> com.guangyue.feature.library.design.icons.GuangYueIcons.ListMusic
+    }
 
+internal fun stageModeLabel(shuffle: Boolean, repeatMode: Int) =
+    when (com.guangyue.feature.player.screen.playerMode(shuffle, repeatMode)) {
+        com.guangyue.feature.player.screen.PlayerMode.Shuffle -> "随机播放"
+        com.guangyue.feature.player.screen.PlayerMode.LoopOne -> "单曲循环"
+        com.guangyue.feature.player.screen.PlayerMode.Sequential -> "顺序播放"
+    }
