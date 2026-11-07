@@ -625,3 +625,14 @@ BUILD SUCCESSFUL in 35s
   两条 `Unnecessary non-null assertion` 都是既有告警（`FumeCamera.kt:409` 的 `input.overviewCamera!!`、`GlowWordVariantsTest.kt:53`），本步未引入。
 - 提交：`bb4ffdd` `V1b-1: 镜头取点改实测字宽 + 重拍中英混排`（`port/u2`，未 push / 未打 tag / 未动 stash）。
   滑杆相关的 `LyricStyleSheet.kt` 修改与未跟踪的 `FoliaSliderGeometryTest.kt` **未纳入本次提交**，原样留在工作区（V1b-2 范围）。
+## P1b 舞台浮卡面板（2026-11-08，Hark 直接做）
+
+- 依据 Folia `UnifiedPanel.tsx` + `panelTab/shell/PanelShell.tsx / SongHeader.tsx / TabDock.tsx / Segments.tsx / panelTheme.ts`。
+- 舞台右下面板键不再整页跳 PLAYER：点开在键上方浮出玻璃卡（宽 360dp、不超过屏宽-32，圆角 20，内边距 12，顶部至少留 56dp），面板键变 X；点卡外 / X / 返回键收起。入场缩放 0.92 + 淡入（kit unfold 300ms），出场 move 220ms，变换原点在面板键。
+- 卡内：歌曲头（封面页签 = 大方封面 + 歌名两行 + 歌手 + 专辑 + 喜欢/加入歌单/歌词样式三键；其它页签折成 48dp 一行，点回封面页签）→ 页签内容（超高卡内滚动）→ 底部 36dp 分段页签条「封面 / 控制 / 播放列表 / 音质」（Folia zh-CN `panel.*`，选中块滑动）。
+- 控制：播放模式三段直选（顺序 / 单曲循环 / 随机）+「歌词样式」行（右侧当前样式名，点开样式弹层）。播放列表：当前曲高亮 + 其它行可移出。音质：按插件声明档位，未声明显示全部。
+- 有意偏离：Compose 无背景模糊，玻璃不透明度 0.8 → 0.94；Folia 控制页的音量/均衡器/主题区手机上不做（系统音量键）。
+- 顺带：`CoverImage` 改 `ContentScale.Crop`（Folia object-cover），B 站 16:9 封面不再留黑边。
+- 测试：`:feature:player:testDebugUnitTest` 6 套件 68 例 0 失败（新增 `StagePanelTest` 4 例）。`:app:installDebug` 成功。
+- 实拍：`docs/ui-v0/p1b-panel-{cover,controls,queue,quality}-dark.png`、`p1b-panel-cover-light.png`。
+- 提交：`4e7d3cc`、`d5336d3`、`f49e9ba`（port/u2 已 push）。PLAYER 路由暂留（无入口），后续确认无引用后删。
