@@ -38,7 +38,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CircleShape
@@ -75,12 +86,19 @@ import kotlin.math.roundToInt
 
 @Composable
 fun BravaisWall(
-    tiles: List<HomeTile>,
+    sections: List<Pair<String, List<HomeTile>>>,
+    title: String,
     inkColor: Color,
     groundColor: Color,
     onOpenTile: (HomeTile) -> Unit,
+    onOpenSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // B1d：缝（Seam）横条的页签 = 墙的数据来源；第 0 个是「全部」（各段按 key 去重拼起来）。
+    var tab by remember { mutableStateOf(0) }
+    val tiles = remember(sections, tab) {
+        if (tab == 0) sections.flatMap { it.second }.distinctBy { it.key } else sections.getOrNull(tab - 1)?.second.orEmpty()
+    }
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     BoxWithConstraints(modifier.fillMaxSize().clipToBounds()) {
@@ -97,6 +115,8 @@ fun BravaisWall(
         val camX = remember { Animatable(startX.toFloat()) }
         val camY = remember { Animatable(startY.toFloat()) }
         // 排名：初始镜头中心附近 3×3 区块，条目按排名落位（换数据才重算）。
+        // 缝：竖屏横条（axis y），放在世界 y=0 的区块边界上（区块边界不切砖）；上半墙上移、下半墙下移各半条高。
+        val seamH = SEAM_HOME_HEIGHT
         val ranked = remember(tiles, vw, vh) {
             val ox = bw / 2
             val oy = bh / 2
@@ -161,7 +181,7 @@ fun BravaisWall(
                     val sw by animateFloatAsState(slot.width.toFloat(), spec, label = "w")
                     val sh by animateFloatAsState(slot.height.toFloat(), spec, label = "h")
                     val x = ((sx - cx) * scale).toFloat()
-                    val y = ((sy - cy) * scale).toFloat()
+                    val y = ((sy - cy) * scale).toFloat() + if (base.y < 0) -seamH / 2 else seamH / 2
                     Box(
                         Modifier
                             .offset { IntOffset((x * density.density).roundToInt(), (y * density.density).roundToInt()) }
@@ -179,6 +199,71 @@ fun BravaisWall(
                     }
                 }
             }
+            val seamTop = (-cy * scale).toFloat() - seamH / 2
+            Box(
+                Modifier
+                    .offset { IntOffset(0, (seamTop * density.density).roundToInt()) }
+                    .fillMaxWidth()
+                    .height(seamH.dp)
+                    .zIndex(10f)
+                    .background(groundColor),
+            ) {
+                SeamHomeRow(title, listOf("全部") + sections.map { it.first }, tab, inkColor, onSelect = { tab = it; expanded = null }, onOpenSearch = onOpenSearch)
+            }
+            // 状态栏：墙铺满全屏（Folia 同），顶上加一道纸色渐隐让状态栏图标看得清。
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .windowInsetsTopHeight(WindowInsets.statusBars)
+                    .zIndex(15f)
+                    .background(Brush.verticalGradient(listOf(groundColor.copy(alpha = 0.85f), groundColor.copy(alpha = 0.5f)))),
+            )
+        }
+    }
+}
+
+/** 对应 bravaisConstants BRAVAIS_SEAM_ROW_HOME_HEIGHT = 72。 */
+private const val SEAM_HOME_HEIGHT = 72f
+
+/**
+ * 缝里的首页横条（BravaisSeamHome 的 HomeSeamHead + bravaisSeamRow.css `.bravais-seam-home-row`）：
+ * 标题 15/800 字距 0.3em；页签 14/700、内边距 8×12、圆角 10，选中时字色转主色、底 = 当前色 14%；右侧搜索键。
+ * 手机化：页签放不下时整段横向滚（Folia 也是 overflowing 时横滚）；扫描进度、直达入口、管理隐藏、折叠键未移。
+ */
+@Composable
+private fun SeamHomeRow(title: String, tabs: List<String>, active: Int, ink: Color, onSelect: (Int) -> Unit, onOpenSearch: () -> Unit) {
+    Row(
+        Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, color = ink, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 4.5.sp, maxLines = 1)
+        Spacer(Modifier.width(12.dp))
+        Row(
+            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            tabs.forEachIndexed { i, label ->
+                val on = i == active
+                Text(
+                    label,
+                    color = if (on) ink else ink.copy(alpha = 0.62f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (on) ink.copy(alpha = 0.14f) else Color.Transparent)
+                        .clickable { onSelect(i) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
+        }
+        Box(
+            Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).clickable(onClick = onOpenSearch),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(GuangYueIcons.Search, contentDescription = "搜索", tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
         }
     }
 }

@@ -151,16 +151,18 @@ fun GuangYueNavHost(
 
             // B1b：有内容时首页换成 Folia Bravais 墙（推荐歌单 → 榜单 → 最近播放，按 key 去重）；
             // 一块砖都没有（加载中 / 失败 / 无插件）时仍走原来的墙状态页；榜单部分失败不挡墙。
-            val wallTiles = remember(sheets, recent, charts) {
-                (vm.recommended(sheets, recent) + charts + recent).distinctBy { it.key }
+            val wallSections = remember(sheets, recent, charts) {
+                listOf("推荐" to vm.recommended(sheets, recent), "榜单" to charts, "最近" to recent).filter { it.second.isNotEmpty() }
             }
-            if (wallTiles.isNotEmpty()) {
+            if (wallSections.isNotEmpty()) {
                 ShellColumn(
                     content = {
                         com.guangyue.music.ui.home.BravaisWall(
-                            tiles = wallTiles,
+                            sections = wallSections,
+                            title = "广乐",
                             inkColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
                             groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
+                            onOpenSearch = { navController.navigate(Routes.SEARCH) },
                             onOpenTile = { tile ->
                                 vm.playTracksOf(tile) { tracks, at ->
                                     playback.setQueueFromTracks(tracks, at, true)
