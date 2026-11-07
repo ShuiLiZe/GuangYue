@@ -130,6 +130,11 @@ class U2ShellScreenshotTest {
                 playLabel = "播放",
                 pauseLabel = "暂停",
                 nextLabel = "下一首",
+                positionMs = 84_000L,
+                durationMs = 226_000L,
+                modeIcon = GuangYueIcons.ListMusic,
+                modeLabel = "顺序播放",
+                onCycleMode = {},
             )
         }
     }
