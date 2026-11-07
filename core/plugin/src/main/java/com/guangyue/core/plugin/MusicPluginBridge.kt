@@ -342,8 +342,11 @@ class MusicPluginBridge @Inject constructor(
                     call("getMusicSheetInfo", sheetItem, JsonPrimitive(page))
                 }
                 val o = raw.asObj()
-                MusicItem.list(o?.get("musicList") ?: o?.get("data") ?: raw, pluginId)
-            }.getOrDefault(emptyList())
+                val list = MusicItem.list(o?.get("musicList") ?: o?.get("data") ?: raw, pluginId)
+                if (list.isEmpty()) android.util.Log.w("GYSHEET", "getMusicSheetInfo empty plugin=$pluginId sheet=${sheetItem.toString().take(300)} raw=${raw.toString().take(500)}")
+                list
+            }.onFailure { android.util.Log.w("GYSHEET", "getMusicSheetInfo failed plugin=$pluginId: ${it.message?.take(400)}") }
+                .getOrDefault(emptyList())
         }
 
     /** Optional: plugin-provided comment section. */
