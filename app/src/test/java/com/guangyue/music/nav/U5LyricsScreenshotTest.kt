@@ -103,6 +103,7 @@ class U5LyricsScreenshotTest {
         pureMusic: Boolean = false,
         coverColor: Color? = COVER_TINT,
         showTranslation: Boolean = true,
+        barExpanded: Boolean = false,
     ) {
         val res = remember { testStrings() }
         val kernel = remember(lines, showTranslation) {
@@ -129,6 +130,12 @@ class U5LyricsScreenshotTest {
                 darkMode = dark,
                 coverColor = coverColor,
                 kernelLines = kernel,
+                onOpenPanel = {},
+                onNext = {},
+                modeIcon = com.guangyue.feature.library.design.icons.GuangYueIcons.ListMusic,
+                modeLabel = "顺序播放",
+                onCycleMode = {},
+                initialBarExpanded = barExpanded,
             )
         }
     }
@@ -136,6 +143,13 @@ class U5LyricsScreenshotTest {
     // ---------------- V0e 舞台单行 + 底部字幕层 ----------------
 
     /** 当前句有可读翻译 → 舞台画当前句、字幕层画译文。 */
+    /** P2b：播放胶囊展开态（歌名 / 模式·播放·下一首 / 可拖进度）。 */
+    @Test
+    fun p2bBarExpandedLight() = shoot("p2b-bar-expanded-light") { Lyrics(currentIndex = 4, barExpanded = true) }
+
+    @Test
+    fun p2bBarExpandedDark() = shoot("p2b-bar-expanded-dark", dark = true) { Lyrics(currentIndex = 4, dark = true, barExpanded = true) }
+
     @Test
     fun v0eStageLight() = shoot("v0e-stage-light") { Lyrics(currentIndex = 4) }
 

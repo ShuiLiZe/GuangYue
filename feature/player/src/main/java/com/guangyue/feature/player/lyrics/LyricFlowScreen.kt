@@ -149,6 +149,8 @@ fun LyricFlowScreen(
     modeIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     modeLabel: String = "",
     onCycleMode: (() -> Unit)? = null,
+    /** 截图用：播放胶囊一开始就是展开态。 */
+    initialBarExpanded: Boolean = false,
     /** 样式入口的无障碍文案（feature:player 无资源表，由 app 侧注入）。 */
     styleLabel: String = "",
     // V0d 取证：非 null 时把当前句的辉光强度钉死（debug harness 用，业务侧恒为 null）。
@@ -586,6 +588,7 @@ fun LyricFlowScreen(
                     modeIcon = modeIcon,
                     modeLabel = modeLabel,
                     onCycleMode = onCycleMode,
+                    initialExpanded = initialBarExpanded,
                 )
                 if (onOpenPanel != null) {
                     val panelPill = if (darkMode) Color(0xFF17171A).copy(alpha = 0.55f) else Color.White.copy(alpha = 0.62f)
@@ -718,15 +721,16 @@ private fun LyricBar(
     modeIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     modeLabel: String = "",
     onCycleMode: (() -> Unit)? = null,
+    initialExpanded: Boolean = false,
 ) {
     val seekBarLabel = str(labels.seekBar)
     val playLabel = str(labels.play)
     val pauseLabel = str(labels.pause)
     val pill = if (dark) Color(0xFF17171A).copy(alpha = 0.55f) else Color.White.copy(alpha = 0.62f)
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(initialExpanded) }
     var touch by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     LaunchedEffect(expanded, touch) {
-        if (expanded) {
+        if (expanded && !runningUnderRobolectric) {
             kotlinx.coroutines.delay(5_000)
             expanded = false
         }
