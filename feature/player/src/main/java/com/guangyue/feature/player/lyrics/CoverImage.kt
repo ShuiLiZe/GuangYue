@@ -37,6 +37,8 @@ fun CoverImage(
             .crossfade(true)
             .build(),
         contentDescription = contentDescription,
+        // P1b：封面一律裁成填满（Folia `object-cover`）；B 站等 16:9 封面放进方框不再上下留黑边。
+        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
         modifier = modifier,
     )
 }
