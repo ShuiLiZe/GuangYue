@@ -677,3 +677,11 @@ BUILD SUCCESSFUL in 35s
 - 依据 Folia `BravaisFocusCardBody.tsx`：当前在播的那块，播放键变「暂停 / 继续播放」（toggles），旁边多一颗「进入播放页」（Maximize2）；「加入队列」在已入队时显示「✓ 已在队列」且不再重复加入。
 - 实现：BravaisWall 新参数 `isCurrent / playing / onTogglePlayback / onEnterPlayback / isQueued`；NavHost 用 `playback.queueSnapshot()` 的 key 集合判断（砖 key：首页单曲 `track:<key>`，集合页 `ctrack:<i>:<key>`），首页与集合页都接上。文案取 zh-CN `libraryBravais.*`。
 - 验收：编译安装通过；模拟器上 B 站源取不到播放地址，最近播放不更新，未拍到「当前在播」态，留真机验收。提交 `be681ad`。
+
+## P2 浮动播放胶囊（2026-11-08）
+
+- 依据 Folia `FloatingPlayerControls.tsx` 展开态（grid-cols-[1fr_auto_1fr]、p-3、rounded-full、玻璃 + shadow-2xl）与基准 `screenshots-v2/m412-light-mini-bar.png`。
+- 首页 / 搜索 / 我的底栏上方的迷你条改为三行胶囊：居中歌名 14/700（点进播放舞台）；左槽播放模式（顺序 / 单曲 / 随机，点按循环）、中间 48dp 实心圆播放键（底 = 主字色、图标 = 页底色）、右槽下一首；底行等宽时间 · 2dp 进度（主字色）· 时长。
+- 手机化：Folia 默认槽位是「循环 + 歌词时间轴」，手机右槽换成下一首（原迷你条就有）；封面缩略图去掉（Folia 胶囊没有）。
+- 截图用 Robolectric（`GUANGYUE_RECORD_SCREENSHOTS=true`，U2ShellScreenshotTest 喂了时间与模式槽）：`p2-mini-capsule-{light,dark}.png`。模拟器上 B 站源取不到链，实机态待真机。
+- 提交：`db5a1dc`、`a596e2e` 及截图提交。
