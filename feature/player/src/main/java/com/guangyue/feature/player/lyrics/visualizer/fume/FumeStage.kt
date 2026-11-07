@@ -27,7 +27,10 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -47,6 +50,11 @@ import com.guangyue.core.lyrics.Line
 import com.guangyue.core.lyrics.RenderHints
 import com.guangyue.core.lyrics.fume.FumeArticleLayout
 import com.guangyue.core.lyrics.fume.FumeArticleLayoutBuilder
+import com.guangyue.core.lyrics.fume.FumeBackground
+import com.guangyue.core.lyrics.fume.FumeBackgroundScene
+import com.guangyue.core.lyrics.fume.FumeBackgroundShape
+import com.guangyue.core.lyrics.fume.FumeBackgroundShapeColor
+import com.guangyue.core.lyrics.fume.FumeBackgroundShapeKind
 import com.guangyue.core.lyrics.fume.FumeBlock
 import com.guangyue.core.lyrics.fume.FumeBlockTiming
 import com.guangyue.core.lyrics.fume.FumeCamera
@@ -174,6 +182,16 @@ internal fun FumeBulletinStage(
             return@BoxWithConstraints
         }
 
+        // V1b-5：世界背景物体（Folia VisualizerFume.tsx:239 buildFumeBackgroundScene，种子 `fume:主题名`）。
+        val backgroundScene: FumeBackgroundScene = remember(article, viewport) {
+            FumeBackground.buildScene(
+                viewport = viewport,
+                worldWidthIn = article.width,
+                worldHeightIn = article.height,
+                paperBounds = article.paperBounds,
+                seed = "fume:${layoutTheme.name}",
+            )
+        }
         val overviewCamera: FumeCameraViewTarget = remember(article, viewport) {
             FumeCamera.articleOverviewCamera(article, viewport)
         }
@@ -313,6 +331,25 @@ internal fun FumeBulletinStage(
             // 放大 density 倍，此后内部一切（相机、块、字号）都是 dp；scale(camera.scale) 与
             // 平移顺序严格照 useFumeCanvasStage.ts：translate(视口中心) → scale → translate(-camera)。
             val densityScale = density.density
+            // V1b-5：背景层先画（useFumeCanvasStage.ts:162-192），视差镜头 + 0.94 缩放，减弱动效时不画（= Folia staticMode）。
+            if (!reduceMotion) {
+                val bgView = FumeBackground.view(backgroundScene, camera.x, camera.y, camera.scale, viewport)
+                withTransform({
+                    scale(densityScale, densityScale, Offset.Zero)
+                    translate((viewport.width * 0.5).toFloat(), (viewport.height * 0.5).toFloat())
+                    scale(bgView.scale.toFloat(), bgView.scale.toFloat(), Offset.Zero)
+                    translate(-bgView.cameraX.toFloat(), -bgView.cameraY.toFloat())
+                }) {
+                    drawFumeBackground(
+                        scene = backgroundScene,
+                        view = bgView,
+                        time = time,
+                        multiplier = FumeBackground.opacityMultiplier(tuning.backgroundObjectOpacity),
+                        secondary = baseColor,
+                        accent = accentColor,
+                    )
+                }
+            }
             withTransform({
                 scale(densityScale, densityScale, Offset.Zero)
                 translate(
@@ -744,4 +781,96 @@ private fun mixColors(from: Color, to: Color, amount: Double, alpha: Double): Co
         blue = from.blue + (to.blue - from.blue) * t,
         alpha = FumeMath.clamp(alpha, 0.0, 1.0).toFloat(),
     )
+}
+
+/**
+ * V1b-5：对应 Folia `FumeBackground.ts` 的 drawFumeBackground（无音频电平时 audioScale = 1）。
+ * 大几何：同一路径描两遍渐变线（底线 0.28× 线宽 / 0.56× 透明度，顶线 0.92× 线宽）；
+ * 星芒：纯色描边 + 一圈加宽的淡描边代替 Canvas 的 shadowBlur 10（Compose 线条没有廉价阴影）。
+ */
+private fun DrawScope.drawFumeBackground(
+    scene: FumeBackgroundScene,
+    view: com.guangyue.core.lyrics.fume.FumeBackgroundLayerView,
+    time: Double,
+    multiplier: Double,
+    secondary: Color,
+    accent: Color,
+) {
+    for (shape in scene.shapes) {
+        val opacity = FumeBackground.drawOpacity(shape, multiplier)
+        if (opacity <= 0.001) continue
+        val (ox, oy) = FumeBackground.parallaxOffset(shape, view)
+        val rotationDeg = Math.toDegrees(shape.rotation + time * shape.rotationSpeed).toFloat()
+        withTransform({
+            translate((shape.x + ox).toFloat(), (shape.y + oy).toFloat())
+            rotate(rotationDeg, Offset.Zero)
+        }) {
+            if (shape.kind == FumeBackgroundShapeKind.SPARK) {
+                val c = if (shape.color == FumeBackgroundShapeColor.ACCENT) accent else secondary
+                val path = fumeShapePath(shape)
+                drawPath(path, c.copy(alpha = (opacity * 0.75 * 0.35).toFloat()), style = Stroke(width = (shape.strokeWidth * 4).toFloat()))
+                drawPath(path, c.copy(alpha = opacity.toFloat()), style = Stroke(width = shape.strokeWidth.toFloat()))
+            } else {
+                val w = shape.width.toFloat()
+                val h = shape.height.toFloat()
+                fun gradient(a: Double) = Brush.linearGradient(
+                    0f to secondary.copy(alpha = (a * 0.18).toFloat()),
+                    0.28f to mixColors(secondary, accent, 0.24, a * 0.58),
+                    0.54f to mixColors(secondary, accent, 0.62, a * 0.92),
+                    1f to accent.copy(alpha = (a * 0.7).toFloat()),
+                    start = Offset(-w * 0.55f, -h * 0.28f),
+                    end = Offset(w * 0.55f, h * 0.28f),
+                )
+                val baseW = maxOf(shape.strokeWidth * 0.28, 0.14).toFloat()
+                val topW = maxOf(shape.strokeWidth * 0.92, 0.78).toFloat()
+                if (shape.kind == FumeBackgroundShapeKind.RING) {
+                    val gapStart = shape.ringGapStart ?: (-Math.PI * 0.18)
+                    val gapSize = FumeMath.clamp(shape.ringGapSize ?: (Math.PI * 0.2), 0.18, Math.PI * 0.6)
+                    val startDeg = Math.toDegrees(gapStart + gapSize).toFloat()
+                    val sweepDeg = Math.toDegrees(Math.PI * 2 - gapSize).toFloat()
+                    val r = w * 0.5f
+                    for ((a, sw) in listOf(opacity * 0.56 to baseW, opacity to topW)) {
+                        drawArc(
+                            brush = gradient(a),
+                            startAngle = startDeg,
+                            sweepAngle = sweepDeg,
+                            useCenter = false,
+                            topLeft = Offset(-r, -r),
+                            size = Size(w, w),
+                            style = Stroke(width = sw, cap = StrokeCap.Round),
+                        )
+                    }
+                } else {
+                    val path = fumeShapePath(shape)
+                    drawPath(path, gradient(opacity * 0.56), style = Stroke(width = baseW))
+                    drawPath(path, gradient(opacity), style = Stroke(width = topW))
+                }
+            }
+        }
+    }
+}
+
+/** 对应 buildShapePath（方 / 十字 / 星芒；环走 drawArc）。坐标以形状中心为原点。 */
+private fun fumeShapePath(shape: FumeBackgroundShape): Path {
+    val size = shape.width.toFloat()
+    val half = size * 0.5f
+    val path = Path()
+    when (shape.kind) {
+        FumeBackgroundShapeKind.SQUARE -> {
+            path.moveTo(-half, -half); path.lineTo(half, -half); path.lineTo(half, half); path.lineTo(-half, half); path.close()
+        }
+        FumeBackgroundShapeKind.CROSS -> {
+            val arm = size * 0.3f
+            path.moveTo(-arm, -half); path.lineTo(arm, -half); path.lineTo(arm, -arm); path.lineTo(half, -arm)
+            path.lineTo(half, arm); path.lineTo(arm, arm); path.lineTo(arm, half); path.lineTo(-arm, half)
+            path.lineTo(-arm, arm); path.lineTo(-half, arm); path.lineTo(-half, -arm); path.lineTo(-arm, -arm); path.close()
+        }
+        else -> {
+            val outer = half
+            val inner = size * 0.13f
+            path.moveTo(0f, -outer); path.lineTo(inner, -inner); path.lineTo(outer, 0f); path.lineTo(inner, inner)
+            path.lineTo(0f, outer); path.lineTo(-inner, inner); path.lineTo(-outer, 0f); path.lineTo(-inner, -inner); path.close()
+        }
+    }
+    return path
 }

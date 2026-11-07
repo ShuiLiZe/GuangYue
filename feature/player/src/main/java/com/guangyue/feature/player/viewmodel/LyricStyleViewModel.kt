@@ -12,6 +12,7 @@ package com.guangyue.feature.player.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.guangyue.core.lyrics.ClassicTuning
+import com.guangyue.core.lyrics.fume.FumeTuning
 import com.guangyue.core.prefs.AppPreferences
 import com.guangyue.feature.player.lyrics.LyricStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -39,6 +40,15 @@ class LyricStyleViewModel @Inject constructor(
      */
     private val _style = MutableStateFlow(LyricStyle.fromId(preferences.lyricStyleId))
     val style: StateFlow<LyricStyle> = _style.asStateFlow()
+
+    /** V1b-4：「浮名」调参（Folia `fume/tuning.ts`，storage.key = 'fume_tuning'）。 */
+    private val _fumeTuning = MutableStateFlow(preferences.fumeTuning)
+    val fumeTuning: StateFlow<FumeTuning> = _fumeTuning.asStateFlow()
+
+    fun updateFume(tuning: FumeTuning) {
+        _fumeTuning.value = tuning
+        viewModelScope.launch { preferences.fumeTuning = tuning }
+    }
 
     fun update(tuning: ClassicTuning) {
         _tuning.value = ClassicTuning.sanitize(

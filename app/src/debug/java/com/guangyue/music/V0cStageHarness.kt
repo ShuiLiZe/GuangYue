@@ -36,6 +36,8 @@ import com.guangyue.feature.player.lyrics.LyricStringHost
 import com.guangyue.feature.player.lyrics.LyricStrings
 import com.guangyue.feature.player.lyrics.LyricStyle
 import com.guangyue.feature.player.lyrics.LyricStyleSheet
+import com.guangyue.feature.player.lyrics.LyricStyleSheetPreview
+import androidx.compose.foundation.layout.navigationBarsPadding
 import com.guangyue.music.nav.lyricStyleStrings
 import com.guangyue.feature.player.lyrics.visualizer.fume.fumeGlowOverride
 import com.guangyue.feature.player.lyrics.visualizer.runningUnderRobolectricOverride
@@ -205,9 +207,9 @@ fun V0cStage(
         // V1b-2：弹层是半透明毛玻璃，身后必须有一层真实的播放页画面，实拍才看得出「透」。
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
-        if (style == "sheet" || style == "sheetbare") {
+        if (style == "sheet" || style == "sheetbare" || style == "sheetclassic") {
             CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
-                if (style == "sheet") {
+                if (style == "sheet" || style == "sheetclassic") {
                     LyricFlowScreen(
                         lyrics = remember { parseLrc(LRC) },
                         currentIndex = 1,
@@ -231,15 +233,22 @@ fun V0cStage(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
-                LyricStyleSheet(
-                    tuning = ClassicTuning(),
-                    strings = lyricStyleStrings(),
-                    styleName = v0cString(R.string.lyrics_style_classic),
-                    onTuning = {},
-                    onDismiss = {},
-                    style = LyricStyle.FUME,
-                    fumeName = v0cString(R.string.lyrics_style_fume),
-                )
+                // V1b-4：模拟器 withFrameNanos 推不动 ModalBottomSheet 的入场动画（实拍只有底图、弹层不出），
+                // 取证改画面板本体 [LyricStyleSheetPreview]，贴底放在播放页上，与弹层展开后的位置一致。
+                Box(
+                    Modifier.fillMaxSize().navigationBarsPadding(),
+                    contentAlignment = androidx.compose.ui.Alignment.BottomCenter,
+                ) {
+                    LyricStyleSheetPreview(
+                        tuning = ClassicTuning(),
+                        strings = lyricStyleStrings(),
+                        styleName = v0cString(R.string.lyrics_style_classic),
+                        onTuning = {},
+                        // V1b-4：`sheetclassic` 拍流光那一组参数，其余拍浮名参数。
+                        style = if (style == "sheetclassic") LyricStyle.CLASSIC else LyricStyle.FUME,
+                        fumeName = v0cString(R.string.lyrics_style_fume),
+                    )
+                }
             }
         } else {
         val lines = remember { parseLrc(LRC) }
@@ -312,6 +321,16 @@ private fun v0cString(id: Int): String = when (id) {
     R.string.lyrics_style_spacing -> "词距"
     R.string.lyrics_style_reset -> "恢复默认"
     R.string.lyrics_style_close -> "关闭"
+    R.string.lyrics_style_fume_hide_print -> "隐藏打印方块"
+    R.string.lyrics_style_fume_geometric -> "通用几何图形"
+    R.string.lyrics_style_fume_bg_opacity -> "世界背景物体透明度"
+    R.string.lyrics_style_fume_text_hold -> "文字停留比例"
+    R.string.lyrics_style_fume_camera_speed -> "摄影机移动速度"
+    R.string.lyrics_style_fume_tracking -> "摄影机追焦方式"
+    R.string.lyrics_style_fume_tracking_stepped -> "定格"
+    R.string.lyrics_style_fume_tracking_smooth -> "平滑"
+    R.string.lyrics_style_fume_glow -> "当前句辉光强度"
+    R.string.lyrics_style_fume_hero_scale -> "大标题比例"
     else -> ""
 }
 

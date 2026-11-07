@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -54,6 +57,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.guangyue.core.lyrics.ClassicTuning
+import com.guangyue.core.lyrics.fume.FumeCameraTrackingMode
+import com.guangyue.core.lyrics.fume.FumeTuning
 import com.guangyue.feature.library.design.GyMotion
 import com.guangyue.feature.library.design.GySpace
 import com.guangyue.feature.library.design.Gyp
@@ -108,6 +113,20 @@ data class LyricStyleStrings(
      * 时由宿主兜底，不会把 0 当文案显示。
      */
     val fume: Int = 0,
+    /**
+     * V1b-4：「浮名参数」各行文案（Folia zh-CN `options.fume*`）。同样默认 0，老调用点不传不报错；
+     * 0 时该行标签退回空串（取证 / NavHost 都显式传值）。
+     */
+    val fumeHidePrintSymbols: Int = 0,
+    val fumeGeometricBackground: Int = 0,
+    val fumeBackgroundObjectOpacity: Int = 0,
+    val fumeTextHoldRatio: Int = 0,
+    val fumeCameraSpeed: Int = 0,
+    val fumeCameraTrackingMode: Int = 0,
+    val fumeCameraTrackingStepped: Int = 0,
+    val fumeCameraTrackingSmooth: Int = 0,
+    val fumeGlowIntensity: Int = 0,
+    val fumeHeroScale: Int = 0,
 )
 
 @Composable
@@ -129,6 +148,9 @@ fun LyricStyleSheet(
      * 取证截图（[SheetPreview]）用 28dp 全圆角，四角一起看得到。
      */
     sheetShape: RoundedCornerShape = LyricSheetShape,
+    /** V1b-4：「浮名」调参（Folia `fume/tuning.ts`）。选中浮名时面板换成这一组。 */
+    fumeTuning: FumeTuning = FumeTuning.DEFAULT,
+    onFumeTuning: (FumeTuning) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -151,6 +173,8 @@ fun LyricStyleSheet(
             style = style,
             fumeName = fumeName,
             onStyle = onStyle,
+            fumeTuning = fumeTuning,
+            onFumeTuning = onFumeTuning,
         )
     }
 }
@@ -171,21 +195,27 @@ private fun LyricStylePanelContent(
     style: LyricStyle,
     fumeName: String,
     onStyle: (LyricStyle) -> Unit,
+    fumeTuning: FumeTuning = FumeTuning.DEFAULT,
+    onFumeTuning: (FumeTuning) -> Unit = {},
 ) {
     // Folia `index.css:163-168` `.theme-glass-panel`：`--bg-color` 85% 底 + `--text-primary` 12% 描边。
     // 面板改用 `--st-card` 一族（与弹层其它行同源），透明度取 85%，透出身后的封面调色板。
     val glassFill = Gyp.card.copy(alpha = 0.85f)
     val glassBorder = Gyp.line2
+    // V1b-4：浮名参数一长串，面板最高占屏 82%（留出状态栏与身后舞台），超出部分在面板里滚。
+    val maxPanelHeight = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.82f).dp
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(max = maxPanelHeight)
             .clip(LyricSheetShape)
             .background(glassFill)
             .border(1.dp, glassBorder, LyricSheetShape)
             .padding(horizontal = 20.dp)
             .padding(top = 8.dp, bottom = 4.dp),
     ) {
-        Column {
+        // V1b-4：浮名有 8 项参数，360dp 高的屏放不下 → 整列可滚（手柄与标题一起滚走，和 Folia 设置窗一致）。
+        Column(Modifier.verticalScroll(rememberScrollState())) {
             // 手柄：自绘 36×4、圆角胶囊、`--st-t3`（Material 默认把手是 32×4 的纯灰）。
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Box(
@@ -239,31 +269,43 @@ private fun LyricStylePanelContent(
 
             // Folia kit/Row.tsx：一行 = 左标签、右控件（`flex min-h-14 items-center`，标签在左、控件在右）。
             // 原来开关单独一行、标签在下一行（两行错位），这里合成同一行。
-            ToggleRow(
-                label = str(strings.rotation),
-                checked = tuning.enableWordRotation,
-                accent = accent,
-                onChange = { onTuning(tuning.copy(enableWordRotation = it)) },
-            )
+            if (style == LyricStyle.FUME) {
+                FumeTuningRows(
+                    tuning = fumeTuning,
+                    strings = strings,
+                    accent = accent,
+                    onTuning = onFumeTuning,
+                )
+            } else {
+                ToggleRow(
+                    label = str(strings.rotation),
+                    checked = tuning.enableWordRotation,
+                    accent = accent,
+                    onChange = { onTuning(tuning.copy(enableWordRotation = it)) },
+                )
 
-            TuningSliderRow(
-                label = str(strings.breathing),
-                value = tuning.breathingFloatMultiplier.toFloat(),
-                accent = accent,
-                onChange = { onTuning(tuning.copy(breathingFloatMultiplier = it.toDouble())) },
-            )
-            TuningSliderRow(
-                label = str(strings.spacing),
-                value = tuning.wordSpacing.toFloat(),
-                accent = accent,
-                onChange = { onTuning(tuning.copy(wordSpacing = it.toDouble())) },
-            )
+                TuningSliderRow(
+                    label = str(strings.breathing),
+                    value = tuning.breathingFloatMultiplier.toFloat(),
+                    accent = accent,
+                    onChange = { onTuning(tuning.copy(breathingFloatMultiplier = it.toDouble())) },
+                )
+                TuningSliderRow(
+                    label = str(strings.spacing),
+                    value = tuning.wordSpacing.toFloat(),
+                    accent = accent,
+                    onChange = { onTuning(tuning.copy(wordSpacing = it.toDouble())) },
+                )
+            }
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .clickableNoRipple { onTuning(ClassicTuning()) }
+                    .clickableNoRipple {
+                        // 恢复默认只作用于当前样式（Folia 各模式各自的 handleReset*Tuning）。
+                        if (style == LyricStyle.FUME) onFumeTuning(FumeTuning.DEFAULT) else onTuning(ClassicTuning())
+                    }
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
@@ -403,6 +445,8 @@ private fun FoliaSwitch(
     onChange: (Boolean) -> Unit,
 ) {
     var pressed by remember { mutableStateOf(false) }
+    // V1b-4 修：同滑杆，pointerInput 只按 checked 重启，回调须读最新值。
+    val latestOnChange by rememberUpdatedState(onChange)
     val knobWidth by animateDpAsState(
         targetValue = if (pressed) 22.dp else 18.dp,
         animationSpec = tween(GyMotion.MOVE_MS, easing = GyMotion.easeStandard),
@@ -434,7 +478,7 @@ private fun FoliaSwitch(
                         tryAwaitRelease()
                         pressed = false
                     },
-                    onTap = { onChange(!checked) },
+                    onTap = { latestOnChange(!checked) },
                 )
             },
     ) {
@@ -464,6 +508,12 @@ private fun TuningSliderRow(
     value: Float,
     accent: Color,
     onChange: (Float) -> Unit,
+    /** V1b-4：值域与步长（Folia `SliderRow` 的 min / max / step），默认是流光的 `zeroToTwo`。 */
+    min: Float = 0f,
+    max: Float = 2f,
+    step: Float = 0.1f,
+    /** Folia `panelRows.tsx` 的 `times`（`1.00x`）/ `percent`（`50%`）。 */
+    format: (Float) -> String = ::formatTimes,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         // stacked：标签与数值同一行，数值靠右（Folia Slider stacked 的 `<output class="ml-auto">`）。
@@ -474,7 +524,7 @@ private fun TuningSliderRow(
         ) {
             Text(label, fontSize = 14.sp, lineHeight = 20.sp, color = Gyp.ink)
             Text(
-                text = "%.2fx".format(value),
+                text = format(value),
                 fontSize = 13.sp,
                 color = Gyp.t2,
                 style = androidx.compose.ui.text.TextStyle(
@@ -488,6 +538,9 @@ private fun TuningSliderRow(
             accent = accent,
             onChange = onChange,
             contentDescription = label,
+            min = min,
+            max = max,
+            step = step,
         )
     }
 }
@@ -517,7 +570,13 @@ private fun FoliaSlider(
     accent: Color,
     onChange: (Float) -> Unit,
     contentDescription: String,
+    min: Float = 0f,
+    max: Float = 2f,
+    step: Float = 0.1f,
 ) {
+    // V1b-4 修：pointerInput 只按宽度重启，协程里会一直拿着第一次组合的 onChange ——
+    // 它闭包里的 tuning 是旧的，拖完 A 再拖 B，A 会被旧值写回。改为始终读最新的回调。
+    val latestOnChange by rememberUpdatedState(onChange)
     val density = LocalDensity.current
     val thumbDp = FoliaSliderThumbDp
     val thumbInsetPx = with(density) { FoliaSliderThumbInsetDp.dp.toPx() }
@@ -529,7 +588,7 @@ private fun FoliaSlider(
     val thumbSizePx = with(density) { thumbSizeNow.toPx() }
     // 拖动中或点按落点都立即收值：手势里先给值、再把 dragging 打开，
     // 保证滑钮的「按下放大」只影响半径、不影响中心。
-    val fraction = (value.coerceIn(0f, 2f) / 2f)
+    val fraction = FoliaSliderGeometry.fractionOf(value, min, max)
     // 填充末端与滑钮中心同源：两者都等于 [FoliaSliderGeometry.fillEndPx]。
     val fillEndPx = FoliaSliderGeometry.fillEndPx(trackWidthPx, thumbInsetPx, fraction)
     val thumbLeftPx = FoliaSliderGeometry.thumbLeftPx(trackWidthPx, thumbInsetPx, fraction, thumbSizePx)
@@ -541,16 +600,16 @@ private fun FoliaSlider(
         .onSizeChanged { trackWidthPx = it.width.toFloat() }
         // 只留一个 pointerInput 块：detectTapGestures 与 detectHorizontalDragGestures 写在两个
         // pointerInput 里会争抢同一次 down 事件，拖动前几帧不收值（滑钮跟不上手指）。
-        .pointerInput(trackWidthPx) {
+        .pointerInput(trackWidthPx, min, max, step) {
             detectHorizontalDragGestures(
                 onDragStart = { offset ->
                     dragging = true
-                    onChange(FoliaSliderGeometry.valueForPositionPx(offset.x, trackWidthPx, thumbInsetPx))
+                    latestOnChange(FoliaSliderGeometry.valueForPositionPx(offset.x, trackWidthPx, thumbInsetPx, min, max, step))
                 },
                 onDragEnd = { dragging = false },
                 onDragCancel = { dragging = false },
                 onHorizontalDrag = { change, _ ->
-                    onChange(FoliaSliderGeometry.valueForPositionPx(change.position.x, trackWidthPx, thumbInsetPx))
+                    latestOnChange(FoliaSliderGeometry.valueForPositionPx(change.position.x, trackWidthPx, thumbInsetPx, min, max, step))
                 },
             )
         }
@@ -625,11 +684,24 @@ internal object FoliaSliderGeometry {
         fillEndPx(trackWidthPx, insetPx, fraction) - thumbSizePx * 0.5f
 
     /** 手势落点 → 0..2 的值（按 0.1 取整，与 Folia `zeroToTwo` 的 19 个中间值一致）。 */
-    fun valueForPositionPx(xPx: Float, trackWidthPx: Float, insetPx: Float): Float {
+    fun valueForPositionPx(xPx: Float, trackWidthPx: Float, insetPx: Float): Float =
+        valueForPositionPx(xPx, trackWidthPx, insetPx, 0f, 2f, 0.1f)
+
+    /**
+     * V1b-4：通用值域。落点 → [min, max]，按 [step] 从 min 起取整（Folia `<input type=range step>`），
+     * 再按 0.0001 收口，去掉 0.55 + 7×0.05 这类浮点尾巴。
+     */
+    fun valueForPositionPx(xPx: Float, trackWidthPx: Float, insetPx: Float, min: Float, max: Float, step: Float): Float {
         val usable = usableWidthPx(trackWidthPx, insetPx)
-        val raw = ((xPx - insetPx) / usable).coerceIn(0f, 1f) * 2f
-        return (raw * 10f).roundToInt() / 10f
+        val f = ((xPx - insetPx) / usable).coerceIn(0f, 1f)
+        val raw = min + (max - min) * f
+        val snapped = if (step > 0f) min + ((raw - min) / step).roundToInt() * step else raw
+        return ((snapped.coerceIn(min, max)) * 10000f).roundToInt() / 10000f
     }
+
+    /** 值 → 0..1 的位置比例（值域退化时按 0）。 */
+    fun fractionOf(value: Float, min: Float, max: Float): Float =
+        if (max <= min) 0f else ((value.coerceIn(min, max) - min) / (max - min))
 }
 
 /** 弹层 / 面板圆角：14dp，与 V0 的 `QualityPickerSheet` 同一档。 */
@@ -673,6 +745,8 @@ fun LyricStyleSheetPreview(
     style: LyricStyle = LyricStyle.CLASSIC,
     fumeName: String = "",
     onStyle: (LyricStyle) -> Unit = {},
+    fumeTuning: FumeTuning = FumeTuning.DEFAULT,
+    onFumeTuning: (FumeTuning) -> Unit = {},
 ) {
     LyricStylePanelContent(
         tuning = tuning,
@@ -683,5 +757,163 @@ fun LyricStyleSheetPreview(
         style = style,
         fumeName = fumeName,
         onStyle = onStyle,
+        fumeTuning = fumeTuning,
+        onFumeTuning = onFumeTuning,
     )
+}
+
+
+/** Folia `panelRows.tsx`：`times = value.toFixed(2) + "x"`。 */
+internal fun formatTimes(value: Float): String = "%.2fx".format(value)
+
+/** Folia `panelRows.tsx`：`percent = Math.round(value * 100) + "%"`。 */
+internal fun formatPercent(value: Float): String = "${(value * 100f).roundToInt()}%"
+
+/**
+ * V1b-4「浮名参数」一组，逐行照 Folia `visualizer/settingsPanels.tsx` 的 `FumeSettingsPanel`：
+ * 隐藏打印方块（开关）→ 通用几何图形（开关，显示的是「开」，存的是 disable）→ 世界背景物体透明度（0..1 / 0.05 / %）
+ * → 文字停留比例（0..1 / 0.05 / %）→ 摄影机移动速度（0.55..1.85 / 0.05 / x）→ 摄影机追焦方式（分段：定格 / 平滑）
+ * → 当前句辉光强度（0..1.8 / 0.05 / x）→ 大标题比例（0.82..1.32 / 0.02 / x）。
+ * 写回一律过 [FumeTuning.sanitize]（= Folia `tuning.ts` 的 merge 钳位）。
+ */
+@Composable
+private fun FumeTuningRows(
+    tuning: FumeTuning,
+    strings: LyricStyleStrings,
+    accent: Color,
+    onTuning: (FumeTuning) -> Unit,
+) {
+    fun emit(t: FumeTuning) = onTuning(
+        FumeTuning.sanitize(
+            hidePrintSymbols = t.hidePrintSymbols,
+            disableGeometricBackground = t.disableGeometricBackground,
+            backgroundObjectOpacity = t.backgroundObjectOpacity,
+            textHoldRatio = t.textHoldRatio,
+            cameraTrackingMode = t.cameraTrackingMode,
+            cameraSpeed = t.cameraSpeed,
+            glowIntensity = t.glowIntensity,
+            heroScale = t.heroScale,
+        ),
+    )
+    ToggleRow(
+        label = str(strings.fumeHidePrintSymbols),
+        checked = tuning.hidePrintSymbols,
+        accent = accent,
+        onChange = { emit(tuning.copy(hidePrintSymbols = it)) },
+    )
+    ToggleRow(
+        label = str(strings.fumeGeometricBackground),
+        checked = !tuning.disableGeometricBackground,
+        accent = accent,
+        onChange = { shown -> emit(tuning.copy(disableGeometricBackground = !shown)) },
+    )
+    TuningSliderRow(
+        label = str(strings.fumeBackgroundObjectOpacity),
+        value = tuning.backgroundObjectOpacity.toFloat(),
+        accent = accent,
+        min = 0f, max = 1f, step = 0.05f, format = ::formatPercent,
+        onChange = { emit(tuning.copy(backgroundObjectOpacity = it.toDouble())) },
+    )
+    TuningSliderRow(
+        label = str(strings.fumeTextHoldRatio),
+        value = tuning.textHoldRatio.toFloat(),
+        accent = accent,
+        min = 0f, max = 1f, step = 0.05f, format = ::formatPercent,
+        onChange = { emit(tuning.copy(textHoldRatio = it.toDouble())) },
+    )
+    TuningSliderRow(
+        label = str(strings.fumeCameraSpeed),
+        value = tuning.cameraSpeed.toFloat(),
+        accent = accent,
+        min = 0.55f, max = 1.85f, step = 0.05f,
+        onChange = { emit(tuning.copy(cameraSpeed = it.toDouble())) },
+    )
+    SegmentedRow(
+        label = str(strings.fumeCameraTrackingMode),
+        options = listOf(
+            FumeCameraTrackingMode.STEPPED to str(strings.fumeCameraTrackingStepped),
+            FumeCameraTrackingMode.SMOOTH to str(strings.fumeCameraTrackingSmooth),
+        ),
+        selected = tuning.cameraTrackingMode,
+        onChange = { emit(tuning.copy(cameraTrackingMode = it)) },
+    )
+    TuningSliderRow(
+        label = str(strings.fumeGlowIntensity),
+        value = tuning.glowIntensity.toFloat(),
+        accent = accent,
+        min = 0f, max = 1.8f, step = 0.05f,
+        onChange = { emit(tuning.copy(glowIntensity = it.toDouble())) },
+    )
+    TuningSliderRow(
+        label = str(strings.fumeHeroScale),
+        value = tuning.heroScale.toFloat(),
+        accent = accent,
+        min = 0.82f, max = 1.32f, step = 0.02f,
+        onChange = { emit(tuning.copy(heroScale = it.toDouble())) },
+    )
+}
+
+/**
+ * Folia `kit/Row.tsx` + `kit/Segmented.tsx`：左标签、右分段。
+ * 分段容器 `--st-fill` 底、8dp 圆角、2dp 内边距；每段高 28dp、13sp；
+ * 选中段垫 `--st-raise` 6dp 圆角 + 1dp 投影，文字 `--st-t1`，未选 `--st-t2`。
+ * 手机上整段热区垫到 48dp 高（触控），视觉仍是 32dp 的胶囊。
+ */
+@Composable
+private fun <T> SegmentedRow(
+    label: String,
+    options: List<Pair<T, String>>,
+    selected: T,
+    onChange: (T) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            color = Gyp.ink,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(12.dp))
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Gyp.tint)
+                .padding(2.dp),
+        ) {
+            options.forEach { (value, text) ->
+                val isSel = value == selected
+                Box(
+                    modifier = Modifier
+                        .height(28.dp)
+                        .then(
+                            if (isSel) {
+                                Modifier
+                                    .shadow(1.dp, RoundedCornerShape(6.dp))
+                                    .background(Gyp.raise, RoundedCornerShape(6.dp))
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .clickableNoRipple { if (!isSel) onChange(value) }
+                        .semantics { contentDescription = text }
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = text,
+                        fontSize = 13.sp,
+                        color = if (isSel) Gyp.ink else Gyp.t2,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
 }

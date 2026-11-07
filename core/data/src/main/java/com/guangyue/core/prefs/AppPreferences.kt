@@ -2,6 +2,8 @@ package com.guangyue.core.prefs
 
 import android.content.Context
 import com.guangyue.core.lyrics.ClassicTuning
+import com.guangyue.core.lyrics.fume.FumeCameraTrackingMode
+import com.guangyue.core.lyrics.fume.FumeTuning
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -95,6 +97,38 @@ class AppPreferences @Inject constructor(
                 .apply()
         }
 
+    /**
+     * V1b-4：「浮名」调参。对应 Folia `fume/tuning.ts` storage.key = 'fume_tuning'；
+     * 逐字段存，读写都过 [FumeTuning.sanitize]（同 Folia read/merge 的钳位与回落）。
+     */
+    var fumeTuning: FumeTuning
+        get() = FumeTuning.sanitize(
+            hidePrintSymbols = prefs.getBoolean(KEY_FUME_HIDE_PRINT, FumeTuning.DEFAULT.hidePrintSymbols),
+            disableGeometricBackground = prefs.getBoolean(KEY_FUME_NO_GEOMETRY, FumeTuning.DEFAULT.disableGeometricBackground),
+            backgroundObjectOpacity = prefs.getFloat(KEY_FUME_BG_OPACITY, FumeTuning.DEFAULT.backgroundObjectOpacity.toFloat()).toDouble(),
+            textHoldRatio = prefs.getFloat(KEY_FUME_TEXT_HOLD, FumeTuning.DEFAULT.textHoldRatio.toFloat()).toDouble(),
+            cameraTrackingMode = if (prefs.getString(KEY_FUME_TRACKING, null) == "stepped") {
+                FumeCameraTrackingMode.STEPPED
+            } else {
+                FumeCameraTrackingMode.SMOOTH
+            },
+            cameraSpeed = prefs.getFloat(KEY_FUME_CAMERA_SPEED, FumeTuning.DEFAULT.cameraSpeed.toFloat()).toDouble(),
+            glowIntensity = prefs.getFloat(KEY_FUME_GLOW, FumeTuning.DEFAULT.glowIntensity.toFloat()).toDouble(),
+            heroScale = prefs.getFloat(KEY_FUME_HERO_SCALE, FumeTuning.DEFAULT.heroScale.toFloat()).toDouble(),
+        )
+        set(value) {
+            prefs.edit()
+                .putBoolean(KEY_FUME_HIDE_PRINT, value.hidePrintSymbols)
+                .putBoolean(KEY_FUME_NO_GEOMETRY, value.disableGeometricBackground)
+                .putFloat(KEY_FUME_BG_OPACITY, value.backgroundObjectOpacity.toFloat())
+                .putFloat(KEY_FUME_TEXT_HOLD, value.textHoldRatio.toFloat())
+                .putString(KEY_FUME_TRACKING, if (value.cameraTrackingMode == FumeCameraTrackingMode.STEPPED) "stepped" else "smooth")
+                .putFloat(KEY_FUME_CAMERA_SPEED, value.cameraSpeed.toFloat())
+                .putFloat(KEY_FUME_GLOW, value.glowIntensity.toFloat())
+                .putFloat(KEY_FUME_HERO_SCALE, value.heroScale.toFloat())
+                .apply()
+        }
+
     /** 用户启用的取链源 id，多个用逗号分隔，按启用顺序依次尝试。 */
     var lxEnabledIds: String
         get() = prefs.getString(KEY_LX_ENABLED, "").orEmpty()
@@ -134,6 +168,16 @@ class AppPreferences @Inject constructor(
         const val KEY_CLASSIC_BREATHING = "classic_tuning_breathing"
         const val KEY_CLASSIC_LEGACY = "classic_tuning_legacy"
         const val KEY_CLASSIC_SPACING = "classic_tuning_spacing"
+
+        /** 「浮名」调参（Folia fume/tuning.ts storage.key = 'fume_tuning'）。 */
+        const val KEY_FUME_HIDE_PRINT = "fume_tuning_hide_print"
+        const val KEY_FUME_NO_GEOMETRY = "fume_tuning_no_geometry"
+        const val KEY_FUME_BG_OPACITY = "fume_tuning_bg_opacity"
+        const val KEY_FUME_TEXT_HOLD = "fume_tuning_text_hold"
+        const val KEY_FUME_TRACKING = "fume_tuning_tracking"
+        const val KEY_FUME_CAMERA_SPEED = "fume_tuning_camera_speed"
+        const val KEY_FUME_GLOW = "fume_tuning_glow"
+        const val KEY_FUME_HERO_SCALE = "fume_tuning_hero_scale"
 
         /** 取链源支持的音质档，由低到高。 */
         val LX_QUALITIES = listOf("128k", "320k", "flac", "flac24bit")

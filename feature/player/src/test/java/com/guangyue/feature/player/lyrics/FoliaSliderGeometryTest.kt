@@ -115,4 +115,31 @@ class FoliaSliderGeometryTest {
         assertTrue(left.isFinite())
         assertTrue(FoliaSliderGeometry.valueForPositionPx(10f, 0f, inset).isFinite())
     }
+
+    // V1b-4：通用值域（浮名参数的 0.55..1.85 / 0.05、0.82..1.32 / 0.02、0..1 / 0.05）。
+    @Test
+    fun genericRangeSnapsFromMinAndHitsBothEnds() {
+        val w = 400f
+        val inset = 8f
+        assertEquals(0.55f, FoliaSliderGeometry.valueForPositionPx(0f, w, inset, 0.55f, 1.85f, 0.05f), 1e-4f)
+        assertEquals(1.85f, FoliaSliderGeometry.valueForPositionPx(w, w, inset, 0.55f, 1.85f, 0.05f), 1e-4f)
+        // 正中 = 1.20（0.55 + 0.65），不是浮点尾巴 1.2000001
+        assertEquals(1.2f, FoliaSliderGeometry.valueForPositionPx(w / 2f, w, inset, 0.55f, 1.85f, 0.05f), 1e-4f)
+        assertEquals(1.08f, FoliaSliderGeometry.valueForPositionPx(inset + (w - 2 * inset) * 0.52f, w, inset, 0.82f, 1.32f, 0.02f), 1e-4f)
+        assertEquals(0.5f, FoliaSliderGeometry.valueForPositionPx(w / 2f, w, inset, 0f, 1f, 0.05f), 1e-4f)
+    }
+
+    @Test
+    fun fractionOfMapsRangeAndClamps() {
+        assertEquals(0f, FoliaSliderGeometry.fractionOf(0.55f, 0.55f, 1.85f), 1e-6f)
+        assertEquals(1f, FoliaSliderGeometry.fractionOf(9f, 0.55f, 1.85f), 1e-6f)
+        assertEquals(0.5f, FoliaSliderGeometry.fractionOf(1.2f, 0.55f, 1.85f), 1e-5f)
+        assertEquals(0f, FoliaSliderGeometry.fractionOf(1f, 1f, 1f), 1e-6f)
+    }
+
+    @Test
+    fun formatMatchesFoliaPanelRows() {
+        assertEquals("50%", formatPercent(0.5f))
+        assertEquals("1.20x", formatTimes(1.2f))
+    }
 }

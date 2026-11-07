@@ -320,6 +320,17 @@
     <string name="lyrics_style_no_options">这个样式没有参数</string>
     <!-- 自拟：样式弹层的关闭语义（底部弹层下滑关闭，无障碍要有个说法） -->
     <string name="lyrics_style_close">关闭</string>
+    <!-- ===== V1b-4 浮名参数（zh-CN.ts options.fume*，visualizer/settingsPanels.tsx FumeSettingsPanel） ===== -->
+    <string name="lyrics_style_fume_hide_print">隐藏打印方块</string>
+    <string name="lyrics_style_fume_geometric">通用几何图形</string>
+    <string name="lyrics_style_fume_bg_opacity">世界背景物体透明度</string>
+    <string name="lyrics_style_fume_text_hold">文字停留比例</string>
+    <string name="lyrics_style_fume_camera_speed">摄影机移动速度</string>
+    <string name="lyrics_style_fume_tracking">摄影机追焦方式</string>
+    <string name="lyrics_style_fume_tracking_stepped">定格</string>
+    <string name="lyrics_style_fume_tracking_smooth">平滑</string>
+    <string name="lyrics_style_fume_glow">当前句辉光强度</string>
+    <string name="lyrics_style_fume_hero_scale">大标题比例</string>
     <!-- ===== U6 首页墙（Folia home/explore：问候 + 推荐歌单 2 列网格 + 横滑分区） ===== -->
     <!-- zh-CN.ts: 1613 "welcomeBack"（「欢迎回来」） -->
     <string name="home_wall_greeting">欢迎回来</string>

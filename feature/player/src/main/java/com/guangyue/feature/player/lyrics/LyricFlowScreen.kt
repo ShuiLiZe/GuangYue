@@ -296,10 +296,12 @@ fun LyricFlowScreen(
                 .padding(horizontal = GySpace.pageH),
         ) {
             // ---------------- 顶栏 ----------------
+            // V1b-3：顶栏高度改为「至少 56dp」，1.3 倍字体时随标题+副标题两行长高，副标题不再被裁掉下半截。
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .heightIn(min = 56.dp)
+                    .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(

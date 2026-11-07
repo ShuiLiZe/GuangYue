@@ -451,6 +451,8 @@ fun GuangYueNavHost(
                         style = style,
                         fumeName = sheetContext.getString(R.string.lyrics_style_fume),
                         onStyle = styleVm::pickStyle,
+                        fumeTuning = styleVm.fumeTuning.collectAsStateWithLifecycle().value,
+                        onFumeTuning = styleVm::updateFume,
                     )
                 }
             }
@@ -472,6 +474,7 @@ fun GuangYueNavHost(
             val loading by vm.loading.collectAsStateWithLifecycle()
             val message by vm.message.collectAsStateWithLifecycle()
             val tuning by styleVm.tuning.collectAsStateWithLifecycle()
+            val fumeTuning by styleVm.fumeTuning.collectAsStateWithLifecycle()
             // V1a：当前样式（流光 / 浮名），同一份 styleVm —— 播放页切好、这里直接生效。
             val style by styleVm.style.collectAsStateWithLifecycle()
             val lyricContext = LocalContext.current
@@ -513,6 +516,7 @@ fun GuangYueNavHost(
                     // 参数由 fume-draw 加在 LyricFlowScreen 末尾（默认 CLASSIC）；若该层尚未落地，
                     // 本行会在统一收口时由 lead 处理。
                     lyricStyle = style,
+                    fumeTuning = fumeTuning,
                 )
                 if (styleSheetOpen) {
                     LyricStyleSheet(
@@ -525,6 +529,8 @@ fun GuangYueNavHost(
                         style = style,
                         fumeName = lyricContext.getString(R.string.lyrics_style_fume),
                         onStyle = styleVm::pickStyle,
+                        fumeTuning = fumeTuning,
+                        onFumeTuning = styleVm::updateFume,
                     )
                 }
             }
@@ -615,6 +621,16 @@ internal fun lyricStyleStrings(): LyricStyleStrings {
         close = R.string.lyrics_style_close,
         // V1a：「浮名」（Folia key `ui.visualizerFume`）。
         fume = R.string.lyrics_style_fume,
+        fumeHidePrintSymbols = R.string.lyrics_style_fume_hide_print,
+        fumeGeometricBackground = R.string.lyrics_style_fume_geometric,
+        fumeBackgroundObjectOpacity = R.string.lyrics_style_fume_bg_opacity,
+        fumeTextHoldRatio = R.string.lyrics_style_fume_text_hold,
+        fumeCameraSpeed = R.string.lyrics_style_fume_camera_speed,
+        fumeCameraTrackingMode = R.string.lyrics_style_fume_tracking,
+        fumeCameraTrackingStepped = R.string.lyrics_style_fume_tracking_stepped,
+        fumeCameraTrackingSmooth = R.string.lyrics_style_fume_tracking_smooth,
+        fumeGlowIntensity = R.string.lyrics_style_fume_glow,
+        fumeHeroScale = R.string.lyrics_style_fume_hero_scale,
     )
 }
 
