@@ -51,6 +51,9 @@ class HomeViewModel @Inject constructor(
     /** 已安装插件（只统计能当音源用的），供空状态文案判断。 */
     init {
         android.util.Log.d("GYHOME", "VM CREATED plugins=" + plugins.plugins.value.size)
+        // B2 修：冷启动直接进首页时插件表从没加载（只有音源页 / 搜索页会 load），currentSource 一直是 null，
+        // 推荐歌单 / 榜单永远拉不到；这里与 SearchViewModel 一样先 load 一次（幂等）。
+        viewModelScope.launch { plugins.load() }
     }
 
     val enabledPlugins: StateFlow<List<PluginMeta>> =
