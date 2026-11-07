@@ -521,6 +521,10 @@ fun GuangYueNavHost(
             val style by styleVm.style.collectAsStateWithLifecycle()
             val lyricContext = LocalContext.current
             var styleSheetOpen by rememberSaveable { mutableStateOf(false) }
+            // P1b：面板是舞台上的浮卡（Folia UnifiedPanel），不再整页跳 PLAYER。
+            var panelOpen by rememberSaveable { mutableStateOf(false) }
+            var panelTab by rememberSaveable { mutableStateOf(com.guangyue.feature.player.screen.StagePanelTab.COVER) }
+            androidx.activity.compose.BackHandler(enabled = panelOpen && !styleSheetOpen) { panelOpen = false }
             val kernelLines = remember(lyric) {
                 LyricTimeline.toLines(
                     lines = lyric.lines,
@@ -553,7 +557,8 @@ fun GuangYueNavHost(
                     classicTuning = tuning,
                     coverUrl = playbackState.item?.artworkUri,
                     onOpenStyleSheet = { styleSheetOpen = true },
-                    onOpenPanel = { navController.navigate(Routes.PLAYER) },
+                    onOpenPanel = { panelOpen = !panelOpen },
+                    panelOpen = panelOpen,
                     styleLabel = lyricContext.getString(R.string.lyrics_style),
                     // V1a：把当前样式透传给歌词画布（流光 / 浮名切换后立刻换渲染器）。
                     // 参数由 fume-draw 加在 LyricFlowScreen 末尾（默认 CLASSIC）；若该层尚未落地，
@@ -563,6 +568,25 @@ fun GuangYueNavHost(
                     partitaTuning = partitaTuning,
                     tiltTuning = tiltTuning,
                     claddaghTuning = claddaghTuning,
+                )
+                StagePanelHost(
+                    open = panelOpen,
+                    tab = panelTab,
+                    onTab = { panelTab = it },
+                    onDismiss = { panelOpen = false },
+                    playback = playback,
+                    playbackState = playbackState,
+                    darkMode = darkMode,
+                    accent = accent,
+                    lyricStyle = style,
+                    onOpenLyricStyle = {
+                        panelOpen = false
+                        styleSheetOpen = true
+                    },
+                    onAddToPlaylist = {
+                        panelOpen = false
+                        navController.navigate(Routes.SEARCH)
+                    },
                 )
                 if (styleSheetOpen) {
                     LyricStyleSheet(

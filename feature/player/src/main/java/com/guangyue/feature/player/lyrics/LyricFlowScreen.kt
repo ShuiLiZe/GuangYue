@@ -134,6 +134,8 @@ fun LyricFlowScreen(
     onOpenStyleSheet: (() -> Unit)? = null,
     /** P1a：舞台底部胶囊右侧的「面板」键（Folia 播放条旁的 sliders 键），打开封面/队列面板；null 不画。 */
     onOpenPanel: (() -> Unit)? = null,
+    /** P1b：浮卡面板开着时面板键改画 X（Folia PanelHandle 打开后是关闭键）。 */
+    panelOpen: Boolean = false,
     /** 样式入口的无障碍文案（feature:player 无资源表，由 app 侧注入）。 */
     styleLabel: String = "",
     // V0d 取证：非 null 时把当前句的辉光强度钉死（debug harness 用，业务侧恒为 null）。
@@ -571,10 +573,17 @@ fun LyricFlowScreen(
                             .clip(CircleShape)
                             .background(panelPill)
                             .clickableNoRipple(onOpenPanel)
-                            .semantics { contentDescription = "播放面板" },
+                            .semantics { contentDescription = if (panelOpen) "关闭面板" else "播放面板" },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(GuangYueIcons.SlidersHorizontal, null, tint = pillInk, modifier = Modifier.size(20.dp))
+                        androidx.compose.animation.Crossfade(targetState = panelOpen, label = "panelKey") { opened ->
+                            Icon(
+                                if (opened) GuangYueIcons.X else GuangYueIcons.SlidersHorizontal,
+                                null,
+                                tint = pillInk,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                     }
                 }
             }

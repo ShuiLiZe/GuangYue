@@ -37,6 +37,10 @@ import com.guangyue.feature.player.screen.PlayerStrings
 import com.guangyue.feature.player.screen.nextLikeTarget
 import com.guangyue.feature.player.screen.nextPlayerModeTarget
 import com.guangyue.feature.player.screen.playerMode
+import com.guangyue.feature.player.screen.playerModeTarget
+import com.guangyue.feature.player.screen.StagePanel
+import com.guangyue.feature.player.screen.StagePanelTab
+import com.guangyue.feature.player.lyrics.LyricStyle
 import kotlinx.coroutines.launch
 
 /**
@@ -173,6 +177,107 @@ fun IPlayerRoute(
             settled = settled,
         )
     }
+}
+
+/**
+ * P1b：舞台上的浮卡面板外壳（收藏 / 队列 / 音质 / 模式都在 app 层接线，界面在 feature 的 [StagePanel]）。
+ */
+@Composable
+fun StagePanelHost(
+    open: Boolean,
+    tab: StagePanelTab,
+    onTab: (StagePanelTab) -> Unit,
+    onDismiss: () -> Unit,
+    playback: PlaybackController,
+    playbackState: PlaybackState,
+    darkMode: Boolean,
+    accent: Color,
+    lyricStyle: LyricStyle,
+    onOpenLyricStyle: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+) {
+    val ctx = LocalContext.current
+    val tracks = LocalTrackRepository.current
+    val scope = rememberCoroutineScope()
+    val item = playbackState.item
+
+    var liked by remember(item?.key) { mutableStateOf(false) }
+    var pending by remember(item?.key) { mutableStateOf(false) }
+    LaunchedEffect(item?.key) {
+        val key = item?.key
+        liked = if (key == null) false else runCatching { tracks?.byKey(key)?.favorite == true }.getOrDefault(false)
+    }
+    val like = when {
+        pending -> LikeState.Pending
+        liked -> LikeState.Liked
+        else -> LikeState.Idle
+    }
+    // 队列在面板打开 / 换歌 / 增删时重取；removeAt 之后用 revision 触发。
+    var revision by remember { mutableIntStateOf(0) }
+    val queueRows = remember(open, revision, playbackState.index, playbackState.queueSize, item?.key) {
+        playback.queueSnapshot().mapIndexed { i, q ->
+            PlayerQueueRow(
+                index = i,
+                title = q.title.ifBlank { ctx.getString(R.string.player_no_song) },
+                subtitle = q.artist.orEmpty(),
+                current = i == playbackState.index,
+            )
+        }
+    }
+    val declared = item?.origin?.availableQualities.orEmpty()
+    val qualities = QualityLadder.of(declared).ifEmpty { QualityLadder.default() }.sortedByDescending { it.order }
+    val styleName = ctx.getString(
+        when (lyricStyle) {
+            LyricStyle.CLASSIC -> R.string.lyrics_style_classic
+            LyricStyle.FUME -> R.string.lyrics_style_fume
+            LyricStyle.PARTITA -> R.string.lyrics_style_partita
+            LyricStyle.CADENZA -> R.string.lyrics_style_cadenza
+            LyricStyle.STILL -> R.string.lyrics_style_still
+            LyricStyle.TILT -> R.string.lyrics_style_tilt
+            LyricStyle.CLADDAGH -> R.string.lyrics_style_claddagh
+        },
+    )
+
+    StagePanel(
+        open = open,
+        tab = tab,
+        onTab = onTab,
+        onDismiss = onDismiss,
+        dark = darkMode,
+        accent = accent,
+        title = item?.title?.takeIf { it.isNotBlank() } ?: ctx.getString(R.string.player_no_song),
+        artist = item?.artist.orEmpty(),
+        album = item?.album,
+        coverUrl = item?.artworkUri,
+        like = like,
+        onToggleLike = {
+            val key = item?.key
+            val target = nextLikeTarget(like)
+            if (key != null && target != null) {
+                pending = true
+                scope.launch {
+                    runCatching { tracks?.setFavorite(key, target) }.onSuccess { liked = target }
+                    pending = false
+                }
+            }
+        },
+        onAddToPlaylist = onAddToPlaylist,
+        mode = playerMode(shuffle = playbackState.shuffle, repeatMode = playbackState.repeatMode),
+        onPickMode = { mode ->
+            val target = playerModeTarget(mode)
+            playback.setShuffle(target.shuffle)
+            playback.setRepeatMode(target.repeatMode)
+        },
+        lyricStyleName = styleName,
+        onOpenLyricStyle = onOpenLyricStyle,
+        queue = queueRows,
+        onPickQueueRow = { index -> playback.queueSnapshot().getOrNull(index)?.let { playback.playNow(it) } },
+        onRemoveQueueRow = { index -> playback.removeAt(index); revision++ },
+        qualities = qualities,
+        currentQuality = item?.origin?.quality ?: playback.defaultQuality,
+        qualityDeclared = declared.isNotEmpty(),
+        onPickQuality = { playback.setQuality(it) },
+    )
 }
 
 /** 收起转场时长：`springPlayer`（stiffness 280）约 320ms，留一帧余量。 */
