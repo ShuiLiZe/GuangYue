@@ -278,7 +278,8 @@ fun LyricFlowScreen(
                 seed = (coverUrl ?: "").hashCode().toLong(),
                 secondaryColor = theme.secondary,
                 accentColor = lyricAccent,
-                paused = !playback.isPlaying || reduceMotion,
+                // Robolectric 下逐帧循环会让 waitForIdle 永远等不到空闲（截图套件 AppNotIdleException），按暂停画静帧。
+                paused = !playback.isPlaying || reduceMotion || runningUnderRobolectric,
             )
         }
         // ---------------- 浮名：整屏画布（edge-to-edge，系统栏/顶栏/字幕层都浮在它上面） ----------------
