@@ -197,7 +197,7 @@ fun LyricFlowScreen(
         resolveSubtitleOverlayContent(
             activeLine = activeLine,
             nextLines = kernelLines.drop(currentIndex.coerceAtLeast(0) + 1),
-            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET && lyricStyle != LyricStyle.PENDOLO && lyricStyle != LyricStyle.NEBBIA && lyricStyle != LyricStyle.SONNET,
+            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET && lyricStyle != LyricStyle.PENDOLO && lyricStyle != LyricStyle.NEBBIA && lyricStyle != LyricStyle.SONNET && lyricStyle != LyricStyle.HANABI,
         )
     }
 
@@ -401,6 +401,19 @@ fun LyricFlowScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        // P7 花火：整屏夜空（烟花开在上部），歌词排在烟花下方、底部胶囊之上。
+        if (lyricStyle == LyricStyle.HANABI && kernelLines.isNotEmpty() && emptyKind == null) {
+            com.guangyue.feature.player.lyrics.visualizer.HanabiStage(
+                lines = kernelLines,
+                clock = clock,
+                lyricsFontScale = lyricsFontScale,
+                accentColor = lyricAccent,
+                fontFamily = GuangYueDesign.Serif,
+                reduceMotion = reduceMotion,
+                bottomReserve = 104.dp,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         // P6 商籁：PV 镜头版面，词块排在让开顶栏与底部胶囊的区域里，外框与五线谱贴着这两处留白。
         if (lyricStyle == LyricStyle.SONNET && kernelLines.isNotEmpty() && emptyKind == null) {
             com.guangyue.feature.player.lyrics.visualizer.SonnetStage(
@@ -552,7 +565,7 @@ fun LyricFlowScreen(
                         failure = failure,
                         onRetry = null,
                     )
-                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL || lyricStyle == LyricStyle.CLADDAGH || lyricStyle == LyricStyle.MONET || lyricStyle == LyricStyle.PENDOLO || lyricStyle == LyricStyle.NEBBIA || lyricStyle == LyricStyle.SONNET) && kernelLines.isNotEmpty()) {
+                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL || lyricStyle == LyricStyle.CLADDAGH || lyricStyle == LyricStyle.MONET || lyricStyle == LyricStyle.PENDOLO || lyricStyle == LyricStyle.NEBBIA || lyricStyle == LyricStyle.SONNET || lyricStyle == LyricStyle.HANABI) && kernelLines.isNotEmpty()) {
                     // 浮名：画布已经铺在整屏那一层（本函数开头），舞台 Box 里留空，
                     // 只保留顶栏 / 字幕层 / 播放条这些「浮在画布上」的层。
                 } else if (lyricStyle == LyricStyle.TILT && activeLine != null && activeLine.hasVisibleWords()) {

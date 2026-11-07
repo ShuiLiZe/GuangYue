@@ -729,3 +729,13 @@ BUILD SUCCESSFUL in 35s
 - 不做：Pixi 纹理池、镜头 MG 图库、后期滤镜（颗粒 / 半调 / 色散）、设置面板参数。
 - 单测 `SonnetProgramTest`（镜头 ≤3 行且覆盖全部行、相邻版式不重复、空隙开新段带转场、词块计时与主角、中文块 ≤4 字不丢字）。
 - 实拍：`p6-sonnet-4500.png`（碎片拼贴）、`p6-sonnet-dark.png`（色带）、`p6-sonnet-15500.png`（遮罩揭开竖排）。
+
+## P7 花火样式（Folia hanabi，2026-11-08）
+
+- 新文件 `feature/player/.../visualizer/HanabiStage.kt`：对照 Folia `visualizer/hanabi/`（hanabiProgram / hanabiSky / mg/burstPlan / mg/fireworks / color / text/lyricText+blocks+animations）。
+- 程序 `compileHanabi`（纯函数）：每句开唱放一朵（长于 4.5 秒的句子中段补一朵），前奏、段间 ≥3.2 秒的空隙、尾奏铺スターマイン（两快一慢）；种类菊 / 牡丹 / 柳 / 輪 / 千輪 相邻不重复，左右交替落在上部 16%–46%。
+- 烟花用 Folia burstPlan 的闭式解（阻尼 + 终端下落），升空尾迹 0.9 秒、开花闪光、菊末段转白与闪烁、牡丹中途变色、柳金色长尾、千輪子弹再开小花；BlendMode.Plus 叠加。seek 到任何时刻画面一致。
+- 夜空：四色标渐变（色相往强调色偏 0.3）+ 星点 + 地平线桃色祭典光。
+- 歌词：烟花下方、底部胶囊之上；字底色块三种（逐字方块 tile / 整行色带 band 带金边 / 斜带 slant），祭色朱红 / 瑠璃 / 柿色；逐字 rise 升入（拉伸后压扁回弹），唱到的字弹跳 + 染金，换句整行 ascend 飞走。硬阴影墨色 #0B0D24。
+- 不做：Pixi 精灵池、拼贴 MG 图库、副歌全屏辉光、片尾卡、设置面板（无参数）。
+- 单测 `HanabiProgramTest`（2 例）通过；实拍 `docs/ui-v0/p7-hanabi.jpg`（4.8 秒 band 版 + 菊；9.3 秒 tile 版 + 牡丹余烬）。

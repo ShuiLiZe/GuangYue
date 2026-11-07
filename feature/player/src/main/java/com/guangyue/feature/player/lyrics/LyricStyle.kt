@@ -48,6 +48,9 @@ enum class LyricStyle(val id: String) {
 
     /** 「商籁」：Folia sonnet（P6：歌词编成 PV 镜头——段落→镜头→7 种版式，主角词放大 / 竖排、词按唱到逐个打进、开口框、五线谱外框；手机不做 Pixi 滤镜与 MG 图库）。无参数。 */
     SONNET("sonnet"),
+
+    /** 「花火」：Folia hanabi（P7：夜空里每句开唱放一朵烟花，长空隙一串スターマイン；字底色块 + 逐字升入、唱到弹跳染金、换句向上飞走；手机不做 Pixi 精灵池与拼贴 MG）。无参数。 */
+    HANABI("hanabi"),
     ;
 
     companion object {

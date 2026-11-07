@@ -150,6 +150,8 @@ data class LyricStyleStrings(
     val nebbia: Int = 0,
     /** P6：「商籁」（Folia `ui.visualizerSonnet`）。 */
     val sonnet: Int = 0,
+    /** P7：「花火」（Folia `ui.visualizerHanabi`）。 */
+    val hanabi: Int = 0,
     /** V2d：「倾诉」与参数（Folia `ui.visualizerTilt` / `options.tilt*`）。 */
     val tilt: Int = 0,
     /** V2e：「回环」与参数（Folia `ui.visualizerCladdagh` / `options.claddagh*`）。 */
@@ -323,6 +325,7 @@ private fun LyricStylePanelContent(
                 LyricStyle.PENDOLO to (if (strings.pendolo != 0) str(strings.pendolo) else ""),
                 LyricStyle.NEBBIA to (if (strings.nebbia != 0) str(strings.nebbia) else ""),
                 LyricStyle.SONNET to (if (strings.sonnet != 0) str(strings.sonnet) else ""),
+                LyricStyle.HANABI to (if (strings.hanabi != 0) str(strings.hanabi) else ""),
                 LyricStyle.STILL to (if (strings.still != 0) str(strings.still) else ""),
             )
             styleRows.forEach { (rowStyle, rowName) ->
@@ -347,7 +350,7 @@ private fun LyricStylePanelContent(
                     accent = accent,
                     onTuning = onFumeTuning,
                 )
-            } else if (style == LyricStyle.CADENZA || style == LyricStyle.STILL || style == LyricStyle.MONET || style == LyricStyle.PENDOLO || style == LyricStyle.NEBBIA || style == LyricStyle.SONNET) {
+            } else if (style == LyricStyle.CADENZA || style == LyricStyle.STILL || style == LyricStyle.MONET || style == LyricStyle.PENDOLO || style == LyricStyle.NEBBIA || style == LyricStyle.SONNET || style == LyricStyle.HANABI) {
                 // Folia cadenza/entry.tsx 没有 renderSettingsPanel：窗口里显示「这个样式没有参数」。
                 Text(
                     text = str(strings.noOptions),
@@ -395,7 +398,7 @@ private fun LyricStylePanelContent(
                     .clickableNoRipple {
                         // 恢复默认只作用于当前样式（Folia 各模式各自的 handleReset*Tuning）。
                         when (style) {
-                            LyricStyle.CADENZA, LyricStyle.STILL, LyricStyle.MONET, LyricStyle.PENDOLO, LyricStyle.NEBBIA, LyricStyle.SONNET -> Unit
+                            LyricStyle.CADENZA, LyricStyle.STILL, LyricStyle.MONET, LyricStyle.PENDOLO, LyricStyle.NEBBIA, LyricStyle.SONNET, LyricStyle.HANABI -> Unit
                             LyricStyle.TILT -> onTiltTuning(TiltTuning.DEFAULT)
                             LyricStyle.CLADDAGH -> onCladdaghTuning(CladdaghTuning.DEFAULT)
                             LyricStyle.FUME -> onFumeTuning(FumeTuning.DEFAULT)

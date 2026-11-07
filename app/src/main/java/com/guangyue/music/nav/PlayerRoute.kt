@@ -240,6 +240,7 @@ fun StagePanelHost(
             LyricStyle.PENDOLO -> R.string.lyrics_style_pendolo
             LyricStyle.NEBBIA -> R.string.lyrics_style_nebbia
             LyricStyle.SONNET -> R.string.lyrics_style_sonnet
+            LyricStyle.HANABI -> R.string.lyrics_style_hanabi
             LyricStyle.TILT -> R.string.lyrics_style_tilt
             LyricStyle.CLADDAGH -> R.string.lyrics_style_claddagh
         },
