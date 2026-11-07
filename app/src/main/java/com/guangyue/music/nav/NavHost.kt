@@ -512,6 +512,11 @@ fun GuangYueNavHost(
         composable(Routes.SETTINGS) {
             val lxVm: LxViewModel = hiltViewModel()
             val lxQuality by lxVm.quality.collectAsStateWithLifecycle()
+            // S1：设置页（Folia SettingsModal 手机版）。歌词样式与舞台共用 LyricStyleViewModel 的落盘偏好。
+            val styleVm: LyricStyleViewModel = hiltViewModel()
+            val style by styleVm.style.collectAsStateWithLifecycle()
+            val settingsCtx = LocalContext.current
+            var defaultQuality by remember { mutableStateOf(playback.defaultQuality) }
             SettingsScreen(
                 darkMode = darkMode,
                 onDarkModeChange = onDarkModeChange,
@@ -519,6 +524,31 @@ fun GuangYueNavHost(
                 onBack = { navController.popBackStack() },
                 lxQuality = lxQuality,
                 onPickLxQuality = { lxVm.pickQuality(it) },
+                lyricStyles = com.guangyue.feature.player.lyrics.LyricStyle.entries.map { st ->
+                    st.id to settingsCtx.getString(
+                        when (st) {
+                            com.guangyue.feature.player.lyrics.LyricStyle.CLASSIC -> R.string.lyrics_style_classic
+                            com.guangyue.feature.player.lyrics.LyricStyle.FUME -> R.string.lyrics_style_fume
+                            com.guangyue.feature.player.lyrics.LyricStyle.PARTITA -> R.string.lyrics_style_partita
+                            com.guangyue.feature.player.lyrics.LyricStyle.CADENZA -> R.string.lyrics_style_cadenza
+                            com.guangyue.feature.player.lyrics.LyricStyle.STILL -> R.string.lyrics_style_still
+                            com.guangyue.feature.player.lyrics.LyricStyle.TILT -> R.string.lyrics_style_tilt
+                            com.guangyue.feature.player.lyrics.LyricStyle.CLADDAGH -> R.string.lyrics_style_claddagh
+                        },
+                    )
+                },
+                lyricStyle = style.id,
+                onPickLyricStyle = { id -> styleVm.pickStyle(com.guangyue.feature.player.lyrics.LyricStyle.fromId(id)) },
+                playQualities = com.guangyue.core.player.Quality.entries.sortedBy { it.order }.map { it.wire to it.label },
+                playQuality = defaultQuality.wire,
+                onPickPlayQuality = { w ->
+                    val q = com.guangyue.core.player.Quality.fromWire(w)
+                    playback.setDefaultQuality(q)
+                    defaultQuality = q
+                },
+                onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
+                onOpenDownloads = { navController.navigate(Routes.DOWNLOADS) },
+                versionName = com.guangyue.music.BuildConfig.VERSION_NAME,
             )
         }
 

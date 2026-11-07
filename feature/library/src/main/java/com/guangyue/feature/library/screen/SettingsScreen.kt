@@ -28,6 +28,11 @@ import com.guangyue.feature.library.design.FoliaRow
 import com.guangyue.feature.library.design.FoliaSegmented
 import com.guangyue.feature.library.design.FoliaTopBar
 import com.guangyue.feature.library.design.FoliaToggle
+import com.guangyue.feature.library.design.FoliaTextField
+import com.guangyue.feature.library.design.clickableNoRipple
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.guangyue.feature.library.design.GuangYueDesign
 import com.guangyue.feature.library.design.GyRadius
 import com.guangyue.feature.library.design.GySpace
@@ -38,10 +43,12 @@ import com.guangyue.feature.library.design.icons.GuangYueIcons
 import com.guangyue.feature.library.design.marbleBackground
 
 /**
- * 设置（「我的」里的二级页）。
+ * S1：设置（Folia `SettingsModal`：顶部搜索 + 分类 + 分组行）。
  *
- * 布局按 Folia 设置窗口的 Group/Row 规格：组卡片圆角 12dp、1dp `--st-line` 描边、
- * 组标题 13/20 semibold `--st-t2`、行最小高 56dp、行首发丝线自 16dp 起。
+ * Folia 桌面是左侧分类列表 + 右侧页面；手机上分类改成搜索框下一条横滑分段（外观 / 播放页 / 播放控制 / 存储与备份 / 关于，
+ * 名字取 zh-CN `options.settingsPage*`），页面内仍是 Folia kit 的 Group/Row。搜索：按行名 + 说明过滤，
+ * 有输入时不分页，把所有分类里命中的行按分类分组列出（Folia SettingsSearchResults）。
+ * 只放广乐真有的开关；Folia 的主题 / 图形 / 交互 / 集成等页等对应功能落地再加。
  */
 @Composable
 fun SettingsScreen(
@@ -52,105 +59,193 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     lxQuality: String = "320k",
     onPickLxQuality: (String) -> Unit = {},
+    /** 歌词样式（id 到名字），当前 id，选中回调；空列表不显示这一行。 */
+    lyricStyles: List<Pair<String, String>> = emptyList(),
+    lyricStyle: String = "",
+    onPickLyricStyle: (String) -> Unit = {},
+    /** 默认播放音质（wire 到名字）。 */
+    playQualities: List<Pair<String, String>> = emptyList(),
+    playQuality: String = "",
+    onPickPlayQuality: (String) -> Unit = {},
+    onOpenPlugins: (() -> Unit)? = null,
+    onOpenDownloads: (() -> Unit)? = null,
+    versionName: String = "0.0.8",
 ) {
+    var query by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
+    var page by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(SettingsPage.APPEARANCE) }
+
+    val chevron: @Composable () -> Unit = {
+        Icon(GuangYueIcons.ChevronRight, null, tint = Gyp.t3, modifier = Modifier.size(16.dp))
+    }
+    fun icon(v: androidx.compose.ui.graphics.vector.ImageVector): @Composable () -> Unit = {
+        Icon(v, null, tint = Gyp.t2, modifier = Modifier.size(18.dp))
+    }
+
+    // 全部设置项（数据驱动：分页与搜索共用一份）。
+    val items = buildList {
+        add(SettingItem(SettingsPage.APPEARANCE, "外观", "深色模式", "跟随 Folia 的「午夜墨染」深色底", icon(if (darkMode) GuangYueIcons.Moon else GuangYueIcons.Sun),
+            trailing = { FoliaToggle(checked = darkMode, onChange = onDarkModeChange) }))
+        if (lyricStyles.isNotEmpty()) {
+            add(SettingItem(SettingsPage.PLAYER, "歌词动画", "歌词样式", "播放舞台上的歌词画法；各样式的参数在舞台的样式弹层里调", icon(GuangYueIcons.Sparkles),
+                below = {
+                    FlowStyleChips(lyricStyles, lyricStyle, onPickLyricStyle)
+                }))
+        }
+        if (playQualities.isNotEmpty()) {
+            add(SettingItem(SettingsPage.PLAYBACK, "音质", "默认播放音质", "新开始播放的歌按这一档取链；音源没有这一档时向下取", icon(GuangYueIcons.AudioLines),
+                below = { FlowStyleChips(playQualities, playQuality, onPickPlayQuality) }))
+        }
+        add(SettingItem(SettingsPage.PLAYBACK, "取链源", "取链源默认音质", "插件取不到播放地址时，按这里选的音质问取链源；播放器切到无损就按无损问", icon(GuangYueIcons.Route),
+            below = { FoliaSegmented(value = lxQuality, options = LxQualityOptions, onSelect = onPickLxQuality) }))
+        if (onOpenPlugins != null) {
+            add(SettingItem(SettingsPage.PLAYBACK, "音源", "音源插件管理", "装音源、选当前音源、看体检结果", icon(GuangYueIcons.Puzzle), trailing = chevron, onClick = onOpenPlugins))
+        }
+        if (onOpenDownloads != null) {
+            add(SettingItem(SettingsPage.STORAGE, "下载", "下载设置", "并发数、音质、存储位置", icon(GuangYueIcons.Download), trailing = chevron, onClick = onOpenDownloads))
+        }
+        add(SettingItem(SettingsPage.ABOUT, "关于", "版本", "广乐 $versionName", icon(GuangYueIcons.Info)))
+        add(SettingItem(SettingsPage.ABOUT, "关于", "开源许可", "AGPL-3.0 · 界面改写自 Folia", icon(GuangYueIcons.FileText), trailing = chevron, onClick = onOpenLicenses))
+    }
+    val pages = SettingsPage.entries.filter { p -> items.any { it.page == p } }
+    val q = query.trim()
+    val shown = if (q.isEmpty()) items.filter { it.page == page }
+    else items.filter { it.label.contains(q, true) || (it.hint?.contains(q, true) == true) || it.group.contains(q, true) || it.page.label.contains(q, true) }
+
     Box(modifier.fillMaxSize().marbleBackground()) {
         Column(Modifier.fillMaxSize()) {
             FoliaTopBar(title = "设置", onBack = onBack)
-
-            LazyColumn(
-                contentPadding = PaddingValues(bottom = 40.dp),
-            ) {
-                item(key = "appearance") {
-                    FoliaGroup(title = "外观") {
-                        FoliaRow(
-                            label = "深色模式",
-                            hint = "跟随 Folia 的「午夜墨染」深色底",
-                            first = true,
-                            leading = {
-                                Icon(
-                                    if (darkMode) GuangYueIcons.Moon else GuangYueIcons.Sun,
-                                    null,
-                                    tint = Gyp.t2,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            },
-                            trailing = {
-                                FoliaToggle(checked = darkMode, onChange = onDarkModeChange)
-                            },
-                        )
-                    }
-                }
-
-                item(key = "about") {
-                    FoliaGroup(title = "关于") {
-                        FoliaRow(
-                            label = "版本",
-                            hint = "广乐 0.0.8",
-                            first = true,
-                            leading = {
-                                Icon(
-                                    GuangYueIcons.Info,
-                                    null,
-                                    tint = Gyp.t2,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            },
-                        )
-                        FoliaRow(
-                            label = "开源许可",
-                            hint = "AGPL-3.0 · 界面改写自 Folia",
-                            leading = {
-                                Icon(
-                                    GuangYueIcons.FileText,
-                                    null,
-                                    tint = Gyp.t2,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            },
-                            trailing = {
-                                Icon(
-                                    GuangYueIcons.ChevronRight,
-                                    null,
-                                    tint = Gyp.t3,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            },
-                            onClick = onOpenLicenses,
-                        )
-                    }
-                }
-                // 取链源的默认音质：插件自己取不到链时按这一档问洛雪源。
-                item(key = "lx-quality") {
-                    FoliaGroup(
-                        title = "取链源",
-                        foot = "插件取不到播放地址时，按这里选的音质问取链源；播放器切到无损就按无损问。",
+            Column(Modifier.padding(horizontal = GySpace.pageH)) {
+                FoliaTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = "搜索设置",
+                    leading = { Icon(GuangYueIcons.Search, null, tint = Gyp.t3, modifier = Modifier.size(16.dp)) },
+                    trailing = if (query.isNotEmpty()) {
+                        { Icon(GuangYueIcons.X, "清空", tint = Gyp.t3, modifier = Modifier.size(16.dp).clip(RoundedCornerShape(8.dp)).clickableNoRipple { query = "" }) }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (q.isEmpty()) {
+                    Spacer(Modifier.height(GySpace.m))
+                    // 分类：横滑分段（Folia Tabs 的选中块 = raise + 投影）。
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScrollCompat()
+                            .clip(RoundedCornerShape(GyRadius.row))
+                            .background(Gyp.tint, RoundedCornerShape(GyRadius.row))
+                            .padding(GySpace.hairlinePad),
                     ) {
-                        FoliaRow(
-                            label = "默认音质",
-                            first = true,
-                            leading = {
-                                Icon(
-                                    GuangYueIcons.AudioLines,
-                                    null,
-                                    tint = Gyp.t2,
-                                    modifier = Modifier.size(18.dp),
+                        pages.forEach { p ->
+                            val on = p == page
+                            Box(
+                                Modifier
+                                    .height(32.dp)
+                                    .clip(RoundedCornerShape(GyRadius.field))
+                                    .background(if (on) Gyp.raise else androidx.compose.ui.graphics.Color.Transparent)
+                                    .clickableNoRipple { page = p }
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    p.label,
+                                    fontSize = GyText.label,
+                                    fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
+                                    color = if (on) Gyp.ink else Gyp.t2,
+                                    maxLines = 1,
                                 )
-                            },
-                            trailing = {
-                                FoliaSegmented(
-                                    value = lxQuality,
-                                    options = LxQualityOptions,
-                                    onSelect = onPickLxQuality,
-                                    fill = false,
-                                )
-                            },
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(GySpace.l))
+            }
+            LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
+                if (shown.isEmpty()) {
+                    item(key = "none") {
+                        Text(
+                            "没有找到「$q」相关的设置",
+                            fontSize = GyText.row,
+                            color = Gyp.t3,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         )
                     }
-            }
+                }
+                // 搜索时按「分类 · 组」分组，否则按组。
+                val grouped = shown.groupBy { if (q.isEmpty()) it.group else "${it.page.label} · ${it.group}" }
+                grouped.forEach { (title, rows) ->
+                    item(key = "g-$title") {
+                        FoliaGroup(title = title) {
+                            rows.forEachIndexed { i, it ->
+                                FoliaRow(
+                                    label = it.label,
+                                    hint = it.hint,
+                                    first = i == 0,
+                                    leading = it.leading,
+                                    trailing = it.trailing,
+                                    onClick = it.onClick,
+                                )
+                                it.below?.let { below ->
+                                    Box(Modifier.fillMaxWidth().padding(start = GySpace.pageH, end = GySpace.pageH, bottom = GySpace.m)) { below() }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
+
+/** 设置分类（Folia settingsNavModel 的手机子集，名字取 zh-CN options.settingsPage*）。 */
+enum class SettingsPage(val label: String) {
+    APPEARANCE("外观"),
+    PLAYER("播放页"),
+    PLAYBACK("播放控制"),
+    STORAGE("存储与备份"),
+    ABOUT("关于"),
+}
+
+private class SettingItem(
+    val page: SettingsPage,
+    val group: String,
+    val label: String,
+    val hint: String?,
+    val leading: (@Composable () -> Unit)?,
+    val trailing: (@Composable () -> Unit)? = null,
+    val onClick: (() -> Unit)? = null,
+    val below: (@Composable () -> Unit)? = null,
+)
+
+/** 选项多于分段放得下时用可换行的小胶囊（Folia kit Chips）。 */
+@Composable
+private fun FlowStyleChips(options: List<Pair<String, String>>, current: String, onPick: (String) -> Unit) {
+    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        options.forEach { (id, name) ->
+            val on = id == current
+            Text(
+                name,
+                fontSize = GyText.label,
+                fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
+                color = if (on) Gyp.ink else Gyp.t2,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(GyRadius.field))
+                    .background(if (on) Gyp.raise else Gyp.tint)
+                    .clickableNoRipple { if (!on) onPick(id) }
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Modifier.horizontalScrollCompat(): Modifier =
+    this.then(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()))
 
 /** 取链源的四档音质（洛雪 LX 的 `info.type`）。 */
 private val LxQualityOptions = listOf(
