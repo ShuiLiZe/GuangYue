@@ -68,12 +68,27 @@ fun ProfileScreen(
     modifier: Modifier = Modifier,
     bottomBar: (@Composable () -> Unit)? = null,
     miniPlayer: (@Composable () -> Unit)? = null,
+    /** S1：顶栏齿轮 → 设置页（Folia 标题旁的 Settings 键）。 */
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     Box(modifier.fillMaxSize().marbleBackground()) {
         Column(Modifier.fillMaxSize()) {
             FoliaTopBar(
                 title = "我的",
                 actions = {
+                    if (onOpenSettings != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(GyRadius.fieldShape())
+                                .background(Gyp.tint)
+                                .clickableNoRipple(onOpenSettings),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(GuangYueIcons.Settings, contentDescription = "设置", tint = Gyp.ink, modifier = Modifier.size(16.dp))
+                        }
+                        androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+                    }
                     Box(
                         modifier = Modifier
                             .size(32.dp)

@@ -368,6 +368,7 @@ fun GuangYueNavHost(
                         onToggleDark = { onDarkModeChange(!darkMode) },
                         onOpenLicenses = { navController.navigate(Routes.LICENSES) },
                         onOpenAbout = { navController.navigate(Routes.ABOUT) },
+                        onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                     )
                 },
                 miniPlayer = miniPlayer,
