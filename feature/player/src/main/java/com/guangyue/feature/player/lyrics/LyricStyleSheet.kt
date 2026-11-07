@@ -134,6 +134,9 @@ data class LyricStyleStrings(
     val partitaSemanticLayout: Int = 0,
     val partitaStaggerMin: Int = 0,
     val partitaStaggerMax: Int = 0,
+    /** V2b：「心象」样式名（Folia `ui.visualizerCadenze`）与「这个样式没有参数」（`lyricStyleNoOptions`）。 */
+    val cadenza: Int = 0,
+    val noOptions: Int = 0,
 )
 
 @Composable
@@ -288,6 +291,14 @@ private fun LyricStylePanelContent(
                     onClick = { onStyle(LyricStyle.PARTITA) },
                 )
             }
+            if (strings.cadenza != 0) {
+                StyleRow(
+                    name = str(strings.cadenza),
+                    selected = style == LyricStyle.CADENZA,
+                    accent = accent,
+                    onClick = { onStyle(LyricStyle.CADENZA) },
+                )
+            }
 
             Box(Modifier.height(GySpace.s))
 
@@ -299,6 +310,14 @@ private fun LyricStylePanelContent(
                     strings = strings,
                     accent = accent,
                     onTuning = onFumeTuning,
+                )
+            } else if (style == LyricStyle.CADENZA) {
+                // Folia cadenza/entry.tsx 没有 renderSettingsPanel：窗口里显示「这个样式没有参数」。
+                Text(
+                    text = str(strings.noOptions),
+                    fontSize = 13.sp,
+                    color = Gyp.t2,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                 )
             } else if (style == LyricStyle.PARTITA) {
                 PartitaTuningRows(
@@ -336,6 +355,7 @@ private fun LyricStylePanelContent(
                     .clickableNoRipple {
                         // 恢复默认只作用于当前样式（Folia 各模式各自的 handleReset*Tuning）。
                         when (style) {
+                            LyricStyle.CADENZA -> Unit
                             LyricStyle.FUME -> onFumeTuning(FumeTuning.DEFAULT)
                             LyricStyle.PARTITA -> onPartitaTuning(PartitaTuning.DEFAULT)
                             else -> onTuning(ClassicTuning())

@@ -24,6 +24,9 @@ enum class LyricStyle(val id: String) {
 
     /** 「云阶」：Folia partita 渲染器（V2a：当前句切 chunk 左右错落 + 引导线，词仍是 GlowWord）。 */
     PARTITA("partita"),
+
+    /** 「心象」：Folia cadenza 渲染器（V2b：整句拆词散落、主词居中放大、碰撞避让）。Folia 无参数面板。 */
+    CADENZA("cadenza"),
     ;
 
     companion object {

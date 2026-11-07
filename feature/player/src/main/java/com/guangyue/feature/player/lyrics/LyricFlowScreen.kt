@@ -288,6 +288,22 @@ fun LyricFlowScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        // V2b 心象：同样是 VisualizerShell 里铺满的一层（焦点在容器高 42%），顶栏 / 字幕 / 播放条浮在上面。
+        if (lyricStyle == LyricStyle.CADENZA && kernelLines.isNotEmpty() && emptyKind == null) {
+            com.guangyue.feature.player.lyrics.visualizer.CadenzaStage(
+                line = activeLine,
+                clock = clock,
+                tuning = com.guangyue.core.lyrics.CadenzaTuning.DEFAULT,
+                intensity = AnimationIntensity.NORMAL,
+                reduceMotion = reduceMotion,
+                lyricsFontScale = lyricsFontScale,
+                activeColor = lyricAccent,
+                baseColor = onBackdrop,
+                fontFamily = GuangYueDesign.Serif,
+                settleSteps = if (fumeStillFrame) 90 else 0,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         Column(
             Modifier
                 .fillMaxSize()
@@ -393,7 +409,7 @@ fun LyricFlowScreen(
                         failure = failure,
                         onRetry = null,
                     )
-                } else if (lyricStyle == LyricStyle.FUME && kernelLines.isNotEmpty()) {
+                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA) && kernelLines.isNotEmpty()) {
                     // 浮名：画布已经铺在整屏那一层（本函数开头），舞台 Box 里留空，
                     // 只保留顶栏 / 字幕层 / 播放条这些「浮在画布上」的层。
                 } else if (lyricStyle == LyricStyle.PARTITA && activeLine != null && activeLine.hasVisibleWords()) {

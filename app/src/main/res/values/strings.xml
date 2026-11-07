@@ -322,6 +322,8 @@
     <string name="lyrics_style_close">关闭</string>
     <!-- zh-CN.ts ui.visualizerPartita -->
     <string name="lyrics_style_partita">云阶</string>
+    <!-- zh-CN.ts ui.visualizerCadenze -->
+    <string name="lyrics_style_cadenza">心象</string>
     <!-- ===== V2a 云阶参数（zh-CN.ts options.partita*） ===== -->
     <string name="lyrics_style_partita_guide">引导线</string>
     <string name="lyrics_style_partita_semantic">语义排列</string>

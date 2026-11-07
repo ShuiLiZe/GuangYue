@@ -284,6 +284,7 @@ fun V0cStage(
                 lyricStyle = when (style) {
                     "fume" -> LyricStyle.FUME
                     "partita" -> LyricStyle.PARTITA
+                    "cadenza" -> LyricStyle.CADENZA
                     else -> LyricStyle.CLASSIC
                 },
                 fumeSettleSteps = fumeSteps,
@@ -331,6 +332,8 @@ private fun v0cString(id: Int): String = when (id) {
     R.string.lyrics_style_reset -> "恢复默认"
     R.string.lyrics_style_close -> "关闭"
     R.string.lyrics_style_partita -> "云阶"
+    R.string.lyrics_style_cadenza -> "心象"
+    R.string.lyrics_style_no_options -> "这个样式没有参数"
     R.string.lyrics_style_partita_guide -> "引导线"
     R.string.lyrics_style_partita_semantic -> "语义排列"
     R.string.lyrics_style_partita_stagger_min -> "错位最小值"

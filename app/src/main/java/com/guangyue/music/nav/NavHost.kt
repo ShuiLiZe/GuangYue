@@ -630,6 +630,8 @@ internal fun lyricStyleStrings(): LyricStyleStrings {
         // V1a：「浮名」（Folia key `ui.visualizerFume`）。
         fume = R.string.lyrics_style_fume,
         partita = R.string.lyrics_style_partita,
+        cadenza = R.string.lyrics_style_cadenza,
+        noOptions = R.string.lyrics_style_no_options,
         partitaGuideLines = R.string.lyrics_style_partita_guide,
         partitaSemanticLayout = R.string.lyrics_style_partita_semantic,
         partitaStaggerMin = R.string.lyrics_style_partita_stagger_min,
