@@ -52,4 +52,16 @@ class WallTest {
         assertTrue(r.first().area >= 16)
         assertEquals(r[3].key, RankSlots.rank(slots, bw / 2, bh / 2, startKey = r[3].key).first().key)
     }
+
+    @Test
+    fun reflowsKeepBlockCoveredAndGrowTheTappedSlot() {
+        for (c in 0 until 4) for (r in 0 until 4) for (e in 0 until 12) {
+            val rf = BlockTemplates.reflow(c, r, e)!!
+            val grid = Array(8) { IntArray(12) }
+            rf.forEach { s -> for (y in s.y until s.y + s.rows) for (x in s.x until s.x + s.cols) grid[y][x]++ }
+            assertTrue("cover $c,$r,$e", grid.all { row -> row.all { it == 1 } })
+            assertEquals(6, rf[e].cols); assertEquals(6, rf[e].rows)
+        }
+        assertEquals(null, BlockTemplates.reflow(0, 0, 12))
+    }
 }

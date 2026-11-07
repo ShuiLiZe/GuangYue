@@ -5,7 +5,7 @@
 //   src/library/suites/bravais/bravaisConstants.ts（BRAVAIS_METRICS、getBravaisScale、overscan）
 //
 // B1a：Bravais 首页墙的几何底座。无限平铺：区块 (column,row) 的模板由坐标确定，每块 12 个槽。
-// 未含：blockReflows.ts（点开一格后整块重排，29KB 数据）——B1c 再移。
+// B1c：含 blockReflows（点开一格后整块重排），数据在 BlockReflows.kt。
 package com.guangyue.core.wall
 
 import kotlin.math.floor
@@ -67,6 +67,9 @@ object BlockTemplates {
     private fun flipY(l: List<BlockSlot>) = l.map { it.copy(y = BLOCK_ROWS - it.y - it.rows) }
     private val REFLECTIONS: List<(List<BlockSlot>) -> List<BlockSlot>> = listOf({ it }, ::flipX, ::flipY, { flipX(flipY(it)) })
     private val ORIENTED = TEMPLATES.flatMap { t -> REFLECTIONS.map { it(t) } }
+    private val ORIENTED_REFLOWS = BlockReflowData.REFLOWS.flatMap { perSlot -> REFLECTIONS.map { r -> perSlot.map(r) } }
+    const val EXPANSION_COLS = 6
+    const val EXPANSION_ROWS = 6
     val ORIENTATION_COUNT = ORIENTED.size
 
     /** 对应 mixBlockCoords（Math.imul + 无符号右移，按 32 位整数算）。 */
@@ -84,6 +87,10 @@ object BlockTemplates {
     }
 
     fun template(column: Int, row: Int): List<BlockSlot> = ORIENTED[orientation(column, row)]
+
+    /** 对应 getBlockReflow：展开 [expandedSlot] 后整块 12 张的新位置（下标按原槽位）。 */
+    fun reflow(column: Int, row: Int, expandedSlot: Int): List<BlockSlot>? =
+        if (expandedSlot !in 0 until SLOTS_PER_BLOCK) null else ORIENTED_REFLOWS[orientation(column, row)][expandedSlot]
 }
 
 object WallSlots {
@@ -112,6 +119,10 @@ object WallSlots {
         if (index !in 0 until BlockTemplates.SLOTS_PER_BLOCK) return null
         return toSlot(column, row, index, BlockTemplates.template(column, row)[index], m)
     }
+
+    /** 对应 layoutFocusedBlock。 */
+    fun focusedBlock(column: Int, row: Int, focused: Int, m: WallMetrics = Bravais.METRICS): List<WallSlot>? =
+        BlockTemplates.reflow(column, row, focused)?.mapIndexed { i, r -> toSlot(column, row, i, r, m) }
 
     /** 对应 collectWallSlots：与 [bounds] 相交的所有槽（行优先，区块内按槽序）。 */
     fun collect(bounds: Bounds, m: WallMetrics = Bravais.METRICS, limit: Int = Int.MAX_VALUE): List<WallSlot> {
