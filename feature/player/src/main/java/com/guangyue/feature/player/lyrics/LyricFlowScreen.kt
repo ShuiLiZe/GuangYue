@@ -136,6 +136,8 @@ fun LyricFlowScreen(
     onOpenPanel: (() -> Unit)? = null,
     /** P1b：浮卡面板开着时面板键改画 X（Folia PanelHandle 打开后是关闭键）。 */
     panelOpen: Boolean = false,
+    /** P1c：歌词时间轴偏移（ms，正数歌词更晚）；逐字时钟按「播放时间 - 偏移」走。 */
+    lyricOffsetMs: Long = 0L,
     /** 样式入口的无障碍文案（feature:player 无资源表，由 app 侧注入）。 */
     styleLabel: String = "",
     // V0d 取证：非 null 时把当前句的辉光强度钉死（debug harness 用，业务侧恒为 null）。
@@ -228,10 +230,10 @@ fun LyricFlowScreen(
     // 「流光」逐词画布需要逐帧时间；三态只在 derivedStateOf 里读，整行不会每帧重组。
     // Robolectric 下 withFrameNanos 会把 waitForIdle() 挂住（同 FrameJank 的坑），改用固定时钟。
     val clock: VisualizerClock = if (runningUnderRobolectric) {
-        rememberStaticVisualizerClock(positionMs / 1000.0)
+        rememberStaticVisualizerClock((positionMs - lyricOffsetMs) / 1000.0)
     } else {
         rememberVisualizerClock(
-            positionMsProvider = { positionMs },
+            positionMsProvider = { positionMs - lyricOffsetMs },
             playingProvider = { playback.isPlaying },
             enabled = !reduceMotion,
         )

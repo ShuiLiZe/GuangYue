@@ -80,6 +80,7 @@ import com.guangyue.feature.player.lyrics.CoverImage
  */
 enum class StagePanelTab(val label: String) {
     COVER("封面"),
+    LYRICS("歌词"),
     CONTROLS("控制"),
     QUEUE("播放列表"),
     QUALITY("音质"),
@@ -161,6 +162,11 @@ fun StagePanel(
     qualityDeclared: Boolean,
     onPickQuality: (Quality) -> Unit,
     modifier: Modifier = Modifier,
+    /** P1c：歌词页签——时间轴偏移（ms）。 */
+    lyricOffsetMs: Long = 0L,
+    onLyricOffset: (Long) -> Unit = {},
+    /** 歌词来源说明（音源名 / 无歌词）。 */
+    lyricSourceNote: String = "",
     /** 截图用例直接给 true，跳过入场动画。 */
     skipEnter: Boolean = false,
 ) {
@@ -279,6 +285,12 @@ fun StagePanel(
                                     current = currentQuality,
                                     declared = qualityDeclared,
                                     onPick = onPickQuality,
+                                )
+                                StagePanelTab.LYRICS -> LyricsBody(
+                                    colors = colors,
+                                    offsetMs = lyricOffsetMs,
+                                    onOffset = onLyricOffset,
+                                    sourceNote = lyricSourceNote,
                                 )
                                 StagePanelTab.COVER -> Spacer(Modifier.height(0.dp))
                             }
@@ -527,6 +539,65 @@ private fun SectionLabel(text: String, colors: StagePanelColors) {
         modifier = Modifier.padding(start = 2.dp, top = 4.dp, bottom = 8.dp),
     )
 }
+
+// ---------------------------------------------------------------- 歌词
+
+/** Folia SourceTab 的「时间轴偏移」行（LyricTimelineOffsetControl：步长 250ms，可重置）。 */
+@Composable
+private fun LyricsBody(colors: StagePanelColors, offsetMs: Long, onOffset: (Long) -> Unit, sourceNote: String) {
+    Column(Modifier.fillMaxWidth().padding(end = 2.dp)) {
+        if (sourceNote.isNotBlank()) {
+            SectionLabel("歌词来源 · $sourceNote", colors)
+        }
+        Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("时间轴偏移", fontSize = 14.sp, color = colors.t1, modifier = Modifier.weight(1f))
+            StepKey("−", "提前 250 毫秒", colors) { onOffset(offsetMs - OFFSET_STEP) }
+            Text(
+                (if (offsetMs > 0) "+" else "") + "$offsetMs ms",
+                fontSize = 13.sp,
+                color = if (offsetMs == 0L) colors.t2 else colors.t1,
+                maxLines = 1,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.width(76.dp),
+            )
+            StepKey("+", "推后 250 毫秒", colors) { onOffset(offsetMs + OFFSET_STEP) }
+            Spacer(Modifier.width(6.dp))
+            Box(
+                Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickableNoRipple { if (offsetMs != 0L) onOffset(0L) }
+                    .semantics { contentDescription = "重置时间轴偏移" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(GuangYueIcons.RotateCcw, null, tint = if (offsetMs == 0L) colors.t3 else colors.t2, modifier = Modifier.size(15.dp))
+            }
+        }
+        Text(
+            "正数让歌词更晚出现。每首歌各记一份。",
+            fontSize = 12.sp,
+            color = colors.t3,
+            modifier = Modifier.padding(start = 2.dp, bottom = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun StepKey(text: String, label: String, colors: StagePanelColors, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(32.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(colors.fill)
+            .clickableNoRipple(onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, fontSize = 16.sp, color = colors.t1)
+    }
+}
+
+private const val OFFSET_STEP = 250L
 
 // ---------------------------------------------------------------- 播放列表
 

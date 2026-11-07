@@ -195,6 +195,9 @@ fun StagePanelHost(
     lyricStyle: LyricStyle,
     onOpenLyricStyle: () -> Unit,
     onAddToPlaylist: () -> Unit,
+    lyricOffsetMs: Long = 0L,
+    onLyricOffset: (Long) -> Unit = {},
+    lyricSourceNote: String = "",
 ) {
     val ctx = LocalContext.current
     val tracks = LocalTrackRepository.current
@@ -277,6 +280,9 @@ fun StagePanelHost(
         currentQuality = item?.origin?.quality ?: playback.defaultQuality,
         qualityDeclared = declared.isNotEmpty(),
         onPickQuality = { playback.setQuality(it) },
+        lyricOffsetMs = lyricOffsetMs,
+        onLyricOffset = onLyricOffset,
+        lyricSourceNote = lyricSourceNote,
     )
 }
 

@@ -637,6 +637,7 @@ fun GuangYueNavHost(
             val partitaTuning by styleVm.partitaTuning.collectAsStateWithLifecycle()
             val tiltTuning by styleVm.tiltTuning.collectAsStateWithLifecycle()
             val claddaghTuning by styleVm.claddaghTuning.collectAsStateWithLifecycle()
+            val lyricOffset by vm.offsetMs.collectAsStateWithLifecycle()
             // V1a：当前样式（流光 / 浮名），同一份 styleVm —— 播放页切好、这里直接生效。
             val style by styleVm.style.collectAsStateWithLifecycle()
             val lyricContext = LocalContext.current
@@ -679,6 +680,7 @@ fun GuangYueNavHost(
                     onOpenStyleSheet = { styleSheetOpen = true },
                     onOpenPanel = { panelOpen = !panelOpen },
                     panelOpen = panelOpen,
+                    lyricOffsetMs = lyricOffset,
                     styleLabel = lyricContext.getString(R.string.lyrics_style),
                     // V1a：把当前样式透传给歌词画布（流光 / 浮名切换后立刻换渲染器）。
                     // 参数由 fume-draw 加在 LyricFlowScreen 末尾（默认 CLASSIC）；若该层尚未落地，
@@ -706,6 +708,13 @@ fun GuangYueNavHost(
                     onAddToPlaylist = {
                         panelOpen = false
                         navController.navigate(Routes.SEARCH)
+                    },
+                    lyricOffsetMs = lyricOffset,
+                    onLyricOffset = vm::setOffset,
+                    lyricSourceNote = when {
+                        loading -> "加载中"
+                        lyric.lines.isEmpty() -> "暂无歌词"
+                        else -> (playbackState.item?.origin?.pluginId ?: "").substringBefore("-").ifBlank { "音源" } + " · ${lyric.lines.size} 行"
                     },
                 )
                 if (styleSheetOpen) {

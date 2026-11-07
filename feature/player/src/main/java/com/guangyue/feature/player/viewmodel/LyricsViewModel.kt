@@ -25,6 +25,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 
 /**
  * The shared lyric controller: one instance for the whole playback session.
@@ -38,7 +40,25 @@ class LyricsViewModel @Inject constructor(
     private val playback: PlaybackController,
     private val bridge: MusicPluginBridge,
     private val tracks: TrackRepository,
+    @ApplicationContext context: Context,
 ) : ViewModel() {
+
+    /**
+     * P1c：歌词时间轴偏移（Folia LyricTimelineOffsetControl + lyricOffsetMemory）：每首歌记一份，步长 250ms，
+     * 正数让歌词更晚出现（歌词时间 = 播放时间 - 偏移）。
+     */
+    private val offsets = context.getSharedPreferences("lyric_offsets", Context.MODE_PRIVATE)
+    private val _offsetMs = MutableStateFlow(0L)
+    val offsetMs: StateFlow<Long> = _offsetMs.asStateFlow()
+
+    fun setOffset(ms: Long) {
+        val v = ms.coerceIn(-30_000L, 30_000L)
+        _offsetMs.value = v
+        lastKey?.let { k -> offsets.edit().apply { if (v == 0L) remove(k) else putLong(k, v) }.apply() }
+        val pos = playback.state.value.positionMs
+        sync.onPosition(pos - v, System.currentTimeMillis())
+        _syncState.value = sync.state.value
+    }
 
     val playbackState: StateFlow<PlaybackState> =
         playback.state.stateIn(viewModelScope, SharingStarted.Eagerly, PlaybackState())
@@ -67,9 +87,10 @@ class LyricsViewModel @Inject constructor(
                 val key = current?.key
                 if (current != null && key != null && key != lastKey) {
                     lastKey = key
+                    _offsetMs.value = offsets.getLong(key, 0L)
                     loadLyrics(current)
                 }
-                sync.onPosition(state.positionMs, System.currentTimeMillis())
+                sync.onPosition(state.positionMs - _offsetMs.value, System.currentTimeMillis())
                 _syncState.value = sync.state.value
             }
         }

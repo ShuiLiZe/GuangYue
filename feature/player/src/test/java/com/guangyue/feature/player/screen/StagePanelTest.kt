@@ -24,7 +24,7 @@ class StagePanelTest {
 
     @Test
     fun tabsFollowFoliaOrderAndNames() {
-        assertEquals(listOf("封面", "控制", "播放列表", "音质"), StagePanelTab.entries.map { it.label })
+        assertEquals(listOf("封面", "歌词", "控制", "播放列表", "音质"), StagePanelTab.entries.map { it.label })
     }
 
     @Test
