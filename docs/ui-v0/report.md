@@ -665,3 +665,9 @@ BUILD SUCCESSFUL in 35s
 - 测试：`:feature:player:testDebugUnitTest` 6 套件 68 例 0 失败（StagePanelTest 页签断言更新）。
 - 已知（非本步引入）：`:app:testDebugUnitTest` 里 Robolectric 截图套件（U5LyricsScreenshotTest、V0LyricStyleScreenshotTest 等）在本机全部 `AppNotIdleException`，单例约 1 分钟超时，整套跑不完，本步未用它们验收；需另查（疑似逐帧时钟在 Robolectric 下不空闲）。
 - 实拍：`p1c-panel-lyrics-light.png`（+500 ms）。提交：`02ca340` 及实拍提交。
+
+## 测试修复：截图套件 AppNotIdleException（2026-11-08）
+
+- 原因：V2 通用几何背景 `GeometricBackgroundLayer` 在播放中跑 `withFrameNanos` 死循环，Robolectric 的 `waitForIdle` 永远等不到空闲，凡渲染 `LyricFlowScreen` 的截图用例都卡 1 分钟后 `AppNotIdleException`。
+- 修：Robolectric 下按暂停画静帧（`paused = … || runningUnderRobolectric`），与逐帧时钟的既有处理一致。提交 `b264df3`。
+- 结果：`U5LyricsScreenshotTest` 14/0、`V0LyricStyleScreenshotTest` 29/0；全量 `testDebugUnitTest :core:lyrics:test --continue`：67 套件 645 例 0 失败（BUILD SUCCESSFUL）。
