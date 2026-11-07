@@ -149,6 +149,31 @@ fun GuangYueNavHost(
                 }
             }
 
+            // B1b：有内容时首页换成 Folia Bravais 墙（推荐歌单 → 榜单 → 最近播放，按 key 去重）；
+            // 一块砖都没有（加载中 / 失败 / 无插件）时仍走原来的墙状态页；榜单部分失败不挡墙。
+            val wallTiles = remember(sheets, recent, charts) {
+                (vm.recommended(sheets, recent) + charts + recent).distinctBy { it.key }
+            }
+            if (wallTiles.isNotEmpty()) {
+                ShellColumn(
+                    content = {
+                        com.guangyue.music.ui.home.BravaisWall(
+                            tiles = wallTiles,
+                            inkColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
+                            groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
+                            onOpenTile = { tile ->
+                                vm.playTracksOf(tile) { tracks, at ->
+                                    playback.setQueueFromTracks(tracks, at, true)
+                                    navController.navigate(Routes.PLAYER)
+                                }
+                            },
+                        )
+                    },
+                    miniPlayer = miniPlayer,
+                    bottomBar = bottomBar,
+                )
+                return@composable
+            }
             ShellColumn(
                 content = {
                     HomeWallScreen(

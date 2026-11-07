@@ -162,6 +162,8 @@ android {
 
 dependencies {
     implementation(project(":core:data"))
+    // B1b：Bravais 墙几何（core/wall 暂放在纯 JVM 的 core:lyrics 模块里）。
+    implementation(project(":core:lyrics"))
     implementation(project(":core:download"))
     implementation(project(":core:player"))
     implementation(project(":core:plugin"))
