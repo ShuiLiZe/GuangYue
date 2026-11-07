@@ -202,8 +202,35 @@ fun V0cStage(
             if (isFume) fumeLines else buildKernelLines(withTranslation)
         }
         // V1a 取证：拍「歌词样式」弹层（浮名条目选中态）。只在 debug 源集，release 无此分支。
-        if (style == "sheet") {
+        // V1b-2：弹层是半透明毛玻璃，身后必须有一层真实的播放页画面，实拍才看得出「透」。
+        // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
+        // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
+        if (style == "sheet" || style == "sheetbare") {
             CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
+                if (style == "sheet") {
+                    LyricFlowScreen(
+                        lyrics = remember { parseLrc(LRC) },
+                        currentIndex = 1,
+                        strings = V0cStrings,
+                        playback = playing(positionMs),
+                        accent = Folia.colors.accent,
+                        onBack = {},
+                        onSeekToLine = {},
+                        onManualScroll = {},
+                        onTogglePlay = {},
+                        onSeek = {},
+                        artist = "周杰伦",
+                        source = "V0c 取证",
+                        darkMode = dark,
+                        coverColor = Color(0xFFB4553C),
+                        kernelLines = kernel,
+                        classicTuning = ClassicTuning(),
+                        coverUrl = null,
+                        glowStrengthOverride = V0dGlowOverride,
+                        lyricStyle = LyricStyle.FUME,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
                 LyricStyleSheet(
                     tuning = ClassicTuning(),
                     strings = lyricStyleStrings(),

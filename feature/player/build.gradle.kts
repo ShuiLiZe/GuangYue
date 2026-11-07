@@ -48,4 +48,15 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     testImplementation(libs.junit)
+    // V1b-2：滑杆对齐用 Robolectric + Roborazzi 的 Compose 截图测试锁住（全部是已声明版本、锁文件里已有的依赖，非新增）。
+    testImplementation(libs.robolectric)
+    // 与 :app 同款：Robolectric 需要 androidx.test 的 ApplicationProvider/RuntimeEnvironment，
+    // 显式钉版本（1.7.0）避免被 ui-test-junit4 传递到未缓存的 1.5.0。
+    testImplementation(libs.androidx.junit)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

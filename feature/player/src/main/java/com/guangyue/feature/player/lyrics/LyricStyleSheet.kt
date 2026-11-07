@@ -1,9 +1,12 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.guangyue.feature.player.lyrics
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -11,9 +14,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,33 +36,43 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.guangyue.core.lyrics.ClassicTuning
+import com.guangyue.feature.library.design.GyMotion
 import com.guangyue.feature.library.design.GySpace
 import com.guangyue.feature.library.design.Gyp
 import com.guangyue.feature.library.design.clickableNoRipple
 import com.guangyue.feature.library.design.icons.GuangYueIcons
-import com.guangyue.feature.library.design.FoliaToggle
 import kotlin.math.roundToInt
 
 /**
- * V0「歌词样式」底部弹层
+ * V0「歌词样式」底部弹层（V1b-2：去 Material 风格 + 滑杆对齐）
  *
  * 对应 Folia 文件：
  * - `src/components/visualizer/window/`（样式窗口 / 样式切换器，桌面浮窗形态）
  * - `src/components/visualizer/registry.tsx`（`VISUALIZER_REGISTRY`，本段只有 classic 一项可选）
  * - `src/components/visualizer/classic/tuning.ts`（`enableWordRotation` / `breathingFloatMultiplier` /
  *   `wordSpacing` 三项调参，`zeroToTwo` 钳 [0,2]，`storage.resetNotice = 'notifications.classicReset'`）
+ * - `src/components/modal/settings/kit/Slider.tsx:23`（`THUMB_INSET = 8`）、`:32-42`（轨道 `h-1`、拇指 `h-4 w-4`）、
+ *   `:120-140`（stacked：数值在本行右端、轨道独占下一行）
+ * - `src/components/modal/settings/kit/Toggle.tsx:16-30`（40×24 胶囊、18dp 滑钮、按下加宽到 22dp）
+ * - `src/index.css:163-168`（`.theme-glass-panel`：`--bg-color` 85% + `--text-primary` 12% 描边）
  * - `src/i18n/locales/zh-CN.ts:915 "visualizerClassic": "流光"`、`:2495 "lyricsStyleSettings"`、
  *   `:2496 "lyricStyles"`、`:2497 "lyricStyleNoOptions"`、`:5363 "lyricStyle"`
  *
@@ -72,6 +86,7 @@ import kotlin.math.roundToInt
  * 4. V1a 的样式行只切样式、**不**关弹层：选中态（右侧 accent 圆 + Check）要在原地看得见，
  *    与 Folia 样式窗口「点一下立刻换渲染器、窗口留着」的手感一致；下滑 / 点外部才关。
  * 5. tuning 面板仍只服务「流光」（V1b 才补「浮名」自己那套 tuning UI）。
+ * 6. V1b-2：面板、开关、滑杆全部自绘/自配，不再用 Material 的 `Slider` / `Switch` 默认外观。
  */
 
 /** 弹层文案表：与 `app/src/main/res/values/strings.xml` 的「V0 歌词样式」段逐键对应。 */
@@ -95,7 +110,6 @@ data class LyricStyleStrings(
     val fume: Int = 0,
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LyricStyleSheet(
     tuning: ClassicTuning,
@@ -110,14 +124,77 @@ fun LyricStyleSheet(
     fumeName: String = "",
     /** V1a：点样式行 → 只切换样式，**不**关弹层（让用户看到选中态，对应 Folia 样式窗口的即选即显）。 */
     onStyle: (LyricStyle) -> Unit = {},
+    /**
+     * V1b-2：面板形状。手机入口用底部弹层默认的「上方两角圆、贴底」；
+     * 取证截图（[SheetPreview]）用 28dp 全圆角，四角一起看得到。
+     */
+    sheetShape: RoundedCornerShape = LyricSheetShape,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Gyp.card,
+        containerColor = Color.Transparent,
+        shape = sheetShape,
+        // Material 默认在弹层底下盖一层 32% 遮罩；它会把身后的封面调色板压灰，
+        // 毛玻璃面板（半透底）就透不出播放页的画面。这里收到 10%，与播放页浮层一致。
+        scrimColor = Color.Black.copy(alpha = 0.10f),
+        // Material 的拖拽把手（4dp×32dp 灰条）不属于这套视觉。
+        dragHandle = null,
     ) {
-        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+        LyricStylePanelContent(
+            tuning = tuning,
+            strings = strings,
+            styleName = styleName,
+            onTuning = onTuning,
+            accent = accent,
+            style = style,
+            fumeName = fumeName,
+            onStyle = onStyle,
+        )
+    }
+}
+
+/**
+ * 面板本体（V1b-2 抽出）：毛玻璃底 + 10dp 圆角 + 发丝描边 + 手柄，内容为一列。
+ *
+ * 抽出来是为了能在同一份代码上做「弹层之外」的确定性截图（[SheetPreview]），
+ * 免得实拍每次都要赌弹层动画的结束时刻。
+ */
+@Composable
+private fun LyricStylePanelContent(
+    tuning: ClassicTuning,
+    strings: LyricStyleStrings,
+    styleName: String,
+    onTuning: (ClassicTuning) -> Unit,
+    accent: Color,
+    style: LyricStyle,
+    fumeName: String,
+    onStyle: (LyricStyle) -> Unit,
+) {
+    // Folia `index.css:163-168` `.theme-glass-panel`：`--bg-color` 85% 底 + `--text-primary` 12% 描边。
+    // 面板改用 `--st-card` 一族（与弹层其它行同源），透明度取 85%，透出身后的封面调色板。
+    val glassFill = Gyp.card.copy(alpha = 0.85f)
+    val glassBorder = Gyp.line2
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(LyricSheetShape)
+            .background(glassFill)
+            .border(1.dp, glassBorder, LyricSheetShape)
+            .padding(horizontal = 20.dp)
+            .padding(top = 8.dp, bottom = 4.dp),
+    ) {
+        Column {
+            // 手柄：自绘 36×4、圆角胶囊、`--st-t3`（Material 默认把手是 32×4 的纯灰）。
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .size(width = 36.dp, height = 4.dp)
+                        .background(Gyp.t3, RoundedCornerShape(999.dp)),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = GuangYueIcons.Sparkles,
@@ -165,6 +242,7 @@ fun LyricStyleSheet(
             ToggleRow(
                 label = str(strings.rotation),
                 checked = tuning.enableWordRotation,
+                accent = accent,
                 onChange = { onTuning(tuning.copy(enableWordRotation = it)) },
             )
 
@@ -193,11 +271,11 @@ fun LyricStyleSheet(
                     Icon(
                         imageVector = GuangYueIcons.RotateCcw,
                         contentDescription = null,
-                        tint = Gyp.accent,
+                        tint = accent,
                         modifier = Modifier.size(16.dp),
                     )
                     Box(Modifier.width(8.dp))
-                    Text(str(strings.reset), fontSize = 13.sp, color = Gyp.accent)
+                    Text(str(strings.reset), fontSize = 13.sp, color = accent)
                 }
             }
             Box(Modifier.height(GySpace.m))
@@ -212,6 +290,10 @@ fun LyricStyleSheet(
  * 右侧 20dp accent 实心圆 + Check 只在**选中**时显示 —— 未选中时用等宽 Spacer 占位，
  * 保证两行文字左端对齐、320dp 窄屏不因标记出现/消失而抖动或溢出。
  * 点击走 [clickableNoRipple]（与弹层其它行同一手感），且**不**触发关闭。
+ *
+ * V1b-2：毛玻璃面板底色本身就带 alphe，选中行再叠 accent@0.10 会显得发脏，
+ * 这里把选中底改成 accent@0.14 + 1dp accent@0.22 描边，未选中行给 `--st-fill` 7%，
+ * 两行都在玻璃面上读得出层次。
  */
 @Composable
 private fun StyleRow(
@@ -220,12 +302,19 @@ private fun StyleRow(
     accent: Color,
     onClick: () -> Unit,
 ) {
+    val shape = RoundedCornerShape(14.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp)
             .padding(vertical = 4.dp)
-            .background(accent.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
+            .background(
+                if (selected) accent.copy(alpha = 0.14f) else Gyp.fill2,
+                shape,
+            )
+            .then(
+                if (selected) Modifier.border(1.dp, accent.copy(alpha = 0.22f), shape) else Modifier,
+            )
             .clickableNoRipple(onClick)
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.CenterStart,
@@ -273,6 +362,7 @@ private fun StyleRow(
 private fun ToggleRow(
     label: String,
     checked: Boolean,
+    accent: Color,
     onChange: (Boolean) -> Unit,
 ) {
     Row(
@@ -292,7 +382,69 @@ private fun ToggleRow(
             modifier = Modifier.weight(1f, fill = false),
         )
         Spacer(Modifier.width(24.dp))
-        FoliaToggle(checked = checked, onChange = onChange)
+        // V1b-2：原来的 [FoliaToggle] 是 Material `Switch` 换色（Material 的拇指/轨迹尺寸与波形弧），
+        // 换成本文件里的自绘 [FoliaSwitch]（Folia `kit/Toggle.tsx` 的 40×24 胶囊 + 18dp 滑钮）。
+        FoliaSwitch(checked = checked, accent = accent, onChange = onChange)
+    }
+}
+
+/**
+ * Folia `kit/Toggle.tsx:16-30` 的自绘开关。
+ *
+ * - 胶囊 40×24（`h-6 w-10`）、全圆角；开 = `--st-accent`，关 = `--st-track`；
+ * - 滑钮 18dp（`h-[18px] w-[18px]`），距两边各 3dp（`left-[3px] top-[3px]`），开启平移 16dp（`translate-x-4`）；
+ * - 按下时滑钮加宽到 22dp、开启态少推 4dp（`group-active:w-[22px]` / `translate-x-3`），
+ *   时长 `st-t-move` = [GyMotion.MOVE_MS] 220ms。
+ */
+@Composable
+private fun FoliaSwitch(
+    checked: Boolean,
+    accent: Color,
+    onChange: (Boolean) -> Unit,
+) {
+    var pressed by remember { mutableStateOf(false) }
+    val knobWidth by animateDpAsState(
+        targetValue = if (pressed) 22.dp else 18.dp,
+        animationSpec = tween(GyMotion.MOVE_MS, easing = GyMotion.easeStandard),
+        label = "folioSwitchKnobWidth",
+    )
+    val knobOffset by animateDpAsState(
+        targetValue = when {
+            checked && pressed -> 12.dp
+            checked -> 16.dp
+            else -> 0.dp
+        },
+        animationSpec = tween(GyMotion.MOVE_MS, easing = GyMotion.easeStandard),
+        label = "folioSwitchKnobOffset",
+    )
+    val trackColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (checked) accent else Gyp.track,
+        animationSpec = tween(GyMotion.MOVE_MS, easing = GyMotion.easeStandard),
+        label = "foliaSwitchTrack",
+    )
+    Box(
+        modifier = Modifier
+            .size(width = 40.dp, height = 24.dp)
+            .clip(CircleShape)
+            .background(trackColor, CircleShape)
+            .pointerInput(checked) {
+                detectTapGestures(
+                    onPress = {
+                        pressed = true
+                        tryAwaitRelease()
+                        pressed = false
+                    },
+                    onTap = { onChange(!checked) },
+                )
+            },
+    ) {
+        Box(
+            Modifier
+                .offset(x = 3.dp + knobOffset, y = 3.dp)
+                .size(width = knobWidth, height = 18.dp)
+                .shadow(elevation = 1.dp, shape = CircleShape)
+                .background(if (checked) Gyp.onAccent else Gyp.knob, CircleShape),
+        )
     }
 }
 
@@ -331,107 +483,172 @@ private fun TuningSliderRow(
             )
         }
         Spacer(Modifier.height(6.dp))
-        // 轨道：1dp 圆角线 + 白点滑钮，拖动热区 44dp（Folia input 高 20px，手机上抬到 44dp 保触控）。
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            FoliaSlider(
-                value = value,
-                accent = accent,
-                onChange = onChange,
-            )
-        }
+        FoliaSlider(
+            value = value,
+            accent = accent,
+            onChange = onChange,
+            contentDescription = label,
+        )
     }
 }
+
+/**
+ * V1b-2 滑杆自检用的语义/标签常量：截图测试按 [testTag] 抓节点，按 [desc] 找控件。
+ */
+internal const val FoliaSliderTestTagPrefix = "folia-slider-"
+internal const val FoliaThumbTestTagPrefix = "folia-thumb-"
 
 /**
  * Folia `kit/Slider.tsx` 的视觉与手感，用 Compose 基础能力重画（不用 Material Slider ——
  * 它的点状刻度轨道 + 大号拇指与 Folia tuning 面板完全不同）。
  *
- * - 轨道：高 1dp（`h-1`）全圆角，未填充段 `Gyp.track`，填充段 accent 线性渐变；
- * - 滑钮：16dp 纯白圆点（`h-4 w-4 bg-white`），外加 1px 深色描边 + 1px 下偏移阴影；
+ * - 轨道：高 1dp（`h-1`）全圆角，未填充段 `Gyp.track`，填充段 accent；
+ * - 滑钮：16dp 纯白圆点（`h-4 w-4 bg-white`），外加 1px 深色描边 + 下偏移阴影；
  * - 拖动：整个 44dp 高的行都吃手势（pointerInput），换算成 0..2 的值后按 0.1 取整。
+ *
+ * ## V1b-2 对齐口径（根因见 [FoliaSliderGeometry]）
+ * 轨道可视段就是**滑钮中心的行程** `[inset, width - inset]`（Folia `THUMB_INSET = 8`），
+ * 填充末端与滑钮中心是同一个表达式 `fillEndPx`，滑钮左缘 = 中心 − 半径。
+ * 因此 0% / 50% / 100% 三处的中心都恰好压在填充末端上。
  */
 @Composable
 private fun FoliaSlider(
     value: Float,
     accent: Color,
     onChange: (Float) -> Unit,
+    contentDescription: String,
 ) {
     val density = LocalDensity.current
-    val thumbDp = 16.dp
+    val thumbDp = FoliaSliderThumbDp
     val thumbInsetPx = with(density) { FoliaSliderThumbInsetDp.dp.toPx() }
     val trackColor = Gyp.track
     var trackWidthPx by remember { mutableStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
+    // 按下时滑钮放大到 18dp（Folia `st-slider:active`），但**中心不动** —— 定位与半径分开算。
+    val thumbSizeNow = if (dragging) FoliaSliderThumbPressedDp else thumbDp
+    val thumbSizePx = with(density) { thumbSizeNow.toPx() }
+    // 拖动中或点按落点都立即收值：手势里先给值、再把 dragging 打开，
+    // 保证滑钮的「按下放大」只影响半径、不影响中心。
     val fraction = (value.coerceIn(0f, 2f) / 2f)
-    val active = Modifier
+    // 填充末端与滑钮中心同源：两者都等于 [FoliaSliderGeometry.fillEndPx]。
+    val fillEndPx = FoliaSliderGeometry.fillEndPx(trackWidthPx, thumbInsetPx, fraction)
+    val thumbLeftPx = FoliaSliderGeometry.thumbLeftPx(trackWidthPx, thumbInsetPx, fraction, thumbSizePx)
+    val dragModifier = Modifier
         .fillMaxWidth()
         .height(44.dp)
+        // 热区本身带 testTag：UI 测试用它读滑杆的实际宽度与左缘，再和滑钮矩形一起断言对齐。
+        .testTag(FoliaSliderTestTagPrefix + contentDescription)
         .onSizeChanged { trackWidthPx = it.width.toFloat() }
-        .pointerInput(trackWidthPx, accent) {
-            detectTapGestures(
-                onPress = { offset ->
-                    dragging = true
-                    val usable = (trackWidthPx - thumbInsetPx * 2f).coerceAtLeast(1f)
-                    val raw = ((offset.x - thumbInsetPx) / usable).coerceIn(0f, 1f) * 2f
-                    onChange((raw * 10f).roundToInt() / 10f)
-                    tryAwaitRelease()
-                    dragging = false
-                },
-            )
-        }
-        .pointerInput(trackWidthPx, accent) {
+        // 只留一个 pointerInput 块：detectTapGestures 与 detectHorizontalDragGestures 写在两个
+        // pointerInput 里会争抢同一次 down 事件，拖动前几帧不收值（滑钮跟不上手指）。
+        .pointerInput(trackWidthPx) {
             detectHorizontalDragGestures(
                 onDragStart = { offset ->
                     dragging = true
-                    val usable = (trackWidthPx - thumbInsetPx * 2f).coerceAtLeast(1f)
-                    val raw = ((offset.x - thumbInsetPx) / usable).coerceIn(0f, 1f) * 2f
-                    onChange((raw * 10f).roundToInt() / 10f)
+                    onChange(FoliaSliderGeometry.valueForPositionPx(offset.x, trackWidthPx, thumbInsetPx))
                 },
                 onDragEnd = { dragging = false },
                 onDragCancel = { dragging = false },
                 onHorizontalDrag = { change, _ ->
-                    val usable = (trackWidthPx - thumbInsetPx * 2f).coerceAtLeast(1f)
-                    val raw = ((change.position.x - thumbInsetPx) / usable).coerceIn(0f, 1f) * 2f
-                    onChange((raw * 10f).roundToInt() / 10f)
+                    onChange(FoliaSliderGeometry.valueForPositionPx(change.position.x, trackWidthPx, thumbInsetPx))
                 },
             )
         }
-    Box(modifier = active, contentAlignment = Alignment.CenterStart) {
-        Canvas(Modifier.fillMaxWidth().height(2.dp)) {
+    Box(modifier = dragModifier, contentAlignment = Alignment.CenterStart) {
+        Canvas(Modifier.fillMaxWidth().height(FoliaSliderTrackDp)) {
             val trackHeight = size.height
-            drawRoundRect(color = trackColor, cornerRadius = CornerRadius(trackHeight / 2f))
-            val fillEnd = (size.width - thumbInsetPx * 2f) * fraction + thumbInsetPx
+            val radius = CornerRadius(trackHeight / 2f)
+            // 未填充段：与滑钮行程同宽（两端各让出 inset），不是整行宽 ——
+            // 否则 0% 时轨道还比填充多出一截 8dp 的「前导」，看上去就是错位。
             drawRoundRect(
-                brush = Brush.horizontalGradient(listOf(accent.copy(alpha = 0.92f), accent), startX = 0f, endX = size.width),
-                size = Size(fillEnd.coerceAtLeast(1f), trackHeight),
-                cornerRadius = CornerRadius(trackHeight / 2f),
+                color = trackColor,
+                topLeft = Offset(thumbInsetPx, 0f),
+                size = Size((size.width - thumbInsetPx * 2f).coerceAtLeast(1f), trackHeight),
+                cornerRadius = radius,
+            )
+            // 填充段：0 → 滑钮中心，同样的 inset 起点。画到 fillEndPx + 半轨道高，
+            // 让圆角端头在 thumb 遮住之前仍是完整圆头，不漏「半个圆」的缺口。
+            drawRoundRect(
+                brush = Brush.horizontalGradient(
+                    listOf(accent.copy(alpha = 0.92f), accent),
+                    startX = thumbInsetPx,
+                    endX = thumbInsetPx + (size.width - thumbInsetPx * 2f).coerceAtLeast(1f),
+                ),
+                topLeft = Offset(thumbInsetPx, 0f),
+                size = Size(
+                    (fillEndPx - thumbInsetPx + trackHeight / 2f).coerceAtLeast(trackHeight),
+                    trackHeight,
+                ),
+                cornerRadius = radius,
             )
         }
         Box(
             modifier = Modifier
-                .padding(start = (FoliaSliderThumbInsetDp.dp * fraction * 2f))
-                .size(if (dragging) 18.dp else thumbDp)
-                .shadow(elevation = 1.dp, shape = CircleShape)
-                .background(Color.White, CircleShape)
-                .border(width = 0.5.dp, color = Color.Black.copy(alpha = 0.14f), shape = CircleShape),
+                .offset { IntOffset(thumbLeftPx.roundToInt(), 0) }
+                .size(thumbSizeNow)
+                // Folia `shadow-[0_0_0_1px_rgba(0,0,0,0.14),0_1px_3px_rgba(0,0,0,0.35)]`
+                .shadow(elevation = 3.dp, shape = CircleShape)
+                .background(FoliaSliderThumb, CircleShape)
+                .border(width = 1.dp, color = Color.Black.copy(alpha = 0.14f), shape = CircleShape)
+                // V1b-2：给滑钮一个 testTag + 描述，截图测试据此读它的实际绘制中心（px）。
+                .testTag(FoliaThumbTestTagPrefix + contentDescription)
+                .semantics { this.contentDescription = contentDescription },
         )
     }
 }
 
-/** Folia kit 滑杆：轨道 1dp（`h-1`），滑钮 16dp（`h-4 w-4`），图形本身不做 Material 的默认样式。 */
-private val FoliaSliderTrackDp = 20f
+/**
+ * 滑杆几何（V1b-2 抽出成纯函数，供 JVM 单测与 Compose 截图测试锁住「滑块中心 = 填充末端」）。
+ *
+ * 坐标都相对 44dp 拖动热区的左边缘，单位 px：
+ * - 轨道可视区间是 `[inset, width - inset]`，滑钮在两端时贴边、中心正好落在 inset / width − inset；
+ * - 填充末端 `fillEndPx` 与滑钮中心是同一个值；
+ * - 滑钮左缘 = 中心 − 半径（按下放大到 18dp 时只是半径变大，中心不动）。
+ *
+ * ## 根因（V1a-fix3 的定位）
+ * 修复前：填充 = `(宽度 − 2×8dp) × fraction + 8dp`，而滑钮位置 = `padding = 8dp × fraction × 2`
+ * （= 8dp × value）。两者公式不同源、后者**不减半径**，于是 1.00x 时填充到正中间、滑钮才挪 8dp，
+ * 肉眼看就是「填充到一半、滑块还贴在左边」——这就是实拍 `v1a-style-sheet.png` 里的错位。
+ */
+internal object FoliaSliderGeometry {
+
+    /** 可拖动宽度（扣掉两端 inset），至少 1px 防止除零。 */
+    fun usableWidthPx(trackWidthPx: Float, insetPx: Float): Float =
+        (trackWidthPx - insetPx * 2f).coerceAtLeast(1f)
+
+    /** 填充末端 = 滑钮中心（fraction 取 0..1，值域 0..2 已在外层归一）。 */
+    fun fillEndPx(trackWidthPx: Float, insetPx: Float, fraction: Float): Float =
+        usableWidthPx(trackWidthPx, insetPx) * fraction.coerceIn(0f, 1f) + insetPx
+
+    /** 滑钮左缘：中心 − 半径，使滑块中心恒等于填充末端。 */
+    fun thumbLeftPx(trackWidthPx: Float, insetPx: Float, fraction: Float, thumbSizePx: Float): Float =
+        fillEndPx(trackWidthPx, insetPx, fraction) - thumbSizePx * 0.5f
+
+    /** 手势落点 → 0..2 的值（按 0.1 取整，与 Folia `zeroToTwo` 的 19 个中间值一致）。 */
+    fun valueForPositionPx(xPx: Float, trackWidthPx: Float, insetPx: Float): Float {
+        val usable = usableWidthPx(trackWidthPx, insetPx)
+        val raw = ((xPx - insetPx) / usable).coerceIn(0f, 1f) * 2f
+        return (raw * 10f).roundToInt() / 10f
+    }
+}
+
+/** 弹层 / 面板圆角：14dp，与 V0 的 `QualityPickerSheet` 同一档。 */
+private val LyricSheetShape = RoundedCornerShape(14.dp)
+
+/** 轨道可视高度 2dp（Folia `h-1` = 4px @2x，这里取 2dp 的细线）。 */
+private val FoliaSliderTrackDp = 2.dp
+
+/** Folia kit 滑杆：滑钮 16dp（`h-4 w-4`）。 */
+private val FoliaSliderThumbDp = 16.dp
+
+/** 滑钮底色：纯白（Folia `bg-white`），在深色轨道上也读得出「实心圆点」。 */
 private val FoliaSliderThumb = Color.White
 
-/** 滑钮中心左右各让出的距离（对应 Folia `THUMB_INSET = 8`）。 */
-private const val FoliaSliderThumbInsetDp = 8f
+/** 按下时 `st-slider:active` 的 1.15 倍（16 × 1.15 ≈ 18.4 → 取 18dp）。 */
+private val FoliaSliderThumbPressedDp = 18.dp
 
-/** Folia tuning 的 step：0–2 之间按 0.1 取整（zeroToTwo 保留两位小数，滑杆点击数 19 个中间值）。 */
-private const val FOLIA_SLIDER_STEPS = 19
+/** 滑钮中心左右各让出的距离（对应 Folia `Slider.tsx:23` 的 `THUMB_INSET = 8`）。 */
+internal const val FoliaSliderThumbInsetDp = 8f
 
 /** 与 U5 同款：弹层里也走 `LyricStringHost`，保证文案与外层同一份资源。 */
 @Composable
@@ -439,3 +656,32 @@ private fun str(id: Int): String = LyricStringHost.current(id)
 
 /** 取整辅助（滑杆 steps 的落地值，报告里引用 zeroToTwo 的两位小数形态）。 */
 internal fun ClassicTuning.percents(): Int = (breathingFloatMultiplier * 100).roundToInt()
+
+/**
+ * V1b-2 取证 / 截图测试用：不经过 `ModalBottomSheet`（它有自己的入场动画与遮罩），
+ * 直接把面板本体画在一块给定的底上，用于 Robolectric 确定性截图。
+ *
+ * 只给测试与截图 Harness 用，生产入口仍走 [LyricStyleSheet]。
+ */
+@Composable
+fun LyricStyleSheetPreview(
+    tuning: ClassicTuning,
+    strings: LyricStyleStrings,
+    styleName: String,
+    onTuning: (ClassicTuning) -> Unit,
+    accent: Color = Gyp.accent,
+    style: LyricStyle = LyricStyle.CLASSIC,
+    fumeName: String = "",
+    onStyle: (LyricStyle) -> Unit = {},
+) {
+    LyricStylePanelContent(
+        tuning = tuning,
+        strings = strings,
+        styleName = styleName,
+        onTuning = onTuning,
+        accent = accent,
+        style = style,
+        fumeName = fumeName,
+        onStyle = onStyle,
+    )
+}
