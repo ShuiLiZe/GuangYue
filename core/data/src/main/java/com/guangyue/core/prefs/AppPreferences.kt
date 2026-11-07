@@ -5,6 +5,7 @@ import com.guangyue.core.lyrics.ClassicTuning
 import com.guangyue.core.lyrics.PartitaTuning
 import com.guangyue.core.lyrics.TiltColorScheme
 import com.guangyue.core.lyrics.TiltTuning
+import com.guangyue.core.lyrics.CladdaghTuning
 import com.guangyue.core.lyrics.fume.FumeCameraTrackingMode
 import com.guangyue.core.lyrics.fume.FumeTuning
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -132,6 +133,25 @@ class AppPreferences @Inject constructor(
                 .apply()
         }
 
+    /** V2e：「回环」调参（Folia claddagh/tuning.ts storage.key = 'claddagh_tuning'）。 */
+    var claddaghTuning: CladdaghTuning
+        get() = CladdaghTuning.sanitize(
+            focus = prefs.getFloat(KEY_CL_FOCUS, CladdaghTuning.DEFAULT.focusScaleRatio.toFloat()).toDouble(),
+            radius = prefs.getFloat(KEY_CL_RADIUS, CladdaghTuning.DEFAULT.radiusScale.toFloat()).toDouble(),
+            tilt = prefs.getFloat(KEY_CL_TILT, CladdaghTuning.DEFAULT.ellipseTiltDeg.toFloat()).toDouble(),
+            axis = prefs.getBoolean(KEY_CL_AXIS, CladdaghTuning.DEFAULT.showAxisLine),
+            spacing = prefs.getFloat(KEY_CL_SPACING, CladdaghTuning.DEFAULT.letterSpacingOffset.toFloat()).toDouble(),
+        )
+        set(v) {
+            prefs.edit()
+                .putFloat(KEY_CL_FOCUS, v.focusScaleRatio.toFloat())
+                .putFloat(KEY_CL_RADIUS, v.radiusScale.toFloat())
+                .putFloat(KEY_CL_TILT, v.ellipseTiltDeg.toFloat())
+                .putBoolean(KEY_CL_AXIS, v.showAxisLine)
+                .putFloat(KEY_CL_SPACING, v.letterSpacingOffset.toFloat())
+                .apply()
+        }
+
     /** V2d：「倾诉」调参（Folia tilt/tuning.ts storage.key = 'tilt_tuning'）。 */
     var tiltTuning: TiltTuning
         get() = TiltTuning.sanitize(
@@ -204,6 +224,11 @@ class AppPreferences @Inject constructor(
         const val KEY_CLASSIC_LEGACY = "classic_tuning_legacy"
         const val KEY_CLASSIC_SPACING = "classic_tuning_spacing"
 
+        const val KEY_CL_FOCUS = "claddagh_tuning_focus"
+        const val KEY_CL_RADIUS = "claddagh_tuning_radius"
+        const val KEY_CL_TILT = "claddagh_tuning_tilt"
+        const val KEY_CL_AXIS = "claddagh_tuning_axis"
+        const val KEY_CL_SPACING = "claddagh_tuning_spacing"
         const val KEY_TILT_SPLIT = "tilt_tuning_split"
         const val KEY_TILT_STYLE = "tilt_tuning_style"
         const val KEY_TILT_SCHEME = "tilt_tuning_scheme"

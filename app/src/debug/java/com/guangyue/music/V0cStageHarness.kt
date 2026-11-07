@@ -207,9 +207,9 @@ fun V0cStage(
         // V1b-2：弹层是半透明毛玻璃，身后必须有一层真实的播放页画面，实拍才看得出「透」。
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
-        if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt") {
+        if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh") {
             CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
-                if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt") {
+                if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh") {
                     LyricFlowScreen(
                         lyrics = remember { parseLrc(LRC) },
                         currentIndex = 1,
@@ -249,6 +249,7 @@ fun V0cStage(
                             "sheetclassic" -> LyricStyle.CLASSIC
                             "sheetpartita" -> LyricStyle.PARTITA
                             "sheettilt" -> LyricStyle.TILT
+                            "sheetcladdagh" -> LyricStyle.CLADDAGH
                             else -> LyricStyle.FUME
                         },
                         fumeName = v0cString(R.string.lyrics_style_fume),
@@ -288,6 +289,7 @@ fun V0cStage(
                     "cadenza" -> LyricStyle.CADENZA
                     "still" -> LyricStyle.STILL
                     "tilt" -> LyricStyle.TILT
+                    "claddagh" -> LyricStyle.CLADDAGH
                     else -> LyricStyle.CLASSIC
                 },
                 fumeSettleSteps = fumeSteps,
@@ -338,6 +340,12 @@ private fun v0cString(id: Int): String = when (id) {
     R.string.lyrics_style_cadenza -> "心象"
     R.string.lyrics_style_still -> "静止"
     R.string.lyrics_style_tilt -> "倾诉"
+    R.string.lyrics_style_claddagh -> "回环"
+    R.string.lyrics_style_cl_focus -> "主歌词放大倍率"
+    R.string.lyrics_style_cl_radius -> "轨道半径"
+    R.string.lyrics_style_cl_tilt -> "轨道倾斜度"
+    R.string.lyrics_style_cl_axis -> "中间轴线"
+    R.string.lyrics_style_cl_spacing -> "字符间距"
     R.string.lyrics_style_tilt_split -> "分行概率"
     R.string.lyrics_style_tilt_style -> "斜体强调概率"
     R.string.lyrics_style_tilt_scheme -> "配色方案"

@@ -328,6 +328,13 @@
     <string name="lyrics_style_still">静止</string>
     <!-- zh-CN.ts ui.visualizerTilt / options.tilt* -->
     <string name="lyrics_style_tilt">倾诉</string>
+    <!-- zh-CN.ts ui.visualizerCladdagh / options.claddagh* -->
+    <string name="lyrics_style_claddagh">回环</string>
+    <string name="lyrics_style_cl_focus">主歌词放大倍率</string>
+    <string name="lyrics_style_cl_radius">轨道半径</string>
+    <string name="lyrics_style_cl_tilt">轨道倾斜度</string>
+    <string name="lyrics_style_cl_axis">中间轴线</string>
+    <string name="lyrics_style_cl_spacing">字符间距</string>
     <string name="lyrics_style_tilt_split">分行概率</string>
     <string name="lyrics_style_tilt_style">斜体强调概率</string>
     <string name="lyrics_style_tilt_scheme">配色方案</string>

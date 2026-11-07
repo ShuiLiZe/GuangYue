@@ -33,6 +33,9 @@ enum class LyricStyle(val id: String) {
 
     /** 「倾诉」：Folia tilt（V2d：长句断成 1–4 段，随机一段斜体强调，逐字脉动）。 */
     TILT("tilt"),
+
+    /** 「回环」：Folia claddagh（V2e：歌词排在倾斜椭圆轨道上，句间隔 180°，当前字转到焦点）。 */
+    CLADDAGH("claddagh"),
     ;
 
     companion object {

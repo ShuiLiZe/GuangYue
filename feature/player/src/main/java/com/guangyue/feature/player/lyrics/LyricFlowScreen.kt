@@ -143,6 +143,8 @@ fun LyricFlowScreen(
     lyricStyle: LyricStyle = LyricStyle.CLASSIC,
     /** 「浮名」调参；V1b 才做面板，这里先吃默认值。 */
     fumeTuning: FumeTuning = FumeTuning.DEFAULT,
+    /** V2e：「回环」调参（Folia claddagh/tuning.ts）。 */
+    claddaghTuning: com.guangyue.core.lyrics.CladdaghTuning = com.guangyue.core.lyrics.CladdaghTuning.DEFAULT,
     /** V2d：「倾诉」调参（Folia tilt/tuning.ts）。 */
     tiltTuning: com.guangyue.core.lyrics.TiltTuning = com.guangyue.core.lyrics.TiltTuning.DEFAULT,
     /** V2a：「云阶」调参（Folia partita/tuning.ts）。 */
@@ -306,6 +308,20 @@ fun LyricFlowScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        // V2e 回环：VisualizerShell 里铺满的一层（环心在容器正中），字幕层照常浮在上面。
+        if (lyricStyle == LyricStyle.CLADDAGH && kernelLines.isNotEmpty() && emptyKind == null) {
+            com.guangyue.feature.player.lyrics.visualizer.CladdaghStage(
+                lines = kernelLines,
+                centerIndex = currentIndex,
+                clock = clock,
+                tuning = claddaghTuning,
+                lyricsFontScale = lyricsFontScale,
+                primaryColor = onBackdrop,
+                accentColor = lyricAccent,
+                fontFamily = GuangYueDesign.Serif,
+                reduceMotion = reduceMotion,
+            )
+        }
         // V2c 静止：Folia 整屏一层（absolute inset-0）+ 暗角；字幕层不画（译文由本层自己排在每句下）。
         if (lyricStyle == LyricStyle.STILL && kernelLines.isNotEmpty() && emptyKind == null) {
             com.guangyue.feature.player.lyrics.visualizer.StillVignette(dark = darkMode)
@@ -423,7 +439,7 @@ fun LyricFlowScreen(
                         failure = failure,
                         onRetry = null,
                     )
-                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL) && kernelLines.isNotEmpty()) {
+                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL || lyricStyle == LyricStyle.CLADDAGH) && kernelLines.isNotEmpty()) {
                     // 浮名：画布已经铺在整屏那一层（本函数开头），舞台 Box 里留空，
                     // 只保留顶栏 / 字幕层 / 播放条这些「浮在画布上」的层。
                 } else if (lyricStyle == LyricStyle.TILT && activeLine != null && activeLine.hasVisibleWords()) {

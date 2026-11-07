@@ -60,6 +60,7 @@ import com.guangyue.core.lyrics.ClassicTuning
 import com.guangyue.core.lyrics.PartitaTuning
 import com.guangyue.core.lyrics.TiltColorScheme
 import com.guangyue.core.lyrics.TiltTuning
+import com.guangyue.core.lyrics.CladdaghTuning
 import com.guangyue.core.lyrics.fume.FumeCameraTrackingMode
 import com.guangyue.core.lyrics.fume.FumeTuning
 import com.guangyue.feature.library.design.GyMotion
@@ -143,6 +144,13 @@ data class LyricStyleStrings(
     val still: Int = 0,
     /** V2d：「倾诉」与参数（Folia `ui.visualizerTilt` / `options.tilt*`）。 */
     val tilt: Int = 0,
+    /** V2e：「回环」与参数（Folia `ui.visualizerCladdagh` / `options.claddagh*`）。 */
+    val claddagh: Int = 0,
+    val claddaghFocusScaleRatio: Int = 0,
+    val claddaghRadiusScale: Int = 0,
+    val claddaghEllipseTiltDeg: Int = 0,
+    val claddaghShowAxisLine: Int = 0,
+    val claddaghLetterSpacingOffset: Int = 0,
     val tiltSplitProbability: Int = 0,
     val tiltStyleProbability: Int = 0,
     val tiltColorScheme: Int = 0,
@@ -179,6 +187,8 @@ fun LyricStyleSheet(
     onPartitaTuning: (PartitaTuning) -> Unit = {},
     tiltTuning: TiltTuning = TiltTuning.DEFAULT,
     onTiltTuning: (TiltTuning) -> Unit = {},
+    claddaghTuning: CladdaghTuning = CladdaghTuning.DEFAULT,
+    onCladdaghTuning: (CladdaghTuning) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -208,6 +218,8 @@ fun LyricStyleSheet(
             onPartitaTuning = onPartitaTuning,
             tiltTuning = tiltTuning,
             onTiltTuning = onTiltTuning,
+            claddaghTuning = claddaghTuning,
+            onCladdaghTuning = onCladdaghTuning,
         )
     }
 }
@@ -235,6 +247,8 @@ private fun LyricStylePanelContent(
     onPartitaTuning: (PartitaTuning) -> Unit = {},
     tiltTuning: TiltTuning = TiltTuning.DEFAULT,
     onTiltTuning: (TiltTuning) -> Unit = {},
+    claddaghTuning: CladdaghTuning = CladdaghTuning.DEFAULT,
+    onCladdaghTuning: (CladdaghTuning) -> Unit = {},
 ) {
     // Folia `index.css:163-168` `.theme-glass-panel`：`--bg-color` 85% 底 + `--text-primary` 12% 描边。
     // 面板改用 `--st-card` 一族（与弹层其它行同源），透明度取 85%，透出身后的封面调色板。
@@ -318,6 +332,14 @@ private fun LyricStylePanelContent(
                     onClick = { onStyle(LyricStyle.TILT) },
                 )
             }
+            if (strings.claddagh != 0) {
+                StyleRow(
+                    name = str(strings.claddagh),
+                    selected = style == LyricStyle.CLADDAGH,
+                    accent = accent,
+                    onClick = { onStyle(LyricStyle.CLADDAGH) },
+                )
+            }
             if (strings.still != 0) {
                 StyleRow(
                     name = str(strings.still),
@@ -354,6 +376,8 @@ private fun LyricStylePanelContent(
                     color = Gyp.t2,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                 )
+            } else if (style == LyricStyle.CLADDAGH) {
+                CladdaghTuningRows(tuning = claddaghTuning, strings = strings, accent = accent, onTuning = onCladdaghTuning)
             } else if (style == LyricStyle.TILT) {
                 TiltTuningRows(tuning = tiltTuning, strings = strings, accent = accent, onTuning = onTiltTuning)
             } else if (style == LyricStyle.PARTITA) {
@@ -394,6 +418,7 @@ private fun LyricStylePanelContent(
                         when (style) {
                             LyricStyle.CADENZA, LyricStyle.STILL -> Unit
                             LyricStyle.TILT -> onTiltTuning(TiltTuning.DEFAULT)
+                            LyricStyle.CLADDAGH -> onCladdaghTuning(CladdaghTuning.DEFAULT)
                             LyricStyle.FUME -> onFumeTuning(FumeTuning.DEFAULT)
                             LyricStyle.PARTITA -> onPartitaTuning(PartitaTuning.DEFAULT)
                             else -> onTuning(ClassicTuning())
@@ -845,6 +870,8 @@ fun LyricStyleSheetPreview(
     onPartitaTuning: (PartitaTuning) -> Unit = {},
     tiltTuning: TiltTuning = TiltTuning.DEFAULT,
     onTiltTuning: (TiltTuning) -> Unit = {},
+    claddaghTuning: CladdaghTuning = CladdaghTuning.DEFAULT,
+    onCladdaghTuning: (CladdaghTuning) -> Unit = {},
 ) {
     LyricStylePanelContent(
         tuning = tuning,
@@ -862,6 +889,8 @@ fun LyricStyleSheetPreview(
         onPartitaTuning = onPartitaTuning,
         tiltTuning = tiltTuning,
         onTiltTuning = onTiltTuning,
+        claddaghTuning = claddaghTuning,
+        onCladdaghTuning = onCladdaghTuning,
     )
 }
 
@@ -1101,5 +1130,53 @@ private fun TiltTuningRows(
         accent = accent,
         min = 0f, max = 1f, step = 0.05f, format = ::formatPercent,
         onChange = { emit(tuning.copy(tiltStyleProbability = it.toDouble())) },
+    )
+}
+
+
+/** V2e「回环参数」，照 Folia `CladdaghSettingsPanel`：主歌词放大倍率 → 轨道半径 → 轨道倾斜度 → 中间轴线 → 字符间距。 */
+@Composable
+private fun CladdaghTuningRows(
+    tuning: CladdaghTuning,
+    strings: LyricStyleStrings,
+    accent: Color,
+    onTuning: (CladdaghTuning) -> Unit,
+) {
+    fun emit(t: CladdaghTuning) = onTuning(
+        CladdaghTuning.sanitize(t.focusScaleRatio, t.radiusScale, t.ellipseTiltDeg, t.showAxisLine, t.letterSpacingOffset),
+    )
+    TuningSliderRow(
+        label = str(strings.claddaghFocusScaleRatio),
+        value = tuning.focusScaleRatio.toFloat(),
+        accent = accent,
+        min = 0f, max = 1.5f, step = 0.05f, format = { formatTimes(it + 1f) },
+        onChange = { emit(tuning.copy(focusScaleRatio = it.toDouble())) },
+    )
+    TuningSliderRow(
+        label = str(strings.claddaghRadiusScale),
+        value = tuning.radiusScale.toFloat(),
+        accent = accent,
+        min = 0.5f, max = 1.5f, step = 0.05f, format = ::formatTimes,
+        onChange = { emit(tuning.copy(radiusScale = it.toDouble())) },
+    )
+    TuningSliderRow(
+        label = str(strings.claddaghEllipseTiltDeg),
+        value = tuning.ellipseTiltDeg.toFloat(),
+        accent = accent,
+        min = 0f, max = 60f, step = 1f, format = { "${it.roundToInt()}°" },
+        onChange = { emit(tuning.copy(ellipseTiltDeg = it.toDouble())) },
+    )
+    ToggleRow(
+        label = str(strings.claddaghShowAxisLine),
+        checked = tuning.showAxisLine,
+        accent = accent,
+        onChange = { emit(tuning.copy(showAxisLine = it)) },
+    )
+    TuningSliderRow(
+        label = str(strings.claddaghLetterSpacingOffset),
+        value = tuning.letterSpacingOffset.toFloat(),
+        accent = accent,
+        min = -5f, max = 20f, step = 0.5f, format = { (if (it > 0) "+" else "") + "%.1fpx".format(it) },
+        onChange = { emit(tuning.copy(letterSpacingOffset = it.toDouble())) },
     )
 }

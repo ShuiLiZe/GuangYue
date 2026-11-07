@@ -15,6 +15,7 @@ import com.guangyue.core.lyrics.ClassicTuning
 import com.guangyue.core.lyrics.fume.FumeTuning
 import com.guangyue.core.lyrics.PartitaTuning
 import com.guangyue.core.lyrics.TiltTuning
+import com.guangyue.core.lyrics.CladdaghTuning
 import com.guangyue.core.prefs.AppPreferences
 import com.guangyue.feature.player.lyrics.LyricStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -59,6 +60,16 @@ class LyricStyleViewModel @Inject constructor(
     /** V2d：「倾诉」调参（Folia `tilt/tuning.ts`，storage.key = 'tilt_tuning'）。 */
     private val _tiltTuning = MutableStateFlow(preferences.tiltTuning)
     val tiltTuning: StateFlow<TiltTuning> = _tiltTuning.asStateFlow()
+
+    /** V2e：「回环」调参（Folia `claddagh/tuning.ts`，storage.key = 'claddagh_tuning'）。 */
+    private val _claddaghTuning = MutableStateFlow(preferences.claddaghTuning)
+    val claddaghTuning: StateFlow<CladdaghTuning> = _claddaghTuning.asStateFlow()
+
+    fun updateCladdagh(t: CladdaghTuning) {
+        val safe = CladdaghTuning.sanitize(t.focusScaleRatio, t.radiusScale, t.ellipseTiltDeg, t.showAxisLine, t.letterSpacingOffset)
+        _claddaghTuning.value = safe
+        viewModelScope.launch { preferences.claddaghTuning = safe }
+    }
 
     fun updateTilt(tuning: TiltTuning) {
         val safe = TiltTuning.sanitize(tuning.splitProbability, tuning.tiltStyleProbability, tuning.colorScheme)

@@ -458,6 +458,8 @@ fun GuangYueNavHost(
                         onPartitaTuning = styleVm::updatePartita,
                         tiltTuning = styleVm.tiltTuning.collectAsStateWithLifecycle().value,
                         onTiltTuning = styleVm::updateTilt,
+                        claddaghTuning = styleVm.claddaghTuning.collectAsStateWithLifecycle().value,
+                        onCladdaghTuning = styleVm::updateCladdagh,
                     )
                 }
             }
@@ -482,6 +484,7 @@ fun GuangYueNavHost(
             val fumeTuning by styleVm.fumeTuning.collectAsStateWithLifecycle()
             val partitaTuning by styleVm.partitaTuning.collectAsStateWithLifecycle()
             val tiltTuning by styleVm.tiltTuning.collectAsStateWithLifecycle()
+            val claddaghTuning by styleVm.claddaghTuning.collectAsStateWithLifecycle()
             // V1a：当前样式（流光 / 浮名），同一份 styleVm —— 播放页切好、这里直接生效。
             val style by styleVm.style.collectAsStateWithLifecycle()
             val lyricContext = LocalContext.current
@@ -526,6 +529,7 @@ fun GuangYueNavHost(
                     fumeTuning = fumeTuning,
                     partitaTuning = partitaTuning,
                     tiltTuning = tiltTuning,
+                    claddaghTuning = claddaghTuning,
                 )
                 if (styleSheetOpen) {
                     LyricStyleSheet(
@@ -545,6 +549,8 @@ fun GuangYueNavHost(
                         onPartitaTuning = styleVm::updatePartita,
                         tiltTuning = tiltTuning,
                         onTiltTuning = styleVm::updateTilt,
+                        claddaghTuning = claddaghTuning,
+                        onCladdaghTuning = styleVm::updateCladdagh,
                     )
                 }
             }
@@ -639,6 +645,12 @@ internal fun lyricStyleStrings(): LyricStyleStrings {
         cadenza = R.string.lyrics_style_cadenza,
         still = R.string.lyrics_style_still,
         tilt = R.string.lyrics_style_tilt,
+        claddagh = R.string.lyrics_style_claddagh,
+        claddaghFocusScaleRatio = R.string.lyrics_style_cl_focus,
+        claddaghRadiusScale = R.string.lyrics_style_cl_radius,
+        claddaghEllipseTiltDeg = R.string.lyrics_style_cl_tilt,
+        claddaghShowAxisLine = R.string.lyrics_style_cl_axis,
+        claddaghLetterSpacingOffset = R.string.lyrics_style_cl_spacing,
         tiltSplitProbability = R.string.lyrics_style_tilt_split,
         tiltStyleProbability = R.string.lyrics_style_tilt_style,
         tiltColorScheme = R.string.lyrics_style_tilt_scheme,
