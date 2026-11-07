@@ -573,6 +573,7 @@ fun GuangYueNavHost(
                             com.guangyue.feature.player.lyrics.LyricStyle.MONET -> R.string.lyrics_style_monet
                             com.guangyue.feature.player.lyrics.LyricStyle.PENDOLO -> R.string.lyrics_style_pendolo
                             com.guangyue.feature.player.lyrics.LyricStyle.NEBBIA -> R.string.lyrics_style_nebbia
+                            com.guangyue.feature.player.lyrics.LyricStyle.SONNET -> R.string.lyrics_style_sonnet
                             com.guangyue.feature.player.lyrics.LyricStyle.TILT -> R.string.lyrics_style_tilt
                             com.guangyue.feature.player.lyrics.LyricStyle.CLADDAGH -> R.string.lyrics_style_claddagh
                         },
@@ -827,6 +828,7 @@ internal fun lyricStyleStrings(): LyricStyleStrings {
         monet = R.string.lyrics_style_monet,
         pendolo = R.string.lyrics_style_pendolo,
         nebbia = R.string.lyrics_style_nebbia,
+        sonnet = R.string.lyrics_style_sonnet,
         tilt = R.string.lyrics_style_tilt,
         claddagh = R.string.lyrics_style_claddagh,
         claddaghFocusScaleRatio = R.string.lyrics_style_cl_focus,

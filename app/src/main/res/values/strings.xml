@@ -332,6 +332,8 @@
     <string name="lyrics_style_pendolo">时计</string>
     <!-- zh-CN.ts ui.visualizerNebbia -->
     <string name="lyrics_style_nebbia">雾笺</string>
+    <!-- zh-CN.ts ui.visualizerSonnet -->
+    <string name="lyrics_style_sonnet">商籁</string>
     <!-- zh-CN.ts ui.visualizerTilt / options.tilt* -->
     <string name="lyrics_style_tilt">倾诉</string>
     <!-- zh-CN.ts ui.visualizerCladdagh / options.claddagh* -->

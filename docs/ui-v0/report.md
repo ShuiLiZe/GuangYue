@@ -720,3 +720,12 @@ BUILD SUCCESSFUL in 35s
 - 排版：三个槽位 0.26/0.51/0.76H 轮换（第 i 与 i+3 句共槽），字号从 min(0.085H, 0.17W) 往下试到多行 ≤ 0.2H；横向左/中/右按句子种子挑，逐字 ±3.5° 倾斜。
 - 时间：句子在下一句开唱与本句唱完取晚者后再留 1.5 s，之后 8 s 被雾吞回（Folia breathFade 8）；共槽的 i+3 句开唱时强制清零。约 28% 的字收笔挂水珠，0.8 s 后缓慢下淌。
 - 未做：WebGL 折射/城市建筑缓存/雨刷颠簸/哈气/片尾曲名。单测 NebbiaTimingTest（2 例）。实拍 docs/ui-v0/p5-nebbia-9000.png、p5-nebbia-14000.png、p5-nebbia-pair.jpg。
+
+## P6 商籁样式（Folia sonnet 手机版，2026-11-08 07:20）
+
+- 依据 Folia `visualizer/sonnet/`：sonnetProgram.ts（切段 → 镜头 → 7 种版式 → 3 种转场）、sonnetTypographyRoles/Layout.ts（主角词评分、版式字号倍数与竖排）、sonnetGuides / FrameDecor / BackgroundDecor / StaffView（定位记号、开口框、漂浮小形、La Folia 五线谱）、DEFAULT_SONNET_TUNING（外框 full、巨字底纹）。
+- 新文件 `visualizer/SonnetStage.kt`：`compileSonnet` 纯函数编排（空隙阈值 = 中位间隔×2.5 夹 1.25–3.5 秒；段 ≤6 行 ≤18 秒；竖屏一镜 ≤3 行 ≤6 秒；版式不与上一镜重复；段落交界转场 fast-blur / mono-glitch / camera-pull）；词块用系统分词（Android 为 ICU 词典），单字碎块两两合并、最长 4 字。
+- 画面：type-impact 大字居中、editorial-column / mask-reveal 竖排主角柱 + 另一侧配角、fragment-collage 绕中心散落旋转、tracking-ribbon 斜色带反白 + 镜头横向跟唱、poster-blocks 种子切格 + 主角格实心反白、quiet-tableau 留白小字；词按唱到时刻逐个打进（ExpoOut），字到前 0.35 秒落点出现「+」定位记号，正在唱的词下划线推进；约 40% 词块套开口框与角饰；背后描边巨字底纹；外框角标（段号.镜号、时间码、版式名）与五线谱游标。
+- 不做：Pixi 纹理池、镜头 MG 图库、后期滤镜（颗粒 / 半调 / 色散）、设置面板参数。
+- 单测 `SonnetProgramTest`（镜头 ≤3 行且覆盖全部行、相邻版式不重复、空隙开新段带转场、词块计时与主角、中文块 ≤4 字不丢字）。
+- 实拍：`p6-sonnet-4500.png`（碎片拼贴）、`p6-sonnet-dark.png`（色带）、`p6-sonnet-15500.png`（遮罩揭开竖排）。

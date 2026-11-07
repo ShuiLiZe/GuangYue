@@ -45,6 +45,9 @@ enum class LyricStyle(val id: String) {
 
     /** 「雾笺」：Folia nebbia（P5：夜色玻璃起雾，歌词逐字被手指擦开、水珠下淌、旧句被雾吞回；手机不做 WebGL 折射）。无参数。 */
     NEBBIA("nebbia"),
+
+    /** 「商籁」：Folia sonnet（P6：歌词编成 PV 镜头——段落→镜头→7 种版式，主角词放大 / 竖排、词按唱到逐个打进、开口框、五线谱外框；手机不做 Pixi 滤镜与 MG 图库）。无参数。 */
+    SONNET("sonnet"),
     ;
 
     companion object {
