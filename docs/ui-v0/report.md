@@ -647,3 +647,12 @@ BUILD SUCCESSFUL in 35s
 - 已知：模拟器上酷我推荐歌单 getMusicSheetInfo 返回 0 首（插件侧，归 M8），所以实拍是加载态；单测未新增（纯 UI 接线）。
 - 实拍：`b2-focus-enter.png`（聚焦卡进入键）、`b2-collection-light.png`（集合信息条）、`p1b-panel-open-key-light.png`（面板开时圆键反色为关闭键）。
 - 提交：`c009355`、`bf218e1` 及实拍提交（port/u2 已 push）。
+
+## 首页冷启动修复 + S1 设置页（2026-11-08，Hark 直接做）
+
+- 修：首页冷启动从不加载插件表（只有音源页 / 搜索页会 `PluginManager.load()`），`currentSource` 一直 null，推荐歌单 / 榜单永远拉不到；HomeViewModel init 里先 load 一次（幂等）。实测冷启动后 8 个推荐歌单正常出现。
+- 调试：`getMusicSheetInfo` 空 / 失败打 `GYSHEET` 日志。酷我插件对推荐歌单抛 `empty sheet`（插件 JS 混淆，归 M8）。
+- S1 设置页（Folia `SettingsModal` + `settingsNavModel.ts` 手机版）：顶部「搜索设置」，下面分类横滑分段（外观 / 播放页 / 播放控制 / 存储与备份 / 关于，名字取 zh-CN `options.settingsPage*`），页内 Folia kit Group/Row；搜索按行名 / 说明 / 组名过滤，跨分类按「分类 · 组」列出，无结果有提示。
+- 新增设置：歌词样式（七种，与舞台共用 LyricStyleViewModel 落盘）、默认播放音质（`PlaybackController.setDefaultQuality`）、音源插件管理 / 下载设置入口、版本取 BuildConfig。原有深色模式、取链源音质、开源许可保留。
+- 入口：「我的」顶栏新增齿轮（以前 SETTINGS 路由没有任何入口）。
+- 实拍：`s1-settings-{appearance,player,playback}-light.png`。提交：`82fb129`、`39b7c48`、`4feb4a3`、`67c3d3c` 及实拍提交（port/u2 已 push）。
