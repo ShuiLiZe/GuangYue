@@ -656,3 +656,12 @@ BUILD SUCCESSFUL in 35s
 - 新增设置：歌词样式（七种，与舞台共用 LyricStyleViewModel 落盘）、默认播放音质（`PlaybackController.setDefaultQuality`）、音源插件管理 / 下载设置入口、版本取 BuildConfig。原有深色模式、取链源音质、开源许可保留。
 - 入口：「我的」顶栏新增齿轮（以前 SETTINGS 路由没有任何入口）。
 - 实拍：`s1-settings-{appearance,player,playback}-light.png`。提交：`82fb129`、`39b7c48`、`4feb4a3`、`67c3d3c` 及实拍提交（port/u2 已 push）。
+
+## P1c 面板「歌词」页签：时间轴偏移（2026-11-08，Hark 直接做）
+
+- 依据 Folia `panelTab/SourceTab.tsx` + `LyricTimelineOffsetControl.tsx`（步长 250ms、可重置）+ `utils/lyrics/lyricOffsetMemory`（每首歌记一份）+ `incomingLyricClock.ts`（歌词时间 = 播放时间 − 偏移，正数歌词更晚）。
+- 面板页签变为「封面 / 歌词 / 控制 / 播放列表 / 音质」（与基准 player-panel-*-m412 的五页签一致）。歌词页：歌词来源行（音源 · N 行 / 暂无歌词 / 加载中）+「时间轴偏移」− 值 + 重置，说明「正数让歌词更晚出现。每首歌各记一份。」
+- LyricsViewModel：偏移按歌 key 存 SharedPreferences `lyric_offsets`（0 时删除），换歌时读回；行同步用 `position − offset`。LyricFlowScreen 新参数 `lyricOffsetMs`，逐字时钟同样减去偏移。
+- 测试：`:feature:player:testDebugUnitTest` 6 套件 68 例 0 失败（StagePanelTest 页签断言更新）。
+- 已知（非本步引入）：`:app:testDebugUnitTest` 里 Robolectric 截图套件（U5LyricsScreenshotTest、V0LyricStyleScreenshotTest 等）在本机全部 `AppNotIdleException`，单例约 1 分钟超时，整套跑不完，本步未用它们验收；需另查（疑似逐帧时钟在 Robolectric 下不空闲）。
+- 实拍：`p1c-panel-lyrics-light.png`（+500 ms）。提交：`02ca340` 及实拍提交。
