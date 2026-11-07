@@ -320,6 +320,13 @@
     <string name="lyrics_style_no_options">这个样式没有参数</string>
     <!-- 自拟：样式弹层的关闭语义（底部弹层下滑关闭，无障碍要有个说法） -->
     <string name="lyrics_style_close">关闭</string>
+    <!-- zh-CN.ts ui.visualizerPartita -->
+    <string name="lyrics_style_partita">云阶</string>
+    <!-- ===== V2a 云阶参数（zh-CN.ts options.partita*） ===== -->
+    <string name="lyrics_style_partita_guide">引导线</string>
+    <string name="lyrics_style_partita_semantic">语义排列</string>
+    <string name="lyrics_style_partita_stagger_min">错位最小值</string>
+    <string name="lyrics_style_partita_stagger_max">错位最大值</string>
     <!-- ===== V1b-4 浮名参数（zh-CN.ts options.fume*，visualizer/settingsPanels.tsx FumeSettingsPanel） ===== -->
     <string name="lyrics_style_fume_hide_print">隐藏打印方块</string>
     <string name="lyrics_style_fume_geometric">通用几何图形</string>

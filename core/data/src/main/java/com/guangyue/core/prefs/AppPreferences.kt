@@ -2,6 +2,7 @@ package com.guangyue.core.prefs
 
 import android.content.Context
 import com.guangyue.core.lyrics.ClassicTuning
+import com.guangyue.core.lyrics.PartitaTuning
 import com.guangyue.core.lyrics.fume.FumeCameraTrackingMode
 import com.guangyue.core.lyrics.fume.FumeTuning
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -129,6 +130,23 @@ class AppPreferences @Inject constructor(
                 .apply()
         }
 
+    /** V2a：「云阶」调参（Folia partita/tuning.ts storage.key = 'partita_tuning'），读写过 [PartitaTuning.sanitize]。 */
+    var partitaTuning: PartitaTuning
+        get() = PartitaTuning.sanitize(
+            showGuideLines = prefs.getBoolean(KEY_PARTITA_GUIDE, PartitaTuning.DEFAULT.showGuideLines),
+            useSemanticLayout = prefs.getBoolean(KEY_PARTITA_SEMANTIC, PartitaTuning.DEFAULT.useSemanticLayout),
+            staggerMin = prefs.getFloat(KEY_PARTITA_MIN, PartitaTuning.DEFAULT.staggerMin.toFloat()).toDouble(),
+            staggerMax = prefs.getFloat(KEY_PARTITA_MAX, PartitaTuning.DEFAULT.staggerMax.toFloat()).toDouble(),
+        )
+        set(value) {
+            prefs.edit()
+                .putBoolean(KEY_PARTITA_GUIDE, value.showGuideLines)
+                .putBoolean(KEY_PARTITA_SEMANTIC, value.useSemanticLayout)
+                .putFloat(KEY_PARTITA_MIN, value.staggerMin.toFloat())
+                .putFloat(KEY_PARTITA_MAX, value.staggerMax.toFloat())
+                .apply()
+        }
+
     /** 用户启用的取链源 id，多个用逗号分隔，按启用顺序依次尝试。 */
     var lxEnabledIds: String
         get() = prefs.getString(KEY_LX_ENABLED, "").orEmpty()
@@ -168,6 +186,11 @@ class AppPreferences @Inject constructor(
         const val KEY_CLASSIC_BREATHING = "classic_tuning_breathing"
         const val KEY_CLASSIC_LEGACY = "classic_tuning_legacy"
         const val KEY_CLASSIC_SPACING = "classic_tuning_spacing"
+
+        const val KEY_PARTITA_GUIDE = "partita_tuning_guide"
+        const val KEY_PARTITA_SEMANTIC = "partita_tuning_semantic"
+        const val KEY_PARTITA_MIN = "partita_tuning_stagger_min"
+        const val KEY_PARTITA_MAX = "partita_tuning_stagger_max"
 
         /** 「浮名」调参（Folia fume/tuning.ts storage.key = 'fume_tuning'）。 */
         const val KEY_FUME_HIDE_PRINT = "fume_tuning_hide_print"

@@ -453,6 +453,9 @@ fun GuangYueNavHost(
                         onStyle = styleVm::pickStyle,
                         fumeTuning = styleVm.fumeTuning.collectAsStateWithLifecycle().value,
                         onFumeTuning = styleVm::updateFume,
+                        partitaName = sheetContext.getString(R.string.lyrics_style_partita),
+                        partitaTuning = styleVm.partitaTuning.collectAsStateWithLifecycle().value,
+                        onPartitaTuning = styleVm::updatePartita,
                     )
                 }
             }
@@ -475,6 +478,7 @@ fun GuangYueNavHost(
             val message by vm.message.collectAsStateWithLifecycle()
             val tuning by styleVm.tuning.collectAsStateWithLifecycle()
             val fumeTuning by styleVm.fumeTuning.collectAsStateWithLifecycle()
+            val partitaTuning by styleVm.partitaTuning.collectAsStateWithLifecycle()
             // V1a：当前样式（流光 / 浮名），同一份 styleVm —— 播放页切好、这里直接生效。
             val style by styleVm.style.collectAsStateWithLifecycle()
             val lyricContext = LocalContext.current
@@ -517,6 +521,7 @@ fun GuangYueNavHost(
                     // 本行会在统一收口时由 lead 处理。
                     lyricStyle = style,
                     fumeTuning = fumeTuning,
+                    partitaTuning = partitaTuning,
                 )
                 if (styleSheetOpen) {
                     LyricStyleSheet(
@@ -531,6 +536,9 @@ fun GuangYueNavHost(
                         onStyle = styleVm::pickStyle,
                         fumeTuning = fumeTuning,
                         onFumeTuning = styleVm::updateFume,
+                        partitaName = lyricContext.getString(R.string.lyrics_style_partita),
+                        partitaTuning = partitaTuning,
+                        onPartitaTuning = styleVm::updatePartita,
                     )
                 }
             }
@@ -621,6 +629,11 @@ internal fun lyricStyleStrings(): LyricStyleStrings {
         close = R.string.lyrics_style_close,
         // V1a：「浮名」（Folia key `ui.visualizerFume`）。
         fume = R.string.lyrics_style_fume,
+        partita = R.string.lyrics_style_partita,
+        partitaGuideLines = R.string.lyrics_style_partita_guide,
+        partitaSemanticLayout = R.string.lyrics_style_partita_semantic,
+        partitaStaggerMin = R.string.lyrics_style_partita_stagger_min,
+        partitaStaggerMax = R.string.lyrics_style_partita_stagger_max,
         fumeHidePrintSymbols = R.string.lyrics_style_fume_hide_print,
         fumeGeometricBackground = R.string.lyrics_style_fume_geometric,
         fumeBackgroundObjectOpacity = R.string.lyrics_style_fume_bg_opacity,

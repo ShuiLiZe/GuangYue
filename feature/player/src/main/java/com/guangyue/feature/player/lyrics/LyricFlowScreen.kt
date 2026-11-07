@@ -54,6 +54,7 @@ import com.guangyue.core.lyrics.ClassicLayout
 import com.guangyue.core.lyrics.ClassicTuning
 import com.guangyue.core.lyrics.Line
 import com.guangyue.core.lyrics.fume.FumeTuning
+import com.guangyue.feature.player.lyrics.visualizer.PartitaLyricLine
 import com.guangyue.core.player.PlaybackState
 import com.guangyue.feature.library.design.FoliaEmptyState
 import com.guangyue.feature.library.design.GuangYueDesign
@@ -142,6 +143,8 @@ fun LyricFlowScreen(
     lyricStyle: LyricStyle = LyricStyle.CLASSIC,
     /** 「浮名」调参；V1b 才做面板，这里先吃默认值。 */
     fumeTuning: FumeTuning = FumeTuning.DEFAULT,
+    /** V2a：「云阶」调参（Folia partita/tuning.ts）。 */
+    partitaTuning: com.guangyue.core.lyrics.PartitaTuning = com.guangyue.core.lyrics.PartitaTuning.DEFAULT,
     /** 取证用：>0 时「浮名」镜头按固定 dt 一次推进这么多帧（模拟器帧时间不可靠）。 */
     fumeSettleSteps: Int = 0,
     /** 取证用：取景定格时刻（秒）。>0 且 [fumeSettleSteps]>0 时，画面固定停在这一时刻。 */
@@ -393,6 +396,27 @@ fun LyricFlowScreen(
                 } else if (lyricStyle == LyricStyle.FUME && kernelLines.isNotEmpty()) {
                     // 浮名：画布已经铺在整屏那一层（本函数开头），舞台 Box 里留空，
                     // 只保留顶栏 / 字幕层 / 播放条这些「浮在画布上」的层。
+                } else if (lyricStyle == LyricStyle.PARTITA && activeLine != null && activeLine.hasVisibleWords()) {
+                    // V2a 云阶：当前句切 chunk 竖排错落（Folia VisualizerPartita 的 activeLine 分支）。
+                    val stageDensity = LocalDensity.current
+                    PartitaLyricLine(
+                        line = activeLine,
+                        clock = clock,
+                        tuning = partitaTuning,
+                        intensity = AnimationIntensity.NORMAL,
+                        reduceMotion = reduceMotion,
+                        viewportWidthDp = LocalConfiguration.current.screenWidthDp.toDouble(),
+                        windowHeightDp = LocalConfiguration.current.screenHeightDp.toDouble(),
+                        lyricsFontScale = lyricsFontScale,
+                        activeColor = lyricAccent,
+                        baseColor = onBackdrop,
+                        fontFamily = GuangYueDesign.Serif,
+                        glowStrengthOverride = glowStrengthOverride,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = with(stageDensity) { stageHeightPx.toDp() })
+                            .clickableNoRipple { if (currentIndex >= 0) onSeekToLine(currentIndex) },
+                    )
                 } else if (activeLine != null && activeLine.hasVisibleWords()) {
                     // 舞台只画正在唱的这一句（Folia classic/Visualizer.tsx 的 activeLine 分支）。
                     ClassicLyricLine(

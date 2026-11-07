@@ -207,9 +207,9 @@ fun V0cStage(
         // V1b-2：弹层是半透明毛玻璃，身后必须有一层真实的播放页画面，实拍才看得出「透」。
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
-        if (style == "sheet" || style == "sheetbare" || style == "sheetclassic") {
+        if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita") {
             CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
-                if (style == "sheet" || style == "sheetclassic") {
+                if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita") {
                     LyricFlowScreen(
                         lyrics = remember { parseLrc(LRC) },
                         currentIndex = 1,
@@ -245,8 +245,13 @@ fun V0cStage(
                         styleName = v0cString(R.string.lyrics_style_classic),
                         onTuning = {},
                         // V1b-4：`sheetclassic` 拍流光那一组参数，其余拍浮名参数。
-                        style = if (style == "sheetclassic") LyricStyle.CLASSIC else LyricStyle.FUME,
+                        style = when (style) {
+                            "sheetclassic" -> LyricStyle.CLASSIC
+                            "sheetpartita" -> LyricStyle.PARTITA
+                            else -> LyricStyle.FUME
+                        },
                         fumeName = v0cString(R.string.lyrics_style_fume),
+                        partitaName = v0cString(R.string.lyrics_style_partita),
                     )
                 }
             }
@@ -276,7 +281,11 @@ fun V0cStage(
                 coverUrl = null,
                 glowStrengthOverride = V0dGlowOverride,
                 lineOnlyStage = lineOnly,
-                lyricStyle = if (style == "fume") LyricStyle.FUME else LyricStyle.CLASSIC,
+                lyricStyle = when (style) {
+                    "fume" -> LyricStyle.FUME
+                    "partita" -> LyricStyle.PARTITA
+                    else -> LyricStyle.CLASSIC
+                },
                 fumeSettleSteps = fumeSteps,
                 fumeSettleTimeSeconds = fumeAtClock,
                 fumeStillFrame = fumeSteps > 0,
@@ -321,6 +330,11 @@ private fun v0cString(id: Int): String = when (id) {
     R.string.lyrics_style_spacing -> "词距"
     R.string.lyrics_style_reset -> "恢复默认"
     R.string.lyrics_style_close -> "关闭"
+    R.string.lyrics_style_partita -> "云阶"
+    R.string.lyrics_style_partita_guide -> "引导线"
+    R.string.lyrics_style_partita_semantic -> "语义排列"
+    R.string.lyrics_style_partita_stagger_min -> "错位最小值"
+    R.string.lyrics_style_partita_stagger_max -> "错位最大值"
     R.string.lyrics_style_fume_hide_print -> "隐藏打印方块"
     R.string.lyrics_style_fume_geometric -> "通用几何图形"
     R.string.lyrics_style_fume_bg_opacity -> "世界背景物体透明度"

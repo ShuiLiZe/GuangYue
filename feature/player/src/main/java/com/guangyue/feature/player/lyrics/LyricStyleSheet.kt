@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.guangyue.core.lyrics.ClassicTuning
+import com.guangyue.core.lyrics.PartitaTuning
 import com.guangyue.core.lyrics.fume.FumeCameraTrackingMode
 import com.guangyue.core.lyrics.fume.FumeTuning
 import com.guangyue.feature.library.design.GyMotion
@@ -127,6 +128,12 @@ data class LyricStyleStrings(
     val fumeCameraTrackingSmooth: Int = 0,
     val fumeGlowIntensity: Int = 0,
     val fumeHeroScale: Int = 0,
+    /** V2a：「云阶」样式名与参数文案（Folia zh-CN `ui.visualizerPartita` / `options.partita*`）。 */
+    val partita: Int = 0,
+    val partitaGuideLines: Int = 0,
+    val partitaSemanticLayout: Int = 0,
+    val partitaStaggerMin: Int = 0,
+    val partitaStaggerMax: Int = 0,
 )
 
 @Composable
@@ -151,6 +158,9 @@ fun LyricStyleSheet(
     /** V1b-4：「浮名」调参（Folia `fume/tuning.ts`）。选中浮名时面板换成这一组。 */
     fumeTuning: FumeTuning = FumeTuning.DEFAULT,
     onFumeTuning: (FumeTuning) -> Unit = {},
+    partitaName: String = "",
+    partitaTuning: PartitaTuning = PartitaTuning.DEFAULT,
+    onPartitaTuning: (PartitaTuning) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -175,6 +185,9 @@ fun LyricStyleSheet(
             onStyle = onStyle,
             fumeTuning = fumeTuning,
             onFumeTuning = onFumeTuning,
+            partitaName = partitaName,
+            partitaTuning = partitaTuning,
+            onPartitaTuning = onPartitaTuning,
         )
     }
 }
@@ -197,6 +210,9 @@ private fun LyricStylePanelContent(
     onStyle: (LyricStyle) -> Unit,
     fumeTuning: FumeTuning = FumeTuning.DEFAULT,
     onFumeTuning: (FumeTuning) -> Unit = {},
+    partitaName: String = "",
+    partitaTuning: PartitaTuning = PartitaTuning.DEFAULT,
+    onPartitaTuning: (PartitaTuning) -> Unit = {},
 ) {
     // Folia `index.css:163-168` `.theme-glass-panel`：`--bg-color` 85% 底 + `--text-primary` 12% 描边。
     // 面板改用 `--st-card` 一族（与弹层其它行同源），透明度取 85%，透出身后的封面调色板。
@@ -264,6 +280,14 @@ private fun LyricStylePanelContent(
                 accent = accent,
                 onClick = { onStyle(LyricStyle.FUME) },
             )
+            if (partitaName.isNotBlank()) {
+                StyleRow(
+                    name = partitaName,
+                    selected = style == LyricStyle.PARTITA,
+                    accent = accent,
+                    onClick = { onStyle(LyricStyle.PARTITA) },
+                )
+            }
 
             Box(Modifier.height(GySpace.s))
 
@@ -275,6 +299,13 @@ private fun LyricStylePanelContent(
                     strings = strings,
                     accent = accent,
                     onTuning = onFumeTuning,
+                )
+            } else if (style == LyricStyle.PARTITA) {
+                PartitaTuningRows(
+                    tuning = partitaTuning,
+                    strings = strings,
+                    accent = accent,
+                    onTuning = onPartitaTuning,
                 )
             } else {
                 ToggleRow(
@@ -304,7 +335,11 @@ private fun LyricStylePanelContent(
                     .height(48.dp)
                     .clickableNoRipple {
                         // 恢复默认只作用于当前样式（Folia 各模式各自的 handleReset*Tuning）。
-                        if (style == LyricStyle.FUME) onFumeTuning(FumeTuning.DEFAULT) else onTuning(ClassicTuning())
+                        when (style) {
+                            LyricStyle.FUME -> onFumeTuning(FumeTuning.DEFAULT)
+                            LyricStyle.PARTITA -> onPartitaTuning(PartitaTuning.DEFAULT)
+                            else -> onTuning(ClassicTuning())
+                        }
                     }
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.CenterStart,
@@ -747,6 +782,9 @@ fun LyricStyleSheetPreview(
     onStyle: (LyricStyle) -> Unit = {},
     fumeTuning: FumeTuning = FumeTuning.DEFAULT,
     onFumeTuning: (FumeTuning) -> Unit = {},
+    partitaName: String = "",
+    partitaTuning: PartitaTuning = PartitaTuning.DEFAULT,
+    onPartitaTuning: (PartitaTuning) -> Unit = {},
 ) {
     LyricStylePanelContent(
         tuning = tuning,
@@ -759,6 +797,9 @@ fun LyricStyleSheetPreview(
         onStyle = onStyle,
         fumeTuning = fumeTuning,
         onFumeTuning = onFumeTuning,
+        partitaName = partitaName,
+        partitaTuning = partitaTuning,
+        onPartitaTuning = onPartitaTuning,
     )
 }
 
@@ -916,4 +957,50 @@ private fun <T> SegmentedRow(
             }
         }
     }
+}
+
+
+/** Folia `settingsPanels.tsx`：`pixels = value + "px"`。 */
+internal fun formatPixels(value: Float): String = "${value.roundToInt()}px"
+
+/**
+ * V2a「云阶参数」，逐行照 Folia `PartitaSettingsPanel`：引导线（开关）→ 语义排列（开关）
+ * → 错位最小值 / 最大值（0..180，步长 5，`px`）。写回过 [PartitaTuning.sanitize]（小的在前）。
+ */
+@Composable
+private fun PartitaTuningRows(
+    tuning: PartitaTuning,
+    strings: LyricStyleStrings,
+    accent: Color,
+    onTuning: (PartitaTuning) -> Unit,
+) {
+    fun emit(t: PartitaTuning) = onTuning(
+        PartitaTuning.sanitize(t.showGuideLines, t.useSemanticLayout, t.staggerMin, t.staggerMax),
+    )
+    ToggleRow(
+        label = str(strings.partitaGuideLines),
+        checked = tuning.showGuideLines,
+        accent = accent,
+        onChange = { emit(tuning.copy(showGuideLines = it)) },
+    )
+    ToggleRow(
+        label = str(strings.partitaSemanticLayout),
+        checked = tuning.useSemanticLayout,
+        accent = accent,
+        onChange = { emit(tuning.copy(useSemanticLayout = it)) },
+    )
+    TuningSliderRow(
+        label = str(strings.partitaStaggerMin),
+        value = tuning.staggerMin.toFloat(),
+        accent = accent,
+        min = 0f, max = 180f, step = 5f, format = ::formatPixels,
+        onChange = { emit(tuning.copy(staggerMin = it.toDouble())) },
+    )
+    TuningSliderRow(
+        label = str(strings.partitaStaggerMax),
+        value = tuning.staggerMax.toFloat(),
+        accent = accent,
+        min = 0f, max = 180f, step = 5f, format = ::formatPixels,
+        onChange = { emit(tuning.copy(staggerMax = it.toDouble())) },
+    )
 }

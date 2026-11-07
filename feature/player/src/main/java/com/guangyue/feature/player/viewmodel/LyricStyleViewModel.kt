@@ -13,6 +13,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.guangyue.core.lyrics.ClassicTuning
 import com.guangyue.core.lyrics.fume.FumeTuning
+import com.guangyue.core.lyrics.PartitaTuning
 import com.guangyue.core.prefs.AppPreferences
 import com.guangyue.feature.player.lyrics.LyricStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -48,6 +49,16 @@ class LyricStyleViewModel @Inject constructor(
     fun updateFume(tuning: FumeTuning) {
         _fumeTuning.value = tuning
         viewModelScope.launch { preferences.fumeTuning = tuning }
+    }
+
+    /** V2a：「云阶」调参（Folia `partita/tuning.ts`，storage.key = 'partita_tuning'）。 */
+    private val _partitaTuning = MutableStateFlow(preferences.partitaTuning)
+    val partitaTuning: StateFlow<PartitaTuning> = _partitaTuning.asStateFlow()
+
+    fun updatePartita(tuning: PartitaTuning) {
+        val safe = PartitaTuning.sanitize(tuning.showGuideLines, tuning.useSemanticLayout, tuning.staggerMin, tuning.staggerMax)
+        _partitaTuning.value = safe
+        viewModelScope.launch { preferences.partitaTuning = safe }
     }
 
     fun update(tuning: ClassicTuning) {

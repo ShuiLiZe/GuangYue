@@ -21,6 +21,9 @@ enum class LyricStyle(val id: String) {
 
     /** 「浮名」：Folia fume 渲染器（V1a 只接样式切换与持久化，渲染由 fume-draw 那一层落）。 */
     FUME("fume"),
+
+    /** 「云阶」：Folia partita 渲染器（V2a：当前句切 chunk 左右错落 + 引导线，词仍是 GlowWord）。 */
+    PARTITA("partita"),
     ;
 
     companion object {
