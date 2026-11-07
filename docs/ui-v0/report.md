@@ -671,3 +671,9 @@ BUILD SUCCESSFUL in 35s
 - 原因：V2 通用几何背景 `GeometricBackgroundLayer` 在播放中跑 `withFrameNanos` 死循环，Robolectric 的 `waitForIdle` 永远等不到空闲，凡渲染 `LyricFlowScreen` 的截图用例都卡 1 分钟后 `AppNotIdleException`。
 - 修：Robolectric 下按暂停画静帧（`paused = … || runningUnderRobolectric`），与逐帧时钟的既有处理一致。提交 `b264df3`。
 - 结果：`U5LyricsScreenshotTest` 14/0、`V0LyricStyleScreenshotTest` 29/0；全量 `testDebugUnitTest :core:lyrics:test --continue`：67 套件 645 例 0 失败（BUILD SUCCESSFUL）。
+
+## B1h 聚焦卡：正在播放 / 已在队列（2026-11-08）
+
+- 依据 Folia `BravaisFocusCardBody.tsx`：当前在播的那块，播放键变「暂停 / 继续播放」（toggles），旁边多一颗「进入播放页」（Maximize2）；「加入队列」在已入队时显示「✓ 已在队列」且不再重复加入。
+- 实现：BravaisWall 新参数 `isCurrent / playing / onTogglePlayback / onEnterPlayback / isQueued`；NavHost 用 `playback.queueSnapshot()` 的 key 集合判断（砖 key：首页单曲 `track:<key>`，集合页 `ctrack:<i>:<key>`），首页与集合页都接上。文案取 zh-CN `libraryBravais.*`。
+- 验收：编译安装通过；模拟器上 B 站源取不到播放地址，最近播放不更新，未拍到「当前在播」态，留真机验收。提交 `be681ad`。
