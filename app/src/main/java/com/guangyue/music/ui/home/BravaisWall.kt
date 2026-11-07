@@ -103,6 +103,10 @@ fun BravaisWall(
     onOpenSearch: () -> Unit,
     onEnqueueTile: (HomeTile) -> Unit = {},
     modifier: Modifier = Modifier,
+    /** B2：歌单 / 榜单 / 专辑 / 电台聚焦后的「进入」（Folia 聚焦卡的进入键 + 再点一下聚焦卡 = 进入集合）。null 时一律直接播放。 */
+    onEnterTile: ((HomeTile) -> Unit)? = null,
+    /** B2：集合层。非 null 时缝换成集合信息条（面包屑返回 + 大标题 + 「N 首」+ 播放全部 / 随机），不画首页页签。 */
+    collection: SeamCollection? = null,
 ) {
     // B1d：缝（Seam）横条的页签 = 墙的数据来源；第 0 个是「全部」（各段按 key 去重拼起来）。
     var tab by rememberSaveable { mutableStateOf(0) }  // 进播放页再回来保留页签
@@ -126,7 +130,7 @@ fun BravaisWall(
         val camY = remember { Animatable(startY.toFloat()) }
         // 排名：初始镜头中心附近 3×3 区块，条目按排名落位（换数据才重算）。
         // 缝：竖屏横条（axis y），放在世界 y=0 的区块边界上（区块边界不切砖）；上半墙上移、下半墙下移各半条高。
-        val seamH = SEAM_HOME_HEIGHT
+        val seamH = if (collection != null) SEAM_COLLECTION_HEIGHT else SEAM_HOME_HEIGHT
         val ranked = remember(tiles, vw, vh) {
             val ox = bw / 2
             val oy = bh / 2
@@ -250,9 +254,15 @@ fun BravaisWall(
                         if (face == null) {
                             WallFrame(inkColor) { if (!dragging) expanded = null }
                         } else {
-                            Poster(face, inkColor, groundColor, scale, isOpen, onPlay = { onOpenTile(face) }, onEnqueue = { onEnqueueTile(face) }) {
+                            val enter = onEnterTile?.takeIf { face.kind == HomeTileKind.PLAYLIST || face.kind == HomeTileKind.SHEET || face.kind == HomeTileKind.STATION }
+                            Poster(
+                                face, inkColor, groundColor, scale, isOpen,
+                                onPlay = { onOpenTile(face) },
+                                onEnqueue = { onEnqueueTile(face) },
+                                onEnter = enter?.let { { it(face) } },
+                            ) {
                                 if (dragging) return@Poster
-                                if (isOpen) onOpenTile(face) else expand(base)
+                                if (isOpen) (enter ?: onOpenTile)(face) else expand(base)
                             }
                         }
                     }
@@ -267,7 +277,11 @@ fun BravaisWall(
                     .zIndex(10f)
                     .background(groundColor),
             ) {
-                SeamHomeRow(title, listOf("全部") + sections.map { it.first }, tab, inkColor, onSelect = { tab = it; expanded = null }, onOpenSearch = onOpenSearch)
+                if (collection != null) {
+                    SeamCollectionRow(collection, title, inkColor)
+                } else {
+                    SeamHomeRow(title, listOf("全部") + sections.map { it.first }, tab, inkColor, onSelect = { tab = it; expanded = null }, onOpenSearch = onOpenSearch)
+                }
             }
             // 状态栏：墙铺满全屏（Folia 同），顶上加一道纸色渐隐让状态栏图标看得清。
             Box(
@@ -289,6 +303,95 @@ private val FLIP_IN = CubicBezierEasing(0.2f, 0.7f, 0.25f, 1f)
 
 /** 对应 bravaisConstants BRAVAIS_SEAM_ROW_HOME_HEIGHT = 72。 */
 private const val SEAM_HOME_HEIGHT = 72f
+
+/** 集合层信息条高：Folia 横条完整态 212（桌面）；手机只留面包屑 + 标题 + 元数据/按钮三行，取 148。 */
+private const val SEAM_COLLECTION_HEIGHT = 148f
+
+/** B2：集合层信息条的数据（BravaisSeamCollection 的手机子集）。 */
+data class SeamCollection(
+    val name: String,
+    val kindLabel: String,
+    val count: Int?,
+    val loading: Boolean,
+    val failed: Boolean,
+    val onBack: () -> Unit,
+    val onPlayAll: () -> Unit,
+    val onShuffle: () -> Unit,
+    val onRetry: () -> Unit,
+)
+
+/**
+ * 集合信息条（BravaisSeamCrumbs + BravaisSeamTitle + BravaisSeamCollection 元数据行与高频按钮）：
+ * 第一行面包屑「‹ 广乐 / 类型」，点根返回；第二行集合名 22/800；第三行「N 首 · 类型」或加载中 / 失败（重试），右侧「播放全部」实心胶囊 +「随机」。
+ * 未移：收藏星标、过滤输入、列表面板、「⋯ 更多」、补页进度、每日推荐日期步进。
+ */
+@Composable
+private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = c.onBack).padding(end = 6.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(GuangYueIcons.ChevronLeft, contentDescription = "返回", tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
+                Text(root, color = ink.copy(alpha = 0.62f), fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+            }
+            Text(" / ", color = ink.copy(alpha = 0.3f), fontSize = 13.sp)
+            Text(c.kindLabel, color = ink.copy(alpha = 0.62f), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            c.name, color = ink, fontSize = 22.sp, lineHeight = 27.sp, fontWeight = FontWeight.ExtraBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val meta = when {
+                c.loading -> "加载中…"
+                c.failed -> "加载失败，点此重试"
+                c.count != null -> "${c.count} 首 · ${c.kindLabel}"
+                else -> c.kindLabel
+            }
+            Text(
+                meta,
+                color = ink.copy(alpha = if (c.failed) 0.85f else 0.62f),
+                fontSize = 13.sp,
+                maxLines = 1,
+                modifier = Modifier
+                    .weight(1f)
+                    .then(if (c.failed) Modifier.clickable(onClick = c.onRetry) else Modifier),
+            )
+            val ready = !c.loading && !c.failed && (c.count ?: 0) > 0
+            Row(
+                Modifier
+                    .height(36.dp)
+                    .clip(CircleShape)
+                    .background(if (ready) ink else ink.copy(alpha = 0.2f))
+                    .clickable(enabled = ready, onClick = c.onPlayAll)
+                    .padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(GuangYueIcons.Play, contentDescription = null, tint = Color.White.takeIf { ink.luminanceDark() } ?: Color.Black, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("播放全部", color = Color.White.takeIf { ink.luminanceDark() } ?: Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(ink.copy(alpha = 0.08f))
+                    .clickable(enabled = ready, onClick = c.onShuffle),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(GuangYueIcons.Shuffle, contentDescription = "随机播放", tint = ink.copy(alpha = if (ready) 0.8f else 0.3f), modifier = Modifier.size(17.dp))
+            }
+        }
+    }
+}
+
+/** 主色是深色（浅色主题）时按钮上的字用白色。 */
+private fun Color.luminanceDark(): Boolean = (0.299f * red + 0.587f * green + 0.114f * blue) < 0.5f
 
 /**
  * 缝里的首页横条（BravaisSeamHome 的 HomeSeamHead + bravaisSeamRow.css `.bravais-seam-home-row`）：
@@ -343,7 +446,7 @@ private fun WallFrame(ink: Color, onClick: () -> Unit) {
 @Composable
 private fun Poster(
     tile: HomeTile, ink: Color, ground: Color, scale: Double, open: Boolean,
-    onPlay: () -> Unit = {}, onEnqueue: () -> Unit = {}, onClick: () -> Unit,
+    onPlay: () -> Unit = {}, onEnqueue: () -> Unit = {}, onEnter: (() -> Unit)? = null, onClick: () -> Unit,
 ) {
     val stacked = !open && tile.kind == HomeTileKind.PLAYLIST || tile.kind == HomeTileKind.SHEET || tile.kind == HomeTileKind.STATION
     val top = if (stacked) (16 * scale).toFloat().dp else 0.dp
@@ -376,7 +479,7 @@ private fun Poster(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            if (open) FocusCopy(tile, onPlay, onEnqueue)
+            if (open) FocusCopy(tile, onPlay, onEnqueue, onEnter)
         }
     }
 }
@@ -386,7 +489,7 @@ private fun Poster(
  * 与「加入队列」（点过显示「✓ 已加入队列」）。歌手 / 专辑链接、更多菜单、正在播放时的暂停与「进入」键未移。
  */
 @Composable
-private fun FocusCopy(tile: HomeTile, onPlay: () -> Unit, onEnqueue: () -> Unit) {
+private fun FocusCopy(tile: HomeTile, onPlay: () -> Unit, onEnqueue: () -> Unit, onEnter: (() -> Unit)? = null) {
     var queued by remember(tile.key) { mutableStateOf(false) }
     val kindLabel = when (tile.kind) {
         HomeTileKind.TRACK -> "歌曲"
@@ -406,7 +509,7 @@ private fun FocusCopy(tile: HomeTile, onPlay: () -> Unit, onEnqueue: () -> Unit)
                 color = Color.White.copy(alpha = 0.72f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp),
             )
-            Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(top = 12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier.size(40.dp).background(Color.White, CircleShape).clickable(onClick = onPlay),
                     contentAlignment = Alignment.Center,
@@ -421,6 +524,14 @@ private fun FocusCopy(tile: HomeTile, onPlay: () -> Unit, onEnqueue: () -> Unit)
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(if (queued) "✓ 已加入队列" else "+ 加入队列", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                }
+                if (onEnter != null) {
+                    Spacer(Modifier.weight(1f))
+                    // B2：集合的「进入」（BravaisFocusCardBody 的 enter 键，箭头朝右上）。
+                    Box(
+                        Modifier.size(40.dp).background(Color.White.copy(alpha = 0.18f), CircleShape).clickable(onClick = onEnter),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(GuangYueIcons.ArrowUpRight, contentDescription = "进入", tint = Color.White) }
                 }
             }
         }

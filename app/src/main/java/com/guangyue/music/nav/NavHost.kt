@@ -67,6 +67,8 @@ object Routes {
     const val PLAYER = "player"
     const val LYRIC_FLOW = "lyricFlow"
     const val LYRIC_STAGE = "lyricStage"
+    /** B2：Bravais 集合层（歌单 / 榜单 / 电台的曲目墙）。 */
+    const val COLLECTION = "collection"
     const val PLUGINS = "plugins"
     const val DOWNLOADS = "downloads"
     const val SETTINGS = "settings"
@@ -124,6 +126,9 @@ fun GuangYueNavHost(
         }
     }
 
+    // B2：进入的集合（HomeTile 不可序列化；进程被杀后集合页回首页）。
+    var openedCollection by remember { mutableStateOf<com.guangyue.feature.library.home.HomeTile?>(null) }
+
     NavHost(navController = navController, startDestination = Routes.HOME) {
 
         // ---------- 顶层：首页 ----------
@@ -164,6 +169,10 @@ fun GuangYueNavHost(
                             groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
                             onOpenSearch = { navController.navigate(Routes.SEARCH) },
                             onEnqueueTile = { tile -> vm.playTracksOf(tile) { tracks, _ -> playback.appendTracks(tracks) } },
+                            onEnterTile = { tile ->
+                                openedCollection = tile
+                                navController.navigate(Routes.COLLECTION)
+                            },
                             onOpenTile = { tile ->
                                 vm.playTracksOf(tile) { tracks, at ->
                                     playback.setQueueFromTracks(tracks, at, true)
@@ -212,6 +221,90 @@ fun GuangYueNavHost(
         }
 
         // ---------- 顶层：搜索 ----------
+        // ---------- B2：集合层（Bravais 墙换成该集合的曲目） ----------
+        composable(Routes.COLLECTION) {
+            val tile = openedCollection
+            if (tile == null) {
+                LaunchedEffect(Unit) { navController.popBackStack() }
+                return@composable
+            }
+            // 与首页共用同一个 HomeViewModel：推荐歌单取曲目要用首页已拉到的分类叶子。
+            val homeEntry = remember(it) { runCatching { navController.getBackStackEntry(Routes.HOME) }.getOrNull() }
+            val vm: HomeViewModel = if (homeEntry != null) hiltViewModel(homeEntry) else hiltViewModel()
+            var tracks by remember(tile.key) { mutableStateOf<List<com.guangyue.core.data.model.TrackEntity>?>(null) }
+            var failed by remember(tile.key) { mutableStateOf(false) }
+            var attempt by remember(tile.key) { mutableStateOf(0) }
+            LaunchedEffect(tile.key, attempt) {
+                failed = false
+                tracks = null
+                var got = false
+                vm.playTracksOf(tile) { list, _ -> tracks = list; got = true }
+                // playTracksOf 空结果不回调：给 12s，没回来算失败。
+                kotlinx.coroutines.delay(12_000)
+                if (!got) failed = true
+            }
+            val list = tracks.orEmpty()
+            val trackTiles = remember(list) {
+                list.mapIndexed { i, t ->
+                    com.guangyue.feature.library.home.HomeTile(
+                        key = "ctrack:$i:${t.key}",
+                        title = t.title,
+                        subtitle = t.artist,
+                        artwork = t.artwork,
+                        kind = com.guangyue.feature.library.home.HomeTileKind.TRACK,
+                    )
+                }
+            }
+            val kindLabel = when (tile.kind) {
+                com.guangyue.feature.library.home.HomeTileKind.STATION -> "榜单"
+                else -> "歌单"
+            }
+            ShellColumn(
+                content = {
+                    com.guangyue.music.ui.home.BravaisWall(
+                        sections = listOf("曲目" to trackTiles),
+                        title = "广乐",
+                        inkColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
+                        groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
+                        onOpenSearch = { navController.navigate(Routes.SEARCH) },
+                        onEnqueueTile = { t -> trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> playback.appendTracks(listOf(list[i])) } },
+                        onOpenTile = { t ->
+                            val i = trackTiles.indexOf(t)
+                            if (i >= 0) {
+                                playback.setQueueFromTracks(list, i, true)
+                                navController.navigate(Routes.LYRIC_FLOW)
+                            }
+                        },
+                        collection = com.guangyue.music.ui.home.SeamCollection(
+                            name = tile.title,
+                            kindLabel = kindLabel,
+                            count = tracks?.size,
+                            loading = tracks == null && !failed,
+                            failed = tracks == null && failed,
+                            onBack = { navController.popBackStack() },
+                            onPlayAll = {
+                                if (list.isNotEmpty()) {
+                                    playback.setShuffle(false)
+                                    playback.setQueueFromTracks(list, 0, true)
+                                    navController.navigate(Routes.LYRIC_FLOW)
+                                }
+                            },
+                            onShuffle = {
+                                if (list.isNotEmpty()) {
+                                    playback.setQueueFromTracks(list, list.indices.random(), true)
+                                    playback.setShuffle(true)
+                                    navController.navigate(Routes.LYRIC_FLOW)
+                                }
+                            },
+                            onRetry = { attempt++ },
+                        ),
+                    )
+                },
+                miniPlayer = miniPlayer,
+                bottomBar = bottomBar,
+            )
+        }
+
         composable(Routes.SEARCH) {
             val vm: SearchViewModel = hiltViewModel()
             val state by vm.state.collectAsStateWithLifecycle()
