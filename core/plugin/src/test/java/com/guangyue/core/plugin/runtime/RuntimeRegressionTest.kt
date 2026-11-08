@@ -117,8 +117,9 @@ class RuntimeRegressionTest {
                 // 关键：不管请求成功与否，响应对象上 .then / .catch 都要存在且可调用。
                 if (!r || typeof r.then !== 'function') return { isEnd: true, data: [], seen: 'no-then' };
                 if (typeof r.catch !== 'function') return { isEnd: true, data: [], seen: 'no-catch' };
-                r.then(function () { seen = 'then'; }).catch(function () { seen = 'catch'; });
-                return { isEnd: true, data: [], seen: seen };
+                // M8：axios 现在返回真 Promise（异步并发 HTTP），结果要等宿主推进后才有。
+                return r.then(function () { return { isEnd: true, data: [], seen: 'then' }; })
+                        .catch(function () { return { isEnd: true, data: [], seen: 'catch' }; });
                 } catch (e) {
                   return { isEnd: true, data: [], seen: 'threw:' + (e && e.message ? e.message : e) };
                 }
