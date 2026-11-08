@@ -389,10 +389,11 @@ internal object NebbiaComposer {
     fun layoutSong(
         lines: List<Src>, w: Double, h: Double, fontScale: Double, minPx: Double, jitter: Double,
         visibleUntil: (Int) -> Double, fogAt: (Int) -> Double,
+        lingerUntil: ((Int) -> Double)? = null,
     ): List<List<Pos>> {
         val mx = w * 0.05; val my = h * 0.07
         val sMin = max(minPx, h * 0.065) * fontScale; val sMax = h * 0.14 * fontScale
-        data class P(val box: Box, val until: Double, val fogAt: Double)
+        data class P(val box: Box, val until: Double, val fogAt: Double, val linger: Double)
         val placed = ArrayList<P>()
         val recent = ArrayList<String>()
         var prev: Cand? = null
@@ -405,8 +406,13 @@ internal object NebbiaComposer {
             if (words.isEmpty()) return@mapIndexed chars.map { Pos(w / 2, h / 2, sMin, 0.0) }
             val roles = assignRoles(chars, words)
             val rs = if (fast) ROLE_SCALE_FAST else ROLE_SCALE
-            val busy = placed.filter { it.until > line.t - 0.3 }.map { p ->
-                p.box to (if (line.t <= p.fogAt) 1.0 else 0.6 + 0.4 * ((p.until - line.t) / max(1e-3, p.until - p.fogAt)).coerceIn(0.0, 1.0))
+            // 这句出现时还在屏上的句子（含屏上空着时多留的）；已经开始起雾的按剩下的清晰度打折，多留的只占一点权重
+            val busy = placed.filter { it.linger > line.t - 0.3 }.map { p ->
+                p.box to (
+                    if (p.until <= line.t - 0.3) LINGER_WEIGHT
+                    else if (line.t <= p.fogAt) 1.0
+                    else 0.6 + 0.4 * ((p.until - line.t) / max(1e-3, p.until - p.fogAt)).coerceIn(0.0, 1.0)
+                    )
             }
             var best: Cand? = null
             for (maxBlocks in intArrayOf(5, 7)) {
@@ -457,7 +463,7 @@ internal object NebbiaComposer {
                 best = Cand(0.0, "lines3", res.items, bb, s, w / 2, h / 2, Box(w / 2 - bw / 2, w / 2 + bw / 2, h / 2 - bh / 2, h / 2 + bh / 2))
             }
             val c = best!!
-            placed += P(c.box, visibleUntil(li), fogAt(li))
+            placed += P(c.box, visibleUntil(li), fogAt(li), max(visibleUntil(li), lingerUntil?.invoke(li) ?: 0.0))
             recent += c.name
             if (recent.size > 3) recent.removeAt(0)
             prev = c

@@ -9,6 +9,24 @@ adb install -r app/build/outputs/apk/debug/*.apk
 A=com.guangyue.music/.V0cStageActivity
 shot() { adb exec-out screencap -p > "shots/$1.png"; echo "shot $1"; }
 
+# 雾笺（B0 残差）：与 Folia 基准同一份探针歌词（v0c_fixture probe），静态时钟定格；竖屏、横屏各拍几刻（37.5s 是基准时刻）。
+neb() { # $1 = 名字, $2 = 毫秒
+  adb shell am force-stop com.guangyue.music
+  adb shell am start -W -n $A --es v0c_style nebbia --es v0c_fixture probe --el v0c_ms $2 --ez v0c_dark true >/dev/null
+  sleep 14
+  shot "$1"
+}
+neb nebbia-port-37 37500
+neb nebbia-port-44 44000
+adb shell settings put system user_rotation 1
+sleep 2
+neb nebbia-land-37 37500
+neb nebbia-land-41 41000
+neb nebbia-land-44 44000
+adb shell settings put system user_rotation 0
+sleep 2
+adb logcat -d -s AndroidRuntime > shots/neb-crash.txt 2>&1 || true
+
 for t in 2 6 14 26 40; do
   adb shell am force-stop com.guangyue.music
   adb shell am start -W -n $A --es v0c_style fume --ei v0c_fumesteps 40 --ef v0c_fumetime $t --el v0c_ms $((t*1000)) --ez v0c_dark true >/dev/null
@@ -38,7 +56,7 @@ if [ -n "$b" ]; then
     shot "rotate-back-portrait"
   fi
 fi
-adb logcat -d -s V0cStage FumeBulletinStage AndroidRuntime > shots/logcat.txt 2>&1 || true
+adb logcat -d -s V0cStage FumeBulletinStage AndroidRuntime RuntimeShader skia > shots/logcat.txt 2>&1 || true
 ls -la shots
 # 产物配额满时也能取证：把缩小后的截图以 base64 打进日志。
 echo "===ROTATE==="; cat shots/rotate.txt

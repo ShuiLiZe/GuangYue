@@ -25,6 +25,9 @@ jobs:
       - run: chmod +x ./gradlew && echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
       - name: core:lyrics 单测
         run: ./gradlew :core:lyrics:test --no-daemon --stacktrace
+      - name: 雾笺纯逻辑单测（feature:player，只跑 Nebbia*）
+        continue-on-error: true
+        run: ./gradlew :feature:player:testDebugUnitTest --tests '*Nebbia*' --no-daemon --stacktrace
       - name: 编译 debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
       - name: 上传 debug APK
