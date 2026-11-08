@@ -739,3 +739,13 @@ BUILD SUCCESSFUL in 35s
 - 歌词：烟花下方、底部胶囊之上；字底色块三种（逐字方块 tile / 整行色带 band 带金边 / 斜带 slant），祭色朱红 / 瑠璃 / 柿色；逐字 rise 升入（拉伸后压扁回弹），唱到的字弹跳 + 染金，换句整行 ascend 飞走。硬阴影墨色 #0B0D24。
 - 不做：Pixi 精灵池、拼贴 MG 图库、副歌全屏辉光、片尾卡、设置面板（无参数）。
 - 单测 `HanabiProgramTest`（2 例）通过；实拍 `docs/ui-v0/p7-hanabi.jpg`（4.8 秒 band 版 + 菊；9.3 秒 tile 版 + 牡丹余烬）。
+
+## P8 凝彩样式（Folia tempera 手机版，2026-11-08 08:50）
+
+- 新文件 `feature/player/.../visualizer/TemperaStage.kt`：对照 Folia `visualizer/tempera/`（README、temperaProgram、temperaShotProfiles、compositions/*、temperaLayout、temperaEnterStyles、temperaDifferenceFilter、temperaHatch、createTemperaPixiRuntime 的交接）。
+- 程序 `compileTempera`（纯函数）：每行按词切 slice（2~4 词或 ~2.2 秒一刀，中文单字算半个词，单 slice ≤3.2 秒，不足一词的尾巴并回上一刀）；行间 ≥1.2 秒的空隙（含前奏、尾奏）编成 1~3 个无字 bridge shot（每个 ≤5 秒）；shot 首尾相接，构图与前两个都不重复；每 slice 选最长词为 hero（放大 1.34~1.6×，其余 0.7~0.86×）；逐词七种入场（slide / 左 / 右 / 上 / 下 / swing / stamp），相邻词不同。
+- 构图六族：分割（斜切纸 / 墨 + 强调色细带 + 网点）、色带（墨 / 强调色 / 网点三条横带从两侧拉出）、框窗（1:1 / 4:3 / 2.39:1 遮幅合拢）、海报（强调色大圆 + 放射网点 + 竖墨条）、稀疏（细线十字 + 方标 + 斜线块）、物语留白卡（整屏强调色平涂，有字 shot 每六个一张）。调色取主题：纸 = 背景色、墨 = 前景色、强调色太贴纸色时往墨推。
+- 文字：正文统一画进一层白字，整层以 BlendMode.Difference 合成（压过墨块的笔画自然翻色，对应 Folia difference filter）；有位移的入场拖两层强调色浮影；另一行取两三个字做超大低透明水印垫在字下；右上角镜头编号。shot 之间沿 flow 角（纵向 ±18°）推镜交接：上一个继续推出、下一个从下方推进来，同屏重叠 0.3×时长钳 0.4~1.1 秒；shot 内缓慢推近 3.5%。
+- 坑：最初逐字 drawText 用 Difference 混合 + 整个 Canvas 走离屏层，模拟器上每次绘制都回读整屏，主线程卡到 ANR；改成一层 saveLayer 一次合成后正常。
+- 不做：Pixi runtime、121 种镜头、后处理 filter、封面取色渐变、用户图片层、墨染奥行、关键字着色。
+- 单测 `TemperaProgramTest`（3 例：每字恰进一个 shot、空隙出 bridge、构图不重复、交接重叠）；实拍 `docs/ui-v0/p8-tempera.jpg`（4.8 秒分割构图「为你」跨斜切反色；9.3 秒色带构图；7 秒浅色模式留白卡）。

@@ -51,6 +51,8 @@ enum class LyricStyle(val id: String) {
 
     /** 「花火」：Folia hanabi（P7：夜空里每句开唱放一朵烟花，长空隙一串スターマイン；字底色块 + 逐字升入、唱到弹跳染金、换句向上飞走；手机不做 Pixi 精灵池与拼贴 MG）。无参数。 */
     HANABI("hanabi"),
+    /** 「凝彩」：Folia tempera（P8：网点图形 MG，纸 / 墨 / 强调色六族构图、slice 切镜与无字 bridge、hero 词放大、七种逐词入场与浮影、Difference 反色、超大水印、纵向推镜交接；手机不做 Pixi runtime / 121 种镜头 / 后处理）。无参数。 */
+    TEMPERA("tempera"),
     ;
 
     companion object {

@@ -293,6 +293,7 @@ fun V0cStage(
                     "nebbia" -> LyricStyle.NEBBIA
                     "sonnet" -> LyricStyle.SONNET
                     "hanabi" -> LyricStyle.HANABI
+                    "tempera" -> LyricStyle.TEMPERA
                     "tilt" -> LyricStyle.TILT
                     "claddagh" -> LyricStyle.CLADDAGH
                     else -> LyricStyle.CLASSIC
@@ -349,6 +350,7 @@ private fun v0cString(id: Int): String = when (id) {
     R.string.lyrics_style_nebbia -> "雾笺"
     R.string.lyrics_style_sonnet -> "商籁"
     R.string.lyrics_style_hanabi -> "花火"
+    R.string.lyrics_style_tempera -> "凝彩"
     R.string.lyrics_style_tilt -> "倾诉"
     R.string.lyrics_style_claddagh -> "回环"
     R.string.lyrics_style_cl_focus -> "主歌词放大倍率"
