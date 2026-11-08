@@ -42,6 +42,7 @@ class PluginProbeActivity : ComponentActivity() {
                 }
                 Log.w(TAG, "targets=${targets.map { it.displayName + "@" + it.version }}")
                 for (p in targets) {
+                    manager.setCurrentSource(p.id)
                     val rep = checker.check(p.id)
                     Log.w(TAG, "RESULT ${rep.name} ${p.version} health=${rep.health} ${rep.ms}ms note=${rep.note}")
                 }
