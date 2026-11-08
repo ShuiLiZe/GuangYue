@@ -605,13 +605,8 @@ private fun MonetLandscape(
                                         .clip(RoundedCornerShape(32.dp))
                                         .background(primaryColor.copy(alpha = 0.08f)),
                                 ) {
-                                    if (!coverUrl.isNullOrBlank()) {
-                                        com.guangyue.feature.player.lyrics.CoverImage(
-                                            url = coverUrl,
-                                            modifier = Modifier.fillMaxSize(),
-                                            accent = accentColor,
-                                        )
-                                    }
+                                    // R1f：封面叠层交叉淡化（MonetPortraitImage.tsx），换歌不闪空框。
+                                    MonetPortraitImage(src = coverUrl, modifier = Modifier.fillMaxSize())
                                 }
                                 // 挂条
                                 Box(
