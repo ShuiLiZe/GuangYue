@@ -45,8 +45,13 @@ class Main6LiveTest {
         for (el in arr) {
             val o = el.jsonObject
             val name = o["name"]!!.jsonPrimitive.content
+            System.getenv("GUANGYUE_ONLY")?.let { only -> if (!name.contains(only)) continue }
             val code = runCatching { java.net.URI(o["url"]!!.jsonPrimitive.content).toURL().openStream().use { it.readBytes().toString(Charsets.UTF_8) } }.getOrNull() ?: continue
             val rt = RealPluginHealthTest.runtimeFor(code, name)
+            if (System.getenv("GUANGYUE_TAP") == "true") {
+                rt.onHttp = { m, u, st, ms -> println("[tap] $m $st ${ms}ms ${u.take(220)}") }
+                rt.onLog = { lv, msg -> println("[log] $lv ${msg.take(300)}") }
+            }
             val out = StringBuilder("[sheets] $name")
             try {
                 rt.install()
@@ -57,6 +62,7 @@ class Main6LiveTest {
                     val sheets = arrOf(rt.call("getRecommendSheetsByTag", leaf, kotlinx.serialization.json.JsonPrimitive(1)))
                     out.append(" tags=${groups.size} sheets=${sheets.size}")
                     sheets.firstOrNull()?.let { sh ->
+                        println("[sheet0] ${sh.toString().take(500)}")
                         val info = rt.call("getMusicSheetInfo", sh, kotlinx.serialization.json.JsonPrimitive(1))
                         val ml = (info as? kotlinx.serialization.json.JsonObject)?.get("musicList") as? JsonArray
                         out.append(" sheetSongs=${ml?.size ?: -1}")
