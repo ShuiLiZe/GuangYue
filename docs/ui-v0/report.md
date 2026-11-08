@@ -768,3 +768,8 @@ BUILD SUCCESSFUL in 35s
 - 设置：「我的 → 设置 → 播放器 → 背景类型」隐现 / 通用（Folia「背景类型」文案），默认隐现，存 `visualizer_background_mode`。
 - 实拍：`docs/port/baseline/compare/r2-latent-monet-compare.jpg`（上 Folia、下广乐，同一时刻 37.5 秒横屏）、`r2-latent-classic-land.jpg`。点阵的流向带、像素尺寸、流体层次已和 Folia 一致；颜色差是取证页封面（#B4553C）与 Folia 探针默认灰主题不同。
 - 单测 `LatentColorsTest`（2 例：无封面回落主题色、封面色排在网格前四位）。
+
+## R1d 莫奈歌词行盒对齐 Folia measureMonetLineLayout
+
+- 主文字行高 1.28em → 1.18em，上下留白 max(0.16em, 8) / max(0.34em, 14)；译文字号由「歌词 ×0.62」改为 Folia 的 clamp(0.94rem, 1.28vw, 1.14rem)（与歌词同乘 fontScale，按比值换算），行高 1.28em，上下留白 max(0.45em, 7) / max(0.18em, 5)，字重 500。行间距仍是 max(18, 0.49em) / max(14, 0.38em)。
+- 横屏对照 `docs/port/baseline/compare/r1d-monet-compare.jpg`：上一句位置与 Folia 一致（误差 1dp，原来低 26dp）；当前句低约 5dp、译文低约 12dp（原来 13 / 2dp，但上一句差 26dp），剩余差来自安卓与 Chrome 行盒度量（Folia 用 actualBoundingBox 量字形高）。
