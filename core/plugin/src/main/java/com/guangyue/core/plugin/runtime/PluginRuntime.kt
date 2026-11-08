@@ -308,12 +308,12 @@ class PluginRuntime(
     fun close() {
         // M8：异步 HTTP 之后，关闭时可能还挂着没结算的 Promise / 未到期计时器 / 等响应的回调。
         // 直接 JS_FreeRuntime 会在 releaseRuntime 里 native 崩溃（JVM 实测 EXCEPTION_ACCESS_VIOLATION，
-        // 咪咕榜单）。先清掉这些引用、把 job 队列推空，再释放。
+        // 咪咕榜单）。先清掉这些引用再释放。注意：这里**不能**再推 job 队列 —— 真机上在 close 里
+        // 调 __gy_pump 会卡死在 executePendingJob（模拟器实测装插件时卡住 2 分钟以上）。
         qjs?.let { rt ->
             runCatching {
                 read(rt, "(function(){try{__gy_resetHttp();}catch(e){}try{__gy_resetTimers();}catch(e){}globalThis.__gy_pending=null;return 'ok';})()", "reset.js")
             }
-            runCatching { read(rt, "__gy_pump(300)", "drain-on-close.js") }
         }
         runCatching { qjs?.close() }
         httpDone.clear()
