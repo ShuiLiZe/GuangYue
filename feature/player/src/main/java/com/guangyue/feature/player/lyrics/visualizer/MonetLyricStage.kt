@@ -112,6 +112,10 @@ internal object MonetRail {
         return MonetTone(opacity, scale, blur, if (waiting) 0.46f else 0.36f)
     }
 
+    /** 译文字号 / 歌词字号（Folia translationFontPx = clamp(0.94rem, 1.28vw, 1.14rem) 与 lyricFontPx 同乘 fontScale）。 */
+    fun translationRatio(widthDp: Float): Float =
+        clampDp(0.94f, 1.28f, 1.14f, widthDp) / clampDp(1.34f, 2.75f, 2.28f, widthDp)
+
     /** CSS clamp(min, vw, max)，单位 dp。 */
     fun clampDp(minRem: Float, vw: Float, maxRem: Float, widthDp: Float): Float =
         (widthDp * vw / 100f).coerceIn(minRem * 16f, maxRem * 16f)
@@ -226,6 +230,7 @@ internal fun MonetLyricStage(
                 clock = clock,
                 railHeight = railDp.dp,
                 lyricDp = lyricDp,
+                translationDp = lyricDp * MonetRail.translationRatio(widthDp),
                 inactiveScale = inactiveScale,
                 primaryColor = primaryColor,
                 secondaryColor = secondaryColor,
@@ -244,6 +249,7 @@ private fun MonetRailBox(
     clock: VisualizerClock,
     railHeight: Dp,
     lyricDp: Float,
+    translationDp: Float,
     inactiveScale: Float,
     primaryColor: Color,
     secondaryColor: Color,
@@ -340,17 +346,21 @@ private fun MonetRailBox(
                         fontFamily = fontFamily,
                         fontWeight = if (offset == 0) FontWeight.SemiBold else FontWeight.Medium,
                         fontSize = with(density) { lyricDp.dp.toSp() },
-                        lineHeight = with(density) { (lyricDp * 1.28f).dp.toSp() },
+                        // Folia measureMonetLineLayout：主文字行高 1.18em，上留 max(0.16em, 8)、下留 max(0.34em, 14)。
+                        lineHeight = with(density) { (lyricDp * 1.18f).dp.toSp() },
                     )
+                    val padTop = max(lyricDp * 0.16f, 8f).dp
+                    val padBottom = max(lyricDp * 0.34f, 14f).dp
                     if (offset == 0) {
                         val text by remember(line, primaryColor) {
                             derivedStateOf { monetActiveText(line, clock.seconds(), primaryColor) }
                         }
-                        Text(text = text, style = textStyle, modifier = Modifier.onSizeChanged { mainHeights[i] = it.height })
+                        Text(text = text, style = textStyle, modifier = Modifier.onSizeChanged { mainHeights[i] = it.height }.padding(top = padTop, bottom = padBottom))
                     } else {
                         Text(
                             text = line.fullText,
                             style = textStyle.copy(color = primaryColor.copy(alpha = tone.baseAlpha)),
+                            modifier = Modifier.padding(top = padTop, bottom = padBottom),
                         )
                     }
                     val tr = line.translation
@@ -358,10 +368,14 @@ private fun MonetRailBox(
                     if (offset == 0 && !tr.isNullOrBlank()) {
                         Text(
                             text = tr,
-                            modifier = Modifier.padding(top = 6.dp),
+                            // Folia measureMonetSubtitleTrack：行高 1.28em，上留 max(0.45em, 7)、下留 max(0.18em, 5)，字重 500。
+                            modifier = Modifier.padding(top = max(translationDp * 0.45f, 7f).dp, bottom = max(translationDp * 0.18f, 5f).dp),
                             style = TextStyle(
                                 color = primaryColor.copy(alpha = 0.68f),
-                                fontSize = with(density) { (lyricDp * 0.62f).dp.toSp() },
+                                fontFamily = fontFamily,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = with(density) { translationDp.dp.toSp() },
+                                lineHeight = with(density) { (translationDp * 1.28f).dp.toSp() },
                             ),
                         )
                     }
@@ -514,6 +528,7 @@ private fun MonetLandscape(
                         clock = clock,
                         railHeight = railDp.dp,
                         lyricDp = lyricDp,
+                        translationDp = lyricDp * MonetRail.translationRatio(widthDp),
                         inactiveScale = inactiveScale,
                         primaryColor = primaryColor,
                         secondaryColor = secondaryColor,
