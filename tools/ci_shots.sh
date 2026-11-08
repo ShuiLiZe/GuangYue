@@ -29,7 +29,7 @@ if [ -n "$b" ]; then
   sleep 6
   adb shell dumpsys window displays | grep -i "mCurrentRotation\|cur=" | head -3 | tee -a shots/rotate.txt
   shot "rotate-landscape"
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml shots/ui-landscape.xml >/dev/null
+  adb shell rm -f /sdcard/ui.xml; sleep 2; adb shell uiautomator dump /sdcard/ui.xml 2>&1 | tee -a shots/rotate.txt; adb pull /sdcard/ui.xml shots/ui-landscape.xml >/dev/null
   b2=$(grep -o 'content-desc="切换竖屏"[^>]*bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' shots/ui-landscape.xml | grep -o 'bounds=.*' | grep -o '[0-9]\+' | tr '\n' ' ')
   echo "portrait key bounds: $b2" | tee -a shots/rotate.txt
   if [ -n "$b2" ]; then
@@ -40,3 +40,11 @@ if [ -n "$b" ]; then
 fi
 adb logcat -d -s V0cStage FumeBulletinStage AndroidRuntime > shots/logcat.txt 2>&1 || true
 ls -la shots
+# 产物配额满时也能取证：把缩小后的截图以 base64 打进日志。
+echo "===ROTATE==="; cat shots/rotate.txt
+echo "===LOGCAT==="; tail -c 4000 shots/logcat.txt
+for f in shots/*.png; do
+  n=$(basename "$f" .png)
+  if command -v convert >/dev/null; then convert "$f" -resize 50% -quality 55 "/tmp/$n.jpg"; else cp "$f" "/tmp/$n.jpg"; fi
+  echo "===IMG $n==="; base64 -w0 "/tmp/$n.jpg"; echo; echo "===END $n==="
+done
