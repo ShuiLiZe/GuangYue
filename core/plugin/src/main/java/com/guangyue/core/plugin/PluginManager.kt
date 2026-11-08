@@ -218,12 +218,13 @@ class PluginManager @Inject constructor(
             )
             val id = store.idFor(probed.platform, source)
 
-            // 同 platform 同 source → 更新；同 platform 不同 source → 拒绝（平台 id 会撞车）
+            // 同 platform 同 source → 更新；同 platform 不同 source → 用新的替换旧的（M8：
+            // 换订阅线路 / 换插件仓库分支时 URL 会变，以前直接拒绝「请先删除」，用户订了新清单
+            // 六个平台全装不上，只剩旧的失效版本）。旧插件的启用状态与排序沿用到新插件上。
             val existing = _plugins.value.firstOrNull { it.platform == probed.platform }
             if (existing != null && existing.id != id) {
-                return@withContext InstallResult.Failure(
-                    "已安装同平台插件「${existing.displayName}」，请先删除后再安装",
-                )
+                store.delete(existing.id)
+                _plugins.value = _plugins.value.filterNot { it.id == existing.id }
             }
 
             val finalMeta = probed.copy(
@@ -232,7 +233,8 @@ class PluginManager @Inject constructor(
                 // 0.0.7：导入不再自动启用。批量导入 57 个插件时全部启用会让搜索页把每个音源
                 // 都打一遍（还会被源站限流），用户根本不知道该用哪个。现在导入只代表「已安装」，
                 // 出现在搜索页的可选列表里需要用户自己打开，或用「只启用体检可用的」一键打开。
-                enabled = existing?.enabled ?: false,
+                // M8：一个音源都没选时，装上的第一个插件直接设为当前音源，否则首页和搜索全是空的。
+                enabled = existing?.enabled ?: _plugins.value.none { it.enabled && it.error == null },
                 sortOrder = existing?.sortOrder ?: (_plugins.value.maxOfOrNull { it.sortOrder } ?: 0) + 1,
                 health = existing?.health
                     // 没体检过就用打包的出厂体检基线（真机实测结果），否则保持「未体检」
