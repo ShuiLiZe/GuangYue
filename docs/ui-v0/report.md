@@ -773,3 +773,13 @@ BUILD SUCCESSFUL in 35s
 
 - 主文字行高 1.28em → 1.18em，上下留白 max(0.16em, 8) / max(0.34em, 14)；译文字号由「歌词 ×0.62」改为 Folia 的 clamp(0.94rem, 1.28vw, 1.14rem)（与歌词同乘 fontScale，按比值换算），行高 1.28em，上下留白 max(0.45em, 7) / max(0.18em, 5)，字重 500。行间距仍是 max(18, 0.49em) / max(14, 0.38em)。
 - 横屏对照 `docs/port/baseline/compare/r1d-monet-compare.jpg`：上一句位置与 Folia 一致（误差 1dp，原来低 26dp）；当前句低约 5dp、译文低约 12dp（原来 13 / 2dp，但上一句差 26dp），剩余差来自安卓与 Chrome 行盒度量（Folia 用 actualBoundingBox 量字形高）。
+
+## M8a 插件取链修复：异步并发 HTTP（2026-11-08 20:20）
+- 用户反馈「歌曲都没有」，用户常用订阅：hebijunge「常用六平台」`sub/padao/main.json`（QQ 1.9.26 / 酷我 1.9.24 / 酷狗 1.9.24 / 咪咕 1.9.19 / 网易云 1.9.27 / 汽水 1.9.23）。
+- 现网实测（Main6LiveTest，a2a5c2e）修前：六个都能搜到，但只有咪咕能取到播放地址；QQ/网易云「聚合取链失败」、酷狗「未取得播放链接」、汽水「sign 全部端点失败」、酷我「插件超时没返回」。同一份插件放 Node + 真 axios 能取到链。
+- 真因：宿主桥的 axios 是**同步串行**的（每个请求阻塞到返回），计时器又是「登记后立即触发」。插件取链会并发试十几个聚合接口 + `Promise.race/any` + `setTimeout` 超时竞速：串行后总耗时超过 12 s 预算；竞速里的超时计时器立即触发，把还没轮到的接口全判失败。
+- 修法（793fa25）：`__gy_http_start` 在宿主线程池并发发请求、axios 返回真 Promise；`__gy_pump` 每轮交付已完成的响应（`__gy_http_take`）、只触发到期的计时器，等待时 `__gy_idle(5)` 让出；异步预算 12 s → 25 s；带 `Range` 的探测请求只读前 64 KB。旧的同步桥（测试桩没有 start 时）保留。
+- 修后实测：六个全部 health=ok，搜「周杰伦」→ 第一首取到直链（QQ ws.stream.qqmusic、酷我/酷狗/汽水 kuwo CDN、咪咕 freetyst、网易云 m701.music.126.net），单个 2–4 s。
+- 648619e：同平台不同来源的插件改为**替换**（以前拒装「请先删除」，换订阅线路后六个平台全装不上）；一个音源都没选时，第一个装上的插件自动设为当前音源。
+- 5ae5f88：回归用例 `sync axios response carries then and catch` 改为等真 Promise 结算。`:core:plugin` 与 `:app` 单测全过。
+- 发版 0.0.11（04f4843）。
