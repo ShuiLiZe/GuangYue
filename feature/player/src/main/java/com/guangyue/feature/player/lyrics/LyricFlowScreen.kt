@@ -516,7 +516,7 @@ fun LyricFlowScreen(
                 ),
             )
         }
-        // P4 时计：钟轮在左缘正中，歌词沿弧线排布；让出顶栏与底部胶囊。
+        // P4 时计：钟轮在左缘正中，歌词沿弧线排布；整屏铺满（同 Folia）。
         if (lyricStyle == LyricStyle.PENDOLO && kernelLines.isNotEmpty() && emptyKind == null) {
             com.guangyue.feature.player.lyrics.visualizer.PendoloStage(
                 lines = kernelLines,
@@ -530,13 +530,9 @@ fun LyricFlowScreen(
                 fontFamily = GuangYueDesign.Serif,
                 reduceMotion = reduceMotion,
                 onSeekToLine = onSeekToLine,
-                modifier = Modifier
-                    .windowInsetsPadding(
-                        WindowInsets.statusBars
-                            .union(WindowInsets.displayCutout)
-                            .union(WindowInsets.navigationBars),
-                    )
-                    .padding(top = 56.dp, bottom = 96.dp),
+                // Folia 时计铺满整个视口（VisualizerShell inset-0），轮心 (0, 0.5h)、半径 0.42·min(w,h)；
+                // 顶栏与底部胶囊叠在上面，不再让出（让出后横屏半径只剩 ~67dp，上下句被挤出弧外）。
+                modifier = Modifier.fillMaxSize(),
             )
         }
         Column(

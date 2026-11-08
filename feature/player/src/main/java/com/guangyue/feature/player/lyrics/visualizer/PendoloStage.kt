@@ -138,12 +138,19 @@ internal fun PendoloStage(
         val cx = wPx * PendoloGeometry.CENTER_X
         val cy = hPx * PendoloGeometry.CENTER_Y
         val radius = min(wPx, hPx) * PendoloGeometry.ARC_RADIUS
+        // Folia：歌词环 = 钟轮半径 + 0.06·min(w,h)（lyricRadiusOffset），文字可用宽度仍按钟轮半径算。
+        val ringR = radius + min(wPx, hPx) * 0.06f
         val availPx = max(with(density) { 140.dp.toPx() }, min(wPx * 0.46f, wPx - (cx + radius) - with(density) { 48.dp.toPx() }))
         val fs = lyricsFontScale.toFloat()
 
         // ---------- 钟芯线框 ----------
         Canvas(Modifier.fillMaxSize()) {
-            drawPendoloClockwork(cx, cy, radius, tick.value * step, primaryColor, accentColor, backgroundColor)
+            val t = clock.readForDraw()
+            drawPendoloClockwork(
+                cx, cy, radius, ringR, tick.value * step,
+                PendoloMotion.phase(t), PendoloMotion.secondGearAngle(t),
+                primaryColor, accentColor, backgroundColor,
+            )
         }
 
         // ---------- 弧上歌词 ----------
@@ -153,7 +160,7 @@ internal fun PendoloStage(
         val heights = remember(lines) { mutableStateMapOf<Int, Int>() }
         val focalLinePx = with(density) { (28f * fs * 1.2f).dp.toPx() }
         // Folia 的 24 是 CSS px（≈dp）；行块按当前句放大后的高度预留。
-        val angles = PendoloGeometry.angles(anchor, first, last, radius, with(density) { 24.dp.toPx() }) { i ->
+        val angles = PendoloGeometry.angles(anchor, first, last, ringR, with(density) { 24.dp.toPx() }) { i ->
             (heights[i]?.toFloat() ?: focalLinePx) * PendoloGeometry.ACTIVE_SCALE
         }
         for (i in first..last) {
@@ -169,8 +176,8 @@ internal fun PendoloStage(
                     Modifier
                         .offset {
                             val a = base - (tick.value - anchor) * step
-                            val x = cx + radius * cos(a)
-                            val y = cy + radius * sin(a)
+                            val x = cx + ringR * cos(a)
+                            val y = cy + ringR * sin(a)
                             IntOffset(x.roundToInt(), (y - (heights[i] ?: 0) / 2f).roundToInt())
                         }
                         .onSizeChanged { heights[i] = it.height }
@@ -253,7 +260,10 @@ private fun DrawScope.drawPendoloClockwork(
     cx: Float,
     cy: Float,
     r: Float,
+    ringR: Float,
     esc: Float,
+    phase: Float,
+    secondAngle: Float,
     primary: Color,
     accent: Color,
     background: Color,
@@ -314,8 +324,121 @@ private fun DrawScope.drawPendoloClockwork(
         val a = i * 2f * PI.toFloat() / 12f + esc
         drawCircle(primary.copy(alpha = 0.25f * m), 2.2.dp.toPx(), Offset(cx + rv * cos(a), cy + rv * sin(a)), style = Stroke(0.8.dp.toPx()))
     }
-    // 3. 中心小齿轮（反转 2.5 倍）。
-    gearTeeth(center, r * 0.22f, 12, 6.dp.toPx(), -esc * 2.5f, accent.copy(alpha = 0.72f * m), 2.1f, null)
+    // 3. 中心小齿轮（反转 2.5 倍）+ 宝石轴承。
+    val strong = accent.copy(alpha = 0.72f * m)
+    val subtle = primary.copy(alpha = 0.32f * m)
+    gearTeeth(center, r * 0.22f, 12, 6.dp.toPx(), -esc * 2.5f, strong, 2.1f, null)
+    jewel(center, 4.5f, 2.5f, accent, m, 1.2f, 0.8f)
+    // 4. 行星轮三颗（绕 0.52R 公转 0.4 倍）。
+    for (k in 0 until 3) {
+        val pa = esc * 0.4f + k * 2f * PI.toFloat() / 3f
+        val pc = Offset(cx + r * 0.52f * cos(pa), cy + r * 0.52f * sin(pa))
+        gearTeeth(pc, r * 0.16f, 14, 5.dp.toPx(), -esc * 3f + k * 0.5f, primary.copy(alpha = 0.24f * m), 1.7f, null)
+        jewel(pc, 3.5f, 1.8f, accent, m, 1f, 0.7f)
+    }
+    // 5. 左上摆轮：20 齿 + 图标座圈 + 游丝 + 星标（Folia 用主题 lucide 图标，缺省 Star）。
+    val bc = Offset(cx + r * 0.2f, cy - r * 0.75f)
+    val br = r * 0.28f
+    val bAngle = phase * 0.1f
+    gearTeeth(bc, br, 20, 7.dp.toPx(), bAngle, strong, 2.1f, accent.copy(alpha = 0.10f * m))
+    drawCircle(subtle, br * 0.52f, bc, style = Stroke(1.8.dp.toPx()))
+    hairspring(bc, br * 0.56f, br * 0.88f, 3.5f, PendoloMotion.bassOscillation(phase) * 0.6f + bAngle * 0.3f, accent.copy(alpha = 0.30f * m))
+    jewel(bc, 3.5f, 1.8f, accent, m, 1f, 0.7f)
+    star(bc, max(14.dp.toPx(), r * 0.13f) / 2f, accent.copy(alpha = 0.62f))
+    // 传动轮（左下）：24 齿 + 五辐 + 日内瓦条纹。
+    val tc = Offset(cx + r * 0.32f, cy + r * 0.78f)
+    val tr = r * 0.34f
+    val tAngle = -esc * 1.4f
+    gearTeeth(tc, tr, 24, 7.dp.toPx(), tAngle, primary.copy(alpha = 0.42f * m), 1.8f, null)
+    spokedWheel(tc, tr * 0.25f, tr * 0.85f, 5, tAngle, subtle, 1.5f)
+    translate(tc.x, tc.y) {
+        rotateRad(tAngle, pivot = Offset.Zero) {
+            val clip = Path().apply { addOval(androidx.compose.ui.geometry.Rect(Offset.Zero, tr * 0.8f)) }
+            androidx.compose.ui.graphics.drawscope.clipPath(clip) {
+                val span = tr * 1.6f
+                for (i in 1..9) {
+                    val y = -span * 0.5f + i * span / 10f
+                    drawLine(
+                        primary.copy(alpha = (if (i % 2 == 0) 0.10f else 0.06f) * m),
+                        Offset(-tr, y), Offset(tr, y), strokeWidth = 0.7.dp.toPx(),
+                    )
+                }
+            }
+        }
+    }
+    jewel(tc, 3.5f, 1.8f, accent, m, 1f, 0.7f)
+    // 秒轮：每播放一秒进一齿（15 齿）。
+    val sc = Offset(cx + r * 0.68f, cy + r * 0.76f)
+    val sr = r * 0.16f
+    gearTeeth(sc, sr, 15, 5.dp.toPx(), secondAngle, accent.copy(alpha = 0.58f * m), 1.8f, accent.copy(alpha = 0.06f * m))
+    spokedWheel(sc, sr * 0.28f, sr * 0.76f, 4, -secondAngle, subtle, 1.3f)
+    jewel(sc, 2.8f, 1.5f, accent, m, 0.8f, 0.6f)
+    // 惰轮（传动轮与秒轮之间）。
+    val ic = Offset((tc.x + sc.x) * 0.5f + r * 0.04f, (tc.y + sc.y) * 0.5f - r * 0.02f)
+    val ir = r * 0.08f
+    gearTeeth(ic, ir, 10, 3.5.dp.toPx(), esc * 2.2f, primary.copy(alpha = 0.28f * m), 1.3f, null)
+    drawCircle(primary.copy(alpha = 0.18f * m), ir * 0.45f, ic, style = Stroke(0.8.dp.toPx()))
+    jewel(ic, 2.2f, 1.2f, accent, m, 0.7f, 0.5f)
+    // 6. 焦点轴线 + 箭头（指向当前句）。
+    val axisEnd = ringR - max(14.dp.toPx(), r * 0.025f)
+    drawLine(strong, Offset(cx + r * 0.8f, cy), Offset(cx + axisEnd, cy), strokeWidth = 2.dp.toPx())
+    val ax = cx + axisEnd
+    drawPath(
+        Path().apply {
+            moveTo(ax, cy - 4.dp.toPx()); lineTo(ax + 8.dp.toPx(), cy); lineTo(ax, cy + 4.dp.toPx()); close()
+        },
+        strong,
+    )
+}
+
+/** pendoloClockworkMotion 无音频档：摆轮相位 2.8 rad/s 累积，摆幅 0.15；秒轮每秒一齿、弹簧追齿。 */
+internal object PendoloMotion {
+    fun phase(t: Double): Float = (t * 2.8).toFloat()
+    fun bassOscillation(phase: Float): Float = sin(phase) * 0.15f
+
+    /** 每整秒进一齿（2π/15）；齿间用欠阻尼弹簧（k=92、c=13）的阶跃响应近似。 */
+    fun secondGearAngle(t: Double): Float {
+        val stepAngle = 2f * PI.toFloat() / 15f
+        val whole = kotlin.math.floor(t).toFloat()
+        val dt = (t - kotlin.math.floor(t)).toFloat()
+        val w0 = kotlin.math.sqrt(92f)
+        val z = 13f / (2f * w0)
+        val wd = w0 * kotlin.math.sqrt((1f - z * z).coerceAtLeast(1e-4f))
+        val resp = 1f - kotlin.math.exp(-z * w0 * dt) * (cos(wd * dt) + z * w0 / wd * sin(wd * dt))
+        return (whole - 1f + resp) * stepAngle
+    }
+}
+
+private fun DrawScope.jewel(c: Offset, outerDp: Float, innerDp: Float, accent: Color, m: Float, ow: Float, iw: Float) {
+    drawCircle(accent.copy(alpha = 0.65f * m), outerDp.dp.toPx(), c, style = Stroke(ow.dp.toPx()))
+    drawCircle(accent.copy(alpha = 0.28f * m), innerDp.dp.toPx(), c, style = Stroke(iw.dp.toPx()))
+}
+
+private fun DrawScope.hairspring(c: Offset, startR: Float, endR: Float, coils: Float, rot: Float, color: Color) {
+    val steps = (coils * 60).toInt()
+    val total = coils * 2f * PI.toFloat()
+    val path = Path()
+    for (i in 0..steps) {
+        val t = i.toFloat() / steps
+        val a = t * total
+        val rr = startR + (endR - startR) * t.pow(0.9f)
+        if (i == 0) path.moveTo(rr * cos(a), rr * sin(a)) else path.lineTo(rr * cos(a), rr * sin(a))
+    }
+    translate(c.x, c.y) { rotateRad(rot, pivot = Offset.Zero) { drawPath(path, color, style = Stroke(0.8.dp.toPx())) } }
+}
+
+/** lucide Star 线稿（不随摆轮转）。 */
+private fun DrawScope.star(c: Offset, radius: Float, color: Color) {
+    val path = Path()
+    for (i in 0 until 10) {
+        val a = -PI.toFloat() / 2f + i * PI.toFloat() / 5f
+        val rr = if (i % 2 == 0) radius else radius * 0.45f
+        val x = c.x + rr * cos(a)
+        val y = c.y + rr * sin(a)
+        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    }
+    path.close()
+    drawPath(path, color, style = Stroke(1.2.dp.toPx(), join = androidx.compose.ui.graphics.StrokeJoin.Round))
 }
 
 private fun DrawScope.gearTeeth(
