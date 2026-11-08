@@ -207,7 +207,16 @@ class AppPreferences @Inject constructor(
             ?: DEFAULT_LYRIC_STYLE
         set(value) = prefs.edit().putString(KEY_LYRIC_STYLE, value).apply()
 
+    /**
+     * R2：歌词舞台背景类型（Folia `visualizerBackgroundMode`）。"latent" = 隐现（Folia 默认
+     * DEFAULT_VISUALIZER_BACKGROUND_MODE），"common" = 通用（流体 + 几何）。
+     */
+    var visualizerBackgroundId: String
+        get() = prefs.getString(KEY_VIS_BACKGROUND, "latent")?.takeIf { it == "latent" || it == "common" } ?: "latent"
+        set(value) = prefs.edit().putString(KEY_VIS_BACKGROUND, value).apply()
+
     private companion object {
+        const val KEY_VIS_BACKGROUND = "visualizer_background_mode"
         const val FILE = "guangyue_prefs"
         const val KEY_DARK = "ui_dark_mode"
         const val KEY_LAST_SOURCE = "search_last_source"

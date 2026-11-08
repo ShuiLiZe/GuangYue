@@ -63,6 +63,10 @@ fun SettingsScreen(
     lyricStyles: List<Pair<String, String>> = emptyList(),
     lyricStyle: String = "",
     onPickLyricStyle: (String) -> Unit = {},
+    /** R2：背景类型（id 到名字）；空列表不显示这一行。 */
+    backgrounds: List<Pair<String, String>> = emptyList(),
+    background: String = "",
+    onPickBackground: (String) -> Unit = {},
     /** 默认播放音质（wire 到名字）。 */
     playQualities: List<Pair<String, String>> = emptyList(),
     playQuality: String = "",
@@ -90,6 +94,10 @@ fun SettingsScreen(
                 below = {
                     FlowStyleChips(lyricStyles, lyricStyle, onPickLyricStyle)
                 }))
+        }
+        if (backgrounds.isNotEmpty()) {
+            add(SettingItem(SettingsPage.PLAYER, "背景", "背景类型", "歌词舞台的背景：隐现是封面色流体叠像素点阵（需 Android 13+），通用是流体加几何图形", icon(GuangYueIcons.Sparkles),
+                below = { FlowStyleChips(backgrounds, background, onPickBackground) }))
         }
         if (playQualities.isNotEmpty()) {
             add(SettingItem(SettingsPage.PLAYBACK, "音质", "默认播放音质", "新开始播放的歌按这一档取链；音源没有这一档时向下取", icon(GuangYueIcons.AudioLines),

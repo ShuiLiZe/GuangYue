@@ -582,6 +582,9 @@ fun GuangYueNavHost(
                         },
                     )
                 },
+                backgrounds = listOf("latent" to "隐现", "common" to "通用"),
+                background = styleVm.background.collectAsStateWithLifecycle().value,
+                onPickBackground = { styleVm.pickBackground(it) },
                 lyricStyle = style.id,
                 onPickLyricStyle = { id -> styleVm.pickStyle(com.guangyue.feature.player.lyrics.LyricStyle.fromId(id)) },
                 playQualities = com.guangyue.core.player.Quality.entries.sortedBy { it.order }.map { it.wire to it.label },
@@ -628,6 +631,7 @@ fun GuangYueNavHost(
             val lyricOffset by vm.offsetMs.collectAsStateWithLifecycle()
             // V1a：当前样式（流光 / 浮名），同一份 styleVm —— 播放页切好、这里直接生效。
             val style by styleVm.style.collectAsStateWithLifecycle()
+            val visBackground by styleVm.background.collectAsStateWithLifecycle()
             val lyricContext = LocalContext.current
             var styleSheetOpen by rememberSaveable { mutableStateOf(false) }
             // P1b：面板是舞台上的浮卡（Folia UnifiedPanel），不再整页跳 PLAYER。
@@ -688,6 +692,7 @@ fun GuangYueNavHost(
                     partitaTuning = partitaTuning,
                     tiltTuning = tiltTuning,
                     claddaghTuning = claddaghTuning,
+                    latentBackground = visBackground == "latent",
                 )
                 StagePanelHost(
                     open = panelOpen,

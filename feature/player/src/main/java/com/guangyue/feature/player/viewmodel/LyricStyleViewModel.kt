@@ -101,6 +101,15 @@ class LyricStyleViewModel @Inject constructor(
      * 与 [update] 同一套「先改内存、再 apply」的顺序，不做防抖 —— 样式是单选题，
      * 点一次写一次的量级可忽略。
      */
+    /** R2：背景类型（"latent" 隐现 / "common" 通用）。 */
+    private val _background = MutableStateFlow(preferences.visualizerBackgroundId)
+    val background: StateFlow<String> = _background.asStateFlow()
+
+    fun pickBackground(id: String) {
+        _background.value = id
+        viewModelScope.launch { preferences.visualizerBackgroundId = id }
+    }
+
     fun pickStyle(style: LyricStyle) {
         _style.value = style
         viewModelScope.launch { preferences.lyricStyleId = style.id }
