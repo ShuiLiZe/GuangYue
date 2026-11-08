@@ -362,6 +362,7 @@ internal object HostBridge {
   G.setImmediate = function (fn) { return G.setTimeout(fn, 0); };
   // M8：计时器按到期时间触发（异步 HTTP 之后插件的「超时竞速」要真等）。宿主没有异步 HTTP 时
   // （旧桥 / 测试桩）退回旧行为：一律立即触发。返回本次触发的个数。
+  G.__gy_resetTimers = function () { __timers = []; return 'ok'; };
   G.__gy_timersPending = function () {
     for (var i = 0; i < __timers.length; i++) if (!__timers[i].clear) return true;
     return false;
@@ -666,6 +667,7 @@ internal object HostBridge {
   }
 
   var __httpWaiters = {};
+  G.__gy_resetHttp = function () { __httpWaiters = {}; return 'ok'; };
   // 取回已完成的请求并交给各自的 Promise；返回交付的个数。宿主协议：一次一条，"id\n<响应 JSON>"，空串表示没有。
   G.__gy_deliverHttp = function () {
     if (typeof G.__gy_http_take !== 'function') return 0;
