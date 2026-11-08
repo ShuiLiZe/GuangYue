@@ -793,3 +793,8 @@ BUILD SUCCESSFUL in 35s
 ## R1f/R1g 莫奈人像 + 横屏验收（2026-11-08 22:10）
 - R1f（ce84edd）：MonetPortraitImage.kt 对译 MonetPortraitImage.tsx + monetPortraitCrossfade.ts（Folia v0.7.25）：新封面先 Coil 预取解码，成功才叠层，900 ms easeInOut 淡入，顶层不透明后清底层，栈深上限 4；解码失败保留旧封面；无封面整栈淡出。automix 交接（handoffFrom/leaving、monetSongHandoff）广乐无混音交接，不移。MonetPortraitCrossfadeTest 3/0，MonetRailTest 5/0。
 - R1g：横屏对照 docs/port/baseline/compare/r1g-monet-compare.jpg（上 Folia p800、下广乐 land）。歌词列（上一句/当前/逐字高亮/译文/下一句）、右侧圆角人像卡 + 挂条、隐现点阵背景结构一致；底色差异来自取证曲封面取色。残差：广乐多了外壳返回键与进度条（外壳层，非莫奈本体）；当前句仍比 Folia 低约 10dp。R1 莫奈判通过。
+
+## B0 时计重做（2026-11-08 22:24）
+- 58838bd + c8d04d5：PendoloStage 整屏铺满（Folia VisualizerShell inset-0；原先让出顶栏/胶囊后横屏半径只剩约 67dp，上下句被挤出弧外）；歌词环 = R + 0.06·min(w,h)（lyricRadiusOffset）；钟芯补齐 Folia pendoloClockworkDraw2d subtle 档：中心宝石、3 颗行星轮、左上摆轮（20 齿 + 座圈 + 游丝 + Star 星标）、左下传动轮（24 齿 + 五辐 + 日内瓦条纹）、秒轮（每秒一齿，弹簧 k92/c13）、惰轮、焦点轴线 + 箭头。无音频档相位 2.8 rad/s、摆幅 0.15。
+- 测试：PendoloGeometryTest 3/0、PendoloMotionTest 3/0。
+- 对照 docs/port/baseline/compare/r2-pendolo-compare.jpg：大齿轮占满左缘、上句「风吹过」与下句「光落在晨雾里」沿轮缘出现、当前句位置一致。残差：字体（广乐 Serif，Folia 主题无衬线 400）；顶栏/进度胶囊叠在上句与下句上（Folia 播放时外壳会自动隐藏）。
