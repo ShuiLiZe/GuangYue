@@ -789,3 +789,7 @@ BUILD SUCCESSFUL in 35s
 - 修法：新增 `__gy_tick`，Kotlin 顶层逐拍 evaluate；job 由 quickjs-kt 在每次 evaluate 返回前于顶层推空（1.0.15 `awaitEvaluateResult`），JS 只交付 HTTP 响应与到期计时器。close 里不再推 job，只清 Promise/计时器/回调引用（同时修掉 JVM 上 releaseRuntime 的 native 崩溃，咪咕榜单）。
 - 插件更新或换来源后清空旧体检结论（之前一直挂着 0.0.8 基线的「取不到链」）。
 - 模拟器实测（App 内体检，搜「周杰伦」→ 取链）：酷狗/咪咕/酷我/QQ/汽水/网易云 全部 health=ok（4–13 s）。JVM：六平台搜索+取链、歌单、榜单均通；酷我推荐歌单首个歌单酷我官方接口返回空列表（上游）。
+
+## R1f/R1g 莫奈人像 + 横屏验收（2026-11-08 22:10）
+- R1f（ce84edd）：MonetPortraitImage.kt 对译 MonetPortraitImage.tsx + monetPortraitCrossfade.ts（Folia v0.7.25）：新封面先 Coil 预取解码，成功才叠层，900 ms easeInOut 淡入，顶层不透明后清底层，栈深上限 4；解码失败保留旧封面；无封面整栈淡出。automix 交接（handoffFrom/leaving、monetSongHandoff）广乐无混音交接，不移。MonetPortraitCrossfadeTest 3/0，MonetRailTest 5/0。
+- R1g：横屏对照 docs/port/baseline/compare/r1g-monet-compare.jpg（上 Folia p800、下广乐 land）。歌词列（上一句/当前/逐字高亮/译文/下一句）、右侧圆角人像卡 + 挂条、隐现点阵背景结构一致；底色差异来自取证曲封面取色。残差：广乐多了外壳返回键与进度条（外壳层，非莫奈本体）；当前句仍比 Folia 低约 10dp。R1 莫奈判通过。
