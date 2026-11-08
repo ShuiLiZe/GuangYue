@@ -338,6 +338,8 @@
     <string name="lyrics_style_hanabi">花火</string>
     <!-- zh-CN.ts ui.visualizerTempera -->
     <string name="lyrics_style_tempera">凝彩</string>
+    <!-- zh-CN.ts ui.visualizerLumiere -->
+    <string name="lyrics_style_lumiere">绘光</string>
     <!-- zh-CN.ts ui.visualizerTilt / options.tilt* -->
     <string name="lyrics_style_tilt">倾诉</string>
     <!-- zh-CN.ts ui.visualizerCladdagh / options.claddagh* -->

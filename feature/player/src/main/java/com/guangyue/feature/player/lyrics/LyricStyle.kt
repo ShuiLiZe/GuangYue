@@ -53,6 +53,8 @@ enum class LyricStyle(val id: String) {
     HANABI("hanabi"),
     /** 「凝彩」：Folia tempera（P8：网点图形 MG，纸 / 墨 / 强调色六族构图、slice 切镜与无字 bridge、hero 词放大、七种逐词入场与浮影、Difference 反色、超大水印、纵向推镜交接；手机不做 Pixi runtime / 121 种镜头 / 后处理）。无参数。 */
     TEMPERA("tempera"),
+    /** 「绘光」：Folia lumiere（P9：暗场里十族光位——天光 / 窗隙 / 棱镜 / 焦散 / 光路 / 衍射 / 叶脉 / 星象 / 追光 / 萤尘——按镜头轮换、交叉淡化，段首星空点亮；字在文字区横排或竖排，唱到点亮带光晕与十字爆闪，换句崩解上漂；手机不做 Pixi runtime / 100 种光位 / bloom）。无参数。 */
+    LUMIERE("lumiere"),
     ;
 
     companion object {

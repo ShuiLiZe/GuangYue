@@ -197,7 +197,7 @@ fun LyricFlowScreen(
         resolveSubtitleOverlayContent(
             activeLine = activeLine,
             nextLines = kernelLines.drop(currentIndex.coerceAtLeast(0) + 1),
-            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET && lyricStyle != LyricStyle.PENDOLO && lyricStyle != LyricStyle.NEBBIA && lyricStyle != LyricStyle.SONNET && lyricStyle != LyricStyle.HANABI && lyricStyle != LyricStyle.TEMPERA,
+            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET && lyricStyle != LyricStyle.PENDOLO && lyricStyle != LyricStyle.NEBBIA && lyricStyle != LyricStyle.SONNET && lyricStyle != LyricStyle.HANABI && lyricStyle != LyricStyle.TEMPERA && lyricStyle != LyricStyle.LUMIERE,
         )
     }
 
@@ -414,6 +414,20 @@ fun LyricFlowScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        // P9 绘光：整屏暗场 + 光位，字排在让开顶栏与底部胶囊的文字区里。
+        if (lyricStyle == LyricStyle.LUMIERE && kernelLines.isNotEmpty() && emptyKind == null) {
+            com.guangyue.feature.player.lyrics.visualizer.LumiereStage(
+                lines = kernelLines,
+                clock = clock,
+                lyricsFontScale = lyricsFontScale,
+                accentColor = lyricAccent,
+                fontFamily = GuangYueDesign.Serif,
+                reduceMotion = reduceMotion,
+                topReserve = 136.dp,
+                bottomReserve = 128.dp,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         // P8 凝彩：整屏纸面 + 构图色块，字排在让开顶栏与底部胶囊的区域里，文字 Difference 反色。
         if (lyricStyle == LyricStyle.TEMPERA && kernelLines.isNotEmpty() && emptyKind == null) {
             com.guangyue.feature.player.lyrics.visualizer.TemperaStage(
@@ -581,7 +595,7 @@ fun LyricFlowScreen(
                         failure = failure,
                         onRetry = null,
                     )
-                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL || lyricStyle == LyricStyle.CLADDAGH || lyricStyle == LyricStyle.MONET || lyricStyle == LyricStyle.PENDOLO || lyricStyle == LyricStyle.NEBBIA || lyricStyle == LyricStyle.SONNET || lyricStyle == LyricStyle.HANABI || lyricStyle == LyricStyle.TEMPERA) && kernelLines.isNotEmpty()) {
+                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL || lyricStyle == LyricStyle.CLADDAGH || lyricStyle == LyricStyle.MONET || lyricStyle == LyricStyle.PENDOLO || lyricStyle == LyricStyle.NEBBIA || lyricStyle == LyricStyle.SONNET || lyricStyle == LyricStyle.HANABI || lyricStyle == LyricStyle.TEMPERA || lyricStyle == LyricStyle.LUMIERE) && kernelLines.isNotEmpty()) {
                     // 浮名：画布已经铺在整屏那一层（本函数开头），舞台 Box 里留空，
                     // 只保留顶栏 / 字幕层 / 播放条这些「浮在画布上」的层。
                 } else if (lyricStyle == LyricStyle.TILT && activeLine != null && activeLine.hasVisibleWords()) {
