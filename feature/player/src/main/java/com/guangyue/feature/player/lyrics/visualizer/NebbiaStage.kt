@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -407,17 +408,18 @@ private val maskToAlpha = ColorMatrixColorFilter(
     ),
 )
 
-/** 水珠：透出清晰窗外的小圆，暗边，左上高光（光从左上照来，同 raindrop-fx compose 的 lightDir）。 */
+/**
+ * 水珠（compose.glsl 的透镜）：里面是清晰的窗外，但不暗于雾的 0.55 倍（车厢灯照在水珠表面，max(lens, fog·0.55)），
+ * 边缘一圈折射的暗边，左上一点高光（lightDir (-1, 1, 2)、高光指数 48）。
+ */
 private fun DrawScope.drawDrop(x: Float, y: Float, rx: Float, ry: Float, a: Float, sharp: ShaderBrush?) {
     if (a <= 0.01f || rx < 0.5f) return
     val tl = Offset(x - rx, y - ry)
     val sz = Size(rx * 2, ry * 2)
-    if (sharp != null) drawOval(sharp, tl, sz, alpha = a)
-    drawOval(Color(0xFF0B1018).copy(alpha = 0.32f * a), tl, sz)
-    drawOval(Color(0xFF05070A).copy(alpha = 0.5f * a), tl, sz, style = Stroke(max(0.8f, rx * 0.22f)))
-    drawOval(Color(0xFFBCC6D2).copy(alpha = 0.22f * a), Offset(x - rx * 0.62f, y + ry * 0.05f), Size(rx * 1.24f, ry * 0.86f), style = Stroke(max(0.6f, rx * 0.1f)))
-    val hr = rx * 0.3f
-    drawCircle(Color.White.copy(alpha = 0.85f * a), hr, Offset(x - rx * 0.36f, y - ry * 0.4f))
+    drawOval(Color(0xFF3B3F47), tl, sz, alpha = a)
+    if (sharp != null) drawOval(sharp, tl, sz, alpha = a, blendMode = BlendMode.Lighten)
+    drawOval(Color(0xFF07090D).copy(alpha = 0.42f * a), tl, sz, style = Stroke(max(0.8f, rx * 0.24f)))
+    drawCircle(Color.White.copy(alpha = 0.8f * a), max(0.7f, rx * 0.2f), Offset(x - rx * 0.34f, y - ry * 0.38f))
 }
 
 @Composable
