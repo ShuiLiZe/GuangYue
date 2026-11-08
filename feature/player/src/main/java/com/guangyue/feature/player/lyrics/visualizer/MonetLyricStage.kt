@@ -353,7 +353,7 @@ private fun MonetRailBox(
                     val padBottom = max(lyricDp * 0.34f, 14f).dp
                     if (offset == 0) {
                         val text by remember(line, primaryColor) {
-                            derivedStateOf { monetActiveText(line, clock.seconds(), primaryColor) }
+                            derivedStateOf { monetActiveText(line, clock.seconds(), primaryColor, lyricPx * 0.46f) }
                         }
                         Text(text = text, style = textStyle, modifier = Modifier.onSizeChanged { mainHeights[i] = it.height }.padding(top = padTop, bottom = padBottom))
                     } else {
@@ -386,9 +386,17 @@ private fun MonetRailBox(
 }
 
 /** 当前句：已唱的词 primary@0.98，未唱 primary@0.34，正在唱的词按进度插值（MonetRailLine 的逐字填色）。 */
-internal fun monetActiveText(line: Line, nowS: Double, primary: Color): AnnotatedString {
+internal fun monetActiveText(line: Line, nowS: Double, primary: Color, glowRadiusPx: Float = 0f): AnnotatedString {
     val base = primary.copy(alpha = 0.34f)
     val lit = primary.copy(alpha = 0.98f)
+    // R1e：Folia MonetRailTokens 的 glow 层（text-shadow 0 0 0.28em, 0 0 0.65em，颜色 = 词色 @0.88，
+    // 透明度按 resolveMonetGlow 包络）。安卓 SpanStyle 只能挂一层 Shadow，取两层的中间半径；包络量化到 0.1。
+    fun glowStyle(ws: Double, we: Double): SpanStyle? {
+        if (glowRadiusPx <= 0f) return null
+        val g = (monetGlow(nowS, ws, we, line.endTime) * 10).toInt() / 10f
+        if (g <= 0f) return null
+        return SpanStyle(shadow = androidx.compose.ui.graphics.Shadow(primary.copy(alpha = 0.88f * g), androidx.compose.ui.geometry.Offset.Zero, glowRadiusPx))
+    }
     if (line.words.isEmpty()) {
         val p = MonetRail.wordFill(line.startTime, line.endTime, nowS)
         return AnnotatedString(line.fullText, SpanStyle(color = lerp(base, lit, p)))
@@ -407,10 +415,25 @@ internal fun monetActiveText(line: Line, nowS: Double, primary: Color): Annotate
             val p = MonetRail.wordFill(w.startTime, w.endTime, nowS)
             lastColor = lerp(base, lit, p)
             addStyle(SpanStyle(color = lastColor), at, at + t.length)
+            glowStyle(w.startTime, w.endTime)?.let { addStyle(it, at, at + t.length) }
             cursor = at + t.length
         }
         if (cursor < line.fullText.length) addStyle(SpanStyle(color = if (nowS >= line.endTime) lit else base), cursor, line.fullText.length)
     }
+}
+
+/** Folia monetLyricMotion.ts `resolveMonetGlow`：词起唱后 smoothstep 升到峰值（词长 ×1.18），再 smoothstep 衰减到句尾 / 词尾 +1.05s。 */
+internal fun monetGlow(time: Double, start: Double, end: Double, lineEnd: Double): Float {
+    if (time <= start) return 0f
+    val rise = max(0.001, end - start) * 1.18
+    val peak = start + rise
+    val tail = max(lineEnd, end + 1.05)
+    if (time <= peak) {
+        val p = ((time - start) / rise).coerceIn(0.0, 1.0)
+        return (p * p * (3 - 2 * p)).toFloat()
+    }
+    val r = 1 - ((time - peak) / max(0.18, tail - peak)).coerceIn(0.0, 1.0)
+    return (r * r * (3 - 2 * r)).toFloat()
 }
 
 private fun Modifier.clickableNoRippleMonet(onClick: () -> Unit): Modifier =

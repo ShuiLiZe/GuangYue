@@ -46,4 +46,13 @@ class MonetRailTest {
         val second = text.spanStyles.first { it.start == 6 }
         assertEquals(0.34f, second.item.color.alpha, 1e-2f)
     }
+
+    @Test
+    fun glowRisesThenFadesLikeFolia() {
+        // 词 1.0–2.0s，句尾 3.0s：峰值在 1 + 1.18 = 2.18s，尾巴到 max(3.0, 3.05) = 3.05s。
+        org.junit.Assert.assertEquals(0f, monetGlow(1.0, 1.0, 2.0, 3.0), 1e-6f)
+        org.junit.Assert.assertEquals(1f, monetGlow(2.18, 1.0, 2.0, 3.0), 1e-4f)
+        org.junit.Assert.assertEquals(0.5f, monetGlow(1.59, 1.0, 2.0, 3.0), 1e-3f)
+        org.junit.Assert.assertEquals(0f, monetGlow(3.05, 1.0, 2.0, 3.0), 1e-6f)
+    }
 }
