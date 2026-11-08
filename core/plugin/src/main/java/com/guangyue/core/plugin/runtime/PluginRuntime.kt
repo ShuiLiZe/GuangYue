@@ -641,13 +641,19 @@ class PluginRuntime(
      */
     private fun drivePending(runtime: QuickJs): String {
         val deadline = System.nanoTime() + PENDING_BUDGET_NANOS
+        // M8：改为顶层逐拍驱动（__gy_tick）。每次 evaluate 返回前 quickjs-kt 自己在顶层把 job
+        // 队列推空；JS 侧只交付 HTTP 响应、触发到期计时器。真机上旧的 __gy_pump 在 binding 回调里
+        // 嵌套 executePendingJob，job 一调 axios 就卡死在运行时锁（模拟器 debuggerd 实测）。
+        var idle = 0
         while (System.nanoTime() < deadline) {
-            val state = runCatching {
-                read(runtime, "__gy_pump(1200)", "pump.js")
-            }.getOrNull() ?: break
+            val state = read(runtime, "__gy_tick()", "tick.js")
             val obj = Json2.parse(state).asObj() ?: break
             val result = obj["result"].asStr()
             if (obj["pending"].asBool() != true && result != null) return result
+            val moved = (obj["moved"].asLong() ?: 0L) > 0L
+            if (moved) { idle = 0; continue }
+            if (obj["waiting"].asBool() != true && ++idle > 3) break
+            Thread.sleep(5)
         }
         throw PluginRuntimeException(
             "插件返回的异步结果没结算（超过 ${PENDING_BUDGET_NANOS / 1_000_000_000}s）"

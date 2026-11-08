@@ -917,6 +917,20 @@ internal object HostBridge {
   // 每次推进都走 `__gy_drainOneJob` —— 那是 Kotlin 注入的 host 函数，内部在 binding 回调里
   // 调 `JS_ExecutePendingJob`（只有这个上下文才能安全推进，直接调会卡死运行时锁）。
   // 到时限或结算就返回，把控制权交回 Kotlin，由 Kotlin 检查总预算。
+  // M8：顶层驱动的一拍。只交付已完成的 HTTP、触发到期计时器，**不**在这里推 job 队列 ——
+  // job 由 quickjs-kt 在这次 evaluate 返回前于顶层推空（awaitEvaluateResult），job 里再调宿主
+  // 函数（axios）也不会像 binding 回调里嵌套 executePendingJob 那样卡死在运行时锁上。
+  G.__gy_tick = function () {
+    var st = G.__gy_pending;
+    if (!st || st.done) return G.__gy_poll();
+    var moved = 0;
+    if (typeof G.__gy_deliverHttp === 'function') { try { moved += G.__gy_deliverHttp(); } catch (e) { /* ignore */ } }
+    if (typeof G.__gy_flushTimers === 'function') { try { moved += (G.__gy_flushTimers() || 0); } catch (e) { /* ignore */ } }
+    var waiting = (typeof G.__gy_httpPending === 'function' && G.__gy_httpPending()) ||
+                  (typeof G.__gy_timersPending === 'function' && G.__gy_timersPending());
+    return { pending: true, moved: moved, waiting: !!waiting };
+  };
+
   G.__gy_pump = function (ms) {
     var started = (typeof Date !== 'undefined' && Date.now) ? Date.now() : 0;
     var advanced = 0;
