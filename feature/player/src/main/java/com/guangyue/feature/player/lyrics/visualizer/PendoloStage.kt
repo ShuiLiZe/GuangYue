@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotateRad
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -354,7 +355,7 @@ private fun DrawScope.drawPendoloClockwork(
     translate(tc.x, tc.y) {
         rotateRad(tAngle, pivot = Offset.Zero) {
             val clip = Path().apply { addOval(androidx.compose.ui.geometry.Rect(Offset.Zero, tr * 0.8f)) }
-            androidx.compose.ui.graphics.drawscope.clipPath(clip) {
+            clipPath(clip) {
                 val span = tr * 1.6f
                 for (i in 1..9) {
                     val y = -span * 0.5f + i * span / 10f
