@@ -758,3 +758,13 @@ BUILD SUCCESSFUL in 35s
 - 文字：文字区让开顶栏与底部胶囊；未唱的字暗（26%），唱到时点亮并带一圈先放大再收拢的光晕，天光 / 棱镜 / 星象 / 追光加十字爆闪；镜头结束后逐字错开上漂、散开、淡出（崩解）；每行取前几个字放大 3.2 倍做背景碎片。只用普通混合，不回读。
 - 不做：Pixi runtime、100 种光位、bloom、粒子着色器、线稿库、片尾卡、设置面板。浅色模式仍是暗场（绘光本身是暗场样式）。
 - 单测 `LumiereProgramTest`（3 例：镜头铺满时间轴且每行恰进一镜、前奏 / 长空隙出间奏且光位不重复、按时间查镜头与行）；实拍 `docs/ui-v0/p9-lumiere.jpg`（4.8 秒窗隙光 + 竖排两行；9.3 秒追光 + 横排、上一镜崩解中；7 秒浅色模式）。
+
+## R2 Folia 默认背景「隐现」（latent）
+
+- 发现：B0 横屏对照里 Folia 所有样式背后的点阵 + 流体并不是莫奈自带，而是 Folia 的默认壳层背景「隐现」（`types/visualizerModes.ts` `DEFAULT_VISUALIZER_BACKGROUND_MODE = 'latent'`）。我们之前一直画的是「通用」（流体 + 几何），所以七种样式的对照底图都不对。
+- 对译：`backgrounds/latent/LatentBackground.tsx` + `DEFAULT_LATENT_BACKGROUND_TUNING`；着色器取 `@paper-design/shaders` 0.0.80（与 `_folia-src` node_modules 同版）的 `mesh-gradient.js`、`dithering.js`、`vertex-shader.js`，GLSL 逐行改写成 AGSL（`RuntimeShader`，API 33+）。层次：底色 → MeshGradient（六色：封面 0–3 + 底色 + 强调，distortion 0.8、swirl 0.1、speed 0.3，scale 1.025，saturate 1.04 / brightness 0.94）→ Dithering（warp、4×4 Bayer、像素 2.5、paper 默认 scale 0.6、前景封面主色 / 背景底色、speed 0.1，soft-light 0.55，scale 1.015）→ 底色 overlay 0.35。paper 画布像素比按 dp 面积封顶 1280×720，同 Folia。
+- 取色：`colorPalette.ts extractRepresentativeColorsFromPixels`（50×50、4bit 量化直方图、加权中位切分、按像素量排序）原样对译，取 6 色。
+- 手机化：无音频频段 → 音频驱动项取静音值；暂停速度 ×0.12、按 300ms 时间常数过渡（同 Folia PAUSE_EASE_MS）；减少动态时静止；API < 33 与 Robolectric 回落「通用」。换歌换色 1000ms。
+- 设置：「我的 → 设置 → 播放器 → 背景类型」隐现 / 通用（Folia「背景类型」文案），默认隐现，存 `visualizer_background_mode`。
+- 实拍：`docs/port/baseline/compare/r2-latent-monet-compare.jpg`（上 Folia、下广乐，同一时刻 37.5 秒横屏）、`r2-latent-classic-land.jpg`。点阵的流向带、像素尺寸、流体层次已和 Folia 一致；颜色差是取证页封面（#B4553C）与 Folia 探针默认灰主题不同。
+- 单测 `LatentColorsTest`（2 例：无封面回落主题色、封面色排在网格前四位）。
