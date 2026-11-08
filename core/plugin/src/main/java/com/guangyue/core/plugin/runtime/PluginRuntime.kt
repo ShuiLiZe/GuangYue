@@ -114,7 +114,7 @@ class PluginRuntime(
             }
             // M8：异步并发 HTTP。start 立即返回编号，请求在宿主线程池里跑；
             // take 一次取回一条已完成的 "id\n<响应 JSON>"；idle 在等待时让出几毫秒。
-            runtime.function("__gy_http_start") { args ->
+            if (asyncHttpEnabled) runtime.function("__gy_http_start") { args ->
                 val payload = args.getOrNull(0)?.let(::asBridgeText) ?: "{}"
                 val id = httpSeq.incrementAndGet()
                 httpPool.execute {
@@ -775,6 +775,9 @@ class PluginRuntime(
          * 30s 只放宽预算，不改语义；真挂死的插件仍然会被中断。
          */
         const val CALL_TIMEOUT_MS = 30_000L
+
+        /** M8：异步并发 HTTP 开关（排查用；关掉退回旧的同步串行桥）。 */
+        @JvmStatic var asyncHttpEnabled: Boolean = System.getenv("GUANGYUE_SYNC_HTTP") != "true"
         private const val RANGE_PROBE_BYTES = 65_536L
         /** QuickJS heap cap: 48 MiB is generous for cheerio+html parsing, still bounded. */
         const val MEMORY_LIMIT_BYTES = 48L * 1024 * 1024
