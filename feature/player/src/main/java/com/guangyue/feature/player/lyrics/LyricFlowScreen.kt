@@ -373,6 +373,19 @@ fun LyricFlowScreen(
         }
         // P3 莫奈：海报版面一层（歌手 / 竖线 / 大标题 / 专辑 / 歌词轨），让出顶栏与底部胶囊。
         if (lyricStyle == LyricStyle.MONET && kernelLines.isNotEmpty() && emptyKind == null) {
+            val monetConf = LocalConfiguration.current
+            val monetLandscape = monetConf.screenWidthDp > monetConf.screenHeightDp
+            // R1b：横屏即沉浸（Folia 桌面整窗无系统栏），隐藏状态栏 / 导航栏，离开时还原。
+            val monetView = androidx.compose.ui.platform.LocalView.current
+            androidx.compose.runtime.DisposableEffect(monetLandscape) {
+                val w = (monetView.context as? android.app.Activity)?.window
+                val c = w?.let { androidx.core.view.WindowCompat.getInsetsController(it, monetView) }
+                if (monetLandscape && c != null) {
+                    c.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    c.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                }
+                onDispose { if (monetLandscape) c?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
+            }
             com.guangyue.feature.player.lyrics.visualizer.MonetLyricStage(
                 lines = kernelLines,
                 currentIndex = currentIndex,
@@ -384,12 +397,15 @@ fun LyricFlowScreen(
                 primaryColor = onBackdrop,
                 secondaryColor = theme.secondary,
                 backgroundColor = theme.background,
-                fontFamily = GuangYueDesign.Serif,
-                topReserve = 64.dp,
-                bottomReserve = 104.dp,
+                fontFamily = FontFamily.SansSerif, // Folia DEFAULT_THEME 为无衬线
+                // R1b：横屏照 Folia 整屏排（不让顶栏与胶囊，矮屏上下溢出被裁）；竖屏保留适配版式。
+                topReserve = if (monetLandscape) 0.dp else 64.dp,
+                bottomReserve = if (monetLandscape) 0.dp else 104.dp,
+                coverUrl = coverUrl,
+                accentColor = lyricAccent,
                 reduceMotion = reduceMotion,
                 onSeekToLine = onSeekToLine,
-                modifier = Modifier.windowInsetsPadding(
+                modifier = if (monetLandscape) Modifier else Modifier.windowInsetsPadding(
                     WindowInsets.statusBars
                         .union(WindowInsets.displayCutout)
                         .union(WindowInsets.navigationBars),
