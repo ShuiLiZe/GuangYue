@@ -52,7 +52,7 @@ object FumeCamera {
         val availableWidth = viewport.width - FOCUS_SAFE_INSET_DP * 2.0
         if (availableWidth <= 0.0) return null
         val screenLineWidth = line.width * cameraScaleForBlock(block, viewport)
-        if (screenLineWidth > availableWidth) return null
+        if (screenLineWidth > availableWidth + 1e-6) return null
         return FumeCameraViewTarget(
             x = block.x + line.left + line.width * 0.5,
             y = block.y + line.top + block.lineHeight * 0.5,
@@ -184,8 +184,20 @@ object FumeCamera {
         val minTargetLineHeight =
             if (minViewportSide < PHONE_MIN_SIDE_DP) PHONE_MIN_TARGET_LINE_HEIGHT else 64.0
         val targetLineHeight = FumeMath.clamp(minViewportSide * 0.115, minTargetLineHeight, 124.0)
-        return FumeMath.clamp(targetLineHeight / maxOf(block.lineHeight, 1.0), 0.88, 2.2)
+        val scale = FumeMath.clamp(targetLineHeight / maxOf(block.lineHeight, 1.0), 0.88, 2.2)
+        if (minViewportSide >= PHONE_MIN_SIDE_DP) return scale
+        // 2026-11-08 手机：镜头放大不得让这一块最宽的行超出「视口宽 − 两侧 24dp」，
+        // 整句始终完整在屏内（用户反馈 2.2 倍上限下一行只放 6 字、句首被切）。
+        val widest = block.renderLines.maxOfOrNull { it.width } ?: return scale
+        if (widest <= 0.0) return scale
+        val available = viewport.width - FOCUS_SAFE_INSET_DP * 2.0
+        if (available <= 0.0) return scale
+        val fit = maxOf(available / widest, PHONE_MIN_FIT_SCALE)
+        return minOf(scale, fit)
     }
+
+    /** 手机整句入屏时镜头最小倍率（再小字就看不清了，宁可跟字）。 */
+    private const val PHONE_MIN_FIT_SCALE = 0.5
 
     /** 对应 resolveCameraRetargetDuration：按行的过渡模式决定对焦快慢。 */
     fun cameraRetargetDuration(line: Line): Double {

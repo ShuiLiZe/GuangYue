@@ -161,7 +161,8 @@ internal fun FumeBulletinStage(
             // 单栏整屏高、横向溢出。这里按舞台宽高比选列数：竖长舞台最多 2 栏，屏宽 ≥360 时才允许 2 栏。
             val aspect = if (viewport.height > 0) viewport.width / viewport.height else 1.0
             val maxColumns = when {
-                viewport.width < 360.0 -> 1
+                // 2026-11-08：竖屏手机纸宽 = 屏宽 − 48dp（paperWidthFor），只排一栏。
+                viewport.width < FumeArticleLayoutBuilder.PHONE_PAPER_MAX_VIEWPORT -> 1
                 aspect >= 1.2 -> FumeArticleLayoutBuilder.maxColumnsFor(viewport.width * 1.95)
                 aspect >= 0.62 -> 2
                 else -> 1

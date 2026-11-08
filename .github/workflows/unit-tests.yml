@@ -1,0 +1,44 @@
+name: 🧪 单测
+
+# 开发分支 port/u2 每次推送跑纯 JVM 歌词内核单测（不打包、不发版）。
+on:
+  push:
+    branches: [port/u2]
+  workflow_dispatch:
+
+concurrency:
+  group: unit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: core:lyrics 单测 + 编译 debug
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x ./gradlew && echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+      - name: core:lyrics 单测
+        run: ./gradlew :core:lyrics:test --no-daemon --stacktrace
+      - name: 编译 debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+      - name: 上传 debug APK
+        if: success()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: GuangYue-debug-${{ github.sha }}
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+      - name: 上传测试报告
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report-${{ github.sha }}
+          path: '**/build/reports/tests/**'
+          retention-days: 7

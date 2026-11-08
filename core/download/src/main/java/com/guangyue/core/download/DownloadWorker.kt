@@ -38,6 +38,8 @@ class DownloadWorker @AssistedInject constructor(
     private val store: DownloadStore,
     private val bridge: MusicPluginBridge,
     @com.guangyue.core.plugin.di.DownloadHttp private val okHttp: OkHttpClient,
+    private val lx: com.guangyue.core.plugin.lx.LxSourceManager,
+    private val prefs: com.guangyue.core.prefs.AppPreferences,
 ) : CoroutineWorker(context, params) {
 
     private val meter = BandwidthMeter()
@@ -179,23 +181,52 @@ class DownloadWorker @AssistedInject constructor(
 
     private suspend fun resolveSource(request: DownloadRequest): Source {
         // 插件直链有有效期，重试时必须重新解析
-        val raw: JsonObject? = request.rawJson?.let { Json2.parse(it) as? JsonObject }
-        if (raw != null) {
-            val item = MusicItem.from(raw, request.pluginId)
+        val raw: JsonObject? = request.rawJson?.let { runCatching { Json2.parse(it) as? JsonObject }.getOrNull() }
+        val item = raw?.let { MusicItem.from(it, request.pluginId) } ?: fallbackItem(request)
+        if (raw != null || item != null) {
             val fresh = runCatching {
-                bridge.getMediaSource(
-                    pluginId = request.pluginId,
-                    musicItemRaw = raw,
-                    item = item,
-                    quality = request.quality,
-                )
-            }.getOrNull()
-            if (fresh != null) return Source(fresh.url, fresh.mimeType, fresh.headers)
+                kotlinx.coroutines.withTimeoutOrNull(PLUGIN_BUDGET_MS) {
+                    bridge.getMediaSource(
+                        pluginId = request.pluginId,
+                        musicItemRaw = raw,
+                        item = item,
+                        quality = request.quality,
+                    )
+                }
+            }.onFailure { android.util.Log.w(LOG_TAG, "plugin getMediaSource threw for ${request.key}: ${it.message}") }
+                .getOrNull()
+            if (fresh != null && fresh.url.isNotBlank()) return Source(fresh.url, fresh.mimeType, fresh.headers)
+            android.util.Log.w(LOG_TAG, "plugin gave no url for ${request.key}, trying lx sources")
+        }
+
+        // 2026-11-08 修「不能下载」：播放链路在插件取不到链时会问洛雪取链源，下载以前不会，
+        // 于是能播的歌下载却报「无法解析下载地址」。这里补上同一个兜底。
+        if (item != null) {
+            val lxUrl = runCatching {
+                lx.resolveMediaUrl(item, request.quality, prefs.lxDefaultQuality)
+            }.onFailure { android.util.Log.w(LOG_TAG, "lx fallback threw for ${request.key}: ${it.message}") }
+                .getOrNull()
+            if (!lxUrl.isNullOrBlank()) return Source(lxUrl, null, emptyMap())
         }
 
         val fallback = request.directUrl
         if (!fallback.isNullOrBlank()) return Source(fallback, null, request.headers)
-        throw HttpRange.PermanentException("无法解析下载地址，请稍后重试")
+        throw HttpRange.PermanentException("这首歌当前音源和取链源都取不到下载地址，换个音源再试")
+    }
+
+    /** 没有 rawJson 时（播放队列里直连开播的曲目）用 `platform:id` 拼一个最小 MusicItem。 */
+    private fun fallbackItem(request: DownloadRequest): MusicItem? {
+        val parts = request.key.split(":", limit = 2)
+        if (parts.size != 2 || parts[1].isBlank()) return null
+        return MusicItem(
+            platform = parts[0].ifBlank { request.pluginId },
+            id = parts[1],
+            title = request.title,
+            artist = request.artist,
+            album = request.album,
+            artwork = request.artwork,
+            durationMs = request.durationMs.takeIf { it > 0L },
+        )
     }
 
     /** @return true 表示至少拿到了完整数据 */
@@ -298,6 +329,9 @@ class DownloadWorker @AssistedInject constructor(
         const val KEY_TOTAL = "bytes_total"
         const val MAX_ATTEMPTS = 3
         const val USER_AGENT = "GuangYue/1.0 (Android)"
+        private const val LOG_TAG = "GYDOWNLOAD"
+        /** 插件取链预算，超时就落到洛雪取链源。 */
+        private const val PLUGIN_BUDGET_MS = 25_000L
 
         fun decode(json: String): DownloadRequest? =
             runCatching { kotlinx.serialization.json.Json.decodeFromString<DownloadRequest>(json) }.getOrNull()

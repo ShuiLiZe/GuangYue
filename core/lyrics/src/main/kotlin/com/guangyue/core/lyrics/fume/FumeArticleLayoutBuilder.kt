@@ -26,9 +26,25 @@ object FumeArticleLayoutBuilder {
     /** 对应 LAYOUT_REBUILD_DEBOUNCE_MS：重排前的去抖时长（ms）。 */
     const val LAYOUT_REBUILD_DEBOUNCE_MS = 96
 
-    /** 对应 Folia fumeArticleLayout.ts 行 499：文章纸面宽度。 */
+    /**
+     * 对应 Folia fumeArticleLayout.ts 行 499：文章纸面宽度。
+     *
+     * 手机化（2026-11-08，修「浮名太大、句首被切、一行只放 6 字」）：Folia 的纸宽下限 920 是桌面口径，
+     * 竖屏手机（宽 < 600dp）上一句会排成 900 多 dp 的单行，镜头再放大 1.3–2.2 倍，屏上只剩 6~7 个字，
+     * 句首被推出屏外。手机竖屏改为纸宽 = 视口宽 − 两侧 24dp 安全区，让句子在屏宽内折行。
+     */
     fun paperWidthFor(viewportWidth: Double): Double =
-        FumeMath.clamp(maxOf(viewportWidth * 1.95, viewportWidth + 520.0), 920.0, 2400.0)
+        if (viewportWidth < PHONE_PAPER_MAX_VIEWPORT) {
+            maxOf(viewportWidth - FumeCamera.FOCUS_SAFE_INSET_DP * 2.0, PHONE_PAPER_MIN)
+        } else {
+            FumeMath.clamp(maxOf(viewportWidth * 1.95, viewportWidth + 520.0), 920.0, 2400.0)
+        }
+
+    /** 视口宽小于它按手机竖屏排纸。 */
+    const val PHONE_PAPER_MAX_VIEWPORT = 600.0
+
+    /** 手机纸宽下限。 */
+    const val PHONE_PAPER_MIN = 240.0
 
     /** 对应 Folia 行 501：纸够宽就多排几列。 */
     fun maxColumnsFor(paperWidth: Double): Int = when {

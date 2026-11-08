@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -596,6 +597,9 @@ fun LyricFlowScreen(
                         )
                     }
                 }
+                // 2026-11-08 横竖屏切换键：系统「自动旋转」关着也能横过来（用户反馈横屏感应不到）。
+                StageRotateKey(tint = onBackdrop)
+                Spacer(Modifier.width(GySpace.s))
                 // 样式入口：与 U5 原页面同款 48dp 触控。
                 val styleLabelText = styleLabel.ifEmpty { str(strings.title) }
                 if (onOpenStyleSheet != null) {
@@ -1049,3 +1053,58 @@ internal fun formatTime(ms: Long): String {
 /** 取文案：外壳注入的 [LyricStrings] 只带资源 id，这里统一翻成字符串。 */
 @Composable
 private fun str(id: Int): String = LyricStringHost.current(id)
+
+
+/**
+ * 2026-11-08：舞台顶栏的横竖屏切换键。
+ *
+ * 点一下：竖屏 → 强制横屏（SENSOR_LANDSCAPE，跟重力在左右横屏间翻，不看系统「自动旋转」开关）；
+ * 横屏 → 强制竖屏。离开舞台时恢复跟随系统（UNSPECIFIED）；旋转本身会重建 Activity，
+ * 那时 isChangingConfigurations 为 true，不复位。
+ */
+@Composable
+internal fun StageRotateKey(tint: androidx.compose.ui.graphics.Color) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = remember(context) { context.findActivity() }
+    val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+        android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    if (activity != null) {
+        androidx.compose.runtime.DisposableEffect(activity) {
+            onDispose {
+                if (!activity.isChangingConfigurations) {
+                    activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                }
+            }
+        }
+    }
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(tint.copy(alpha = 0.12f))
+            .clickableNoRipple {
+                activity?.requestedOrientation = if (landscape) {
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                } else {
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                }
+            }
+            .semantics { contentDescription = if (landscape) "切换竖屏" else "切换横屏" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            GuangYueIcons.Smartphone,
+            null,
+            tint = tint,
+            modifier = Modifier
+                .size(20.dp)
+                .rotate(if (landscape) 0f else 90f),
+        )
+    }
+}
+
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
+}

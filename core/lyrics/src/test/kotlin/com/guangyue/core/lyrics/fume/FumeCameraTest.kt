@@ -97,7 +97,7 @@ class FumeCameraTest {
     /** 平板/桌面视口：短边 720dp ≥ 600dp，走 Folia 原口径。 */
     private val tablet = FumeViewport(720.0, 1600.0)
 
-    /** 手机尺寸的一条长句行：行宽 900 >> 视口安全区，只能跟字。 */
+    /** 一条长句行：行宽 900，在 720dp 平板视口（scale 2.2）里也放不下，只能跟字。 */
     private fun phoneLongLine() = renderLine(0, 12, left = 0.0, width = 900.0, step = 75.0)
 
     @Test
@@ -114,8 +114,8 @@ class FumeCameraTest {
         // 长句（行宽 900 放不下）才真的按已打印字数跟字，且焦点取「字心」：
         // 行左缘 100 + baseWidth(0 个字素=0) + advance×0.5 = 137.5；4 个字素 → 100+300+37.5。
         val long = block(renderLines = listOf(phoneLongLine()))
-        assertEquals(137.5, FumeCamera.steppedBlockFocusPoint(long, 0, phone).x, 1e-6)
-        assertEquals(437.5, FumeCamera.steppedBlockFocusPoint(long, 4, phone).x, 1e-6)
+        assertEquals(137.5, FumeCamera.steppedBlockFocusPoint(long, 0, tablet).x, 1e-6)
+        assertEquals(437.5, FumeCamera.steppedBlockFocusPoint(long, 4, tablet).x, 1e-6)
     }
 
     @Test
@@ -127,8 +127,8 @@ class FumeCameraTest {
         // 长句（放不下）才连续跟字：进度 2.0 → 第 2 个字素左缘 150 + 半个字宽 37.5；
         // 1.5 → 第 1 个字素左缘 75 + 半个字宽 37.5 + 0.5 个推进 37.5 = 150。
         val long = block(renderLines = listOf(phoneLongLine()))
-        assertEquals(100.0 + 150.0 + 37.5, FumeCamera.smoothBlockFocusPoint(long, 2.0, phone).x, 1e-6)
-        assertEquals(100.0 + 75.0 + 37.5 + 37.5, FumeCamera.smoothBlockFocusPoint(long, 1.5, phone).x, 1e-6)
+        assertEquals(100.0 + 150.0 + 37.5, FumeCamera.smoothBlockFocusPoint(long, 2.0, tablet).x, 1e-6)
+        assertEquals(100.0 + 75.0 + 37.5 + 37.5, FumeCamera.smoothBlockFocusPoint(long, 1.5, tablet).x, 1e-6)
     }
 
     @Test
@@ -156,35 +156,49 @@ class FumeCameraTest {
 
     @Test
     fun `short line centres the whole sentence inside the phone viewport`() {
-        // 手机 scale = clamp(41.4/26, 0.88, 2.2) ≈ 1.592，安全区 360 − 48 = 312dp，即世界宽上限 ≈ 196dp。
-        // 长句：行宽 260 × 1.592 ≈ 414dp > 312dp ⇒ 放不下，必须跟字（防止判定写反）。
-        val wide = block(renderLines = listOf(renderLine(0, 12, left = 0.0, width = 260.0, step = 21.67)))
-        assertNull(FumeCamera.fitLineFocusPoint(wide, wide.renderLines.first(), phone))
+        // 手机 scale = clamp(41.4/26, 0.88, 2.2) ≈ 1.592，安全区 360 − 48 = 312dp。
         // 短句：10 个汉字、行宽 150 → 屏上 150 × 1.592 ≈ 239dp ≤ 312dp，整句居中可取。
         val narrow = block(renderLines = listOf(renderLine(0, 10, left = 0.0, width = 150.0, step = 15.0)))
         val fit = FumeCamera.fitLineFocusPoint(narrow, narrow.renderLines.first(), phone)
         assertNotNull(fit)
         assertEquals(100.0 + 75.0, fit!!.x, 1e-6)
-        // 整句居中后，行两端在屏上的位置都落在 [24dp, 336dp] 安全区内。
         val scale = FumeCamera.cameraScaleForBlock(narrow, phone)
+        assertEquals(41.4 / 26.0, scale, 1e-6)
         val halfScreen = 360.0 * 0.5
-        val leftOnScreen = halfScreen - (fit.x - 100.0) * scale
-        val rightOnScreen = halfScreen + (100.0 + 150.0 - fit.x) * scale
-        assertTrue("left=$leftOnScreen", leftOnScreen >= 24.0 - 1e-6)
-        assertTrue("right=$rightOnScreen", rightOnScreen <= 336.0 + 1e-6)
+        assertTrue(halfScreen - (fit.x - 100.0) * scale >= 24.0 - 1e-6)
+        assertTrue(halfScreen + (100.0 + 150.0 - fit.x) * scale <= 336.0 + 1e-6)
+    }
+
+    @Test
+    fun `phone camera never lets a line overflow the safe area`() {
+        // 2026-11-08 用户反馈：浮名太大、一行只放 6 字、句首被切。手机上镜头倍率按最宽行收口：
+        // 行宽 260 × 1.592 ≈ 414dp > 312dp ⇒ 倍率降到 312/260 = 1.2，整句居中、两端都在安全区内。
+        val wide = block(renderLines = listOf(renderLine(0, 12, left = 0.0, width = 260.0, step = 21.67)))
+        val scale = FumeCamera.cameraScaleForBlock(wide, phone)
+        assertEquals(312.0 / 260.0, scale, 1e-6)
+        val fit = FumeCamera.fitLineFocusPoint(wide, wide.renderLines.first(), phone)
+        assertNotNull(fit)
+        val halfScreen = 360.0 * 0.5
+        assertTrue(halfScreen - (fit!!.x - 100.0) * scale >= 24.0 - 1e-6)
+        assertTrue(halfScreen + (100.0 + 260.0 - fit.x) * scale <= 336.0 + 1e-6)
+        // 整句居中时焦点与进度无关：句首不会被推出屏外。
+        assertEquals(fit.x, FumeCamera.smoothBlockFocusPoint(wide, 0.0, phone).x, 1e-6)
+        assertEquals(fit.x, FumeCamera.smoothBlockFocusPoint(wide, 11.0, phone).x, 1e-6)
+        // 屏上一行能放下 12 个字（以前 2.2 倍上限时只剩 6~7 个）。
+        assertTrue(260.0 * scale <= 312.0 + 1e-6)
+        // 平板/桌面（短边 ≥ 600）不收口，仍是 Folia 原值。
+        assertEquals(2.2, FumeCamera.cameraScaleForBlock(wide, tablet), 1e-6)
     }
 
     @Test
     fun `long line focus lands on the screen centre`() {
-        // 12 个汉字的长句：行宽 260、逐字 21.67dp，在 360dp 视口里放不下（≈414dp）⇒ 跟字。
-        val line = renderLine(0, 12, left = 0.0, width = 260.0, step = 21.67)
+        // 平板视口 scale 2.2：行宽 400 × 2.2 = 880dp > 672dp ⇒ 放不下，跟字。
+        val line = renderLine(0, 12, left = 0.0, width = 400.0, step = 33.33)
         val long = block(text = "一".repeat(12), start = 0.0, end = 12.0, renderLines = listOf(line))
-        val scale = FumeCamera.cameraScaleForBlock(long, phone)
-        // 直接问镜头取点，确认「正在唱的第 n 个字」落在屏幕正中：camera.x 就是落在屏幕 50% 的世界点，
-        // 所以｜(camera.x − 该字字心) × scale｜必须 ≤ 2dp。
+        val scale = FumeCamera.cameraScaleForBlock(long, tablet)
         for (n in listOf(2, 6, 9)) {
-            val point = FumeCamera.smoothBlockFocusPoint(long, n.toDouble(), phone)
-            val wordCentre = 100.0 + n * 21.67 + 21.67 * 0.5
+            val point = FumeCamera.smoothBlockFocusPoint(long, n.toDouble(), tablet)
+            val wordCentre = 100.0 + n * 33.33 + 33.33 * 0.5
             val offsetDp = (point.x - wordCentre) * scale
             assertTrue("第 $n 个字要落在屏宽 50%±2dp，实测偏 $offsetDp dp", Math.abs(offsetDp) <= 2.0)
         }
@@ -327,10 +341,10 @@ class FumeCameraTest {
         // 长句（行宽 900 放不下）跟字，且焦点单调右移、绝不回到行首：
         // 0 → 字心 137.5；第 4 个字素 → 100+300+37.5=437.5；行末（offset 夹到行尾 12）→ 100+900=1000。
         val long = block(renderLines = listOf(phoneLongLine()))
-        assertEquals(137.5, FumeCamera.smoothBlockFocusPoint(long, 0.0, phone).x, 1e-6)
-        assertEquals(437.5, FumeCamera.smoothBlockFocusPoint(long, 4.0, phone).x, 1e-6)
-        assertEquals(1000.0, FumeCamera.smoothBlockFocusPoint(long, 12.5, phone).x, 1e-6)
-        assertTrue(FumeCamera.smoothBlockFocusPoint(long, 12.5, phone).x > 437.5)
+        assertEquals(137.5, FumeCamera.smoothBlockFocusPoint(long, 0.0, tablet).x, 1e-6)
+        assertEquals(437.5, FumeCamera.smoothBlockFocusPoint(long, 4.0, tablet).x, 1e-6)
+        assertEquals(1000.0, FumeCamera.smoothBlockFocusPoint(long, 12.5, tablet).x, 1e-6)
+        assertTrue(FumeCamera.smoothBlockFocusPoint(long, 12.5, tablet).x > 437.5)
     }
 
     @Test

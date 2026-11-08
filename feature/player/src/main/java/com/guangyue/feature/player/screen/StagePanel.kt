@@ -169,6 +169,8 @@ fun StagePanel(
     lyricSourceNote: String = "",
     /** 截图用例直接给 true，跳过入场动画。 */
     skipEnter: Boolean = false,
+    /** 2026-11-08：下载当前歌曲（null = 不显示下载键）。 */
+    onDownload: (() -> Unit)? = null,
 ) {
     val colors = stagePanelColors(dark)
     val visible = remember { MutableTransitionState(skipEnter && open) }
@@ -247,6 +249,7 @@ fun StagePanel(
                     onAddToPlaylist = onAddToPlaylist,
                     onOpenLyricStyle = onOpenLyricStyle,
                     onShowCover = { onTab(StagePanelTab.COVER) },
+                    onDownload = onDownload,
                 )
                 if (!isCover) {
                     Spacer(Modifier.height(12.dp))
@@ -321,6 +324,7 @@ private fun SongHeader(
     onAddToPlaylist: () -> Unit,
     onOpenLyricStyle: () -> Unit,
     onShowCover: () -> Unit,
+    onDownload: (() -> Unit)? = null,
 ) {
     if (big) {
         Column(Modifier.fillMaxWidth()) {
@@ -358,6 +362,9 @@ private fun SongHeader(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     LikeKey(like = like, colors = colors, onClick = onToggleLike, big = true)
                     PanelKey(GuangYueIcons.ListPlus, "加入歌单", colors, onAddToPlaylist)
+                    if (onDownload != null) {
+                        PanelKey(GuangYueIcons.Download, "下载", colors, onDownload)
+                    }
                     PanelKey(GuangYueIcons.Sparkles, "歌词样式", colors, onOpenLyricStyle)
                 }
             }
@@ -384,6 +391,10 @@ private fun SongHeader(
             Column(Modifier.weight(1f)) {
                 Text(title, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, color = colors.t1, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(artist, fontSize = 12.sp, lineHeight = 18.sp, color = colors.t2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (onDownload != null) {
+                PanelKey(GuangYueIcons.Download, "下载", colors, onDownload)
+                Spacer(Modifier.width(6.dp))
             }
             LikeKey(like = like, colors = colors, onClick = onToggleLike, big = false)
         }

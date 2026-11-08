@@ -32,7 +32,11 @@ class FumeArticleLayoutBuilderTest {
     fun `paper geometry matches folia`() {
         // 视口 720 时：max(720*1.95, 720+520)=1404 → 夹到 [920,2400] 内 = 1404。
         assertEquals(1404.0, FumeArticleLayoutBuilder.paperWidthFor(720.0), 1e-6)
-        assertEquals(920.0, FumeArticleLayoutBuilder.paperWidthFor(100.0), 1e-6)
+        // 手机竖屏（宽 < 600dp）：纸宽 = 屏宽 − 48，下限 240。
+        assertEquals(312.0, FumeArticleLayoutBuilder.paperWidthFor(360.0), 1e-6)
+        assertEquals(240.0, FumeArticleLayoutBuilder.paperWidthFor(100.0), 1e-6)
+        // 600dp 起回到 Folia 口径：max(600×1.95, 1120)=1170。
+        assertEquals(1170.0, FumeArticleLayoutBuilder.paperWidthFor(600.0), 1e-6)
         assertEquals(2400.0, FumeArticleLayoutBuilder.paperWidthFor(2000.0), 1e-6)
         assertEquals(4, FumeArticleLayoutBuilder.maxColumnsFor(1240.0))
         assertEquals(3, FumeArticleLayoutBuilder.maxColumnsFor(800.0))

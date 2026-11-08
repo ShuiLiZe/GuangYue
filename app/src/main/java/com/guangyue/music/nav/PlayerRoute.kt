@@ -290,8 +290,47 @@ fun StagePanelHost(
         lyricOffsetMs = lyricOffsetMs,
         onLyricOffset = onLyricOffset,
         lyricSourceNote = lyricSourceNote,
+        onDownload = item?.let { current ->
+            {
+                val downloads = downloadManagerOf(ctx)
+                val ok = runCatching { downloads.enqueue(downloadRequestOf(current)) }.getOrDefault(false)
+                val text = when {
+                    ok -> "已加入下载，进度在「我的 → 下载」"
+                    downloads.isDownloaded(current.key) -> "这首已经下载过了"
+                    else -> "这首已在下载队列里"
+                }
+                android.widget.Toast.makeText(ctx, text, android.widget.Toast.LENGTH_SHORT).show()
+            }
+        },
     )
 }
+
+/** 2026-11-08：舞台面板的下载键 —— 把正在播放的队列项变成下载任务（取链在 DownloadWorker 里做）。 */
+internal fun downloadRequestOf(item: com.guangyue.core.player.QueueItem): com.guangyue.core.download.DownloadRequest =
+    com.guangyue.core.download.DownloadRequest(
+        key = item.key,
+        title = item.title.ifBlank { "未命名" },
+        artist = item.artist.ifBlank { "未知艺术家" },
+        album = item.album,
+        artwork = item.artworkUri,
+        pluginId = item.origin.pluginId,
+        quality = item.origin.quality.wire,
+        // 播放用的直链会过期，只作兜底；本地文件（file:// / content://）可以直接用。
+        directUrl = item.origin.directUrl?.takeIf { !it.startsWith("guangyue://") },
+        headers = item.origin.headers,
+        rawJson = item.rawJson,
+    )
+
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface DownloadEntryPoint {
+    fun downloads(): com.guangyue.core.download.DownloadManager
+}
+
+internal fun downloadManagerOf(ctx: android.content.Context): com.guangyue.core.download.DownloadManager =
+    dagger.hilt.android.EntryPointAccessors
+        .fromApplication(ctx.applicationContext, DownloadEntryPoint::class.java)
+        .downloads()
 
 /** 收起转场时长：`springPlayer`（stiffness 280）约 320ms，留一帧余量。 */
 private const val CONTRACT_MS = 340L
