@@ -179,6 +179,13 @@ fun LyricFlowScreen(
     fumeDebugFrames: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    // B0 修：雾笺 / 花火 / 绘光自带固定暗场（Folia 外壳 #05070a / 夜空 / 暗场），与 App 深浅无关。
+    // 浅色模式下顶栏、胶囊、系统栏图标仍按浅色主题画成深色，压在夜色上看不清——这三种样式一律按深色画外壳。
+    val darkFieldStyle = lyricStyle == LyricStyle.NEBBIA || lyricStyle == LyricStyle.HANABI ||
+        lyricStyle == LyricStyle.LUMIERE
+    val themeDark = darkMode
+    @Suppress("NAME_SHADOWING")
+    val darkMode = themeDark || darkFieldStyle
     val backLabel = str(strings.back)
     val emptyKind = lyricEmptyKind(lineCount = lyrics.size, loading = loading, failed = failure != null)
 
@@ -388,6 +395,24 @@ fun LyricFlowScreen(
                         .union(WindowInsets.navigationBars),
                 ),
             )
+        }
+        // B0 修：雾笺 / 花火 / 绘光是固定暗场（与 App 深浅无关），浅色模式下系统栏图标仍跟主题走成深色，
+        // 压在夜色上看不清。暗场样式在场时把状态栏 / 手势条图标强制成浅色，离开时还原为跟随主题。
+        val darkFieldStage = darkFieldStyle
+        val barsView = androidx.compose.ui.platform.LocalView.current
+        androidx.compose.runtime.DisposableEffect(darkFieldStage, themeDark) {
+            val window = (barsView.context as? android.app.Activity)?.window
+            val controller = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, barsView) }
+            if (darkFieldStage && controller != null) {
+                controller.isAppearanceLightStatusBars = false
+                controller.isAppearanceLightNavigationBars = false
+            }
+            onDispose {
+                if (darkFieldStage && controller != null) {
+                    controller.isAppearanceLightStatusBars = !themeDark
+                    controller.isAppearanceLightNavigationBars = !themeDark
+                }
+            }
         }
         // P5 雾笺：整屏夜色玻璃（Folia 外壳 inset-0 背景 #05070a），歌词排在全屏上、不让顶栏。
         if (lyricStyle == LyricStyle.NEBBIA && kernelLines.isNotEmpty() && emptyKind == null) {

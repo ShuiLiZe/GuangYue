@@ -26,6 +26,7 @@ import com.guangyue.core.data.lyrics.LyricTimeline
 import com.guangyue.core.lyrics.AnimationIntensity
 import com.guangyue.core.lyrics.ClassicTuning
 import com.guangyue.core.lyrics.Line
+import com.guangyue.core.lyrics.RenderHints
 import com.guangyue.core.lyrics.Word
 import com.guangyue.core.player.MediaOrigin
 import com.guangyue.core.player.PlaybackState
@@ -130,14 +131,60 @@ private fun buildKernelLines(withTranslation: Boolean = true): List<Line> =
         }
     }
 
+/**
+ * Folia 基准对照用的同一份歌词（B0）：照搬 Folia dev/probes/visualizerMemory.probe.tsx 的 `cjk=1`
+ * 合成歌词——CJK_LINES 循环、每行 3 秒、逐字计时（步长 (3-0.2)/字数）、行尾 2.9 秒、
+ * 译文 `translation N`、每 4 行一个副歌。Folia 那边用 `?probe=visualizerMemory&vis=<样式>&cjk=1&speed=0&start=<秒>`
+ * 定格同一时刻，这边用 `--es v0c_fixture probe --el v0c_ms <毫秒>`，两张图才是「同一首歌同一时刻」。
+ */
+private val PROBE_CJK_LINES = listOf(
+    "迷失在无边际这幽深的森林",
+    "风吹过",
+    "我们慢慢走回去，星河与风一起落在很远很远的地方",
+    "光落在晨雾里",
+    "你说夜色会把所有的名字都轻轻藏起来",
+    "晚安",
+    "在城市尽头等一场迟到的雨",
+    "把回忆折成纸船放进河流",
+    "轻轻唱 hello again 在无人的街角",
+    "我听见远方的海潮一遍一遍拍打着沉默的礁石和那座早已熄灭多年的灯塔",
+)
+private const val PROBE_LINE_MS = 3_000L
+private const val PROBE_LINE_COUNT = 40
+
+private fun probeLyrics(): List<LyricLine> = (0 until PROBE_LINE_COUNT).map { i ->
+    LyricLine(
+        timeMs = i * PROBE_LINE_MS,
+        text = PROBE_CJK_LINES[i % PROBE_CJK_LINES.size],
+        translation = "translation $i",
+    )
+}
+
+private fun probeKernelLines(): List<Line> = (0 until PROBE_LINE_COUNT).map { i ->
+    val start = i * PROBE_LINE_MS / 1000.0
+    val text = PROBE_CJK_LINES[i % PROBE_CJK_LINES.size]
+    // JS Array.from(string) = 按码点切；这几句全在 BMP 内，等价于逐 char。
+    val chars = text.codePoints().toArray().map { String(Character.toChars(it)) }
+    val step = (PROBE_LINE_MS / 1000.0 - 0.2) / chars.size
+    val line = Line(
+        words = chars.mapIndexed { o, c -> Word(c, start + o * step, start + (o + 1) * step) },
+        startTime = start,
+        endTime = start + PROBE_LINE_MS / 1000.0 - 0.1,
+        fullText = text,
+        translation = "translation $i",
+        isChorus = i % 4 == 0,
+    )
+    line.copy(renderHints = RenderHints.buildLineRenderHints(line))
+}
+
 /** 播放中：[positionMs] 决定当前行与逐字进度。 */
-private fun playing(positionMs: Long) = PlaybackState(
+private fun playing(positionMs: Long, durationMs: Long = 20_000L) = PlaybackState(
     item = QueueItem(
         key = "v0c", title = "夜曲", artist = "周杰伦", album = "十一月的萧邦",
         artworkUri = null,
         origin = MediaOrigin(pluginId = "v0c", trackKey = "v0c", quality = Quality.SUPER),
     ),
-    isPlaying = true, positionMs = positionMs, durationMs = 20_000L, bufferedMs = 20_000L,
+    isPlaying = true, positionMs = positionMs, durationMs = durationMs, bufferedMs = durationMs,
     shuffle = false, repeatMode = 0, queueSize = 5, index = 1,
 )
 
@@ -159,6 +206,8 @@ fun V0cStage(
     fumeAt: Double = -1.0,
     /** V1b-1 取景：锚点句下标（v0c_fumeline）；-1 = 用 floor(fumeAt/4)。 */
     fumeAnchor: Int = -1,
+    /** B0：`"probe"` = 与 Folia 基准探针同一份歌词（见 [PROBE_CJK_LINES]）。 */
+    fixture: String = "nightsong",
 ) {
     val view = LocalView.current
     // V0e 修 Hark 第 1 条：取景 Activity 没有 MainActivity 那段 insets SideEffect，
@@ -167,8 +216,10 @@ fun V0cStage(
     SideEffect {
         val window = (view.context as? android.app.Activity)?.window ?: return@SideEffect
         WindowCompat.getInsetsController(window, view).apply {
-            isAppearanceLightStatusBars = !dark
-            isAppearanceLightNavigationBars = !dark
+            // B0：暗场样式（雾笺/花火/绘光）一律浅色图标，与 LyricFlowScreen 的外壳规则一致。
+            val barsDark = dark || style == "nebbia" || style == "hanabi" || style == "lumiere"
+            isAppearanceLightStatusBars = !barsDark
+            isAppearanceLightNavigationBars = !barsDark
         }
     }
     FoliaTheme(dark = dark) {
@@ -200,8 +251,13 @@ fun V0cStage(
             variant == "interlude" -> -1
             else -> 1
         }
-        val kernel = remember(withTranslation, isFume, fumeLines) {
-            if (isFume) fumeLines else buildKernelLines(withTranslation)
+        val isProbe = fixture == "probe"
+        val kernel = remember(withTranslation, isFume, fumeLines, isProbe) {
+            when {
+                isProbe -> probeKernelLines()
+                isFume -> fumeLines
+                else -> buildKernelLines(withTranslation)
+            }
         }
         // V1a 取证：拍「歌词样式」弹层（浮名条目选中态）。只在 debug 源集，release 无此分支。
         // V1b-2：弹层是半透明毛玻璃，身后必须有一层真实的播放页画面，实拍才看得出「透」。
@@ -258,16 +314,21 @@ fun V0cStage(
                 }
             }
         } else {
-        val lines = remember { parseLrc(LRC) }
+        val lines = remember(isProbe) { if (isProbe) probeLyrics() else parseLrc(LRC) }
+        val stageIndex = if (isProbe) {
+            (positionMs / PROBE_LINE_MS).toInt().coerceIn(0, PROBE_LINE_COUNT - 1)
+        } else {
+            currentIndex
+        }
         // V0d flex-wrap 取证：只画「当前句」的 FlowRow 舞台（等价 Folia 的 70vh 画布），
         // 验证长句在 360dp / 320dp / 1.3× 字号下自动换行、不出屏。
         // extra：`v0c_lineonly`（布尔）+ `v0c_wordglow`（float，辉光强度）。
         CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
             LyricFlowScreen(
                 lyrics = lines,
-                currentIndex = currentIndex,
+                currentIndex = stageIndex,
                 strings = V0cStrings,
-                playback = playing(positionMs),
+                playback = if (isProbe) playing(positionMs, PROBE_LINE_COUNT * PROBE_LINE_MS) else playing(positionMs),
                 accent = Folia.colors.accent,
                 onBack = {},
                 onSeekToLine = {},
@@ -419,6 +480,7 @@ class V0cStageActivity : ComponentActivity() {
         val fumeAt = if (fumeSettleTime >= 0f) fumeSettleTime.toDouble() else positionMs / 1000.0
         val fumeAnchor = intent?.getIntExtra("v0c_fumeline", -1) ?: -1
         val debugFrames = intent?.getBooleanExtra("v0c_debugframes", false) ?: false
+        val fixture = intent?.getStringExtra("v0c_fixture") ?: "nightsong"
         val wordGlow = if (intent?.hasExtra("v0c_wordglow") == true) {
             intent.getFloatExtra("v0c_wordglow", 1f)
         } else {
@@ -438,6 +500,7 @@ class V0cStageActivity : ComponentActivity() {
         setContent {
             V0cStage(
                 positionMs, dark, wordGlow, lineOnly, variant, style, fumeSteps, debugFrames, fumeAt, fumeAnchor,
+                fixture,
             )
         }
     }
