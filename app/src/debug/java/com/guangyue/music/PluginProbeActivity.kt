@@ -29,21 +29,23 @@ class PluginProbeActivity : ComponentActivity() {
         val only = intent?.getStringExtra("only")
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             runCatching {
+                Log.w(TAG, "start sub=$sub only=$only")
                 manager.load()
+                Log.w(TAG, "loaded ${manager.plugins.value.size}")
                 if (!sub.isNullOrBlank()) {
                     val r = manager.installOrUpdateAll(sub, force = true)
-                    Log.i(TAG, "install result=$r")
+                    Log.w(TAG, "install result=$r")
                 }
                 val targets = manager.plugins.value.filter { p ->
                     p.error == null && (only == null || p.platform.contains(only) || p.displayName.contains(only)) &&
                         (sub.isNullOrBlank() || (p.srcUrl ?: p.source).contains("padao") || only != null)
                 }
-                Log.i(TAG, "targets=${targets.map { it.displayName + "@" + it.version }}")
+                Log.w(TAG, "targets=${targets.map { it.displayName + "@" + it.version }}")
                 for (p in targets) {
                     val rep = checker.check(p.id)
-                    Log.i(TAG, "RESULT ${rep.name} ${p.version} health=${rep.health} ${rep.ms}ms note=${rep.note}")
+                    Log.w(TAG, "RESULT ${rep.name} ${p.version} health=${rep.health} ${rep.ms}ms note=${rep.note}")
                 }
-                Log.i(TAG, "DONE")
+                Log.w(TAG, "DONE")
             }.onFailure { Log.e(TAG, "probe failed", it) }
         }
     }
