@@ -798,3 +798,9 @@ BUILD SUCCESSFUL in 35s
 - 58838bd + c8d04d5：PendoloStage 整屏铺满（Folia VisualizerShell inset-0；原先让出顶栏/胶囊后横屏半径只剩约 67dp，上下句被挤出弧外）；歌词环 = R + 0.06·min(w,h)（lyricRadiusOffset）；钟芯补齐 Folia pendoloClockworkDraw2d subtle 档：中心宝石、3 颗行星轮、左上摆轮（20 齿 + 座圈 + 游丝 + Star 星标）、左下传动轮（24 齿 + 五辐 + 日内瓦条纹）、秒轮（每秒一齿，弹簧 k92/c13）、惰轮、焦点轴线 + 箭头。无音频档相位 2.8 rad/s、摆幅 0.15。
 - 测试：PendoloGeometryTest 3/0、PendoloMotionTest 3/0。
 - 对照 docs/port/baseline/compare/r2-pendolo-compare.jpg：大齿轮占满左缘、上句「风吹过」与下句「光落在晨雾里」沿轮缘出现、当前句位置一致。残差：字体（广乐 Serif，Folia 主题无衬线 400）；顶栏/进度胶囊叠在上句与下句上（Folia 播放时外壳会自动隐藏）。
+
+## B0 雾笺重做·排版（2026-11-08 22:32）
+- 9156e82：NebbiaComposer.kt 对译 nebbiaChars/nebbiaBlocks/nebbiaCompositions/nebbiaLayout（v0.7.25）：主词 2.0×、副主词 1.35×、虚词 0.78×（快歌 1.55/1.18/0.85）；九种构图（横条、两/三行错落、十字、竖柱、刊头、徽章、竖排几列、环绕）；整首按时间一次排完，3×4 候选位置 × 四档字号，按「还没被雾吞掉的句子」重叠面积、构图偏好、重复惩罚打分；字号 max(26, 0.065H)…0.14H。取代旧三槽位整行；clarity 去掉第 i+3 句强制归零。
+- 省略：emoji→lucide 图标与句尾涂鸦、片尾曲名、按笔画数放大复杂字（无笔顺数据）。
+- 测试：NebbiaComposerTest 3/0、NebbiaTimingTest 2/0。对照 compare/r3-nebbia-compare.jpg：字已按构图散成块（徽章/竖列/环绕），主词放大。
+- 残差（下一步）：Folia 字是墨色碎块（擦痕里的深色笔画 + 水珠折射），广乐仍是整字 DstOut 擦开雾；城市夜景（建筑剪影、钠灯光柱）仍用散景光斑代替；同屏旧句未被雾吞时偏多。
