@@ -54,6 +54,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.rememberScrollState
@@ -138,6 +139,7 @@ fun BravaisWall(
         // 排名：初始镜头中心附近 3×3 区块，条目按排名落位（换数据才重算）。
         // 缝：竖屏横条（axis y），放在世界 y=0 的区块边界上（区块边界不切砖）；上半墙上移、下半墙下移各半条高。
         val seamH = if (collection != null) SEAM_COLLECTION_HEIGHT else SEAM_HOME_HEIGHT
+        val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value
         val ranked = remember(tiles, vw, vh) {
             val ox = bw / 2
             val oy = bh / 2
@@ -240,7 +242,9 @@ fun BravaisWall(
                     val sw by animateFloatAsState(slot.width.toFloat(), spec, label = "w")
                     val sh by animateFloatAsState(slot.height.toFloat(), spec, label = "h")
                     val x = ((sx - cx) * scale).toFloat()
-                    val y = ((sy - cy) * scale).toFloat() + if (base.y < 0) -seamH / 2 else seamH / 2
+                    // 顶栏固定在屏幕顶（用户 11-08：往下滑顶栏跟着走不行），墙不再在世界 y=0 处劈开让位，
+                    // 整面墙在顶栏底下滑过；开场下移一条栏高，首屏不被盖住。
+                    val y = ((sy - cy) * scale).toFloat() + seamH / 2
                     Box(
                         Modifier
                             .offset { IntOffset((x * density.density).roundToInt(), (y * density.density).roundToInt()) }
@@ -280,7 +284,7 @@ fun BravaisWall(
                     }
                 }
             }
-            val seamTop = (-cy * scale).toFloat() - seamH / 2
+            val seamTop = statusTop
             Box(
                 Modifier
                     .offset { IntOffset(0, (seamTop * density.density).roundToInt()) }
@@ -301,7 +305,7 @@ fun BravaisWall(
                     .fillMaxWidth()
                     .windowInsetsTopHeight(WindowInsets.statusBars)
                     .zIndex(15f)
-                    .background(Brush.verticalGradient(listOf(groundColor.copy(alpha = 0.85f), groundColor.copy(alpha = 0.5f)))),
+                    .background(groundColor),
             )
         }
     }
