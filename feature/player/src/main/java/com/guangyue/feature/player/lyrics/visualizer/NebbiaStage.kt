@@ -24,6 +24,7 @@ import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -88,6 +89,8 @@ internal fun nebbiaUnits(line: Line): List<Pair<String, Double>> {
     else line.words.forEach { w -> split(w.text, w.startTime, w.endTime) }
     return out
 }
+
+private const val TAG = "NebbiaStage"
 
 /** 窗外三张图（清晰 1/2、雾里两层 1/4 与 1/8 设备分辨率）、回落用的雾图和雾上凝结水珠。 */
 private class NebbiaCityImages(
@@ -296,6 +299,7 @@ private class NebbiaFrameState(w: Int, h: Int, val px: Double) {
     var spotY = 0.0
     var spotR = 0.0
     var lastNanos = 0L
+    var logged = false
 }
 
 /** 每帧在遮罩位图上画擦痕（圆头折线，亮度取最大）。 */
@@ -435,25 +439,36 @@ internal fun NebbiaStage(
         val typeface = remember(fontFamily) {
             runCatching { resolver.resolve(fontFamily, FontWeight.Bold).value as? Typeface }.getOrNull() ?: Typeface.DEFAULT_BOLD
         }
-        val pal = remember(accentColor) {
+        val accentKey = accentColor.value
+        val pal = remember(accentKey) {
             NebbiaCity.palette(doubleArrayOf(accentColor.red.toDouble(), accentColor.green.toDouble(), accentColor.blue.toDouble()))
         }
         val city by produceState<NebbiaCityImages?>(null, wi, hi, pal) {
-            value = null
-            if (wi > 0 && hi > 0) value = withContext(Dispatchers.Default) { buildCityImages(wi, hi, px, pal) }
+            if (wi > 0 && hi > 0) {
+                val t0 = System.nanoTime()
+                Log.i(TAG, "city start ${wi}x$hi px=$px")
+                value = runCatching { withContext(Dispatchers.Default) { buildCityImages(wi, hi, px, pal) } }
+                    .onFailure { Log.e(TAG, "city failed", it) }.getOrNull()
+                Log.i(TAG, "city done ${(System.nanoTime() - t0) / 1_000_000} ms ok=${value != null}")
+            }
         }
         val laid by produceState<List<NebbiaLine>?>(null, lines, wi, hi, lyricsFontScale, typeface) {
-            value = null
-            if (wi > 0 && hi > 0) value = withContext(Dispatchers.Default) {
-                val raster = NebbiaGlyphRaster(typeface)
-                NebbiaSceneBuilder.build(NebbiaComposer.buildLines(lines), w.toDouble(), h.toDouble(), lyricsFontScale, minPx, px) { raster.get(it) }
+            if (wi > 0 && hi > 0) {
+                val t0 = System.nanoTime()
+                value = runCatching {
+                    withContext(Dispatchers.Default) {
+                        val raster = NebbiaGlyphRaster(typeface)
+                        NebbiaSceneBuilder.build(NebbiaComposer.buildLines(lines), w.toDouble(), h.toDouble(), lyricsFontScale, minPx, px) { raster.get(it) }
+                    }
+                }.onFailure { Log.e(TAG, "scene failed", it) }.getOrNull()
+                Log.i(TAG, "scene done ${(System.nanoTime() - t0) / 1_000_000} ms lines=${value?.size} glyphs=${value?.flatMap { it.chars }?.count { it.glyph != null }}")
             }
         }
         val frame = remember(wi, hi) { if (wi > 0 && hi > 0) NebbiaFrameState(wi, hi, px) else null }
         val main = remember(city, frame) {
             val c = city
             if (c != null && frame != null && latentBackgroundSupported && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                runCatching { NebbiaMainShader(c, frame, w, h) }.getOrNull()
+                runCatching { NebbiaMainShader(c, frame, w, h) }.onFailure { Log.w(TAG, "AGSL 主画面编译失败，回落", it) }.getOrNull()
             } else {
                 null
             }
@@ -467,6 +482,7 @@ internal fun NebbiaStage(
                 drawRect(Color(0xFF05070A))
                 return@Canvas
             }
+            if (!st.logged) { st.logged = true; Log.i(TAG, "first frame t=$t shader=${main != null} laid=${laid?.size}") }
             val song = laid.orEmpty()
             st.ink.draw(song, t, px)
             drawMask(st)
