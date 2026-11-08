@@ -783,3 +783,9 @@ BUILD SUCCESSFUL in 35s
 - 648619e：同平台不同来源的插件改为**替换**（以前拒装「请先删除」，换订阅线路后六个平台全装不上）；一个音源都没选时，第一个装上的插件自动设为当前音源。
 - 5ae5f88：回归用例 `sync axios response carries then and catch` 改为等真 Promise 结算。`:core:plugin` 与 `:app` 单测全过。
 - 发版 0.0.11（04f4843）。
+
+## M8b 真机取链修复（2026-11-08 21:10，0.0.12）
+- 用户真机 0.0.11 仍「取不到链」。模拟器装 0.0.11 + debug 取证入口 `PluginProbeActivity`（导入订阅后逐个设为当前音源跑 App 自己的体检，logcat `GYPROBE`）复现：装插件卡在 close、体检卡在搜索。`debuggerd -j` 线程栈：卡在 `__gy_pump` → `__gy_drainOneJob` → `QuickJs.executePendingJob`（binding 回调里嵌套推 job，job 再调 axios 宿主函数 → 运行时锁 futex 死等）。JVM 不复现（锁实现不同）。
+- 修法：新增 `__gy_tick`，Kotlin 顶层逐拍 evaluate；job 由 quickjs-kt 在每次 evaluate 返回前于顶层推空（1.0.15 `awaitEvaluateResult`），JS 只交付 HTTP 响应与到期计时器。close 里不再推 job，只清 Promise/计时器/回调引用（同时修掉 JVM 上 releaseRuntime 的 native 崩溃，咪咕榜单）。
+- 插件更新或换来源后清空旧体检结论（之前一直挂着 0.0.8 基线的「取不到链」）。
+- 模拟器实测（App 内体检，搜「周杰伦」→ 取链）：酷狗/咪咕/酷我/QQ/汽水/网易云 全部 health=ok（4–13 s）。JVM：六平台搜索+取链、歌单、榜单均通；酷我推荐歌单首个歌单酷我官方接口返回空列表（上游）。
