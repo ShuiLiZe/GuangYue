@@ -10,5 +10,9 @@
             android:name=".V0cBackgroundActivity"
             android:exported="true"
             android:theme="@style/Theme.GuangYue" />
+        <activity
+            android:name=".PluginProbeActivity"
+            android:exported="true"
+            android:theme="@style/Theme.GuangYue" />
     </application>
 </manifest>
