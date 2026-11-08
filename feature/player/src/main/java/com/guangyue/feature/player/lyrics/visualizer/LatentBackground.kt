@@ -65,8 +65,12 @@ internal object LatentTuning {
 }
 
 /** 能否画「隐现」（AGSL 需要 API 33；Robolectric 截图不跑着色器）。 */
-val latentBackgroundSupported: Boolean
-    get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !runningUnderRobolectric
+// 只认真 Robolectric：取证页（V0cStageHarness）会把 runningUnderRobolectricOverride 置 true 来定格歌词时钟，
+// 但它跑在真模拟器上，着色器照样能画。
+val latentBackgroundSupported: Boolean by lazy {
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        runCatching { Class.forName("org.robolectric.Robolectric") }.isFailure
+}
 
 /**
  * Folia `resolveLatentShaderColors(coverColors, theme, 'cover-theme')`。
