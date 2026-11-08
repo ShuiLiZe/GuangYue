@@ -347,7 +347,8 @@ internal object HostBridge {
   G.setTimeout = function (fn, delay) {
     if (typeof fn !== 'function') return 0;
     var id = __timerSeq++;
-    __timers.push({ id: id, fn: fn, delay: delay || 0, args: Array.prototype.slice.call(arguments, 2), clear: false });
+    var d = Number(delay) || 0;
+    __timers.push({ id: id, fn: fn, delay: d, due: Date.now() + (d > 0 ? d : 0), args: Array.prototype.slice.call(arguments, 2), clear: false });
     return id;
   };
   G.setInterval = function (fn, delay) {
@@ -359,17 +360,31 @@ internal object HostBridge {
   };
   G.clearInterval = G.clearTimeout;
   G.setImmediate = function (fn) { return G.setTimeout(fn, 0); };
+  // M8：计时器按到期时间触发（异步 HTTP 之后插件的「超时竞速」要真等）。宿主没有异步 HTTP 时
+  // （旧桥 / 测试桩）退回旧行为：一律立即触发。返回本次触发的个数。
+  G.__gy_timersPending = function () {
+    for (var i = 0; i < __timers.length; i++) if (!__timers[i].clear) return true;
+    return false;
+  };
   G.__gy_flushTimers = function () {
+    var asyncHttp = typeof G.__gy_http_start === 'function';
+    var now = Date.now();
     var pending = __timers;
     __timers = [];
     var limit = 200;
-    for (var i = 0; i < pending.length && limit-- > 0; i++) {
+    var fired = 0;
+    // 先到期的先触发
+    pending.sort(function (a, b) { return a.due - b.due; });
+    for (var i = 0; i < pending.length; i++) {
       var t = pending[i];
       if (t.clear) continue;
+      if ((asyncHttp && t.due > now) || limit-- <= 0) { __timers.push(t); continue; }
+      fired++;
       try { t.fn.apply(null, t.args); } catch (e) {
         try { G.__gy_log('error', 'timer: ' + (e && e.message ? e.message : String(e))); } catch (_) {}
       }
     }
+    return fired;
   };
 
   // ---------------------------------------------------------------- axios
@@ -611,6 +626,31 @@ internal object HostBridge {
       timeout: typeof config.timeout === 'number' ? config.timeout : 0
     });
 
+    // M8：宿主有异步 HTTP 时，请求并发发出、返回真正的 Promise（与 MusicFree 的 axios 一致）。
+    // 以前是同步串行：酷我取链要串行试十几个端点，总耗时超过预算 → 「插件超时没返回」；
+    // 插件里 Promise.race/any + setTimeout 的竞速也全部失效（计时器立即触发）。
+    if (typeof G.__gy_http_start === 'function') {
+      var hid = String(G.__gy_http_start(payload));
+      return new Promise(function (resolve, reject) {
+        __httpWaiters[hid] = function (raw2) {
+          var r = finishResponse(raw2, config);
+          var st = r && r.__gyState;
+          var plain = {};
+          for (var pk in r) {
+            if (!Object.prototype.hasOwnProperty.call(r, pk)) continue;
+            if (pk === 'then' || pk === 'catch' || pk === 'finally') continue;
+            plain[pk] = r[pk];
+          }
+          if (st && !st.ok) {
+            if (st.error && st.error.response) st.error.response = plain;
+            reject(st.error);
+          } else {
+            resolve(plain);
+          }
+        };
+      });
+    }
+
     var raw;
     try {
       raw = G.__gy_http(payload);
@@ -622,6 +662,36 @@ internal object HostBridge {
       netErr.config = config;
       return attachChain({ status: 0, headers: {}, data: null, config: config }, netErr);
     }
+    return finishResponse(raw, config);
+  }
+
+  var __httpWaiters = {};
+  // 取回已完成的请求并交给各自的 Promise；返回交付的个数。宿主协议：一次一条，"id\n<响应 JSON>"，空串表示没有。
+  G.__gy_deliverHttp = function () {
+    if (typeof G.__gy_http_take !== 'function') return 0;
+    var n = 0;
+    while (n < 64) {
+      var s = G.__gy_http_take();
+      if (!s) break;
+      var nl = s.indexOf('\n');
+      var id = s.slice(0, nl);
+      var w = __httpWaiters[id];
+      delete __httpWaiters[id];
+      n++;
+      if (typeof w === 'function') {
+        try { w(s.slice(nl + 1)); } catch (e) {
+          try { G.__gy_log('error', 'http deliver: ' + (e && e.message ? e.message : String(e))); } catch (_) {}
+        }
+      }
+    }
+    return n;
+  };
+  G.__gy_httpPending = function () {
+    for (var k in __httpWaiters) if (Object.prototype.hasOwnProperty.call(__httpWaiters, k)) return true;
+    return false;
+  };
+
+  function finishResponse(raw, config) {
     var response = makeResponse(raw);
     // 0.0.8：`responseType: 'arraybuffer'` 时插件要的是二进制（封面、音频头、魔数校验）。
     // 宿主回的是 Base64 文本，这里在 JS 里自己解成 Uint8Array —— 不能让 Kotlin 直接给
@@ -851,11 +921,18 @@ internal object HostBridge {
     while (true) {
       if (G.__gy_pending && G.__gy_pending.done) break;
       if (started && Date.now() - started >= ms) break;
-      if (typeof G.__gy_flushTimers === 'function') { try { G.__gy_flushTimers(); } catch (e) { /* ignore */ } }
-      if (typeof G.__gy_drainOneJob !== 'function') break;
       var moved = false;
-      try { moved = G.__gy_drainOneJob() > 0; } catch (e) { break; }
-      if (!moved) break;
+      if (typeof G.__gy_flushTimers === 'function') { try { moved = (G.__gy_flushTimers() || 0) > 0; } catch (e) { /* ignore */ } }
+      if (typeof G.__gy_deliverHttp === 'function') { try { if (G.__gy_deliverHttp() > 0) moved = true; } catch (e) { /* ignore */ } }
+      if (typeof G.__gy_drainOneJob !== 'function') break;
+      try { if (G.__gy_drainOneJob() > 0) moved = true; } catch (e) { break; }
+      if (!moved) {
+        // M8：还有请求在路上或计时器没到期 → 让出几毫秒再看，而不是判「卡死」。
+        var waiting = (typeof G.__gy_httpPending === 'function' && G.__gy_httpPending()) ||
+                      (typeof G.__gy_timersPending === 'function' && G.__gy_timersPending());
+        if (waiting && typeof G.__gy_idle === 'function') { G.__gy_idle(5); continue; }
+        break;
+      }
       advanced++;
       if (advanced > 20000) break;
     }

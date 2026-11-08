@@ -54,6 +54,12 @@ class PluginRuntime(
     @Volatile private var qjs: QuickJs? = null
     private var installed = false
 
+    private val httpSeq = java.util.concurrent.atomic.AtomicInteger()
+    private val httpDone = java.util.concurrent.ConcurrentLinkedQueue<String>()
+    private val httpPool: java.util.concurrent.ExecutorService = java.util.concurrent.Executors.newCachedThreadPool { r ->
+        Thread(r, "gy-plugin-http").apply { isDaemon = true }
+    }
+
     /** 见 [drainJobs]：保证 job 队列的推进永不递归重入。 */
     private val drainLatch = AtomicBoolean(false)
 
@@ -105,6 +111,24 @@ class PluginRuntime(
             runtime.function("__gy_http") { args ->
                 val payload = args.getOrNull(0)?.let(::asBridgeText) ?: "{}"
                 performHttp(payload)
+            }
+            // M8：异步并发 HTTP。start 立即返回编号，请求在宿主线程池里跑；
+            // take 一次取回一条已完成的 "id\n<响应 JSON>"；idle 在等待时让出几毫秒。
+            runtime.function("__gy_http_start") { args ->
+                val payload = args.getOrNull(0)?.let(::asBridgeText) ?: "{}"
+                val id = httpSeq.incrementAndGet()
+                httpPool.execute {
+                    val raw = runCatching { performHttp(payload) }
+                        .getOrElse { netError(it.message ?: "network error", -1, System.currentTimeMillis(), "?") }
+                    httpDone.add("$id\n$raw")
+                }
+                id.toString()
+            }
+            runtime.function("__gy_http_take") { _ -> httpDone.poll() ?: "" }
+            runtime.function("__gy_idle") { args ->
+                val ms = (args.getOrNull(0) as? Number)?.toLong() ?: 5L
+                try { Thread.sleep(ms.coerceIn(1L, 20L)) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+                ""
             }
             // 0.0.8：TextDecoder 的非 UTF-8 分支（gbk/gb18030/big5）交给宿主，宿主才有 Charset。
             runtime.function("__gy_text_in") { args ->
@@ -283,6 +307,7 @@ class PluginRuntime(
     @Synchronized
     fun close() {
         runCatching { qjs?.close() }
+        httpDone.clear()
         qjs = null
         installed = false
     }
@@ -337,7 +362,17 @@ class PluginRuntime(
 
         return try {
             httpClient.newCall(request).execute().use { resp ->
-                val rawBytes = resp.body?.bytes() ?: ByteArray(0)
+                // M8：插件常用 `Range: bytes=0-0` 探测音频直链是否可用；服务器不认 Range 时会回整首歌，
+                // 只读前 64KB 就够插件判断（状态码 / 魔数），不把几 MB 的音频拉进 JS。
+                val hasRange = req["headers"].asObj()?.keys?.any { it.equals("range", ignoreCase = true) } == true
+                val rawBytes = if (hasRange) {
+                    resp.body?.source()?.let { src ->
+                        src.request(RANGE_PROBE_BYTES)
+                        src.buffer.readByteArray(minOf(src.buffer.size, RANGE_PROBE_BYTES))
+                    } ?: ByteArray(0)
+                } else {
+                    resp.body?.bytes() ?: ByteArray(0)
+                }
                 // 手写解码：调用方自己声明了 Accept-Encoding 时，OkHttp 会把压缩字节原样给我们。
                 val bytes = inflateIfNeeded(resp.headers["Content-Encoding"], rawBytes)
                 val text = decode(resp.headers, bytes)
@@ -740,6 +775,7 @@ class PluginRuntime(
          * 30s 只放宽预算，不改语义；真挂死的插件仍然会被中断。
          */
         const val CALL_TIMEOUT_MS = 30_000L
+        private const val RANGE_PROBE_BYTES = 65_536L
         /** QuickJS heap cap: 48 MiB is generous for cheerio+html parsing, still bounded. */
         const val MEMORY_LIMIT_BYTES = 48L * 1024 * 1024
 
@@ -763,7 +799,7 @@ class PluginRuntime(
         private val DRAIN_BUDGET_NANOS = 1_500_000_000L
 
     /** 顶层推 Promise 队列的总预算；到点如实报「异步结果没结算」。 */
-    private val PENDING_BUDGET_NANOS = 12_000_000_000L
+    private val PENDING_BUDGET_NANOS = 25_000_000_000L
 
         private const val EVAL_TIMEOUT_MS = CALL_TIMEOUT_MS
 
