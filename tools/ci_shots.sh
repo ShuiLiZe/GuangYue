@@ -13,10 +13,9 @@ shot() { adb exec-out screencap -p > "shots/$1.png"; echo "shot $1"; }
 neb() { # $1 = 名字, $2 = 毫秒
   adb shell am force-stop com.guangyue.music
   adb shell am start -W -n $A --es v0c_style nebbia --es v0c_fixture probe --el v0c_ms $2 --ez v0c_dark true >/dev/null
-  sleep 14
+  sleep 24
   shot "$1"
 }
-neb nebbia-warm 37500
 neb nebbia-port-37 37500
 neb nebbia-port-44 44000
 adb shell settings put system user_rotation 1

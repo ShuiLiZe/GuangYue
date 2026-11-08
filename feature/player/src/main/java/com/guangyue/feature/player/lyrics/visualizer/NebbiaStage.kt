@@ -110,15 +110,18 @@ private fun cityBitmap(pw: Int, ph: Int, aspect: Double, b: Double, pal: NebbiaP
 
 private suspend fun buildCityImages(w: Int, h: Int, px: Double, pal: NebbiaPalette): NebbiaCityImages = coroutineScope {
     val aspect = w.toDouble() / h
+    // 分辨率按 CSS 像素定（手机像素密度高，按设备像素算太慢）：清晰的 ≈ 2/3 CSS，雾里两层 1/3、1/6 CSS（Folia 1/4、1/8 渲染分辨率）。
     // 清晰的那张分几段并行算（整屏场景最贵的一张）
-    val sw = max(1, w / 2); val sh = max(1, h / 2)
+    val sDiv = max(2, (1.5 * px).roundToInt())
+    val fDiv = max(4, (3 * px).roundToInt())
+    val sw = max(1, w / sDiv); val sh = max(1, h / sDiv)
     val sharpPx = IntArray(sw * sh)
     val parts = 4
     val jobs = (0 until parts).map { k ->
         async(Dispatchers.Default) { NebbiaCity.render(sw, sh, aspect, 0.0012, pal, sharpPx, sh * k / parts, sh * (k + 1) / parts) }
     }
-    val bw = max(1, w / 4); val bh = max(1, h / 4)
-    val gw = max(1, w / 8); val gh = max(1, h / 8)
+    val bw = max(1, w / fDiv); val bh = max(1, h / fDiv)
+    val gw = max(1, w / (fDiv * 2)); val gh = max(1, h / (fDiv * 2))
     val blurJob = async(Dispatchers.Default) { cityBitmap(bw, bh, aspect, 0.03, pal) }
     val glowJob = async(Dispatchers.Default) { cityBitmap(gw, gh, aspect, 0.09, pal) }
     jobs.awaitAll()
@@ -458,7 +461,10 @@ internal fun NebbiaStage(
                 value = runCatching {
                     withContext(Dispatchers.Default) {
                         val raster = NebbiaGlyphRaster(typeface)
-                        NebbiaSceneBuilder.build(NebbiaComposer.buildLines(lines), w.toDouble(), h.toDouble(), lyricsFontScale, minPx, px) { raster.get(it) }
+                        var glyphNs = 0L
+                        NebbiaSceneBuilder.build(NebbiaComposer.buildLines(lines), w.toDouble(), h.toDouble(), lyricsFontScale, minPx, px) {
+                            val g0 = System.nanoTime(); val g = raster.get(it); glyphNs += System.nanoTime() - g0; g
+                        }.also { Log.i(TAG, "glyphs ${glyphNs / 1_000_000} ms") }
                     }
                 }.onFailure { Log.e(TAG, "scene failed", it) }.getOrNull()
                 Log.i(TAG, "scene done ${(System.nanoTime() - t0) / 1_000_000} ms lines=${value?.size} glyphs=${value?.flatMap { it.chars }?.count { it.glyph != null }}")

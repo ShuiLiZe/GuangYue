@@ -67,31 +67,36 @@ internal object NebbiaSkeleton {
         intArrayOf(1, 1), intArrayOf(-1, 1), intArrayOf(-1, -1), intArrayOf(1, -1),
     )
 
-    /** Zhang-Suen 细化：两遍交替剥掉边界像素，直到只剩一像素宽的骨架。img 是 SK×SK 的 0/1。 */
+    /** Zhang-Suen 细化：两遍交替剥掉边界像素，直到只剩一像素宽的骨架。img 是 SK×SK 的 0/1。只扫有字的包围盒，省时。 */
     fun thin(img: ByteArray) {
+        var x0 = SK; var x1 = -1; var y0 = SK; var y1 = -1
+        for (y in 0 until SK) for (x in 0 until SK) if (img[y * SK + x].toInt() != 0) {
+            if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y
+        }
+        if (x1 < 0) return
         fun at(x: Int, y: Int): Int = if (x < 0 || y < 0 || x >= SK || y >= SK) 0 else img[y * SK + x].toInt()
-        val n = IntArray(8)
+        val del = IntArray(SK * SK)
         var changed = true
         while (changed) {
             changed = false
             for (pass in 0..1) {
-                val del = ArrayList<Int>()
-                for (y in 0 until SK) for (x in 0 until SK) {
+                var nd = 0
+                for (y in y0..y1) for (x in x0..x1) {
                     if (img[y * SK + x].toInt() == 0) continue
-                    n[0] = at(x, y - 1); n[1] = at(x + 1, y - 1); n[2] = at(x + 1, y); n[3] = at(x + 1, y + 1)
-                    n[4] = at(x, y + 1); n[5] = at(x - 1, y + 1); n[6] = at(x - 1, y); n[7] = at(x - 1, y - 1)
-                    val b = n.sum()
+                    val n0 = at(x, y - 1); val n1 = at(x + 1, y - 1); val n2 = at(x + 1, y); val n3 = at(x + 1, y + 1)
+                    val n4 = at(x, y + 1); val n5 = at(x - 1, y + 1); val n6 = at(x - 1, y); val n7 = at(x - 1, y - 1)
+                    val b = n0 + n1 + n2 + n3 + n4 + n5 + n6 + n7
                     if (b < 2 || b > 6) continue
                     var a = 0
-                    for (i in 0 until 8) if (n[i] == 0 && n[(i + 1) % 8] != 0) a += 1
+                    if (n0 == 0 && n1 != 0) a++; if (n1 == 0 && n2 != 0) a++; if (n2 == 0 && n3 != 0) a++; if (n3 == 0 && n4 != 0) a++
+                    if (n4 == 0 && n5 != 0) a++; if (n5 == 0 && n6 != 0) a++; if (n6 == 0 && n7 != 0) a++; if (n7 == 0 && n0 != 0) a++
                     if (a != 1) continue
-                    val keep = if (pass == 0) (n[0] * n[2] * n[4] != 0 || n[2] * n[4] * n[6] != 0)
-                    else (n[0] * n[2] * n[6] != 0 || n[0] * n[4] * n[6] != 0)
+                    val keep = if (pass == 0) (n0 * n2 * n4 != 0 || n2 * n4 * n6 != 0) else (n0 * n2 * n6 != 0 || n0 * n4 * n6 != 0)
                     if (keep) continue
-                    del += y * SK + x
+                    del[nd++] = y * SK + x
                 }
-                for (i in del) img[i] = 0
-                if (del.isNotEmpty()) changed = true
+                for (i in 0 until nd) img[del[i]] = 0
+                if (nd > 0) changed = true
             }
         }
     }

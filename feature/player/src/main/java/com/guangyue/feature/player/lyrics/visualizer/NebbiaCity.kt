@@ -108,6 +108,13 @@ internal object NebbiaCity {
         }
     }
 
+    private val FAC_DARK = doubleArrayOf(0.015, 0.018, 0.025)
+    private val WIN_WARM = doubleArrayOf(1.0, 0.78, 0.5)
+    private val WIN_COOL = doubleArrayOf(0.78, 0.88, 1.0)
+    private val WIN_AVG = doubleArrayOf(0.95 * 0.85, 0.82 * 0.85, 0.66 * 0.85)
+    private val TAIL = doubleArrayOf(1.0, 0.18, 0.12)
+    private val HEAD = doubleArrayOf(1.0, 0.95, 0.85)
+
     /** 一层楼群（layer 0 远、1 近）叠到 col 上（col = mix(col, rgb, a)）。 */
     private fun building(qx: Double, qy: Double, b: Double, t: Double, layer: Double, p: NebbiaPalette, col: DoubleArray) {
         val near = layer
@@ -116,15 +123,18 @@ internal object NebbiaCity {
         val aa = max(b, 0.0012)
         val c0 = floor(x / cw)
         val fx = x - c0 * cw; val nbReach = aa + 0.0013
-        val rr = DoubleArray(3); var ra = 0.0
+        var r0 = 0.0; var r1 = 0.0; var r2 = 0.0; var ra = 0.0
         val sky0 = p.sky0; val sky1 = p.sky1
+        // 楼底在 HZ + 0.015 以上：再往下（路面）整层没有覆盖，跳过
+        if (qy > HZ + 0.015 + aa * 3) return
         for (k in -1..1) {
             if ((k < 0 && fx > nbReach) || (k > 0 && cw - fx > nbReach)) continue
             val n = c0 + k + layer * 100.0
             val w = cw * (0.72 + 0.26 * h1(n))
             val left = (c0 + k) * cw + (cw - w) * h1(n + 1.0)
             val lx = x - left
-            val hgt = (0.07 + 0.04 * near) + (0.16 + 0.11 * near) * h1(n + 2.0).pow(1.5)
+            val hh = h1(n + 2.0)
+            val hgt = (0.07 + 0.04 * near) + (0.16 + 0.11 * near) * hh * kotlin.math.sqrt(hh)
             val base = HZ + near * 0.015
             val top = base - hgt
             val tier = h1(n + 3.0) < 0.5
@@ -136,39 +146,48 @@ internal object NebbiaCity {
             val cov = max(max(body, up), ant)
             if (cov <= 0.0) continue
             val fk = 0.7 + 0.6 * h1(n + 8.0)
-            val lowLit = nClamp((qy - roof) / (base - roof)).pow(2.5)
+            val ll = nClamp((qy - roof) / (base - roof))
+            val lowLit = ll * ll * kotlin.math.sqrt(ll)
             val edge = sst(0.003 + aa, 0.0, lx) * body
             val fh = 0.0075 + 0.0045 * near; val wc = 0.0055 + 0.003 * near
             val gx = (lx - wc * 0.6) / wc; val gy = (qy - roof - fh * 0.8) / fh
             val idx = floor(gx); val idy = floor(gy); val ffx = gx - idx; val ffy = gy - idy
             val dens = 0.15 + 0.5 * h1(n + 9.0)
-            val floorOn = if (hash(idy, n) >= 0.18) 1.0 else 0.0
-            val on = (if (hash(idx + n * 3.7, idy + n * 3.7) <= dens) 1.0 else 0.0) * floorOn
             val inside = sst(-aa, aa, lx - wc * 0.6) * sst(-aa, aa, w - wc * 0.6 - lx) * sst(-aa, aa, qy - roof - fh * 0.8) * sst(-aa, aa, base - fh - qy)
-            val pane = sst(0.32, 0.22, abs(ffx - 0.5)) * sst(0.3, 0.2, abs(ffy - 0.5))
             val blurMix = nClamp(b / (wc * 0.8))
-            val win = (pane * on * (1 - blurMix) + 0.3 * dens * 0.82 * blurMix) * inside * max(body, up)
-            val hc = hash(idx + n * 1.3, idy + n * 1.3)
-            val wcol = when {
-                hc < 0.5 -> doubleArrayOf(1.0, 0.78, 0.5)
-                hc < 0.8 -> doubleArrayOf(0.78, 0.88, 1.0)
-                else -> pick(hash(idx + 5.0, idy + 5.0), p)
+            var win = 0.0
+            var wcol = WIN_AVG
+            var wk = 1.0
+            if (inside > 0.0) {
+                val floorOn = if (hash(idy, n) >= 0.18) 1.0 else 0.0
+                val on = (if (hash(idx + n * 3.7, idy + n * 3.7) <= dens) 1.0 else 0.0) * floorOn
+                val pane = sst(0.32, 0.22, abs(ffx - 0.5)) * sst(0.3, 0.2, abs(ffy - 0.5))
+                win = (pane * on * (1 - blurMix) + 0.3 * dens * 0.82 * blurMix) * inside * max(body, up)
+                val hc = hash(idx + n * 1.3, idy + n * 1.3)
+                wcol = if (hc < 0.5) WIN_WARM else if (hc < 0.8) WIN_COOL else pick(hash(idx + 5.0, idy + 5.0), p)
+                wk = 0.55 + 0.6 * hash(idx + 2.9, idy + 2.9)
             }
-            val wk = 0.55 + 0.6 * hash(idx + 2.9, idy + 2.9)
-            val avg = doubleArrayOf(0.95 * 0.85, 0.82 * 0.85, 0.66 * 0.85)
             val f = 0.45 + (0.12 - 0.45) * near
             for (i in 0..2) {
-                var fac = (sky0[i] * 0.45 + doubleArrayOf(0.015, 0.018, 0.025)[i] * 0.55) * fk
+                var fac = (sky0[i] * 0.45 + FAC_DARK[i] * 0.55) * fk
                 fac += (SODIUM[i] + p.la[i]) * 0.5 * 0.1 * lowLit
                 fac += (sky1[i] * 0.7 + p.lb[i] * 0.3) * 0.12 * edge
-                val wci = wcol[i] * wk * (1 - blurMix) + avg[i] * blurMix
+                val wci = wcol[i] * wk * (1 - blurMix) + WIN_AVG[i] * blurMix
                 var bc = fac + wci * win * (0.7 + 0.3 * near)
                 bc = bc * (1 - f) + (sky0[i] * 0.3 + sky1[i] * 0.7) * f
-                rr[i] = rr[i] * (1 - cov) + bc * cov
+                when (i) {
+                    0 -> r0 = r0 * (1 - cov) + bc * cov
+                    1 -> r1 = r1 * (1 - cov) + bc * cov
+                    else -> r2 = r2 * (1 - cov) + bc * cov
+                }
             }
             ra = max(ra, cov)
         }
-        if (ra > 0) for (i in 0..2) col[i] = col[i] * (1 - ra) + rr[i] * ra
+        if (ra > 0) {
+            col[0] = col[0] * (1 - ra) + r0 * ra
+            col[1] = col[1] * (1 - ra) + r1 * ra
+            col[2] = col[2] * (1 - ra) + r2 * ra
+        }
     }
 
     /** 主题色霓虹：楼群之间密密的彩色小散景，偶尔一大团霓虹带一圈很大的光晕。加到 out。 */
@@ -217,7 +236,7 @@ internal object NebbiaCity {
         for (lane in 0..1) {
             val sp = if (lane == 0) 0.55 else -1.1; val ly = if (lane == 0) 0.76 else 0.83; val ww = 0.9
             val xc = qx + t * sp; val cc = floor(xc / ww)
-            val lc = if (lane == 0) doubleArrayOf(1.0, 0.18, 0.12) else doubleArrayOf(1.0, 0.95, 0.85)
+            val lc = if (lane == 0) TAIL else HEAD
             val hd = abs(qy - ly) < reach(0.004, b)
             val rf = road > 0.0 && abs((qy - ly) * 3.0 - 0.03) < reach(0.02, b * 2.0)
             if (!hd && !rf) continue
