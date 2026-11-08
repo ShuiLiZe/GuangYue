@@ -76,10 +76,12 @@ class MusicPluginBridge @Inject constructor(
     private fun resolveMeta(pluginId: String): PluginMeta? =
         manager.find(pluginId) ?: manager.findByPlatform(pluginId)
 
-    private suspend fun runtimeFor(pluginId: String): PluginRuntime = withContext(Dispatchers.IO) {
+    private suspend fun runtimeFor(pluginId: String, lane: String = MAIN_LANE): PluginRuntime = withContext(Dispatchers.IO) {
         manager.load()
         val meta = resolveMeta(pluginId) ?: throw PluginRuntimeException("插件不存在或未启用：$pluginId")
-        val key = meta.id
+        // M8：歌词走独立的第二个运行时（lane），不用排在取链后面 —— 取链一次 4–13 s，
+        // 以前同一把锁串行，切歌后歌词要等取链结束才开始取（用户反馈「有歌词，只是比较慢」）。
+        val key = if (lane == MAIN_LANE) meta.id else "${meta.id}#$lane"
         if (!meta.enabled) throw PluginRuntimeException("插件已禁用：${meta.displayName}")
 
         synchronized(runtimes) {
@@ -97,10 +99,13 @@ class MusicPluginBridge @Inject constructor(
     private fun readCode(id: String): String? =
         File(context.filesDir, "plugins/$id/plugin.js").takeIf { it.isFile }?.readText()
 
-    private suspend fun <T> invoke(pluginId: String, block: PluginRuntime.() -> T): T =
-        withContext(Dispatchers.IO) {
-        val rt = runtimeFor(pluginId)
-        synchronized(lockOf(pluginId)) { rt.block() }
+    private suspend fun <T> invoke(
+        pluginId: String,
+        lane: String = MAIN_LANE,
+        block: PluginRuntime.() -> T,
+    ): T = withContext(Dispatchers.IO) {
+        val rt = runtimeFor(pluginId, lane)
+        synchronized(lockOf(if (lane == MAIN_LANE) pluginId else "$pluginId#$lane")) { rt.block() }
     }
 
     // ------------------------------------------------------------------ search
@@ -202,7 +207,7 @@ class MusicPluginBridge @Inject constructor(
     suspend fun getLyric(pluginId: String, item: MusicItem): LyricSourceResult? = withContext(Dispatchers.IO) {
         val payload = item.raw ?: item.toJson()
         try {
-            val raw = invoke(pluginId) { call("getLyric", payload) }
+            val raw = invoke(pluginId, LYRIC_LANE) { call("getLyric", payload) }
             val o = raw.asObj() ?: return@withContext null
             LyricSourceResult(
                 rawLrc = o["rawLrc"].asStr() ?: o["lrc"].asStr() ?: o["lyric"].asStr(),
@@ -402,6 +407,8 @@ class MusicPluginBridge @Inject constructor(
     }
 
     companion object {
+        private const val MAIN_LANE = "main"
+        private const val LYRIC_LANE = "lyric"
         /** 并发搜索同时在飞的插件数量上限：过多会触发源站限流或本机 socket 耗尽。 */
         const val SEARCH_CONCURRENCY = 6
     }
