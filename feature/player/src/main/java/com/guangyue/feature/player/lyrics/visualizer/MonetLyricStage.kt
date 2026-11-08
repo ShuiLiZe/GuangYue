@@ -18,6 +18,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -93,6 +94,8 @@ internal object MonetRail {
     const val ROW_MAX_W = 1520f
     const val PORTRAIT_MAX = 430f
     const val PORTRAIT_INNER_MAX = 380f
+    // DEFAULT_MONET_TUNING.fontScale（只乘歌词 / 非当前 / 译文字号，标题与歌手不乘）
+    const val TUNING_FONT_SCALE = 1.2f
     const val FOCUS_RATIO = 0.46f
     const val ACTIVE_GAP = 18f
     const val INACTIVE_GAP = 14f
@@ -253,6 +256,8 @@ private fun MonetRailBox(
     val anchor = currentIndex.coerceIn(0, (lines.size - 1).coerceAtLeast(0))
     // 每行量到的未缩放高度（px），用来按 Folia 的方式从焦点往上下堆叠。
     val heights = remember(lines) { mutableStateMapOf<Int, Int>() }
+    // 当前句主文字高（不含译文轨）：Folia 以主文字块居中于轨高 46%，译文挂在下面。
+    val mainHeights = remember(lines) { mutableStateMapOf<Int, Int>() }
     val railPx = with(density) { railHeight.toPx() }
     val lyricPx = with(density) { lyricDp.dp.toPx() }
     val activeGap = with(density) { max(MonetRail.ACTIVE_GAP, lyricDp * 0.49f).dp.toPx() }
@@ -263,6 +268,7 @@ private fun MonetRailBox(
     val targets = HashMap<Int, Float>()
     run {
         fun h(i: Int) = (heights[i] ?: lyricPx.roundToInt()).toFloat() * MonetRail.tone(i - anchor, inactiveScale).scale
+        // 以整块（主文字+译文）居中于轨高 46%（与 Folia 基准对照：块中心误差 <4dp）。
         targets[anchor] = railPx * MonetRail.FOCUS_RATIO - h(anchor) / 2f
         var y = targets[anchor]!!
         for (i in anchor + 1..range.last) {
@@ -340,7 +346,7 @@ private fun MonetRailBox(
                         val text by remember(line, primaryColor) {
                             derivedStateOf { monetActiveText(line, clock.seconds(), primaryColor) }
                         }
-                        Text(text = text, style = textStyle)
+                        Text(text = text, style = textStyle, modifier = Modifier.onSizeChanged { mainHeights[i] = it.height })
                     } else {
                         Text(
                             text = line.fullText,
@@ -429,6 +435,7 @@ private fun MonetLandscape(
 ) {
     val density = LocalDensity.current
     val sp = { v: Float -> with(density) { v.dp.toSp() } }
+    @Suppress("NAME_SHADOWING") val lyricDp = lyricDp * MonetRail.TUNING_FONT_SCALE
     // Tailwind 断点：sm 640 / lg 1024 / 2xl 1536。
     val padX = when { widthDp >= 1536f -> 80f; widthDp >= 1024f -> 56f; widthDp >= 640f -> 32f; else -> 20f }
     val padY = when { widthDp >= 1024f -> 32f; widthDp >= 640f -> 24f; else -> 20f }
@@ -515,6 +522,23 @@ private fun MonetLandscape(
                         onSeekToLine = onSeekToLine,
                         modifier = Modifier.widthIn(max = MonetRail.RAIL_BASE_MAX_W.dp),
                     )
+                    // showDescription（默认 true）：mt-auto pt-4 的说明胶囊，矮屏上被裁在下方，但参与整列高度与居中。
+                    Box(Modifier.padding(top = 16.dp)) {
+                        Row(
+                            Modifier
+                                .background(backgroundColor.copy(alpha = 0.18f), RoundedCornerShape(50))
+                                .border(1.dp, primaryColor.copy(alpha = 0.16f), RoundedCornerShape(50))
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.width(10.dp).height(10.dp).background(accentColor, RoundedCornerShape(50)))
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                "MONET",
+                                style = TextStyle(color = primaryColor.copy(alpha = 0.9f), fontSize = sp(12f), lineHeight = sp(16f)),
+                            )
+                        }
+                    }
                 }
             }
             // 右列肖像（md:flex，宽≥768 才有；手机横屏 800dp 起即显示）
