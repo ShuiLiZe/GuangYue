@@ -57,8 +57,6 @@ internal object NebbiaTiming {
     /** 第 [i] 句在 [t] 时的清晰度：开唱前 0，起雾前 1，之后线性退到 0；第 i+3 句开唱时强制归零（槽位要让出来）。 */
     fun clarity(lines: List<Line>, i: Int, t: Double): Float {
         if (t < lines[i].startTime - 0.05) return 0f
-        val reuse = lines.getOrNull(i + SLOTS)?.startTime
-        if (reuse != null && t >= reuse) return 0f
         val f = fogAt(lines, i)
         if (t <= f) return 1f
         return (1.0 - (t - f) / FOG_S).coerceIn(0.0, 1.0).toFloat()
@@ -203,6 +201,45 @@ internal fun layoutNebbiaSong(
     }
 }
 
+/**
+ * B0 雾笺重做：Folia nebbiaLayout 构图排版（主词放大、十字 / 竖柱 / 刊头 / 竖排等构图、整屏找空位），
+ * 取代旧的「三槽位整行」。每个字一个擦痕字形，竖排里转 90° 的字带旋转。
+ */
+internal fun composeNebbiaSong(
+    lines: List<Line>,
+    w: Float,
+    h: Float,
+    fontScale: Float,
+    minPx: Float,
+    measurer: TextMeasurer,
+    base: TextStyle,
+): List<List<NebbiaGlyph>> {
+    val src = NebbiaComposer.buildLines(lines)
+    val pos = NebbiaComposer.layoutSong(
+        src, w.toDouble(), h.toDouble(), fontScale.toDouble(), minPx.toDouble(), jitter = 1.0,
+        visibleUntil = { NebbiaTiming.fogAt(lines, it) + NebbiaTiming.FOG_S },
+        fogAt = { NebbiaTiming.fogAt(lines, it) },
+    )
+    return src.mapIndexed { li, line ->
+        val rnd = NebbiaRng(line.chars.size * 131 + li * 7919)
+        line.chars.mapIndexedNotNull { k, c ->
+            if (c.ch.isBlank()) return@mapIndexedNotNull null
+            val p = pos[li][k]
+            val size = p.s.toFloat()
+            NebbiaGlyph(
+                text = c.ch,
+                layout = measurer.measure(c.ch, base.copy(fontSize = size.sp), density = OnePx),
+                cx = p.x.toFloat(),
+                cy = p.y.toFloat(),
+                size = size,
+                rot = (p.rot * 180.0 / Math.PI).toFloat(),
+                start = c.t,
+                drip = if (rnd.next() < 0.28f) 0.5f + rnd.next() else 0f,
+            )
+        }
+    }
+}
+
 private data class NebbiaLight(val x: Float, val y: Float, val r: Float, val color: Color, val phase: Float)
 
 @Composable
@@ -223,7 +260,7 @@ internal fun NebbiaStage(
         val minPx = with(density) { 26.sp.toPx() }
         val style = remember(fontFamily) { TextStyle(fontFamily = fontFamily, fontWeight = FontWeight.Bold) }
         val song = remember(lines, w, h, lyricsFontScale, style) {
-            if (w <= 0f || h <= 0f) emptyList() else layoutNebbiaSong(lines, w, h, lyricsFontScale.toFloat(), minPx, measurer, style)
+            if (w <= 0f || h <= 0f) emptyList() else composeNebbiaSong(lines, w, h, lyricsFontScale.toFloat(), minPx, measurer, style)
         }
         // 夜色光斑：城市灯火的散景（暖黄、钠灯橙、冷青、尾灯红），种子固定。
         val lights = remember(w, h, accentColor) {

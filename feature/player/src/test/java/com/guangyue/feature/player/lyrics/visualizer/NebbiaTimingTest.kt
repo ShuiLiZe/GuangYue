@@ -15,8 +15,9 @@ class NebbiaTimingTest {
         assertEquals(1f, NebbiaTiming.clarity(song, 0, 4.0), 0f)
         // 下一句 3.0 开唱，晚于本句 2.0 唱完 → 4.5 起雾，8 秒吞完
         assertEquals(0.5f, NebbiaTiming.clarity(song, 0, 8.5), 1e-4f)
-        // 第 3 句（共用槽位）开唱时强制归零
-        assertEquals(0f, NebbiaTiming.clarity(song, 0, 9.0), 0f)
+        // 构图排版避让重叠后不再有槽位复用：按雾吞进度继续退（9.0 → 0.4375）
+        assertEquals(0.4375f, NebbiaTiming.clarity(song, 0, 9.0), 1e-4f)
+        assertEquals(0f, NebbiaTiming.clarity(song, 0, 12.5), 0f)
     }
 
     @Test
