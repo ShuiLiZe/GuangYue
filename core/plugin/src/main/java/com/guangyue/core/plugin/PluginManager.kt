@@ -236,12 +236,13 @@ class PluginManager @Inject constructor(
                 // M8：一个音源都没选时，装上的第一个插件直接设为当前音源，否则首页和搜索全是空的。
                 enabled = existing?.enabled ?: _plugins.value.none { it.enabled && it.error == null },
                 sortOrder = existing?.sortOrder ?: (_plugins.value.maxOfOrNull { it.sortOrder } ?: 0) + 1,
-                health = existing?.health
-                    // 没体检过就用打包的出厂体检基线（真机实测结果），否则保持「未体检」
-                    ?: PluginHealthBaseline.lookup(probed.platform)?.first
+                // M8：体检结论只对**同一版本**有效。版本变了（或换了来源）就清成「未体检」，
+                // 否则新插件会一直挂着旧版本的「取不到链」。出厂基线只借它的「可用」结论。
+                health = existing?.takeIf { it.version == probed.version && it.id == id }?.health
+                    ?: PluginHealthBaseline.lookup(probed.platform)?.first?.takeIf { it == PluginHealth.OK }
                     ?: PluginHealth.UNKNOWN,
-                healthNote = existing?.healthNote ?: PluginHealthBaseline.lookup(probed.platform)?.second,
-                healthAt = existing?.healthAt ?: 0L,
+                healthNote = existing?.takeIf { it.version == probed.version && it.id == id }?.healthNote,
+                healthAt = existing?.takeIf { it.version == probed.version && it.id == id }?.healthAt ?: 0L,
                 installedAt = existing?.installedAt ?: System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis(),
             )

@@ -34,11 +34,11 @@ class PluginProbeActivity : ComponentActivity() {
                 Log.w(TAG, "loaded ${manager.plugins.value.size}")
                 if (!sub.isNullOrBlank()) {
                     val r = manager.installOrUpdateAll(sub, force = true)
-                    Log.w(TAG, "install result=$r")
+                    Log.w(TAG, "install result=${r.toString().take(200)}")
                 }
                 val targets = manager.plugins.value.filter { p ->
                     p.error == null && (only == null || p.platform.contains(only) || p.displayName.contains(only)) &&
-                        (sub.isNullOrBlank() || (p.srcUrl ?: p.source).contains("padao") || only != null)
+                        (sub.isNullOrBlank() || (p.source.contains("padao") || (p.srcUrl ?: "").contains("padao")) || only != null)
                 }
                 Log.w(TAG, "targets=${targets.map { it.displayName + "@" + it.version }}")
                 for (p in targets) {
