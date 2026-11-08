@@ -150,6 +150,8 @@ fun LyricFlowScreen(
     modeIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     modeLabel: String = "",
     onCycleMode: (() -> Unit)? = null,
+    /** R2：背景类型——true =「隐现」（Folia 默认，API 33+），false =「通用」（流体 + 几何）。 */
+    latentBackground: Boolean = true,
     /** 截图用：播放胶囊一开始就是展开态。 */
     initialBarExpanded: Boolean = false,
     /** 样式入口的无障碍文案（feature:player 无资源表，由 app 侧注入）。 */
@@ -295,7 +297,15 @@ fun LyricFlowScreen(
     ) {
         // Folia backgrounds/common：通用几何背景（静止不画背景；浮名按自己的「通用几何图形」开关）。
         if (lyricStyle != LyricStyle.STILL && !(lyricStyle == LyricStyle.FUME && fumeTuning.disableGeometricBackground)) {
-            com.guangyue.feature.player.lyrics.visualizer.GeometricBackgroundLayer(
+            if (latentBackground && com.guangyue.feature.player.lyrics.visualizer.latentBackgroundSupported) {
+                // Folia 默认背景「隐现」（DEFAULT_VISUALIZER_BACKGROUND_MODE = 'latent'）。
+                com.guangyue.feature.player.lyrics.visualizer.LatentBackgroundLayer(
+                    coverUrl = coverUrl,
+                    palette = palette,
+                    paused = !playback.isPlaying,
+                    staticMode = reduceMotion,
+                )
+            } else com.guangyue.feature.player.lyrics.visualizer.GeometricBackgroundLayer(
                 seed = (coverUrl ?: "").hashCode().toLong(),
                 secondaryColor = theme.secondary,
                 accentColor = lyricAccent,
