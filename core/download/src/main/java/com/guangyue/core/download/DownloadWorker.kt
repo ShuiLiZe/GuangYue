@@ -137,7 +137,9 @@ class DownloadWorker @AssistedInject constructor(
             // ---------------------------------------------------------------- 5. 歌词 .lrc
             if (request.withLyric) {
                 store.patch(request.key) { it.copy(stage = DownloadStage.LYRICS) }
-                writeLyric(request, targetName)
+                // 歌词只是附带品：写不进去也不能让整首下载算失败（0.0.15 真机就是这样卡住的）。
+                runCatching { writeLyric(request, targetName) }
+                    .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it; android.util.Log.w(LOG_TAG, "lyric skipped for ${request.key}: ${it.message}") }
             }
 
             // ---------------------------------------------------------------- 6. 刷新媒体库

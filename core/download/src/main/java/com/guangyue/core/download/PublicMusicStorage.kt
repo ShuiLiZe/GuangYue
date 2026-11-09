@@ -61,7 +61,17 @@ object PublicMusicStorage {
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
             val resolver = context.contentResolver
-            val uri = resolver.insert(MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)
+            val files = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            // 0.0.15 真机：Android 11+ 不许把非音频文件放进 Music/（只许 Download、Documents），
+            // insert 直接抛 IllegalArgumentException。放不进 Music/ 时退到 Download/GuangYue/。
+            val uri = runCatching { resolver.insert(files, values) }.getOrNull()
+                ?: runCatching {
+                    values.put(
+                        MediaStore.MediaColumns.RELATIVE_PATH,
+                        Environment.DIRECTORY_DOWNLOADS + "/" + DownloadPaths.relativeDir().substringAfter('/'),
+                    )
+                    resolver.insert(files, values)
+                }.getOrNull()
                 ?: return null
             runCatching {
                 resolver.openOutputStream(uri)?.use { it.write(content.toByteArray()) }
