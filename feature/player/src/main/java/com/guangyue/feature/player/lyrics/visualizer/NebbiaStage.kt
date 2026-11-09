@@ -270,9 +270,13 @@ half4 main(float2 fc) {
   fog += smoothstep(0.78, 0.98, spark) * 0.05 * dens;
   float3 col = fog;
   if (clear > 0.001) {
-    float3 wiped = float3(sharpT.eval(fc).rgb) * 1.05 + haze * 0.02 * dens;
+    // 手机上笔画只有几像素宽，清晰图里一格格窗灯正好填满笔画，看着像彩色马赛克：掺 30% 雾里那层（模糊窗外）压一压窗灯
+    float3 wiped = mix(float3(sharpT.eval(fc).rgb) * 1.05, blur * 1.1, 0.3) + haze * 0.02 * dens;
     float rim = clear * (1.0 - clear) * 4.0;
-    col = mix(fog, wiped, clear) + rim * haze * 0.16 * dens;
+    // 手机可读性（第 5 轮）：擦痕刚过阈值的地方（外层、起雾中的旧句）只透出一部分窗外，笔画中心最清楚；
+    // 免得起雾时一粒粒全透的窗灯变成彩色马赛克
+    float k = clear * (0.35 + 0.65 * smoothstep(th + 0.02, th + 0.42, m));
+    col = mix(fog, wiped, k) + rim * haze * 0.16 * dens;
   }
   return half4(half3(col), 1.0);
 }
@@ -280,8 +284,11 @@ half4 main(float2 fc) {
 
 /** 每帧的可变状态：遮罩位图与画笔、聚光灯的平滑强度。 */
 private class NebbiaFrameState(w: Int, h: Int, val px: Double) {
-    /** 擦痕遮罩相对设备像素的比例（Folia MASK_SCALE 是相对 CSS 像素）。 */
-    val ms = (NebbiaFixed.MASK_SCALE / px).toFloat()
+    /**
+     * 擦痕遮罩相对设备像素的比例。Folia MASK_SCALE 0.5 是相对 CSS 像素（2 CSS 像素一格）；手机上字小、笔画细到 3 CSS 像素，
+     * 2 像素一格会把笔画糊成块，所以这里 1 CSS 像素一格。
+     */
+    val ms = (1.0 / px).toFloat()
     val mask: Bitmap = Bitmap.createBitmap(max(1, (w * ms).roundToInt()), max(1, (h * ms).roundToInt()), Bitmap.Config.ARGB_8888)
     val maskCanvas = android.graphics.Canvas(mask)
     /** 白气遮罩（BREATH_SCALE 0.25，相对 CSS 像素）。 */
@@ -306,7 +313,12 @@ private class NebbiaFrameState(w: Int, h: Int, val px: Double) {
     var logged = false
 }
 
-/** 每帧在遮罩位图上画擦痕（圆头折线，亮度取最大）。 */
+/**
+ * 每帧在遮罩位图上画擦痕（圆头折线，亮度取最大）。照 nebbiaMaskGl.ts 一段画三层，由宽到窄、由暗到亮：
+ * [1.3 宽, 0.38 亮] [1.0, 0.72] [0.62, 1]——擦痕中间最清楚、边上淡；起雾时外层先落到阈值下，笔画越来越细地退进雾里。
+ */
+private val MASK_LAYERS = floatArrayOf(1.3f, 0.38f, 1.0f, 0.72f, 0.62f, 1.0f)
+
 private fun drawMask(st: NebbiaFrameState) {
     st.mask.eraseColor(android.graphics.Color.BLACK)
     val c = st.maskCanvas
@@ -317,10 +329,17 @@ private fun drawMask(st: NebbiaFrameState) {
         st.path.moveTo(pl[2].toFloat(), pl[3].toFloat())
         var i = 4
         while (i + 1 < pl.size) { st.path.lineTo(pl[i].toFloat(), pl[i + 1].toFloat()); i += 2 }
-        val v = (nClamp(pl[1]) * 255).roundToInt()
-        st.stroke.color = android.graphics.Color.rgb(v, v, v)
-        st.stroke.strokeWidth = pl[0].toFloat()
-        c.drawPath(st.path, st.stroke)
+        val vv = nClamp(pl[1])
+        var k = 0
+        while (k < MASK_LAYERS.size) {
+            val v = (vv * MASK_LAYERS[k + 1] * 255).roundToInt()
+            if (v > 0) {
+                st.stroke.color = android.graphics.Color.rgb(v, v, v)
+                st.stroke.strokeWidth = pl[0].toFloat() * MASK_LAYERS[k]
+                c.drawPath(st.path, st.stroke)
+            }
+            k += 2
+        }
     }
     c.restore()
 }
@@ -442,7 +461,8 @@ internal fun NebbiaStage(
         val px = density.density.toDouble()
         val minPx = with(density) { 26.sp.toPx() }.toDouble()
         val typeface = remember(fontFamily) {
-            runCatching { resolver.resolve(fontFamily, FontWeight.Bold).value as? Typeface }.getOrNull() ?: Typeface.DEFAULT_BOLD
+            // 骨架用常规字重（Folia 用主题字重）：粗体在 96 格里笔画挤在一起，细化出来的骨架乱成一团，复杂字认不出
+            runCatching { resolver.resolve(fontFamily, FontWeight.Normal).value as? Typeface }.getOrNull() ?: Typeface.DEFAULT
         }
         val accentKey = accentColor.value
         val pal = remember(accentKey) {

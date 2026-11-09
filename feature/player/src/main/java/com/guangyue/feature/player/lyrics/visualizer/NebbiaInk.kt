@@ -40,6 +40,20 @@ internal object NebbiaFixed {
     const val HOLD = 1.2
     const val REFOG = 4.0
     const val STROKE_WIDTH = 0.09
+    /**
+     * 手机上的笔宽（第 5 轮，可读性优先，偏离 Folia）：Folia 的笔宽 0.09 em、下限 8 CSS 像素是按桌面 1600 CSS 宽定的；
+     * 手机横屏只有 800×360 CSS，字只有 30 来 CSS 像素，8 像素下限占到 0.25 em，笔画糊成墨团（Folia 自己在 800 宽下也一样糊）。
+     * 这里基准收到 0.055 em，下限 2.2 CSS 像素（沙盒里用 Noto Sans SC 按三层遮罩 + 阈值模拟过，64 设备像素的字可读）。
+     */
+    const val PHONE_STROKE_WIDTH = 0.055
+    const val PHONE_STROKE_MIN = 2.2
+    /**
+     * 手机上擦痕边水珠的出现概率（Folia BEADS 0.35）：字小、笔画多时水珠挤成一团盖住字（竖屏「雾」「里」），
+     * 收到 0.25，再按笔画数像笔宽那样收（最少一半）。
+     */
+    const val PHONE_BEADS = 0.25
+    /** 字号小于这个（CSS 像素）时擦痕边水珠按比例缩小（最小一半），免得水珠把小字的笔画盖住。 */
+    const val BEAD_FULL_SIZE = 64.0
     const val WRITE_SPEED = 1.0
     const val JITTER = 0.6
     const val WARP = 0.6
@@ -327,15 +341,17 @@ internal object NebbiaSceneBuilder {
     fun decorate(c: NebbiaChar, base: NebbiaGlyphShape, rnd: () -> Double, warp: Double, px: Double) {
         val g = NebbiaGlyphs.warp(base, rng((rnd() * 1e9).toLong().toInt()), warp)
         c.glyph = g
+        val beadK = nClamp(c.s / (NebbiaFixed.BEAD_FULL_SIZE * px), 0.5, 1.0)
+        val beadP = NebbiaFixed.PHONE_BEADS * nClamp(sqrt(9.0 / g.strokes.size), 0.5, 1.0)
         c.beads = g.strokes.map { st ->
             val out = ArrayList<NebbiaBead>()
             val step = 7 * px / c.s
             var s = step * rnd()
             while (s < st.len) {
-                if (rnd() <= NebbiaFixed.BEADS) {
+                if (rnd() <= beadP) {
                     val p = NebbiaGlyphs.pointAt(st, s)
                     val side = if (rnd() < 0.5) -1.0 else 1.0
-                    out += NebbiaBead(s, p[0], p[1], p[2] * side, p[3] * side, (1.6 + rnd().pow(2.2) * 3.6) * px, rnd())
+                    out += NebbiaBead(s, p[0], p[1], p[2] * side, p[3] * side, (1.6 + rnd().pow(2.2) * 3.6) * px * beadK, rnd())
                 }
                 s += step * (0.5 + rnd())
             }
@@ -385,7 +401,11 @@ internal object NebbiaSceneBuilder {
     /** 这句最后一个字写完（慢慢显现的显出一半）的时刻。 */
     fun writtenAt(line: NebbiaLine): Double {
         var done = line.t
-        for (c in line.chars) if (c.glyph != null) done = max(done, if (c.wd > 0) c.wt + c.wd else c.t + min(c.appearDur, 0.5))
+        // 偏离 Folia：慢慢显现的字（appearDur > 0）在 c.t 起就显出来，按「显出一半」算；Folia 这里先看 wd，而 applyAppear 给慢慢显现的字
+        // 也填了压缩后的书写时长，长句会被算成十几秒后才写完 → 不让位，被后一句压在底下（竖屏取证里两句叠在一起）
+        for (c in line.chars) if (c.glyph != null) {
+            done = max(done, if (c.appearDur > 0) c.t + min(c.appearDur, 0.5) else if (c.wd > 0) c.wt + c.wd else c.t)
+        }
         return done
     }
 
@@ -529,6 +549,12 @@ internal object NebbiaSceneBuilder {
     }
 }
 
+/** 一个字的笔宽（em）：笔画多的收细；见 [NebbiaFixed.PHONE_STROKE_WIDTH]。 */
+internal fun strokeWidthOf(c: NebbiaChar, g: NebbiaGlyphShape, px: Double): Double {
+    val thin = nClamp(sqrt(9.0 / g.strokes.size), 0.55, 1.0)
+    return max(NebbiaFixed.PHONE_STROKE_WIDTH * thin, NebbiaFixed.PHONE_STROKE_MIN * px * thin / c.s)
+}
+
 /**
  * 每帧收集擦痕（nebbiaInk.ts drawChar / drawDrip）：线段写进 [seg]（x0, y0, x1, y1, 宽, 亮度；设备像素），
  * 水珠写进 [beads]（x, y, r, 透明度, sx, sy）。笔画是一笔一段折线，[pathStart] 记每段折线在 seg 里开始的下标。
@@ -615,9 +641,8 @@ internal class NebbiaInkFrame {
         val gap = min(0.06 / NebbiaFixed.WRITE_SPEED, wd * 0.08)
         val inkTime = wd - gap * (g.strokes.size - 1)
         var local = t - (if (fadeIn) c.t else c.wt)
-        // 笔画多的字笔画收细一点；最细 8 CSS 像素的下限也跟着收
-        val thin = nClamp(sqrt(9.0 / g.strokes.size), 0.55, 1.0)
-        val width = max(NebbiaFixed.STROKE_WIDTH * thin, 8 * px * thin / c.s)
+        // 笔画多的字笔画收细一点；下限也跟着收（Folia 0.09 em / 8 CSS 像素，手机上收细，见 PHONE_STROKE_WIDTH）
+        val width = strokeWidthOf(c, g, px)
         val drips = ArrayList<Triple<NebbiaStroke, NebbiaDrip, Double>>()
         g.strokes.forEachIndexed { si, st ->
             val dur = if (fadeIn) 0.0 else inkTime * st.len / g.total
