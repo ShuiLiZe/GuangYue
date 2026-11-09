@@ -147,6 +147,7 @@ internal fun LumiereStage(
     }
     val shader = remember { if (lumiereSupportsShader()) RuntimeShader(LUMIERE_LIGHT_AGSL) else null }
     val blurs = remember { HashMap<Int, BlurMaskFilter>() }
+    val fogField = remember { LumiereFogField() }
     val measure = remember(measurePaint) { LumiereTextMeasure { text, px -> measurePaint.textSize = px.toFloat(); measurePaint.measureText(text).toDouble() } }
     val motion = if (reduceMotion) 0.6 else 1.0
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -186,7 +187,7 @@ internal fun LumiereStage(
                 }
             }
             withTransform({ scale(density, density, Offset.Zero) }) {
-                drawUnit(state, time, palette, alpha, scale, shader, textPaint, glowPaint, spritePaint, dot, star, blurs)
+                drawUnit(state, time, palette, alpha, scale, shader, fogField, textPaint, glowPaint, spritePaint, dot, star, blurs)
                 drawLumiereOverlay(wDp.toDouble(), hDp.toDouble(), palette.light)
             }
         }
@@ -194,7 +195,7 @@ internal fun LumiereStage(
 }
 
 private fun DrawScope.drawUnit(
-    state: LumiereUnitState, time: Double, palette: LumierePalette, alpha: Double, transitionScale: Double, shader: RuntimeShader?,
+    state: LumiereUnitState, time: Double, palette: LumierePalette, alpha: Double, transitionScale: Double, shader: RuntimeShader?, fogField: LumiereFogField,
     textPaint: Paint, glowPaint: Paint, spritePaint: Paint, dot: Bitmap, star: Bitmap, blurs: HashMap<Int, BlurMaskFilter>,
 ) {
     val model = state.model
@@ -215,7 +216,8 @@ private fun DrawScope.drawUnit(
         val input = LumiereFieldInput(light, time, model.width, model.height, palette.light, 1.0, 5.0, model.lead.region, 0.22f)
         val overscan = ceil(max(model.width, model.height) * 0.02).toFloat()
         if (shader != null && Build.VERSION.SDK_INT >= 33) {
-            shader.setLumiereField(input)
+            fogField.update(time, light.rig.fog, 5, model.width, model.height, overscan.toDouble())
+            shader.setLumiereField(input, fogField)
             val fieldPaint = Paint()
             fieldPaint.shader = shader
             nc.drawRect(-overscan, -overscan, w + overscan, h + overscan, fieldPaint)

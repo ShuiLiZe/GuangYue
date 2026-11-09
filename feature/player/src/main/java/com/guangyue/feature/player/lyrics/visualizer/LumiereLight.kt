@@ -7,7 +7,10 @@
 //   2. Folia 的图形组还套了一层 bloom（strength 1.5、threshold 0.42，pixi/bloomFilter.ts，多级降采样）。手机上不做多级模糊，
 //      在着色器里给每束光多算一份加宽的柔边（半宽 ×5、软度 1）乘 0.22 叠上去，近似光柱芯的外发光（uBloom 可关）。
 //   3. API 32 及以下没有 RuntimeShader：退回按光束几何画的线性渐变梯形（drawLumiereFallbackLight），没有烟雾与眩光的噪声。
-//   4. 暗场底不在这里画（Folia 里 uDark 恒为 0，暗场由运行时铺在所有场景之下），所以去掉了 uDark 通路。
+//   4. 烟雾噪声（fog：两层 3 倍频 fbm 做域扭曲 + 5 倍频 fbm）逐像素算在模拟器的软件 GPU 上太慢（取证时 ANR），
+//      改在 CPU 上按同一公式算一张 5 dp 一格的低分辨率密度图（LumiereFogField，约 15 帧 / 秒更新），着色器双线性采样它。
+//      烟雾的频率每高度单位 2.4，网格每高度单位 72 格，采样误差看不出来。
+//   5. 暗场底不在这里画（Folia 里 uDark 恒为 0，暗场由运行时铺在所有场景之下），所以去掉了 uDark 通路。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.graphics.RuntimeShader
@@ -44,6 +47,8 @@ uniform float4 uWaveB;
 uniform float4 uShield;
 uniform float4 uShieldB;
 uniform float uBloom;
+uniform float4 uFogGrid;
+uniform shader uFog;
 
 float hash11(float x) {
     float p = fract(x * 0.1031);
@@ -71,28 +76,6 @@ float valueNoise2(float2 p) {
     float c = hash12(i + float2(0.0, 1.0));
     float d = hash12(i + float2(1.0, 1.0));
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-float fbm(float2 p, float octaves) {
-    float sum = 0.0;
-    float amp = 0.5;
-    float norm = 0.0;
-    float2x2 rot = float2x2(0.8, -0.6, 0.6, 0.8);
-    for (int i = 0; i < 6; i++) {
-        if (float(i) < octaves) {
-            sum += amp * valueNoise2(p);
-            norm += amp;
-            p = rot * p * 2.03 + float2(17.1, 9.2);
-            amp *= 0.5;
-        }
-    }
-    return sum / max(norm, 1e-4);
-}
-float fogAt(float2 p, float t) {
-    float2 drift = uFogB.xy * t;
-    float2 q = (p - drift) * uFogA.z;
-    float2 w = float2(fbm(q + float2(0.0, t * 0.07), 3.0), fbm(q + float2(5.2, 1.3) - float2(t * 0.05, 0.0), 3.0));
-    float n = fbm(q + uFogA.w * (w - 0.5) * 2.0, uFogB.w);
-    return smoothstep(0.28, 0.82, n);
 }
 float band(float x, float duty) {
     float f = fract(x);
@@ -192,7 +175,7 @@ half4 main(float2 fragCoord) {
     float H = uFrame.y;
     float t = uFrame.z;
     float2 p = fragCoord / H;
-    float density = fogAt(p, t);
+    float density = uFog.eval((fragCoord - uFogGrid.xy) / uFogGrid.z).a;
     float tyndall = uFogA.y + (1.0 - uFogA.y) * density * uFogA.x;
     float caustic = uCaustic.w > 0.5 ? causticField(p, t * uCaustic.y + 23.0) : 0.0;
     float causticLift = mix(1.0, 0.25 + 1.5 * caustic, uCaustic.w > 0.5 ? uCaustic.z : 0.0);
@@ -236,6 +219,73 @@ half4 main(float2 fragCoord) {
 }
 """
 
+/** fbm（与着色器同一公式；mat2(0.8, -0.6, 0.6, 0.8) 按列主序）。 */
+internal fun lumiereFbm(x0: Double, y0: Double, octaves: Int): Double {
+    var x = x0; var y = y0
+    var sum = 0.0; var amp = 0.5; var norm = 0.0
+    for (i in 0 until min(6, octaves)) {
+        sum += amp * lumiereValueNoise2(x, y)
+        norm += amp
+        val nx = (0.8 * x + 0.6 * y) * 2.03 + 17.1
+        val ny = (-0.6 * x + 0.8 * y) * 2.03 + 9.2
+        x = nx; y = ny
+        amp *= 0.5
+    }
+    return sum / max(norm, 1e-4)
+}
+
+/** lightFieldShader.ts 的 fog(p, t)：烟雾密度 0..1（p 为高度单位）。 */
+internal fun lumiereFogAt(px: Double, py: Double, t: Double, fog: LumiereFog, octaves: Int): Double {
+    val qx = (px - fog.driftX * t) * fog.scale
+    val qy = (py - fog.driftY * t) * fog.scale
+    val wx = lumiereFbm(qx, qy + t * 0.07, 3)
+    val wy = lumiereFbm(qx + 5.2 - t * 0.05, qy + 1.3, 3)
+    val n = lumiereFbm(qx + fog.warp * (wx - 0.5) * 2, qy + fog.warp * (wy - 0.5) * 2, octaves)
+    val k = min(1.0, max(0.0, (n - 0.28) / (0.82 - 0.28)))
+    return k * k * (3 - 2 * k)
+}
+
+/** 烟雾密度的低分辨率网格（5 dp 一格，覆盖含外扩的整个光场），按时间节流更新。 */
+internal class LumiereFogField {
+    val cell = 5.0
+    private var bitmap: android.graphics.Bitmap? = null
+    var shader: android.graphics.BitmapShader? = null
+        private set
+    var originX = 0.0
+        private set
+    var originY = 0.0
+        private set
+    private var lastTime = Double.NaN
+    private var lastFog: LumiereFog? = null
+
+    private fun sameFog(a: LumiereFog, b: LumiereFog?) = b != null && a.density == b.density && a.scale == b.scale &&
+        a.driftX == b.driftX && a.driftY == b.driftY && a.warp == b.warp
+
+    fun update(time: Double, fog: LumiereFog, octaves: Int, width: Double, height: Double, overscan: Double) {
+        val cols = kotlin.math.ceil((width + overscan * 2) / cell).toInt() + 1
+        val rows = kotlin.math.ceil((height + overscan * 2) / cell).toInt() + 1
+        val bmp = bitmap?.takeIf { it.width == cols && it.height == rows }
+        if (bmp != null && sameFog(fog, lastFog) && abs(time - lastTime) < 1.0 / 15) return
+        val target = bmp ?: android.graphics.Bitmap.createBitmap(cols, rows, android.graphics.Bitmap.Config.ARGB_8888)
+        originX = -overscan; originY = -overscan
+        val pixels = IntArray(cols * rows)
+        for (r in 0 until rows) for (c in 0 until cols) {
+            val px = (originX + (c + 0.5) * cell) / height
+            val py = (originY + (r + 0.5) * cell) / height
+            val a = (lumiereFogAt(px, py, time, fog, octaves) * 255).toInt().coerceIn(0, 255)
+            pixels[r * cols + c] = (a shl 24) or 0xffffff
+        }
+        target.setPixels(pixels, 0, cols, 0, 0, cols, rows)
+        if (target !== bitmap) {
+            bitmap = target
+            shader = android.graphics.BitmapShader(target, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP).also {
+                if (Build.VERSION.SDK_INT >= 33) it.filterMode = android.graphics.BitmapShader.FILTER_MODE_LINEAR
+            }
+        }
+        lastTime = time; lastFog = fog
+    }
+}
+
 /** 光场一帧的输入（LightFieldFrame）：width / height 为舞台 dp。 */
 internal class LumiereFieldInput(
     val frame: LumiereLightFrame, val time: Double, val width: Double, val height: Double,
@@ -244,7 +294,9 @@ internal class LumiereFieldInput(
 
 /** createLightField 的 update：把光束、烟雾、眩光、焦散、干涉写进 uniform。 */
 @RequiresApi(33)
-internal fun RuntimeShader.setLumiereField(input: LumiereFieldInput) {
+internal fun RuntimeShader.setLumiereField(input: LumiereFieldInput, fogField: LumiereFogField) {
+    fogField.shader?.let { setInputShader("uFog", it) }
+    setFloatUniform("uFogGrid", fogField.originX.toFloat(), fogField.originY.toFloat(), fogField.cell.toFloat(), 0f)
     val beams = input.frame.beams
     val n = LUMIERE_MAX_BEAMS * 4
     val a = FloatArray(n); val b = FloatArray(n); val c = FloatArray(n); val d = FloatArray(n); val e = FloatArray(n); val f = FloatArray(n)
