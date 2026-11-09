@@ -269,7 +269,7 @@ private fun SonnetAnimGraphics.face(points: List<DoubleArray>, color: Int, alpha
     lineTo(points[0][0], points[0][1]).fill(color, alpha)
 }
 
-private fun pt(x: Double, y: Double) = doubleArrayOf(x, y)
+private fun mgPt(x: Double, y: Double) = doubleArrayOf(x, y)
 
 private fun SonnetAnimGraphics.solidCuboid(x: Double, y: Double, w: Double, h: Double, dx: Double, dy: Double, color: Int, alpha: Double) {
     val l = x - w / 2; val r = x + w / 2; val t = y - h / 2; val b = y + h / 2
@@ -316,7 +316,7 @@ private fun SonnetAnimGraphics.tracePolygon(pts: Array<DoubleArray>): SonnetAnim
 }
 private fun SonnetAnimGraphics.fillPolygon(pts: Array<DoubleArray>, color: Int, alpha: Double) { tracePolygon(pts).fill(color, alpha) }
 private fun SonnetAnimGraphics.strokePolygon(pts: Array<DoubleArray>, color: Int, alpha: Double, width: Double = 1.5) { tracePolygon(pts).stroke(color, width, alpha) }
-private fun pt(x: Double, y: Double) = doubleArrayOf(x, y)
+private fun mgPt(x: Double, y: Double) = doubleArrayOf(x, y)
 
 // ───────────────────────────── 镜头 MG（sonnetShotMg.ts） ─────────────────────────────
 
@@ -702,9 +702,9 @@ private fun drawGeo(geo: SonnetAnimGraphics, variant: Long, seed: Long, width: D
             val d = if (seed % 2 == 0L) 1 else -1
             val bx = max(radius * 0.92, width * 0.64)
             val routes = arrayOf(
-                arrayOf(pt(-0.72, -0.38), pt(-0.38, -0.38), pt(-0.38, 0.08), pt(0.08, 0.08), pt(0.08, 0.52), pt(0.68, 0.52)),
-                arrayOf(pt(-0.62, 0.58), pt(-0.62, 0.24), pt(-0.14, 0.24), pt(-0.14, -0.52), pt(0.5, -0.52), pt(0.5, -0.2), pt(0.74, -0.2)),
-                arrayOf(pt(-0.78, -0.06), pt(-0.5, -0.06), pt(-0.5, -0.62), pt(0.24, -0.62), pt(0.24, 0.3), pt(0.72, 0.3)),
+                arrayOf(mgPt(-0.72, -0.38), mgPt(-0.38, -0.38), mgPt(-0.38, 0.08), mgPt(0.08, 0.08), mgPt(0.08, 0.52), mgPt(0.68, 0.52)),
+                arrayOf(mgPt(-0.62, 0.58), mgPt(-0.62, 0.24), mgPt(-0.14, 0.24), mgPt(-0.14, -0.52), mgPt(0.5, -0.52), mgPt(0.5, -0.2), mgPt(0.74, -0.2)),
+                arrayOf(mgPt(-0.78, -0.06), mgPt(-0.5, -0.06), mgPt(-0.5, -0.62), mgPt(0.24, -0.62), mgPt(0.24, 0.3), mgPt(0.72, 0.3)),
             )
             routes.forEachIndexed { ri, route ->
                 g.moveTo(-bx * d, route[0][1] * radius)
@@ -856,7 +856,7 @@ private fun drawGeo(geo: SonnetAnimGraphics, variant: Long, seed: Long, width: D
         30 -> { // greenhouse
             val d = if (seed % 2 == 0L) 1 else -1
             val bx = max(radius * 0.92, width * 0.64)
-            val shell = arrayOf(pt(-radius * 0.7, radius * 0.58), pt(-radius * 0.7, -radius * 0.12), pt(0.0, -radius * 0.62), pt(radius * 0.7, -radius * 0.12), pt(radius * 0.7, radius * 0.58))
+            val shell = arrayOf(mgPt(-radius * 0.7, radius * 0.58), mgPt(-radius * 0.7, -radius * 0.12), mgPt(0.0, -radius * 0.62), mgPt(radius * 0.7, -radius * 0.12), mgPt(radius * 0.7, radius * 0.58))
             g.fillPolygon(shell, primary, 0.055)
             g.strokePolygon(shell, primary, 0.68, 3.0)
             g.moveTo(0.0, -radius * 0.62).lineTo(0.0, radius * 0.58).stroke(secondary, 2.0, 0.5)
@@ -876,7 +876,7 @@ private fun drawGeo(geo: SonnetAnimGraphics, variant: Long, seed: Long, width: D
             for (fl in 0 until 4) {
                 val y = radius * (0.47 - fl * 0.27)
                 val hw = radius * (0.5 - fl * 0.075)
-                val roof = arrayOf(pt(-hw * 1.18, y), pt(-hw, y - radius * 0.11), pt(0.0, y - radius * 0.19), pt(hw, y - radius * 0.11), pt(hw * 1.18, y))
+                val roof = arrayOf(mgPt(-hw * 1.18, y), mgPt(-hw, y - radius * 0.11), mgPt(0.0, y - radius * 0.19), mgPt(hw, y - radius * 0.11), mgPt(hw * 1.18, y))
                 val c = if (fl % 2 != 0) secondary else primary
                 g.fillPolygon(roof, c, 0.07 + fl * 0.025)
                 g.strokePolygon(roof, c, 0.58, 2.0)
@@ -923,8 +923,8 @@ private fun drawGeo(geo: SonnetAnimGraphics, variant: Long, seed: Long, width: D
         34 -> { // mountain lake
             val bx = max(radius * 0.92, width * 0.64)
             val shift = ((seed % 7) - 3) / 3.0 * radius * 0.04
-            val back = arrayOf(pt(-bx, radius * 0.1), pt(-radius * 0.42, -radius * 0.46), pt(-radius * 0.14, -radius * 0.16), pt(radius * 0.22, -radius * 0.62), pt(bx, radius * 0.1))
-            val front = arrayOf(pt(-bx, radius * 0.22), pt(-radius * 0.28 + shift, -radius * 0.2), pt(radius * 0.06, radius * 0.05), pt(radius * 0.48 + shift, -radius * 0.28), pt(bx, radius * 0.22))
+            val back = arrayOf(mgPt(-bx, radius * 0.1), mgPt(-radius * 0.42, -radius * 0.46), mgPt(-radius * 0.14, -radius * 0.16), mgPt(radius * 0.22, -radius * 0.62), mgPt(bx, radius * 0.1))
+            val front = arrayOf(mgPt(-bx, radius * 0.22), mgPt(-radius * 0.28 + shift, -radius * 0.2), mgPt(radius * 0.06, radius * 0.05), mgPt(radius * 0.48 + shift, -radius * 0.28), mgPt(bx, radius * 0.22))
             g.fillPolygon(back, secondary, 0.07)
             g.strokePolygon(back, secondary, 0.46, 1.5)
             g.fillPolygon(front, primary, 0.12)
@@ -941,7 +941,7 @@ private fun drawGeo(geo: SonnetAnimGraphics, variant: Long, seed: Long, width: D
             val d = if (seed % 2 == 0L) 1 else -1
             val bx = max(radius * 0.92, width * 0.64)
             val by = max(radius * 0.92, height * 0.64)
-            val cliff = arrayOf(pt(-bx * d, by), pt(-radius * 0.78 * d, -radius * 0.1), pt(-radius * 0.5 * d, -radius * 0.34), pt(-radius * 0.18 * d, radius * 0.08), pt(radius * 0.08 * d, radius * 0.58))
+            val cliff = arrayOf(mgPt(-bx * d, by), mgPt(-radius * 0.78 * d, -radius * 0.1), mgPt(-radius * 0.5 * d, -radius * 0.34), mgPt(-radius * 0.18 * d, radius * 0.08), mgPt(radius * 0.08 * d, radius * 0.58))
             g.fillPolygon(cliff, primary, 0.11)
             g.strokePolygon(cliff, primary, 0.62, 2.5)
             val tx = -radius * 0.5 * d
