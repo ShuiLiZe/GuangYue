@@ -16,6 +16,11 @@ shot() { adb exec-out screencap -p > "shots/$1.png"; echo "shot $1"; }
 emit_and_exit() {
   adb logcat -d -s AndroidRuntime SonnetStage RuntimeShader ActivityManager:E ActivityTaskManager:W > shots/logcat.txt 2>&1 || true
   echo "===LOGCAT==="; tail -c 4000 shots/logcat.txt
+  # ANR 主线程栈（google_apis 镜像可 adb root）
+  adb root >/dev/null 2>&1; sleep 3
+  echo "===ANR==="
+  adb shell 'for f in /data/anr/anr_*; do echo "== $f"; grep -A60 "^\"main\"" "$f" | head -70; done' 2>&1 | head -c 20000
+  echo "===ANREND==="
   for f in shots/*.png; do
     n=$(basename "$f" .png)
     if command -v convert >/dev/null; then convert "$f" -resize 50% -quality 60 "/tmp/$n.jpg"; else cp "$f" "/tmp/$n.jpg"; fi
