@@ -129,7 +129,8 @@ fun resolveSubtitleOverlayContent(
         }
         rows += SubtitleRow(key = source.name.lowercase(), source = source, text = text!!)
     }
-    val previews = if (rows.isEmpty() && activeLine != null) previewLines.map { it.fullText.trim() } else emptyList()
+    // 2026-11-09 真机：预告只取后两行（Folia nextLines = slice(i+1, i+3)），之前把余下整首都排上来，在每个舞台中间堆成一大块小字。
+    val previews = if (rows.isEmpty() && activeLine != null) previewLines.take(SUBTITLE_PREVIEW_COUNT).map { it.fullText.trim() } else emptyList()
     return SubtitleOverlayContent(lineKey, visible = true, rows = rows, previews = previews)
 }
 
@@ -148,6 +149,9 @@ private const val SUBTITLE_SCRIM_INNER_STOP = 0.62f
 
 /** 预告行整体透明度。层次由 alpha 承担，不用 Modifier.blur（V0d 已证明会光栅成矩形）。 */
 const val SUBTITLE_PREVIEW_OPACITY = 0.72f
+
+/** 无译文时预告的行数（Folia 取当前句之后两行）。 */
+const val SUBTITLE_PREVIEW_COUNT = 2
 
 /** 字幕背景层相对文字区的外扩（Folia `-inset-x-10 -inset-y-6`，即 40dp / 24dp）。 */
 val SUBTITLE_SCRIM_PAD_X = 40.dp
