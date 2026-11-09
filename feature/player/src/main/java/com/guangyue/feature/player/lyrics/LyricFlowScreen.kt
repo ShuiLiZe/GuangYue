@@ -485,7 +485,7 @@ fun LyricFlowScreen(
                 seed = playback.item?.key ?: "lumiere",
             )
         }
-        // P8 凝彩：整屏纸面 + 构图色块，字排在让开顶栏与底部胶囊的区域里，文字 Difference 反色。
+        // R6 凝彩：Folia tempera 原版对译（段落→shot→构图色块 + 拼贴排版 + 文字反色），整屏铺满。
         if (lyricStyle == LyricStyle.TEMPERA && kernelLines.isNotEmpty() && emptyKind == null) {
             com.guangyue.feature.player.lyrics.visualizer.TemperaStage(
                 lines = kernelLines,
@@ -493,12 +493,15 @@ fun LyricFlowScreen(
                 lyricsFontScale = lyricsFontScale,
                 paperColor = theme.background,
                 inkColor = onBackdrop,
-                accentColor = lyricAccent,
+                accentColor = theme.accent,
                 fontFamily = GuangYueDesign.Serif,
                 reduceMotion = reduceMotion,
                 topReserve = 136.dp,
                 bottomReserve = 128.dp,
+                // R6：Folia 凝彩画布铺满舞台；tone2 混副色（temperaPalette duo）。
                 modifier = Modifier.fillMaxSize(),
+                secondaryColor = theme.secondary,
+                seed = playback.item?.key ?: "tempera",
             )
         }
         // R4 商籁：Folia sonnet 原版对译（PV 镜头：段落→镜头→版式→机位跟踪），整屏铺满。
