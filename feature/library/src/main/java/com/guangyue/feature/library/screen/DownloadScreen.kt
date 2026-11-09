@@ -62,6 +62,8 @@ import com.guangyue.feature.library.viewmodel.DownloadViewModel
 fun DownloadScreen(
     onBack: () -> Unit,
     onPlayLocal: (String) -> Unit = {},
+    // 0.0.16 真机：只传 uri 时播放页标题变成 MediaStore 编号、也匹配不到歌词。带上整条记录。
+    onPlayDownloaded: ((com.guangyue.core.download.DownloadedTrack) -> Unit)? = null,
     vm: DownloadViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -151,7 +153,7 @@ fun DownloadScreen(
                     items(state.done, key = { "d-" + it.key }) { t ->
                         DoneRow(
                             track = t,
-                            onPlay = { onPlayLocal(t.uri) },
+                            onPlay = { onPlayDownloaded?.invoke(t) ?: onPlayLocal(t.uri) },
                             onRemove = { vm.remove(t.key) },
                         )
                     }
