@@ -14,6 +14,9 @@
 //   3. 段落转场：Folia 运行时在边界两侧各画一个单元并做交叉渐变 / 模糊；这里只画当前单元，套它的进出帧（alpha、scale），不做模糊。
 //   4. 颗粒：Folia 的颗粒来自共享背景层的网点纹理，这里在暗场上铺一层 3 dp 间距的淡网点（LUMIERE_GRAIN_ALPHA）。
 //   5. 光场在 2 dp 一像素的离屏合成层里算、最多 20 帧 / 秒（LumiereFieldCache），再放大合成。
+//   7. 光色（第 2 阶段第 1 项）：Folia 的 theme.accentColor 是主题里给的强调色，广乐的 theme.emphasis 是封面取出来的饱和色
+//      （常偏红），直接当 accentColor 用会把香槟金光染红。缺省 followThemeAccent=false：强调色按 Folia rgbOf 的退路取香槟金，
+//      再走原版 resolveLumierePalette（themeColorMix 0.3 不变），光色 = 香槟金、点亮的字 = 主色（白）偏暖。
 //   6. 译文由 LyricFlowScreen 的字幕层（LyricSubtitleOverlay）画，同 Folia 的 VisualizerSubtitleOverlay。
 package com.guangyue.feature.player.lyrics.visualizer
 
@@ -175,11 +178,13 @@ internal fun LumiereStage(
     seed: String = "lumiere",
     /** 轨迹过渡（Folia tuning.seamlessTransitions）。Folia 缺省开，但基准截图是按段落切单元的，这里缺省关，见 compileLumiereProgram。 */
     seamless: Boolean = false,
+    /** 光色是否跟随广乐强调色（见文件头偏离 7）。缺省关 = Folia 默认的香槟金。 */
+    followThemeAccent: Boolean = false,
 ) {
     val program = remember(lines, seed, seamless) { compileLumiereProgram(lines, seed, seamless = seamless) }
     val density = LocalDensity.current.density
-    val palette = remember(accentColor, primaryColor, secondaryColor) {
-        resolveLumierePalette(lumiereRgbOfArgb(accentColor.toArgb()), lumiereRgbOfArgb(primaryColor.toArgb()), secondaryColor?.let { lumiereRgbOfArgb(it.toArgb()) }, 0.3)
+    val palette = remember(accentColor, primaryColor, secondaryColor, followThemeAccent) {
+        resolveLumierePalette(if (followThemeAccent) lumiereRgbOfArgb(accentColor.toArgb()) else null, lumiereRgbOfArgb(primaryColor.toArgb()), secondaryColor?.let { lumiereRgbOfArgb(it.toArgb()) }, 0.3)
     }
     val darkField = remember(backgroundColor) { resolveLumiereDarkField(lumiereRgbOfArgb(backgroundColor.toArgb()), 0.75) }
     val typeface = remember { if (Build.VERSION.SDK_INT >= 28) Typeface.create(Typeface.SANS_SERIF, 500, false) else Typeface.DEFAULT }
