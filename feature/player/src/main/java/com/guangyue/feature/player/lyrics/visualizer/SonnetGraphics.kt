@@ -2,13 +2,15 @@
 // 对应 Folia 文件：src/components/visualizer/sonnet/
 //   sonnetAnimatedGraphics.ts（逐笔描出的路径记录器，黄金分割错开 + 三次缓出）
 //   sonnetShotMg.ts（镜头 MG：几何变体 0–17）、sonnetSpatialMgGeometry.ts（立方 / 棱柱）
-//   sonnetShotMgFlora.ts + sonnetThemedShotMgPrimitives.ts（主题变体 24–26：山茶 / 郁金香 / 野花）
+//   sonnetAdditionalShotMg.ts（18–23：等高线 / 放射波 / 线路图 / 计时盘 / 折带 / 半调）
+//   sonnetShotMgFlora / Botanical / Architecture / Landscape.ts + sonnetThemedShotMgPrimitives.ts（主题变体 24–35）
 //   sonnetBackgroundMgVariants.ts（8 种 HUD 外框）、sonnetFixedGeoVariants.ts（8 种定格几何 + 斜线填充）
 //   sonnetBackgroundDecor.ts + sonnetIcons.ts（漂浮小形 + 主题图标，没有图标时用 Lucide Flower）
 //   sonnetTextFixedGeo.ts（词块底纹）、sonnetGuides.ts（引导线 / 彗尾 / 碎片）、sonnetFrameDecor.ts（开口框）
 //   sonnetFrameOverlay.ts（画面四角的固定标记）
 // 偏离：Folia 里 Math.random 的地方（圆的起笔方向、引导线碎片）改用种子随机，同一首歌每次一样；
-// 几何变体 18–23 与 27–99（等高线 / 海洋 / 天体 / 工艺 / 动态 等七十余种）还没移植，暂按 variant % 18 退回已移植的 0–17。
+// 几何变体 0–35 已移植（18–23 sonnetAdditionalShotMg.ts，24–35 sonnetThemedShotMg.ts 的花 / 植物 / 建筑 / 地景）；
+// 36–99（开口框 sonnetOpenFrameShotMg.ts、天体 / 海洋 / 音乐 / 工艺 / 动态）还没移植，暂按 variant % 36 退回。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.graphics.Canvas
@@ -307,6 +309,15 @@ private fun SonnetAnimGraphics.leaf(x: Double, y: Double, length: Double, width:
     moveTo(x, y).lineTo(tipX, tipY).stroke(color, 1.0, 0.32)
 }
 
+/** sonnetThemedShotMgPrimitives.ts tracePolygon：逐点连线再回到首点。 */
+private fun SonnetAnimGraphics.tracePolygon(pts: Array<DoubleArray>): SonnetAnimGraphics {
+    pts.forEachIndexed { i, p -> if (i == 0) moveTo(p[0], p[1]) else lineTo(p[0], p[1]) }
+    return lineTo(pts[0][0], pts[0][1])
+}
+private fun SonnetAnimGraphics.fillPolygon(pts: Array<DoubleArray>, color: Int, alpha: Double) { tracePolygon(pts).fill(color, alpha) }
+private fun SonnetAnimGraphics.strokePolygon(pts: Array<DoubleArray>, color: Int, alpha: Double, width: Double = 1.5) { tracePolygon(pts).stroke(color, width, alpha) }
+private fun pt(x: Double, y: Double) = doubleArrayOf(x, y)
+
 // ───────────────────────────── 镜头 MG（sonnetShotMg.ts） ─────────────────────────────
 
 internal const val SONNET_GEO_VARIANT_COUNT = 100
@@ -317,8 +328,8 @@ internal fun sonnetBackgroundMgVariant(seed: Long) = (sonnetMix(seed, 0x9e3779b9
 internal fun sonnetFixedGeoVariant(seed: Long) = (sonnetMix(seed, 0x85ebca6bL.toInt()) % 8).toInt()
 internal fun sonnetBackgroundDecorVariant(seed: Long) = (sonnetMix(seed, 0xc2b2ae35L.toInt()) % 6).toInt()
 
-/** 已移植的几何变体：0–17、24–26。其余按 % 18 退回（见文件头）。 */
-internal fun sonnetPortedGeoVariant(variant: Long): Long = if (variant <= 17 || variant in 24..26) variant else variant % 18
+/** 已移植的几何变体：0–35。其余（36–47 开口框、48–99 扩展主题）按 % 36 退回（见文件头）。 */
+internal fun sonnetPortedGeoVariant(variant: Long): Long = if (variant <= 35) variant else variant % 36
 
 private fun drawGeo(geo: SonnetAnimGraphics, variant: Long, seed: Long, width: Double, height: Double, radius: Double, primary: Int, secondary: Int) {
     val g = geo
@@ -658,6 +669,107 @@ private fun drawGeo(geo: SonnetAnimGraphics, variant: Long, seed: Long, width: D
             g.trapPrism(-radius * 0.42 * d, radius * 0.28, radius * 0.2, radius * 0.38, radius * 0.22, radius * 0.08 * d, -radius * 0.06, primary, 0.21)
             g.trapPrism(radius * 0.5 * d, -radius * 0.3, radius * 0.2, radius * 0.12, radius * 0.22, -radius * 0.06 * d, -radius * 0.05, primary, 0.18)
         }
+        18 -> { // contour atlas
+            val steps = 48
+            for (ring in 0 until 8) {
+                val baseR = radius * (0.16 + ring * 0.075)
+                for (step in 0..steps) {
+                    val a = step.toDouble() / steps * PI * 2
+                    val ripple = sin(a * 3 + seed * 0.07 + ring) * radius * 0.018 + cos(a * 5 - seed * 0.03 + ring * 0.7) * radius * 0.012
+                    val x = cos(a) * (baseR + ripple) + sin(ring * 1.7) * radius * 0.055
+                    val y = sin(a) * (baseR + ripple) * 0.72 + cos(ring * 1.3) * radius * 0.035
+                    if (step == 0) g.moveTo(x, y) else g.lineTo(x, y)
+                }
+                g.stroke(if (ring % 3 == 0) secondary else primary, if (ring % 3 == 0) 2.0 else 1.0, 0.2 + ring * 0.045)
+            }
+            g.moveTo(-radius * 0.78, radius * 0.52).lineTo(-radius * 0.58, radius * 0.52).lineTo(-radius * 0.58, radius * 0.46).lineTo(-radius * 0.38, radius * 0.46).stroke(primary, 3.0, 0.64)
+        }
+        19 -> { // radial wave
+            val bars = 64
+            for (i in 0 until bars) {
+                val a = i.toDouble() / bars * PI * 2
+                val signal = 0.5 + 0.5 * sin(i * 1.83 + seed * 0.11)
+                val inner = radius * (0.29 + signal * 0.035)
+                val outer = radius * (0.43 + signal * 0.21)
+                g.moveTo(cos(a) * inner, sin(a) * inner).lineTo(cos(a) * outer, sin(a) * outer)
+                    .stroke(if (i % 8 == 0) secondary else primary, if (i % 8 == 0) 3.0 else 1.0, if (i % 2 == 0) 0.58 else 0.32)
+            }
+            g.circle(0.0, 0.0, radius * 0.24).stroke(primary, 5.0, 0.7)
+            g.circle(0.0, 0.0, radius * 0.68).stroke(secondary, 1.0, 0.18)
+            g.circle(0.0, 0.0, radius * 0.72).stroke(primary, 2.0, 0.12)
+        }
+        20 -> { // transit blueprint
+            val d = if (seed % 2 == 0L) 1 else -1
+            val bx = max(radius * 0.92, width * 0.64)
+            val routes = arrayOf(
+                arrayOf(pt(-0.72, -0.38), pt(-0.38, -0.38), pt(-0.38, 0.08), pt(0.08, 0.08), pt(0.08, 0.52), pt(0.68, 0.52)),
+                arrayOf(pt(-0.62, 0.58), pt(-0.62, 0.24), pt(-0.14, 0.24), pt(-0.14, -0.52), pt(0.5, -0.52), pt(0.5, -0.2), pt(0.74, -0.2)),
+                arrayOf(pt(-0.78, -0.06), pt(-0.5, -0.06), pt(-0.5, -0.62), pt(0.24, -0.62), pt(0.24, 0.3), pt(0.72, 0.3)),
+            )
+            routes.forEachIndexed { ri, route ->
+                g.moveTo(-bx * d, route[0][1] * radius)
+                for (p in route) g.lineTo(p[0] * radius * d, p[1] * radius)
+                g.lineTo(bx * d, route.last()[1] * radius)
+                g.stroke(if (ri == 1) secondary else primary, if (ri == 0) 5.0 else 2.0, 0.34 + ri * 0.12)
+                route.forEachIndexed { pi, p ->
+                    if (pi == 0 || pi == route.size - 1 || (pi + ri) % 2 == 0) {
+                        val px = p[0] * radius * d; val py = p[1] * radius
+                        g.circle(px, py, if (pi == 0) 10.0 else 6.0).fill(if (pi % 2 == 0) primary else secondary, 0.72)
+                        g.circle(px, py, if (pi == 0) 16.0 else 11.0).stroke(primary, 1.0, 0.36)
+                    }
+                }
+            }
+        }
+        21 -> { // chronograph
+            doubleArrayOf(0.2, 0.38, 0.62).forEachIndexed { i, sc ->
+                g.circle(0.0, 0.0, radius * sc).stroke(if (i == 1) secondary else primary, if (i == 2) 4.0 else 2.0, 0.3 + i * 0.13)
+            }
+            for (tick in 0 until 48) {
+                val a = tick / 48.0 * PI * 2
+                val outer = radius * 0.72
+                val inner = outer - radius * (if (tick % 4 == 0) 0.11 else 0.045)
+                g.moveTo(cos(a) * inner, sin(a) * inner).lineTo(cos(a) * outer, sin(a) * outer)
+                    .stroke(if (tick % 4 == 0) secondary else primary, if (tick % 4 == 0) 3.0 else 1.0, 0.5)
+            }
+            val hand = (seed % 60) / 60.0 * PI * 2 - PI / 2
+            val sec = ((seed * 7) % 60) / 60.0 * PI * 2 - PI / 2
+            g.moveTo(-cos(hand) * radius * 0.12, -sin(hand) * radius * 0.12).lineTo(cos(hand) * radius * 0.55, sin(hand) * radius * 0.55).stroke(primary, 6.0, 0.74)
+            g.moveTo(0.0, 0.0).lineTo(cos(sec) * radius * 0.65, sin(sec) * radius * 0.65).stroke(secondary, 2.0, 0.72)
+            g.circle(0.0, 0.0, radius * 0.055).fill(primary, 0.85)
+        }
+        22 -> { // folded ribbons
+            val d = if (seed % 2 == 0L) 1 else -1
+            val bx = max(radius * 0.92, width * 0.64)
+            val by = max(radius * 0.92, height * 0.64)
+            for (band in 0 until 5) {
+                val y = (-0.5 + band * 0.25) * radius
+                val off = (if (band % 2 == 0) 1 else -1) * d
+                g.moveTo(-bx, y).bezierCurveTo(-radius * 0.38, y - radius * 0.28 * off, radius * 0.18, y + radius * 0.28 * off, bx, y)
+                    .stroke(if (band % 2 == 0) primary else secondary, if (band == 2) 12.0 else 5.0, 0.24 + band * 0.08)
+                val e = radius * 0.055
+                g.moveTo(-bx, y + e).bezierCurveTo(-radius * 0.38, y - radius * 0.28 * off + e, radius * 0.18, y + radius * 0.28 * off + e, bx, y + e)
+                    .stroke(primary, 1.0, 0.3)
+            }
+            g.moveTo(-radius * 0.34, -by).lineTo(-radius * 0.34, -radius * 0.18).stroke(primary, 2.0, 0.18)
+            g.moveTo(radius * 0.34, radius * 0.18).lineTo(radius * 0.34, by).stroke(primary, 2.0, 0.18)
+        }
+        23 -> { // halftone poster
+            val spacing = radius * 0.17
+            val bx = max(radius * 0.92, width * 0.64)
+            val by = max(radius * 0.92, height * 0.64)
+            val columns = kotlin.math.ceil(bx * 2 / spacing).toInt() + 2
+            val rows = kotlin.math.ceil(by * 2 / spacing).toInt() + 2
+            for (row in 0 until rows) for (col in 0 until columns) {
+                val x = (col - (columns - 1) / 2.0) * spacing
+                val y = (row - (rows - 1) / 2.0) * spacing
+                val dist = hypot(x, y) / radius
+                val pulse = 0.5 + 0.5 * sin(col * 0.9 + row * 1.4 + seed * 0.08)
+                val dr = radius * (0.009 + max(0.0, 0.72 - dist) * 0.034 + pulse * 0.012)
+                g.circle(x, y, dr).fill(if ((row + col) % 5 == 0) secondary else primary, 0.24 + pulse * 0.5)
+            }
+            g.moveTo(-bx, -by * 0.72).lineTo(bx, -by * 0.72).stroke(secondary, 2.0, 0.28)
+            g.moveTo(-bx * 0.58, -by).lineTo(-bx * 0.58, by).stroke(primary, 1.0, 0.2)
+        }
         24 -> { // camellia
             val turn = (seed % 12) * PI / 72
             for (ring in 0 until 3) {
@@ -698,6 +810,149 @@ private fun drawGeo(geo: SonnetAnimGraphics, variant: Long, seed: Long, width: D
                     g.leaf(x + lean, fy, radius * 0.105, radius * 0.032, a, if (stem % 3 != 0) primary else secondary, 0.1)
                 }
                 g.circle(x + lean, fy, radius * 0.025).fill(secondary, 0.48)
+            }
+        }
+        27 -> { // fern
+            val tilt = (if (seed % 2 != 0L) 1 else -1) * 0.18
+            g.moveTo(-radius * 0.12, radius * 0.72).bezierCurveTo(-radius * 0.04, radius * 0.2, radius * 0.12, -radius * 0.24, radius * 0.02, -radius * 0.72).stroke(primary, 3.0, 0.62)
+            for (i in 0 until 13) {
+                val r = i / 13.0
+                val x = -radius * 0.12 + radius * 0.14 * r
+                val y = radius * (0.63 - r * 1.23)
+                val len = radius * (0.3 - abs(r - 0.5) * 0.18)
+                g.leaf(x, y, len, len * 0.22, PI + tilt - r * 0.25, if (i % 3 != 0) primary else secondary, 0.09 + r * 0.05)
+                g.leaf(x, y, len, len * 0.22, -tilt + r * 0.25, if (i % 3 != 0) secondary else primary, 0.07 + r * 0.04)
+            }
+        }
+        28 -> { // ginkgo
+            val d = if (seed % 2 == 0L) 1 else -1
+            g.moveTo(-radius * 0.72 * d, radius * 0.55).bezierCurveTo(-radius * 0.25 * d, radius * 0.16, radius * 0.08 * d, -radius * 0.12, radius * 0.65 * d, -radius * 0.5).stroke(primary, 5.0, 0.38)
+            for (i in 0 until 8) {
+                val r = i / 7.0
+                val x = (-0.58 + r * 1.12) * radius * d
+                val y = (0.4 - r * 0.78 + sin(i * 1.8) * 0.08) * radius
+                val a = -1.1 + (i % 3) * 0.7
+                val size = radius * (0.13 + (i % 4) * 0.018)
+                g.moveTo(x, y).lineTo(x + cos(a) * size * 0.7, y + sin(a) * size * 0.7).stroke(secondary, 1.5, 0.42)
+                val cx = x + cos(a) * size; val cy = y + sin(a) * size
+                g.moveTo(cx, cy).arc(cx, cy, size, a + PI * 0.1, a + PI * 0.9).lineTo(cx, cy).fill(if (i % 2 != 0) primary else secondary, 0.09 + (i % 3) * 0.04)
+                g.moveTo(cx, cy).arc(cx, cy, size, a + PI * 0.1, a + PI * 0.9).lineTo(cx, cy).stroke(primary, 1.5, 0.58)
+            }
+        }
+        29 -> { // climbing vine
+            val m = if (seed % 2 == 0L) 1 else -1
+            for (vine in 0 until 3) {
+                val off = (vine - 1) * radius * 0.3
+                g.moveTo(off, radius * 0.76).bezierCurveTo(off + radius * 0.5 * m, radius * 0.38, off - radius * 0.48 * m, -radius * 0.1, off + radius * 0.22 * m, -radius * 0.76)
+                    .stroke(if (vine == 1) secondary else primary, if (vine == 1) 3.0 else 1.5, 0.46)
+                for (lf in 0 until 5) {
+                    val r = (lf + 1) / 6.0
+                    val x = off + sin(r * PI * 4 + vine) * radius * 0.16
+                    val y = radius * (0.7 - r * 1.36)
+                    g.leaf(x, y, radius * 0.2, radius * 0.055, if (lf % 2 != 0) -0.25 else PI + 0.25, if (lf % 2 != 0) secondary else primary, 0.08 + vine * 0.035)
+                }
+            }
+        }
+        30 -> { // greenhouse
+            val d = if (seed % 2 == 0L) 1 else -1
+            val bx = max(radius * 0.92, width * 0.64)
+            val shell = arrayOf(pt(-radius * 0.7, radius * 0.58), pt(-radius * 0.7, -radius * 0.12), pt(0.0, -radius * 0.62), pt(radius * 0.7, -radius * 0.12), pt(radius * 0.7, radius * 0.58))
+            g.fillPolygon(shell, primary, 0.055)
+            g.strokePolygon(shell, primary, 0.68, 3.0)
+            g.moveTo(0.0, -radius * 0.62).lineTo(0.0, radius * 0.58).stroke(secondary, 2.0, 0.5)
+            for (pane in -3..3) {
+                val x = pane * radius * 0.18
+                g.moveTo(x, radius * 0.58).lineTo(x * 0.38, -radius * (0.58 - abs(pane) * 0.04)).stroke(if (pane % 2 != 0) secondary else primary, 1.0, 0.32)
+            }
+            val doorX = radius * 0.2 * d
+            g.rect(doorX - radius * 0.13, radius * 0.08, radius * 0.26, radius * 0.5).fill(secondary, 0.1)
+            g.rect(doorX - radius * 0.13, radius * 0.08, radius * 0.26, radius * 0.5).stroke(secondary, 2.0, 0.62)
+            g.moveTo(-bx, radius * 0.58).lineTo(-radius * 0.7, radius * 0.58).stroke(primary, 1.0, 0.3)
+            g.moveTo(radius * 0.7, radius * 0.58).lineTo(bx, radius * 0.58).stroke(primary, 1.0, 0.3)
+        }
+        31 -> { // pagoda
+            val lean = if (seed % 2 == 0L) 1 else -1
+            val bx = max(radius * 0.92, width * 0.64)
+            for (fl in 0 until 4) {
+                val y = radius * (0.47 - fl * 0.27)
+                val hw = radius * (0.5 - fl * 0.075)
+                val roof = arrayOf(pt(-hw * 1.18, y), pt(-hw, y - radius * 0.11), pt(0.0, y - radius * 0.19), pt(hw, y - radius * 0.11), pt(hw * 1.18, y))
+                val c = if (fl % 2 != 0) secondary else primary
+                g.fillPolygon(roof, c, 0.07 + fl * 0.025)
+                g.strokePolygon(roof, c, 0.58, 2.0)
+                g.rect(-hw * 0.68, y, hw * 1.36, radius * 0.17).fill(primary, 0.035 + fl * 0.018)
+                g.rect(-hw * 0.68, y, hw * 1.36, radius * 0.17).stroke(primary, 1.0, 0.36)
+            }
+            g.moveTo(0.0, -radius * 0.62).lineTo(radius * 0.035 * lean, -radius * 0.78).stroke(secondary, 3.0, 0.65)
+            g.moveTo(-bx, radius * 0.64).lineTo(-radius * 0.52, radius * 0.64).stroke(secondary, 1.0, 0.22)
+            g.moveTo(radius * 0.52, radius * 0.64).lineTo(bx, radius * 0.64).stroke(secondary, 1.0, 0.22)
+        }
+        32 -> { // city facade
+            val bx = max(radius * 0.92, width * 0.64)
+            val heights = doubleArrayOf(0.52, 0.88, 0.66, 1.08, 0.74, 0.94, 0.58)
+            val bw = radius * 0.205
+            heights.forEachIndexed { i, hr ->
+                val x = radius * (-0.73 + i * 0.24)
+                val hh = radius * hr
+                val c = if (i % 3 == 1) secondary else primary
+                g.rect(x, radius * 0.62 - hh, bw, hh).fill(c, 0.045 + (i % 3) * 0.035)
+                g.rect(x, radius * 0.62 - hh, bw, hh).stroke(c, if (i == 3) 3.0 else 1.5, 0.5)
+                for (row in 0 until floor(hr * 6).toInt()) for (col in 0 until 2) {
+                    if ((row + col + i + seed) % 3 == 0L) {
+                        g.rect(x + radius * (0.035 + col * 0.085), radius * 0.53 - hh + row * radius * 0.13, radius * 0.045, radius * 0.055).fill(if (col != 0) secondary else primary, 0.2)
+                    }
+                }
+            }
+            g.moveTo(-bx, radius * 0.63).lineTo(bx, radius * 0.63).stroke(primary, 4.0, 0.48)
+        }
+        33 -> { // terraces
+            val d = if (seed % 2 == 0L) 1 else -1
+            val bx = max(radius * 0.92, width * 0.64)
+            for (band in 0 until 7) {
+                val y = radius * (-0.5 + band * 0.16)
+                val amp = radius * (0.09 + band * 0.012)
+                val c = if (band % 2 != 0) secondary else primary
+                g.moveTo(-bx, y).bezierCurveTo(-radius * 0.35, y + amp * d, radius * 0.08, y - amp * d, bx, y + amp * 0.35)
+                    .lineTo(bx, y + radius * 0.12)
+                    .bezierCurveTo(radius * 0.12, y + radius * 0.04, -radius * 0.3, y + radius * 0.2, -bx, y + radius * 0.12)
+                    .fill(c, 0.025 + band * 0.018)
+                g.moveTo(-bx, y).bezierCurveTo(-radius * 0.35, y + amp * d, radius * 0.08, y - amp * d, bx, y + amp * 0.35)
+                    .stroke(c, if (band % 3 == 0) 2.5 else 1.0, 0.34 + band * 0.04)
+            }
+        }
+        34 -> { // mountain lake
+            val bx = max(radius * 0.92, width * 0.64)
+            val shift = ((seed % 7) - 3) / 3.0 * radius * 0.04
+            val back = arrayOf(pt(-bx, radius * 0.1), pt(-radius * 0.42, -radius * 0.46), pt(-radius * 0.14, -radius * 0.16), pt(radius * 0.22, -radius * 0.62), pt(bx, radius * 0.1))
+            val front = arrayOf(pt(-bx, radius * 0.22), pt(-radius * 0.28 + shift, -radius * 0.2), pt(radius * 0.06, radius * 0.05), pt(radius * 0.48 + shift, -radius * 0.28), pt(bx, radius * 0.22))
+            g.fillPolygon(back, secondary, 0.07)
+            g.strokePolygon(back, secondary, 0.46, 1.5)
+            g.fillPolygon(front, primary, 0.12)
+            g.strokePolygon(front, primary, 0.66, 2.5)
+            for (line in 0 until 7) {
+                val y = radius * (0.28 + line * 0.07)
+                val inset = radius * (0.08 + (line % 3) * 0.08)
+                g.moveTo(-bx + inset, y).lineTo(bx - inset, y).stroke(if (line % 2 != 0) secondary else primary, 1.0, 0.2 + line * 0.035)
+            }
+            g.circle(-radius * 0.48, -radius * 0.48, radius * 0.1).fill(secondary, 0.14)
+            g.circle(-radius * 0.48, -radius * 0.48, radius * 0.13).stroke(secondary, 2.0, 0.5)
+        }
+        35 -> { // coastal cliff
+            val d = if (seed % 2 == 0L) 1 else -1
+            val bx = max(radius * 0.92, width * 0.64)
+            val by = max(radius * 0.92, height * 0.64)
+            val cliff = arrayOf(pt(-bx * d, by), pt(-radius * 0.78 * d, -radius * 0.1), pt(-radius * 0.5 * d, -radius * 0.34), pt(-radius * 0.18 * d, radius * 0.08), pt(radius * 0.08 * d, radius * 0.58))
+            g.fillPolygon(cliff, primary, 0.11)
+            g.strokePolygon(cliff, primary, 0.62, 2.5)
+            val tx = -radius * 0.5 * d
+            g.rect(tx - radius * 0.09, -radius * 0.42, radius * 0.18, radius * 0.45).fill(secondary, 0.12)
+            g.rect(tx - radius * 0.09, -radius * 0.42, radius * 0.18, radius * 0.45).stroke(secondary, 2.0, 0.7)
+            g.moveTo(tx - radius * 0.14, -radius * 0.42).lineTo(tx, -radius * 0.56).lineTo(tx + radius * 0.14, -radius * 0.42).fill(secondary, 0.2)
+            g.moveTo(tx - radius * 0.14, -radius * 0.42).lineTo(tx, -radius * 0.56).lineTo(tx + radius * 0.14, -radius * 0.42).lineTo(tx - radius * 0.14, -radius * 0.42).stroke(secondary, 2.0, 0.72)
+            for (wave in 0 until 6) {
+                val y = radius * (0.14 + wave * 0.1)
+                g.moveTo(-radius * 0.05 * d, y).quadraticCurveTo(radius * 0.35 * d, y - radius * 0.08, bx * d, y)
+                    .stroke(if (wave % 2 != 0) secondary else primary, if (wave % 3 == 0) 2.0 else 1.0, 0.26 + wave * 0.045)
             }
         }
     }
