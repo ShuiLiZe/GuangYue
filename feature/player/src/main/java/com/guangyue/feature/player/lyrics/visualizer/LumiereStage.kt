@@ -13,7 +13,7 @@
 //   2. 文字组 bloom（strength 1.15、threshold 0.12）用每个已唱字底下一份 BlurMaskFilter 模糊字近似；图形组 bloom 在着色器里近似。
 //   3. 段落转场：Folia 运行时在边界两侧各画一个单元并做交叉渐变 / 模糊；这里只画当前单元，套它的进出帧（alpha、scale），不做模糊。
 //   4. 颗粒：Folia 的颗粒来自共享背景层的网点纹理，这里在暗场上铺一层 3 dp 间距的淡网点（LUMIERE_GRAIN_ALPHA）。
-//   5. 光场在 2 dp 一像素的位图上算、最多 20 帧 / 秒（LumiereFieldCache），再放大贴图。
+//   5. 光场在 2 dp 一像素的离屏合成层里算、最多 20 帧 / 秒（LumiereFieldCache），再放大合成。
 //   6. 译文由 LyricFlowScreen 的字幕层（LyricSubtitleOverlay）画，同 Folia 的 VisualizerSubtitleOverlay。
 package com.guangyue.feature.player.lyrics.visualizer
 
@@ -70,35 +70,48 @@ internal object LumierePhase2 {
 }
 
 /**
- * 光场缓存：着色器画进一张 2 dp 一像素的软件位图（Skia 光栅后端同样执行 AGSL），每秒最多更新 20 次、时间不变就不重画，
- * 再双线性放大贴到舞台上。逐设备像素跑全屏着色器在模拟器的软件 GPU 上把 RenderThread 拖死（取证时 ANR）；
- * 光场本身是柔的（最细的光路光线半宽约 2 dp），放大的损失看不出来，代价是光场最多 20 帧 / 秒。
+ * 光场缓存：着色器画进一个 2 dp 一像素的离屏合成层（RenderNode + setUseCompositingLayer，API 29+），每秒最多重录 20 次、
+ * 时间不变就不重录，合成时双线性放大贴到舞台上。逐设备像素跑全屏着色器在模拟器的软件 GPU 上把 RenderThread 拖死
+ * （取证时 ANR）；软件位图上不能用 RuntimeShader（会崩），所以用硬件离屏层。光场本身是柔的（最细的光路光线半宽约 2 dp），
+ * 放大的损失看不出来，代价是光场最多 20 帧 / 秒。画布不是硬件加速时直接整幅画。
  */
 internal class LumiereFieldCache {
     private val cell = 2f
-    private var bitmap: Bitmap? = null
+    private var node: android.graphics.RenderNode? = null
+    private var cols = 0
+    private var rows = 0
     private var lastTime = Double.NaN
     private val paint = Paint()
-    private val blit = Paint(Paint.FILTER_BITMAP_FLAG)
-    private val dst = RectF()
 
     fun draw(target: android.graphics.Canvas, shader: RuntimeShader, time: Double, w: Float, h: Float, overscan: Float) {
-        val cols = ceil((w + overscan * 2) / cell).toInt()
-        val rows = ceil((h + overscan * 2) / cell).toInt()
-        var bmp = bitmap
-        val fresh = bmp == null || bmp.width != cols || bmp.height != rows
-        if (fresh) { bmp = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888); bitmap = bmp }
-        if (fresh || kotlin.math.abs(time - lastTime) >= 1.0 / 20) {
-            bmp!!.eraseColor(0)
-            val c = android.graphics.Canvas(bmp)
-            c.scale(1 / cell, 1 / cell)
-            c.translate(overscan, overscan)
-            paint.shader = shader
-            c.drawRect(-overscan, -overscan, w + overscan, h + overscan, paint)
+        paint.shader = shader
+        if (Build.VERSION.SDK_INT < 29 || !target.isHardwareAccelerated) {
+            target.drawRect(-overscan, -overscan, w + overscan, h + overscan, paint)
+            return
+        }
+        val c = ceil((w + overscan * 2) / cell).toInt()
+        val r = ceil((h + overscan * 2) / cell).toInt()
+        var n = node
+        var dirty = false
+        if (n == null || c != cols || r != rows) {
+            n = n ?: android.graphics.RenderNode("lumiere-light").also { node = it }
+            n.setPosition(0, 0, c, r)
+            n.setUseCompositingLayer(true, Paint(Paint.FILTER_BITMAP_FLAG))
+            cols = c; rows = r; dirty = true
+        }
+        if (dirty || kotlin.math.abs(time - lastTime) >= 1.0 / 20) {
+            val rc = n.beginRecording(c, r)
+            rc.scale(1 / cell, 1 / cell)
+            rc.translate(overscan, overscan)
+            rc.drawRect(-overscan, -overscan, w + overscan, h + overscan, paint)
+            n.endRecording()
             lastTime = time
         }
-        dst.set(-overscan, -overscan, -overscan + cols * cell, -overscan + rows * cell)
-        target.drawBitmap(bmp!!, null, dst, blit)
+        val saved = target.save()
+        target.translate(-overscan, -overscan)
+        target.scale(cell, cell)
+        target.drawRenderNode(n)
+        target.restoreToCount(saved)
     }
 }
 
