@@ -96,6 +96,7 @@ internal class TpGlyphFrame(
 )
 
 private const val CURRENT_EMPHASIS = 0.05
+private const val EMPHASIS_DECAY = 0.26
 private const val ECHO_ALPHA = 0.5
 private const val MAX_REVEAL_WINDOW = 1.35
 private const val RELEASE_TRACKING = 0.055
@@ -109,7 +110,8 @@ internal fun resolveTemperaGlyphMotion(g: TpGlyphMotion, time: Double, motion: D
     val alpha = easeTemperaInOut(tClamp01(reveal * 2.4))
     val sungWindow = g.endTime - g.startTime
     val attack = min(0.12, sungWindow * 0.5)
-    val emphasis = if (sungWindow <= 0) 0.0 else easeTemperaInOut(tClamp01((time - g.startTime) / max(attack, 0.02)))
+    val emphasis = if (sungWindow <= 0) 0.0 else (easeTemperaInOut(tClamp01((time - g.startTime) / max(attack, 0.02))) *
+        (1 - easeTemperaInOut(tClamp01((time - g.endTime) / EMPHASIS_DECAY))))
     val releaseStart = max(g.endTime, g.settleTime)
     val release = easeTemperaInOut(tClamp01((time - releaseStart) / max(g.releaseTime - releaseStart, 0.001)))
     val spread = release * tClamp01(motion) * RELEASE_TRACKING
