@@ -7,15 +7,22 @@ adb shell wm density 320
 adb shell settings put system accelerometer_rotation 0
 adb install -r app/build/outputs/apk/debug/*.apk
 A=com.guangyue.music/.V0cStageActivity
+# 模拟器刚起来时系统很忙，Pixel Launcher 常报 ANR 弹窗盖住截图：后台 ANR 不弹窗，先等系统稳一会儿
+adb shell settings put global anr_show_background 0 || true
+sleep 20
 shot() { adb exec-out screencap -p > "shots/$1.png"; echo "shot $1"; }
 
 # 雾笺（B0 残差）：与 Folia 基准同一份探针歌词（v0c_fixture probe），静态时钟定格；竖屏、横屏各拍几刻（37.5s 是基准时刻）。
 neb() { # $1 = 名字, $2 = 毫秒
   adb shell am force-stop com.guangyue.music
   adb shell am start -W -n $A --es v0c_style nebbia --es v0c_fixture probe --el v0c_ms $2 --ez v0c_dark true >/dev/null
-  sleep 24
+  sleep 32
+  adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
+  sleep 1
   shot "$1"
 }
+# 预热一次（冷启动时排版要多算一会儿），不留图
+adb shell am start -W -n $A --es v0c_style nebbia --es v0c_fixture probe --el v0c_ms 37500 --ez v0c_dark true >/dev/null; sleep 30
 neb nebbia-port-37 37500
 neb nebbia-port-44 44000
 adb shell settings put system user_rotation 1
