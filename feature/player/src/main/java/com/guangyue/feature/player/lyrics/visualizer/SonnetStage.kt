@@ -647,8 +647,10 @@ internal fun SonnetStage(
     val cache = remember(program, colors.primary, colors.secondary, colors.accent, lyricsFontScale) { HashMap<String, SonnetSceneView>() }
     val glitchShader = remember { if (Build.VERSION.SDK_INT >= 33) RuntimeShader(SONNET_GLITCH_AGSL) else null }
     val label = "[ THEME ] ${themeName.uppercase()}"
-    val camera = if (reduceMotion) 0.0 else 1.0
-    val motion = if (reduceMotion) 0.0 else 1.0
+    // Folia 商籁不看「减少动效」：机位跟踪与逐字入场都是绝对播放时间的函数（定格一帧也是同一构图），
+    // 系统关动画时照常取景；只关掉段落 / 镜头转场的模糊与撕裂闪烁。
+    val camera = 1.0
+    val motion = 1.0
     val transitions = !reduceMotion
     Box(modifier.fillMaxSize()) {
         Canvas(
