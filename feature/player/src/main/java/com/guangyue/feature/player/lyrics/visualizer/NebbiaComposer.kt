@@ -186,7 +186,9 @@ internal object NebbiaComposer {
 
     // ---------- nebbiaCompositions ----------
     class Ctx(val blocks: List<Block>, val h: Int, val chars: List<Ch>) {
-        fun m(i: Int, vertical: Boolean) = measure(blocks[i], chars, vertical)
+        // 量块缓存：构图搜索里同一块会被各构图反复量（模拟器上排一首要 9–20 s，大头在这里），结果只依赖 (块, 横竖)
+        private val memo = HashMap<Int, Measured>()
+        fun m(i: Int, vertical: Boolean) = memo.getOrPut(i * 2 + if (vertical) 1 else 0) { measure(blocks[i], chars, vertical) }
     }
     data class Result(val items: List<Placed>, val vRot: Int)
 

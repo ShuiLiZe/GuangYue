@@ -13,10 +13,10 @@ sleep 20
 shot() { adb exec-out screencap -p > "shots/$1.png"; echo "shot $1"; }
 
 # 雾笺（B0 残差）：与 Folia 基准同一份探针歌词（v0c_fixture probe），静态时钟定格；竖屏、横屏各拍几刻（37.5s 是基准时刻）。
-neb() { # $1 = 名字, $2 = 毫秒
+neb() { # $1 = 名字, $2 = 毫秒（等 45 s：模拟器上城市图与排版抢 CPU，排版最慢到 30 s）
   adb shell am force-stop com.guangyue.music
   adb shell am start -W -n $A --es v0c_style nebbia --es v0c_fixture probe --el v0c_ms $2 --ez v0c_dark true >/dev/null
-  sleep 32
+  sleep 45
   adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
   sleep 1
   shot "$1"
