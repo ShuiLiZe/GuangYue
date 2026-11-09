@@ -60,7 +60,7 @@ internal object LumierePhase2 {
     @Suppress("UNUSED_PARAMETER") fun drawEcho(scope: DrawScope, unit: LumiereUnitModel, light: LumiereLightFrame, time: Double) = Unit
     /** light/starfall.ts：开场光点倾泻 + 星空 + 光雨。 */
     @Suppress("UNUSED_PARAMETER") fun drawStarfall(scope: DrawScope, unit: LumiereUnitModel, light: LumiereLightFrame, time: Double) = Unit
-    /** lineart/*：每个镜头提前 0.6 秒描线稿，镜头结束后 0.8 秒淡出（LumiereProfile.lineArt 给 spec）。 */
+    /** lineart 目录：每个镜头提前 0.6 秒描线稿，镜头结束后 0.8 秒淡出（LumiereProfile.lineArt 给 spec）。 */
     @Suppress("UNUSED_PARAMETER") fun drawLineArt(scope: DrawScope, unit: LumiereUnitModel, light: LumiereLightFrame, time: Double) = Unit
     /** light/motes.ts：浮尘（领头光位的 motes）与前景散景（front）。 */
     @Suppress("UNUSED_PARAMETER") fun drawMotes(scope: DrawScope, unit: LumiereUnitModel, light: LumiereLightFrame, time: Double, front: Boolean) = Unit
@@ -216,8 +216,9 @@ private fun DrawScope.drawUnit(
         val overscan = ceil(max(model.width, model.height) * 0.02).toFloat()
         if (shader != null && Build.VERSION.SDK_INT >= 33) {
             shader.setLumiereField(input)
-            val p = Paint().apply { this.shader = shader }
-            nc.drawRect(-overscan, -overscan, w + overscan, h + overscan, p)
+            val fieldPaint = Paint()
+            fieldPaint.shader = shader
+            nc.drawRect(-overscan, -overscan, w + overscan, h + overscan, fieldPaint)
         }
         nc.restoreToCount(saved)
     }
