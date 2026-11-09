@@ -14,10 +14,12 @@ package com.guangyue.feature.player.lyrics.visualizer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableDoubleState
+import androidx.compose.runtime.MutableLongState
 import androidx.compose.runtime.RememberObserver
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -42,20 +44,56 @@ import androidx.compose.runtime.withFrameNanos
 class VisualizerClock internal constructor(
     private val positionMs: () -> Long,
     internal val frames: MutableDoubleState,
+    /** 帧循环最近一次「认领」的播放器进度；[frames] 是相对它累积的。 */
+    internal val anchorMs: MutableLongState = mutableLongStateOf(Long.MIN_VALUE),
 ) {
     /** 当前播放时间（秒）。 */
-    fun seconds(): Double = positionMs() / 1000.0 + frames.doubleValue
+    fun seconds(): Double = readForDraw()
 
     /** 在 draw / layer lambda 里读：只重走绘制或图层阶段，不重组、不重布局。 */
     fun readForDraw(): Double {
-        // 显式读 frames 这个 State，并在同一表达式里读 positionMs()，
-        // 保证两处依赖都被记录到读取者（draw/layer 作用域）上。
+        // 三个 State 都在这里读，保证依赖记录到读取者（draw/layer 作用域）上。
         val accumulated = frames.doubleValue
-        return positionMs() / 1000.0 + accumulated
+        val anchor = anchorMs.longValue
+        return VisualizerClockMath.resolve(anchor, accumulated, positionMs())
     }
 
     /** 在 derivedStateOf 里读：帧时间变化不必然引发下游重组，只有派生的离散值变化才通知。 */
     fun readForComposition(): Double = readForDraw()
+}
+
+/**
+ * 时钟的纯计算（JVM 单测锁定）。
+ *
+ * 真机闪烁根因（0.0.13 雾笺 / 商籁）：播放器进度更新后，重组先把新进度交给 draw，
+ * 帧循环要到下一帧才把累积帧时间归零 —— 中间那一帧 t = 新进度 + 旧累积，
+ * 向前跳一个进度轮询间隔再跳回来。雾笺擦字 / 清晰度、商籁镜头切换都是按 t 分段的，
+ * 于是整屏字和背景一起闪。修法：
+ *  1. 读取时若进度还没被帧循环认领，继续用旧锚点的预测值（与新进度相差不大时）；
+ *  2. 认领新进度时，若预测与新进度相差在 [SNAP_S] 以内，保留连续性（把差额记进累积），
+ *     不往回跳；只有 seek / 换歌这类大跳变才硬对齐。
+ */
+internal object VisualizerClockMath {
+    /** 小于这个差额视为同一条时间线上的轮询抖动，不硬跳。 */
+    const val SNAP_S = 0.25
+
+    fun resolve(anchorMs: Long, frames: Double, positionMs: Long): Double {
+        val now = positionMs / 1000.0
+        if (anchorMs == Long.MIN_VALUE) return now + frames
+        val predicted = anchorMs / 1000.0 + frames
+        if (positionMs == anchorMs) return predicted
+        return if (kotlin.math.abs(predicted - now) < SNAP_S) predicted else now
+    }
+
+    /** 帧循环认领新进度后应写回的累积值。 */
+    fun rebase(anchorMs: Long, frames: Double, positionMs: Long, playing: Boolean): Double {
+        if (anchorMs == Long.MIN_VALUE || !playing) return 0.0
+        val diff = anchorMs / 1000.0 + frames - positionMs / 1000.0
+        // 保留 80% 差额：时间线连续（单次最多回拉 50ms），又让帧时钟与播放器的漂移收敛。
+        return if (kotlin.math.abs(diff) < SNAP_S) diff * CARRY else 0.0
+    }
+
+    const val CARRY = 0.8
 }
 
 /**
@@ -87,17 +125,20 @@ fun rememberVisualizerClock(
         if (!enabled) {
             // 「减少动效」：不做帧间插值，时间完全由播放器进度决定。
             frames.doubleValue = 0.0
+            clock.anchorMs.longValue = Long.MIN_VALUE
             return@LaunchedEffect
         }
         var lastFrameNanos = 0L
-        var lastPositionMs = latestPosition.value()
+        clock.anchorMs.longValue = latestPosition.value()
+        frames.doubleValue = 0.0
         while (true) {
             withFrameNanos { frameNanos ->
                 val position = latestPosition.value()
-                if (position != lastPositionMs) {
-                    // 进度跳变（seek / 换歌）：累积时间归零，避免与真实进度重复计时。
-                    lastPositionMs = position
-                    frames.doubleValue = 0.0
+                val anchor = clock.anchorMs.longValue
+                if (position != anchor) {
+                    // 进度更新：小抖动保持连续，seek / 换歌才硬对齐（见 VisualizerClockMath）。
+                    frames.doubleValue = VisualizerClockMath.rebase(anchor, frames.doubleValue, position, latestPlaying.value())
+                    clock.anchorMs.longValue = position
                 } else if (latestPlaying.value()) {
                     if (lastFrameNanos != 0L) {
                         frames.doubleValue += (frameNanos - lastFrameNanos) / 1_000_000_000.0
