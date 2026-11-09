@@ -42,7 +42,19 @@ if [ -n "${SCENE:-}" ]; then
       adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
       sleep 10
     done
+    anr_wait
     shot "$1"
+  }
+  # 模拟器（swiftshader）上全屏着色器慢，系统会弹「无响应」：点「Wait」让它画完再拍，并记一笔
+  anr_wait() {
+    for k in 1 2 3; do
+      adb shell dumpsys window | grep -q "Application Not Responding" || return 0
+      adb shell uiautomator dump /sdcard/u.xml >/dev/null 2>&1
+      b=$(adb shell cat /sdcard/u.xml | tr '>' '\n' | grep 'text="Wait"' | sed -n 's/.*bounds="\[\([0-9]*\),\([0-9]*\)\]\[\([0-9]*\),\([0-9]*\)\]".*/\1 \2 \3 \4/p' | head -1)
+      echo "anr-dialog on $SCENE (wait #$k): $b"
+      if [ -n "$b" ]; then set -- $b; adb shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 )); fi
+      sleep 8
+    done
   }
   adb shell am start -W -n $A --es v0c_style "$SCENE" --es v0c_fixture probe --el v0c_ms 37500 --ez v0c_dark true >/dev/null; sleep 60
   if [ "$SCENE" = "sonnet" ]; then
