@@ -96,9 +96,10 @@ class DownloadManager @Inject constructor(
 
     fun enqueue(request: DownloadRequest): Boolean {
         if (requests.containsKey(request.key) && store.isActive(request.key)) return false
-        if (library.find(request.key) != null && store.find(request.key)?.isActive != true) {
-            // 已经下过且文件还在，不重复下
-            return false
+        library.find(request.key)?.let { done ->
+            // 已经下过且文件还在，不重复下；文件被用户删了就清掉记录重新下。
+            if (library.exists(done)) return false
+            library.remove(done.key, deleteFile = false)
         }
 
         requests[request.key] = request
@@ -237,11 +238,9 @@ class DownloadManager @Inject constructor(
         val data = workDataOf(DownloadWorker.KEY_REQUEST to DownloadWorker.encode(request))
         val work = OneTimeWorkRequestBuilder<DownloadWorker>()
             .setInputData(data)
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build(),
-            )
+            // 0.0.18：不再要求 NetworkType.CONNECTED。它在 API 28+ 要求网络「已验证」(VALIDATED)，
+            // 国内连不上 Google 连通性检测的机器（模拟器、部分原生系统、开代理）网络永远是「受限」，
+            // 任务就一直卡在「解析音源」。没网时 Worker 自己报错 + 退避重试即可。
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.SECONDS)
             .addTag(TAG_DOWNLOAD)
             .addTag("download:${request.key}")
@@ -251,26 +250,11 @@ class DownloadManager @Inject constructor(
         store.watch(request.key) { stage ->
             if (stage == DownloadStage.DONE || stage == DownloadStage.FAILED || stage == DownloadStage.CANCELED) {
                 release(request.key)
-                if (stage == DownloadStage.DONE) {
-                    store.find(request.key)?.let { p ->
-                        library.record(
-                            DownloadedTrack(
-                                key = p.key,
-                                title = p.title,
-                                artist = p.artist,
-                                album = request.album,
-                                artwork = request.artwork,
-                                uri = p.uri.orEmpty(),
-                                fileName = p.fileName.orEmpty(),
-                                sizeBytes = p.bytesTotal.coerceAtLeast(p.bytesDone),
-                                quality = p.quality,
-                            ),
-                        )
-                    }
-                }
+                // 已完成记录由 DownloadWorker 直接写进 DownloadedLibrary（带本地封面 / 歌词）。
             }
         }
-        workManager.enqueueUniqueWork(workName(request.key), ExistingWorkPolicy.KEEP, work)
+        // 用户点了下载就以这次为准：旧进程留下的同名任务（卡在退避 / 约束里）直接替换掉。
+        workManager.enqueueUniqueWork(workName(request.key), ExistingWorkPolicy.REPLACE, work)
         store.patch(request.key) { it.copy(stage = DownloadStage.RESOLVING) }
     }
 

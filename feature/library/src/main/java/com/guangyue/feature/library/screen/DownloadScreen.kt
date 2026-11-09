@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -63,7 +64,8 @@ fun DownloadScreen(
     onBack: () -> Unit,
     onPlayLocal: (String) -> Unit = {},
     // 0.0.16 真机：只传 uri 时播放页标题变成 MediaStore 编号、也匹配不到歌词。带上整条记录。
-    onPlayDownloaded: ((com.guangyue.core.download.DownloadedTrack) -> Unit)? = null,
+    // 0.0.18：交给 ViewModel 先在后台备好本地封面 / 歌词，再把完整曲目行交出去。
+    onPlayDownloaded: ((com.guangyue.core.data.model.TrackEntity) -> Unit)? = null,
     vm: DownloadViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -113,7 +115,7 @@ fun DownloadScreen(
                         .clickable { vm.clearMessage() }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                 ) {
-                    Text(toast.orEmpty(), fontSize = 12.sp, color = Gyp.accentText)
+                    Text(toast.orEmpty(), fontSize = 12.sp, color = Gyp.ink)
                 }
             }
 
@@ -153,7 +155,10 @@ fun DownloadScreen(
                     items(state.done, key = { "d-" + it.key }) { t ->
                         DoneRow(
                             track = t,
-                            onPlay = { onPlayDownloaded?.invoke(t) ?: onPlayLocal(t.uri) },
+                            onPlay = {
+                                val cb = onPlayDownloaded
+                                if (cb != null) vm.preparePlay(t, cb) else onPlayLocal(t.uri)
+                            },
                             onRemove = { vm.remove(t.key) },
                         )
                     }
@@ -292,10 +297,19 @@ private fun DoneRow(track: DownloadedTrack, onPlay: () -> Unit, onRemove: () -> 
             Box(
                 Modifier
                     .size(40.dp)
+                    .clip(GyRadius.fieldShape())
                     .background(Gyp.tint, GyRadius.fieldShape()),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(GuangYueIcons.Music, null, tint = Gyp.accent, modifier = Modifier.size(20.dp))
+                if (!track.artwork.isNullOrBlank()) {
+                    coil3.compose.AsyncImage(
+                        model = track.artwork,
+                        contentDescription = track.title,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {

@@ -40,6 +40,7 @@ class DownloadWorker @AssistedInject constructor(
     @com.guangyue.core.plugin.di.DownloadHttp private val okHttp: OkHttpClient,
     private val lx: com.guangyue.core.plugin.lx.LxSourceManager,
     private val prefs: com.guangyue.core.prefs.AppPreferences,
+    private val library: DownloadedLibrary,
 ) : CoroutineWorker(context, params) {
 
     private val meter = BandwidthMeter()
@@ -101,17 +102,48 @@ class DownloadWorker @AssistedInject constructor(
                 part.delete()
             }
 
-            // ---------------------------------------------------------------- 3. 写 ID3 + 封面
+            // ---------------------------------------------------------------- 3. 补全信息 + 封面 + 歌词
             store.patch(request.key) { it.copy(stage = DownloadStage.TAGGING) }
-            val cover = request.artwork?.takeIf { it.startsWith("http") }?.let(AudioTagger::fetchArtwork)
-            AudioTagger.tag(
+            val item = requestItem(request)
+            // 搜索结果常常没有封面 / 专辑（要 getMusicInfo 才给），下载时补一次。
+            var album = request.album?.takeIf { it.isNotBlank() }
+            var artworkUrl = request.artwork?.takeIf { it.isNotBlank() }
+            if ((album == null || artworkUrl == null) && item != null) {
+                val info = runCatching {
+                    kotlinx.coroutines.withTimeoutOrNull(INFO_BUDGET_MS) { bridge.getMusicInfo(request.pluginId.ifBlank { item.platform }, item) }
+                }.getOrNull()
+                if (album == null) album = info?.album?.takeIf { it.isNotBlank() }
+                if (artworkUrl == null) artworkUrl = info?.artwork?.takeIf { it.isNotBlank() }
+            }
+            val cover = artworkUrl?.let(::fetchCover)
+            val coverUri = cover?.let { bytes ->
+                runCatching {
+                    val f = library.coverFile(request.key)
+                    f.writeBytes(bytes)
+                    android.net.Uri.fromFile(f).toString()
+                }.getOrNull()
+            }
+            val lyric = if (request.withLyric && item != null) {
+                runCatching {
+                    kotlinx.coroutines.withTimeoutOrNull(LYRIC_BUDGET_MS) { bridge.getLyric(request.pluginId.ifBlank { item.platform }, item) }
+                }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.getOrNull()
+            } else null
+            val lrcText = lyric?.rawLrc?.takeIf { it.isNotBlank() }
+                ?: request.rawJson?.let(::inlineLrc)
+            val transText = lyric?.translation?.takeIf { it.isNotBlank() }
+            val lyricPath = lrcText?.let { t -> runCatching { library.lyricFile(request.key).also { it.writeText(t) }.absolutePath }.getOrNull() }
+            val transPath = transText?.let { t -> runCatching { library.lyricFile(request.key, true).also { it.writeText(t) }.absolutePath }.getOrNull() }
+
+            val tagged = AudioTagger.tag(
                 file = audioFile,
                 title = request.title,
                 artist = request.artist,
-                album = request.album,
-                artworkUrl = request.artwork,
+                album = album,
+                artworkUrl = null,
                 artworkBytes = cover,
+                lyrics = lrcText?.let { mergedLrc(it, transText) },
             )
+            android.util.Log.i(LOG_TAG, "tagged=$tagged cover=${cover?.size ?: 0}B lyric=${lrcText?.length ?: 0} album=$album for ${request.key}")
 
             // ---------------------------------------------------------------- 4. 复制进公共音乐库
             val size = audioFile.length()
@@ -121,7 +153,7 @@ class DownloadWorker @AssistedInject constructor(
                 mimeType = mime,
                 title = request.title,
                 artist = request.artist,
-                album = request.album,
+                album = album,
                 durationMs = request.durationMs,
             )
             createdSink = sink
@@ -134,18 +166,39 @@ class DownloadWorker @AssistedInject constructor(
             }
             audioFile.delete()
 
-            // ---------------------------------------------------------------- 5. 歌词 .lrc
-            if (request.withLyric) {
+            // ---------------------------------------------------------------- 5. 公共 .lrc（给系统音乐 App 用）
+            var lrcUri: String? = null
+            if (lrcText != null) {
                 store.patch(request.key) { it.copy(stage = DownloadStage.LYRICS) }
                 // 歌词只是附带品：写不进去也不能让整首下载算失败（0.0.15 真机就是这样卡住的）。
-                runCatching { writeLyric(request, targetName) }
-                    .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it; android.util.Log.w(LOG_TAG, "lyric skipped for ${request.key}: ${it.message}") }
+                lrcUri = runCatching {
+                    PublicMusicStorage.writeText(context, DownloadPaths.lrcName(targetName), mergedLrc(lrcText, transText))?.toString()
+                }.onFailure { android.util.Log.w(LOG_TAG, "lyric skipped for ${request.key}: ${it.message}") }.getOrNull()
             }
 
             // ---------------------------------------------------------------- 6. 刷新媒体库
             store.patch(request.key) { it.copy(stage = DownloadStage.SCANNING) }
             PublicMusicStorage.scan(context, localPathOf(audioUri), mime)
 
+            // 下载记录由 Worker 自己写（以前靠 DownloadManager 的内存监听，进程被杀就丢记录）。
+            library.record(
+                DownloadedTrack(
+                    key = request.key,
+                    title = request.title,
+                    artist = request.artist,
+                    album = album,
+                    artwork = coverUri ?: artworkUrl,
+                    uri = audioUri.toString(),
+                    fileName = targetName,
+                    sizeBytes = size,
+                    quality = request.quality,
+                    rawJson = request.rawJson ?: item?.raw?.toString(),
+                    artworkUrl = artworkUrl,
+                    lyricPath = lyricPath,
+                    translationPath = transPath,
+                    lrcUri = lrcUri,
+                ),
+            )
             store.upsert(
                 DownloadProgress(
                     key = request.key,
@@ -158,14 +211,15 @@ class DownloadWorker @AssistedInject constructor(
                     uri = audioUri.toString(),
                     fileName = targetName,
                     quality = request.quality,
-                    artwork = request.artwork,
+                    artwork = coverUri ?: artworkUrl,
                 ),
             )
             Result.success(workDataOf(KEY_DONE to size, KEY_TOTAL to size))
         } catch (t: Throwable) {
+            android.util.Log.w(LOG_TAG, "download failed for ${request.key} (attempt $runAttemptCount)", t)
             if (t !is kotlinx.coroutines.CancellationException) {
                 ensureActive()
-                store.patch(request.key) { it.copy(stage = DownloadStage.FAILED, error = t.message ?: "下载失败") }
+                store.patch(request.key) { it.copy(stage = DownloadStage.FAILED, error = readableError(t)) }
                 runCatching { createdSink?.abort() }
             }
             if ((t is HttpRange.TransientException || isNetworkError(t)) && runAttemptCount < MAX_ATTEMPTS) {
@@ -268,7 +322,7 @@ class DownloadWorker @AssistedInject constructor(
             val total = if (contentLength > 0L) contentLength + offset else 0L
             val body = response.body?.byteStream() ?: throw HttpRange.TransientException("空响应")
 
-            HttpRange.writeTo(
+            val written = HttpRange.writeTo(
                 target = part,
                 body = body,
                 resumeOffset = offset,
@@ -276,23 +330,55 @@ class DownloadWorker @AssistedInject constructor(
                 progress = onProgress,
                 meter = meter,
             )
+            // 连接中途断了 read() 也会返回 -1：没下满就当可重试，下次从 .part 接着下，别把半截文件当成品。
+            if (total > 0L && written.written < total) {
+                throw HttpRange.TransientException("网络中断（${written.written}/$total），已保存进度，重试会接着下")
+            }
         }
         return part.isFile && part.length() > 0L
     }
 
-    private suspend fun writeLyric(request: DownloadRequest, audioFileName: String) {
-        val raw = request.rawJson?.let { Json2.parse(it) as? JsonObject } ?: return
-        val item = MusicItem.from(raw, request.pluginId) ?: return
-        val lyric = runCatching { bridge.getLyric(request.pluginId, item) }.getOrNull() ?: return
-        val lrc = lyric.rawLrc?.takeIf { it.isNotBlank() } ?: return
-        val content = buildString {
-            append(lrc.trimEnd())
-            lyric.translation?.takeIf { it.isNotBlank() }?.let { tr ->
-                append("\n")
-                tr.lineSequence().filter { it.isNotBlank() }.forEach { append("[译] ").append(it).append('\n') }
+    private fun requestItem(request: DownloadRequest): MusicItem? {
+        val raw = request.rawJson?.let { runCatching { Json2.parse(it) as? JsonObject }.getOrNull() }
+        return raw?.let { MusicItem.from(it, request.pluginId) } ?: fallbackItem(request)
+    }
+
+    /** 拉封面字节：http 失败再试 https（部分平台 http 图床会 302 / 拒连）。 */
+    private fun fetchCover(url: String): ByteArray? {
+        if (!url.startsWith("http")) return null
+        fun get(u: String): ByteArray? = runCatching {
+            okHttp.newCall(Request.Builder().url(u).header("User-Agent", USER_AGENT).build()).execute().use { r ->
+                if (!r.isSuccessful) return@use null
+                val body = r.body ?: return@use null
+                if ((body.contentLength()) > 8L * 1024 * 1024) return@use null
+                body.bytes().takeIf { it.size > 64 }
             }
-        }
-        PublicMusicStorage.writeText(context, DownloadPaths.lrcName(audioFileName), content)
+        }.getOrNull()
+        return get(url) ?: if (url.startsWith("http://")) get("https://" + url.removePrefix("http://")) else null
+    }
+
+    /** musicItem 里直接带的 LRC 文本（MusicFree `rawLrc`），URL 不算。 */
+    private fun inlineLrc(rawJson: String): String? {
+        val o = runCatching { Json2.parse(rawJson) as? JsonObject }.getOrNull() ?: return null
+        val v = (o["rawLrc"] ?: o["lyric"] ?: o["lrc"]) as? kotlinx.serialization.json.JsonPrimitive ?: return null
+        return v.content.takeIf { LRC_TIME.containsMatchIn(it) }
+    }
+
+    /** 原文 + 翻译合成一份标准 LRC：同一时间戳两行，播放器会当作双语显示。 */
+    private fun mergedLrc(lrc: String, translation: String?): String = buildString {
+        append(lrc.trimEnd()).append('\n')
+        translation?.lineSequence()?.filter { LRC_TIME.containsMatchIn(it) }?.forEach { append(it).append('\n') }
+    }
+
+    private fun readableError(t: Throwable): String = when {
+        t is HttpRange.PermanentException || t is HttpRange.TransientException -> t.message ?: "下载失败"
+        t is java.net.UnknownHostException -> "网络不通，连不上下载服务器"
+        t is java.net.SocketTimeoutException -> "下载超时，网络太慢，稍后重试"
+        t is java.io.IOException && (t.message?.contains("ENOSPC") == true || t.message?.contains("No space") == true) -> "手机存储空间不足"
+        t is java.io.IOException -> "网络中断，已保存进度，重试会接着下"
+        t is SecurityException -> "没有写入存储的权限"
+        t.message?.any { it.code > 0x2E80 } == true -> t.message!!
+        else -> "下载失败（${t.javaClass.simpleName}）"
     }
 
     // ------------------------------------------------------------------ helpers
@@ -334,6 +420,9 @@ class DownloadWorker @AssistedInject constructor(
         private const val LOG_TAG = "GYDOWNLOAD"
         /** 插件取链预算，超时就落到洛雪取链源。 */
         private const val PLUGIN_BUDGET_MS = 25_000L
+        private const val INFO_BUDGET_MS = 10_000L
+        private const val LYRIC_BUDGET_MS = 15_000L
+        private val LRC_TIME = Regex("""\[\d{1,3}:\d{1,2}([.:]\d{1,3})?]""")
 
         fun decode(json: String): DownloadRequest? =
             runCatching { kotlinx.serialization.json.Json.decodeFromString<DownloadRequest>(json) }.getOrNull()

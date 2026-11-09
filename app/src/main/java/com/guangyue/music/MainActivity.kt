@@ -45,11 +45,26 @@ class MainActivity : ComponentActivity() {
 
     private val shell: ShellViewModel by viewModels()
 
+    /**
+     * 0.0.18：Android 13+ 通知要运行时授权，以前从没申请过，播放通知 / 锁屏控制在新系统上看不到。
+     * 只在首次启动问一次，拒绝了不再打扰。
+     */
+    private fun askNotificationPermissionOnce() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return
+        val perm = android.Manifest.permission.POST_NOTIFICATIONS
+        if (checkSelfPermission(perm) == android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        val sp = getSharedPreferences("guangyue_perm", MODE_PRIVATE)
+        if (sp.getBoolean("asked_notifications", false)) return
+        sp.edit().putBoolean("asked_notifications", true).apply()
+        requestPermissions(arrayOf(perm), 1001)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // 0.0.8：状态栏 / 手势条图标深浅随主题走——浅色主题下用深色图标，深色下用浅色，
         // 否则「系统栏透明 + 内容下移」之后状态栏文字在白底上会看不见。
         enableEdgeToEdge()
+        askNotificationPermissionOnce()
         setContent {
             // 0.0.9：默认跟随系统深浅；只有用户显式选过才按偏好覆盖。
             val explicitDark by shell.explicitDark.collectAsStateWithLifecycle()

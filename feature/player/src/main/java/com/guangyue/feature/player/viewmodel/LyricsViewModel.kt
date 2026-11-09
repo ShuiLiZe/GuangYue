@@ -125,17 +125,27 @@ class LyricsViewModel @Inject constructor(
         lyricJob = viewModelScope.launch {
             _loading.value = true
             try {
-                val row = tracks.byKey(item.key)
-                val musicItem = row?.let { TrackMapper.toMusicItem(it) }
-                    ?: MusicItem(
-                        platform = item.origin.pluginId,
-                        id = item.key,
-                        title = item.title,
-                        artist = item.artist,
-                    )
-
-                val source = bridge.getLyric(item.origin.pluginId, musicItem)
-                val raw = source?.rawLrc ?: item.rawJson?.let { embeddedLrc(it) }
+                // 0.0.18：本地下载的歌把歌词塞在 rawJson（rawLrc / translation）里，先用它，离线也有歌词。
+                val inline = item.rawJson?.let { embeddedLrc(it) }
+                val inlineTrans = item.rawJson?.let { embeddedTranslation(it) }
+                val source = if (inline != null) {
+                    com.guangyue.core.plugin.LyricSourceResult(rawLrc = inline, translation = inlineTrans)
+                } else {
+                    val row = runCatching { tracks.byKey(item.key) }.getOrNull()
+                    val songId = item.key.substringAfter(':', item.key)
+                    val musicItem = row?.let { TrackMapper.toMusicItem(it) }
+                        ?: item.rawJson?.let { r -> (Json2.parse(r) as? JsonObject)?.let { MusicItem.from(it, item.origin.pluginId) } }
+                        ?: MusicItem(
+                            platform = item.origin.pluginId,
+                            // 以前误传整条 key（platform:id），插件按 id 取不到歌词。
+                            id = songId,
+                            title = item.title,
+                            artist = item.artist,
+                            album = item.album,
+                        )
+                    bridge.getLyric(item.origin.pluginId, musicItem)
+                }
+                val raw = source?.rawLrc
                 if (raw.isNullOrBlank()) {
                     _message.value = "暂无歌词"
                     return@launch
@@ -155,8 +165,18 @@ class LyricsViewModel @Inject constructor(
 
     /** Some plugins inline the LRC in the music item (MusicFree `rawLrc`). */
     private fun embeddedLrc(rawJson: String): String? {
-        val o = Json2.parse(rawJson) as? JsonObject ?: return null
+        val o = runCatching { Json2.parse(rawJson) as? JsonObject }.getOrNull() ?: return null
         val v = o["rawLrc"] ?: o["lrc"] ?: o["lyric"]
-        return (v as? JsonPrimitive)?.content
+        // 有的插件 lrc 字段是歌词 URL，不是正文；只认带时间戳的文本。
+        return (v as? JsonPrimitive)?.content?.takeIf { LRC_TIME.containsMatchIn(it) }
+    }
+
+    private fun embeddedTranslation(rawJson: String): String? {
+        val o = runCatching { Json2.parse(rawJson) as? JsonObject }.getOrNull() ?: return null
+        return ((o["translation"] ?: o["tlyric"]) as? JsonPrimitive)?.content?.takeIf { LRC_TIME.containsMatchIn(it) }
+    }
+
+    private companion object {
+        val LRC_TIME = Regex("""\[\d{1,3}:\d{1,2}([.:]\d{1,3})?]""")
     }
 }

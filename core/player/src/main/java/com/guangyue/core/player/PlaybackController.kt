@@ -257,6 +257,9 @@ class PlaybackController @Inject constructor(
 
     fun setQueue(items: List<QueueItem>, startIndex: Int = 0, play: Boolean = true) {
         if (items.isEmpty()) return
+        // 0.0.18：以前只在插件取到链时才拉起播放服务，本地下载 / 洛雪源开播时系统里没有 media session，
+        // 通知栏、锁屏、媒体键全都没有。开播就拉起（UI 前台调用，startService 合法）。
+        GuangYuePlaybackService.start(context)
         val remembered = items.mapNotNull { it.toCachedTrack() }
         queue.clear()
         queue += items
@@ -302,6 +305,7 @@ class PlaybackController @Inject constructor(
     /** Play a single track without disturbing the rest of the queue. */
     fun playNow(item: QueueItem) {
         if (queue.none { it.key == item.key }) queue.add(0, item)
+        GuangYuePlaybackService.start(context)
         player.setMediaItem(item.toMediaItem())
         player.prepare()
         player.play()

@@ -260,7 +260,10 @@ fun ProfileScreen(
                         )
                         com.guangyue.feature.library.design.FoliaRow(
                             label = "关于广乐",
-                            hint = "0.0.8",
+                            // 以前写死 0.0.8；按安装包实际版本显示。
+                            hint = androidx.compose.ui.platform.LocalContext.current.let { c ->
+                                runCatching { c.packageManager.getPackageInfo(c.packageName, 0).versionName }.getOrNull() ?: ""
+                            },
                             leading = {
                                 Icon(
                                     GuangYueIcons.Info,

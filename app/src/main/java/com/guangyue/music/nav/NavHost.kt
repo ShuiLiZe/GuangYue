@@ -551,25 +551,8 @@ fun GuangYueNavHost(
                     )
                     navController.navigate(Routes.LYRIC_FLOW)
                 },
-                onPlayDownloaded = { t ->
-                    val parts = t.key.split(":", limit = 2)
-                    playback.setQueueFromTracks(
-                        listOf(
-                            com.guangyue.core.data.model.TrackEntity(
-                                key = t.key,
-                                title = t.title,
-                                artist = t.artist,
-                                album = t.album.orEmpty(),
-                                artwork = t.artwork,
-                                platform = parts.getOrElse(0) { "" },
-                                songId = parts.getOrElse(1) { "" },
-                                localUri = t.uri,
-                                source = com.guangyue.core.data.model.TrackEntity.SOURCE_LOCAL,
-                            ),
-                        ),
-                        0,
-                        true,
-                    )
+                onPlayDownloaded = { entity ->
+                    playback.setQueueFromTracks(listOf(entity), 0, true)
                     navController.navigate(Routes.LYRIC_FLOW)
                 },
                 vm = vm,

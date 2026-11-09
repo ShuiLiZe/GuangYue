@@ -70,6 +70,9 @@ class GuangYuePlaybackService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
         mediaLibrarySession = MediaLibrarySession.Builder(this, playback.player, callback).build()
+            // 0.0.18：只 startService 时没有控制器来 bind，会话不会被加进服务，media3 就不发通知
+            // （模拟器实测：在播但通知栏 / 锁屏都没有）。显式 addSession 让通知管理器接管。
+            .also { addSession(it) }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =

@@ -25,7 +25,9 @@ object AudioTagger {
         // jaudiotagger 默认往 java.util.logging 刷大量 WARNING，关掉；同时允许 ID3v1 保持关闭（只写 ID3v2）
         runCatching {
             java.util.logging.Logger.getLogger("org.jaudiotagger").level = java.util.logging.Level.OFF
-            // ID3v1 由默认配置决定，这里不再改动 jaudiotagger 全局选项
+            // 0.0.18 真机/模拟器实测：不开 Android 模式时 FLAC 写封面要走 javax.imageio（Android 上没有），
+            // 封面被静默丢掉（wrote=144951 read=0）。开了之后用 AndroidArtwork，不读图片尺寸。
+            TagOptionSingleton.getInstance().isAndroid = true
         }
     }
 
@@ -42,6 +44,7 @@ object AudioTagger {
         artworkBytes: ByteArray? = null,
         trackNumber: Int? = null,
         year: String? = null,
+        lyrics: String? = null,
     ): Boolean {
         if (!file.isFile || file.length() <= 0L) return false
         return runCatching {
@@ -54,10 +57,18 @@ object AudioTagger {
             writeField(tag, FieldKey.ALBUM, album)
             if (trackNumber != null) writeField(tag, FieldKey.TRACK, trackNumber.toString())
             writeField(tag, FieldKey.YEAR, year)
+            writeField(tag, FieldKey.LYRICS, lyrics)
 
             val cover = artworkBytes ?: artworkUrl?.let(::fetchArtwork)
             if (cover != null && cover.isNotEmpty()) {
                 runCatching {
+                    if (tag is org.jaudiotagger.tag.flac.FlacTag) {
+                        // FLAC：Artwork 路径要把图片解码成 BufferedImage（Android 没有，必失败），
+                        // 直接拼 METADATA_BLOCK_PICTURE，宽高留 0（规范允许，播放器照常显示）。
+                        tag.deleteArtworkField()
+                        tag.setField(tag.createArtworkField(cover, 3, sniffImageMime(cover), "Cover", 0, 0, 24, 0))
+                        return@runCatching
+                    }
                     val artwork = ArtworkFactory.getNew()
                     artwork.binaryData = cover
                     artwork.mimeType = sniffImageMime(cover)
@@ -69,6 +80,11 @@ object AudioTagger {
             }
 
             audioFile.commit()
+            // 回读确认封面真的写进去了（jaudiotagger 对个别容器会静默丢 PICTURE）。
+            if (cover != null && cover.isNotEmpty()) {
+                val back = runCatching { AudioFileIO.read(file).tag?.firstArtwork?.binaryData?.size ?: 0 }.getOrDefault(0)
+                Log.i(TAG, "cover verify ${file.name}: wrote=${cover.size} read=$back")
+            }
             true
         }.onFailure {
             Log.w(TAG, "tagging failed for ${file.name}: ${it.message}")

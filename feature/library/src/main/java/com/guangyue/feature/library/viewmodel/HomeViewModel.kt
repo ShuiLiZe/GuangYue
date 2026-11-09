@@ -46,6 +46,7 @@ class HomeViewModel @Inject constructor(
     private val plugins: PluginManager,
     private val bridge: MusicPluginBridge,
     db: GuangYueDatabase,
+    private val downloadedLibrary: com.guangyue.core.download.DownloadedLibrary,
 ) : ViewModel() {
 
     /** 已安装插件（只统计能当音源用的），供空状态文案判断。 */
@@ -323,7 +324,8 @@ class HomeViewModel @Inject constructor(
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    val downloadedCount: StateFlow<Int> = tracks.localTracks()
+    // 0.0.18：本地下载记在 DownloadedLibrary（下载管理页同一份），以前数的是库表 local 行，永远是 0。
+    val downloadedCount: StateFlow<Int> = downloadedLibrary.tracks
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
@@ -787,10 +789,32 @@ class DownloadViewModel @Inject constructor(
         _message.value = "已重新排队"
     }
 
+    init {
+        // 用户在文件管理器 / 系统音乐 App 里删掉的歌，列表和计数里也去掉。
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val n = runCatching { library.pruneMissing() }.getOrDefault(0)
+            if (n > 0) _message.value = "有 $n 首本地文件已不在，已从列表移除"
+        }
+    }
+
+    /** 离线播放：后台备好本地封面 / 歌词，回主线程交给播放器。 */
+    fun preparePlay(track: com.guangyue.core.download.DownloadedTrack, start: (com.guangyue.core.data.model.TrackEntity) -> Unit) {
+        viewModelScope.launch {
+            if (!kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { library.exists(track) }) {
+                library.remove(track.key, deleteFile = true)
+                _message.value = "本地文件已被删除，已从列表移除"
+                return@launch
+            }
+            val entity = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { library.toPlayable(track) }
+            start(entity)
+        }
+    }
+
     fun remove(key: String) {
+        val wasDone = library.find(key) != null
         library.remove(key)
         manager.storeRef.remove(key)
-        _message.value = "已删除本地文件"
+        _message.value = if (wasDone) "已删除本地文件和歌词" else "已移除"
     }
 
     fun cancelAll() {

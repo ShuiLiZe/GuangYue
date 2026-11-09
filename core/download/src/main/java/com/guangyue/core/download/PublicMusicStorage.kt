@@ -56,7 +56,8 @@ object PublicMusicStorage {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                // text/plain 会被 MediaStore 改名成「xxx.lrc.txt」（模拟器实测），音乐 App 就认不出歌词。
+                put(MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream")
                 put(MediaStore.MediaColumns.RELATIVE_PATH, DownloadPaths.relativeDir())
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
@@ -88,12 +89,20 @@ object PublicMusicStorage {
             uri
         } else {
             runCatching {
-                val file = File(DownloadPaths.legacyPublicDir(), fileName)
+                val file = File(legacyDir(context), fileName)
                 file.writeText(content)
                 MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), arrayOf("text/plain"), null)
                 Uri.fromFile(file)
             }.getOrNull()
         }
+
+    /**
+     * Android 8/9：有存储权限写公共 Music/GuangYue/，没给权限就退到 App 自己的外部目录
+     * （不用权限，App 内能播，只是系统音乐 App 看不到），不让下载因为权限直接失败。
+     */
+    private fun legacyDir(context: Context): File =
+        if (!needsPermission(context)) DownloadPaths.legacyPublicDir()
+        else File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: context.filesDir, DownloadPaths.SUB_DIR).apply { mkdirs() }
 
     /** 刷新媒体库（单个文件）。 */
     fun scan(context: Context, path: String?, mimeType: String?) {
@@ -168,7 +177,7 @@ object PublicMusicStorage {
         private val context: Context,
         fileName: String,
     ) : Sink {
-        private val file = File(DownloadPaths.legacyPublicDir(), fileName)
+        private val file = File(legacyDir(context), fileName)
         override val uri: Uri = Uri.fromFile(file)
 
         override fun open(): OutputStream = file.outputStream()
