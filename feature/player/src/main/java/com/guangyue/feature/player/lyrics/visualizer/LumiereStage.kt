@@ -13,7 +13,8 @@
 //   2. 文字组 bloom（strength 1.15、threshold 0.12）用每个已唱字底下一份 BlurMaskFilter 模糊字近似；图形组 bloom 在着色器里近似。
 //   3. 段落转场：Folia 运行时在边界两侧各画一个单元并做交叉渐变 / 模糊；这里只画当前单元，套它的进出帧（alpha、scale），不做模糊。
 //   4. 颗粒：Folia 的颗粒来自共享背景层的网点纹理，这里在暗场上铺一层 3 dp 间距的淡网点（LUMIERE_GRAIN_ALPHA）。
-//   5. 译文由 LyricFlowScreen 的字幕层（LyricSubtitleOverlay）画，同 Folia 的 VisualizerSubtitleOverlay。
+//   5. 光场在 2 dp 一像素的位图上算、最多 20 帧 / 秒（LumiereFieldCache），再放大贴图。
+//   6. 译文由 LyricFlowScreen 的字幕层（LyricSubtitleOverlay）画，同 Folia 的 VisualizerSubtitleOverlay。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.graphics.Bitmap
@@ -66,6 +67,39 @@ internal object LumierePhase2 {
     @Suppress("UNUSED_PARAMETER") fun drawMotes(scope: DrawScope, unit: LumiereUnitModel, light: LumiereLightFrame, time: Double, front: Boolean) = Unit
     /** light/crossBurst.ts：十字爆闪（profile.burst），在字的下面。 */
     @Suppress("UNUSED_PARAMETER") fun drawBursts(scope: DrawScope, unit: LumiereUnitModel, window: LumiereLyricWindow, time: Double) = Unit
+}
+
+/**
+ * 光场缓存：着色器画进一张 2 dp 一像素的软件位图（Skia 光栅后端同样执行 AGSL），每秒最多更新 20 次、时间不变就不重画，
+ * 再双线性放大贴到舞台上。逐设备像素跑全屏着色器在模拟器的软件 GPU 上把 RenderThread 拖死（取证时 ANR）；
+ * 光场本身是柔的（最细的光路光线半宽约 2 dp），放大的损失看不出来，代价是光场最多 20 帧 / 秒。
+ */
+internal class LumiereFieldCache {
+    private val cell = 2f
+    private var bitmap: Bitmap? = null
+    private var lastTime = Double.NaN
+    private val paint = Paint()
+    private val blit = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val dst = RectF()
+
+    fun draw(target: android.graphics.Canvas, shader: RuntimeShader, time: Double, w: Float, h: Float, overscan: Float) {
+        val cols = ceil((w + overscan * 2) / cell).toInt()
+        val rows = ceil((h + overscan * 2) / cell).toInt()
+        var bmp = bitmap
+        val fresh = bmp == null || bmp.width != cols || bmp.height != rows
+        if (fresh) { bmp = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888); bitmap = bmp }
+        if (fresh || kotlin.math.abs(time - lastTime) >= 1.0 / 20) {
+            bmp!!.eraseColor(0)
+            val c = android.graphics.Canvas(bmp)
+            c.scale(1 / cell, 1 / cell)
+            c.translate(overscan, overscan)
+            paint.shader = shader
+            c.drawRect(-overscan, -overscan, w + overscan, h + overscan, paint)
+            lastTime = time
+        }
+        dst.set(-overscan, -overscan, -overscan + cols * cell, -overscan + rows * cell)
+        target.drawBitmap(bmp!!, null, dst, blit)
+    }
 }
 
 /** 一个段落单元在当前尺寸下的全部状态（换尺寸重建）。 */
@@ -148,6 +182,7 @@ internal fun LumiereStage(
     val shader = remember { if (lumiereSupportsShader()) RuntimeShader(LUMIERE_LIGHT_AGSL) else null }
     val blurs = remember { HashMap<Int, BlurMaskFilter>() }
     val fogField = remember { LumiereFogField() }
+    val fieldCache = remember { LumiereFieldCache() }
     val measure = remember(measurePaint) { LumiereTextMeasure { text, px -> measurePaint.textSize = px.toFloat(); measurePaint.measureText(text).toDouble() } }
     val motion = if (reduceMotion) 0.6 else 1.0
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -187,7 +222,7 @@ internal fun LumiereStage(
                 }
             }
             withTransform({ scale(density, density, Offset.Zero) }) {
-                drawUnit(state, time, palette, alpha, scale, shader, fogField, textPaint, glowPaint, spritePaint, dot, star, blurs)
+                drawUnit(state, time, palette, alpha, scale, shader, fogField, fieldCache, textPaint, glowPaint, spritePaint, dot, star, blurs)
                 drawLumiereOverlay(wDp.toDouble(), hDp.toDouble(), palette.light)
             }
         }
@@ -195,7 +230,7 @@ internal fun LumiereStage(
 }
 
 private fun DrawScope.drawUnit(
-    state: LumiereUnitState, time: Double, palette: LumierePalette, alpha: Double, transitionScale: Double, shader: RuntimeShader?, fogField: LumiereFogField,
+    state: LumiereUnitState, time: Double, palette: LumierePalette, alpha: Double, transitionScale: Double, shader: RuntimeShader?, fogField: LumiereFogField, fieldCache: LumiereFieldCache,
     textPaint: Paint, glowPaint: Paint, spritePaint: Paint, dot: Bitmap, star: Bitmap, blurs: HashMap<Int, BlurMaskFilter>,
 ) {
     val model = state.model
@@ -218,9 +253,7 @@ private fun DrawScope.drawUnit(
         if (shader != null && Build.VERSION.SDK_INT >= 33) {
             fogField.update(time, light.rig.fog, 5, model.width, model.height, overscan.toDouble())
             shader.setLumiereField(input, fogField)
-            val fieldPaint = Paint()
-            fieldPaint.shader = shader
-            nc.drawRect(-overscan, -overscan, w + overscan, h + overscan, fieldPaint)
+            fieldCache.draw(nc, shader, time, model.width.toFloat(), model.height.toFloat(), overscan)
         }
         nc.restoreToCount(saved)
     }
