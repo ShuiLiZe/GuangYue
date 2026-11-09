@@ -207,7 +207,7 @@ fun LyricFlowScreen(
         resolveSubtitleOverlayContent(
             activeLine = activeLine,
             nextLines = kernelLines.drop(currentIndex.coerceAtLeast(0) + 1),
-            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET && lyricStyle != LyricStyle.PENDOLO && lyricStyle != LyricStyle.NEBBIA && lyricStyle != LyricStyle.SONNET && lyricStyle != LyricStyle.HANABI && lyricStyle != LyricStyle.TEMPERA && lyricStyle != LyricStyle.LUMIERE,
+            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET && lyricStyle != LyricStyle.PENDOLO && lyricStyle != LyricStyle.NEBBIA && lyricStyle != LyricStyle.HANABI && lyricStyle != LyricStyle.TEMPERA && lyricStyle != LyricStyle.LUMIERE,
         )
     }
 
@@ -496,7 +496,7 @@ fun LyricFlowScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        // P6 商籁：PV 镜头版面，词块排在让开顶栏与底部胶囊的区域里，外框与五线谱贴着这两处留白。
+        // R4 商籁：Folia sonnet 原版对译（PV 镜头：段落→镜头→版式→机位跟踪），整屏铺满。
         if (lyricStyle == LyricStyle.SONNET && kernelLines.isNotEmpty() && emptyKind == null) {
             com.guangyue.feature.player.lyrics.visualizer.SonnetStage(
                 lines = kernelLines,
@@ -510,11 +510,10 @@ fun LyricFlowScreen(
                 reduceMotion = reduceMotion,
                 topReserve = 64.dp,
                 bottomReserve = 104.dp,
-                modifier = Modifier.windowInsetsPadding(
-                    WindowInsets.statusBars
-                        .union(WindowInsets.displayCutout)
-                        .union(WindowInsets.navigationBars),
-                ),
+                // R4：Folia 商籁画布铺满整个舞台（inset-0），译文由字幕层画（VisualizerSubtitleOverlay）。
+                modifier = Modifier.fillMaxSize(),
+                seed = playback.item?.key ?: "sonnet",
+                themeName = if (darkMode) "Midnight Default" else "Daylight Default",
             )
         }
         // P4 时计：钟轮在左缘正中，歌词沿弧线排布；整屏铺满（同 Folia）。

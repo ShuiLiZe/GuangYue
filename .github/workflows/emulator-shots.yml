@@ -5,6 +5,11 @@ on:
   push:
     branches: [port/u2]
   workflow_dispatch:
+    inputs:
+      scene:
+        description: '只拍某个样式（如 sonnet）；留空 = 雾笺 + 浮名全套'
+        required: false
+        default: ''
 
 jobs:
   shots:
@@ -34,7 +39,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./tools/ci_shots.sh
+          script: SCENE=${{ github.event.inputs.scene }} ./tools/ci_shots.sh
       - uses: actions/upload-artifact@v4
         if: always()
         continue-on-error: true

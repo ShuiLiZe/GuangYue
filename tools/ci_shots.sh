@@ -12,6 +12,43 @@ adb shell settings put global anr_show_background 0 || true
 sleep 20
 shot() { adb exec-out screencap -p > "shots/$1.png"; echo "shot $1"; }
 
+# 只拍一个样式（workflow_dispatch 的 scene 输入；R4 商籁起）：拍完把截图 base64 打进日志后直接退出。
+emit_and_exit() {
+  adb logcat -d -s AndroidRuntime SonnetStage RuntimeShader > shots/logcat.txt 2>&1 || true
+  echo "===LOGCAT==="; tail -c 4000 shots/logcat.txt
+  for f in shots/*.png; do
+    n=$(basename "$f" .png)
+    if command -v convert >/dev/null; then convert "$f" -resize 50% -quality 60 "/tmp/$n.jpg"; else cp "$f" "/tmp/$n.jpg"; fi
+    echo "===IMG $n==="; base64 -w0 "/tmp/$n.jpg"; echo; echo "===END $n==="
+  done
+  exit 0
+}
+if [ "${SCENE:-}" = "sonnet" ]; then
+  son() { # $1 = 名字, $2 = 毫秒
+    adb shell am force-stop com.guangyue.music
+    adb shell am start -W -n $A --es v0c_style sonnet --es v0c_fixture probe --el v0c_ms $2 --ez v0c_dark true >/dev/null
+    sleep 25
+    adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
+    sleep 1
+    shot "$1"
+  }
+  adb shell am start -W -n $A --es v0c_style sonnet --es v0c_fixture probe --el v0c_ms 37500 --ez v0c_dark true >/dev/null; sleep 20
+  son sonnet-port-37 37500
+  son sonnet-port-44 44500
+  adb shell settings put system user_rotation 1
+  adb shell wm user-rotation lock 1 || adb shell cmd window user-rotation lock 1 || true
+  sleep 3
+  son sonnet-land-37 37500
+  son sonnet-land-39 39500
+  son sonnet-land-44 44500
+  son sonnet-land-14 14000
+  son sonnet-land-33 33000
+  son sonnet-land-3 3000
+  adb shell settings put system user_rotation 0
+  adb shell wm user-rotation lock 0 || adb shell cmd window user-rotation lock 0 || true
+  emit_and_exit
+fi
+
 # 雾笺（B0 残差）：与 Folia 基准同一份探针歌词（v0c_fixture probe），静态时钟定格；竖屏、横屏各拍几刻（37.5s 是基准时刻）。
 neb() { # $1 = 名字, $2 = 毫秒（等 45 s：模拟器上城市图与排版抢 CPU，排版最慢到 30 s）
   adb shell am force-stop com.guangyue.music

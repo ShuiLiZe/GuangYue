@@ -178,9 +178,10 @@ private fun probeKernelLines(): List<Line> = (0 until PROBE_LINE_COUNT).map { i 
 }
 
 /** 播放中：[positionMs] 决定当前行与逐字进度。 */
-private fun playing(positionMs: Long, durationMs: Long = 20_000L) = PlaybackState(
+private fun playing(positionMs: Long, durationMs: Long = 20_000L, key: String = "v0c") = PlaybackState(
     item = QueueItem(
-        key = "v0c", title = "夜曲", artist = "周杰伦", album = "十一月的萧邦",
+        // R4：探针歌词用 Folia 探针同一个 seed（visualizerMemory.probe 的 `probe-0`），商籁编排才与基准一致。
+        key = key, title = "夜曲", artist = "周杰伦", album = "十一月的萧邦",
         artworkUri = null,
         origin = MediaOrigin(pluginId = "v0c", trackKey = "v0c", quality = Quality.SUPER),
     ),
@@ -328,7 +329,7 @@ fun V0cStage(
                 lyrics = lines,
                 currentIndex = stageIndex,
                 strings = V0cStrings,
-                playback = if (isProbe) playing(positionMs, PROBE_LINE_COUNT * PROBE_LINE_MS) else playing(positionMs),
+                playback = if (isProbe) playing(positionMs, PROBE_LINE_COUNT * PROBE_LINE_MS, key = "probe-0") else playing(positionMs),
                 accent = Folia.colors.accent,
                 onBack = {},
                 onSeekToLine = {},

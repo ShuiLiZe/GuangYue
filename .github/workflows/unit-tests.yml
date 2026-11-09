@@ -28,6 +28,8 @@ jobs:
       - name: 雾笺纯逻辑单测（feature:player，只跑 Nebbia*）
         continue-on-error: true
         run: ./gradlew :feature:player:testDebugUnitTest --tests '*Nebbia*' --no-daemon --stacktrace
+      - name: 商籁纯逻辑单测（feature:player，只跑 Sonnet*，与 Folia 金标对拍）
+        run: ./gradlew :feature:player:testDebugUnitTest --tests '*Sonnet*' --no-daemon --stacktrace
       - name: 编译 debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
       - name: 上传 debug APK
