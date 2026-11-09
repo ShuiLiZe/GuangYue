@@ -91,4 +91,23 @@ class HanabiCoreProgramTest {
         val x = Math.round(v * 1e6) / 1e6
         return if (x == Math.floor(x)) x.toLong().toString() else x.toString()
     }
+
+    /** R7 花火⑤：段落转场帧（hanabiTransitions + hanabiSceneFrames）对拍：B 程序每个转场前后 2 秒内 25 个时刻的图层与帧。 */
+    @Test
+    fun sceneFramesMatchFolia() {
+        val p = compileHanabiProgram(lines(4.2, true), "probe-0", split = splitter)
+        read("hanabi_frames_golden.txt").forEach { g ->
+            val time = g[1].toDouble()
+            val (active, layers) = resolveHanabiSceneFrames(p, time, true)
+            assertEquals("F $time active", g[2].toInt(), active)
+            val exp = g[3].split('|')
+            assertEquals("F $time 层数", exp.size, layers.size)
+            exp.forEachIndexed { i, s ->
+                val v = s.split(',')
+                val l = layers[i]
+                assertEquals("F $time L$i index", v[0].toInt(), l.index)
+                listOf(l.frame.alpha, l.frame.scale, l.frame.blur, l.frame.y, l.frame.rotation).forEachIndexed { k, a -> near(v[1 + k], a, "F $time L$i #$k") }
+            }
+        }
+    }
 }
