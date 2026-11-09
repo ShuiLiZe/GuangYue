@@ -355,6 +355,16 @@ internal fun TemperaStage(
                 dark = drawShot(view, t, w, h, camera, motion, sceneM, sceneAlpha, palette, paperL, inkL, dark, inversionPaint, reduceMotion)
             }
         }
+        // 后处理暗角（sonnetPrintFilters 的 vignette：smoothstep(0.52, 1.08, r) × 0.85 × 0.6 压黑，r 以屏高为单位）。
+        if (!reduceMotion) {
+            val r = 1.08f * size.height
+            val stops = (0..8).map { k ->
+                val u = 0.52 + (1.08 - 0.52) * k / 8.0
+                val s = ((u - 0.52) / 0.56).coerceIn(0.0, 1.0)
+                (u / 1.08).toFloat() to Color.Black.copy(alpha = (s * s * (3 - 2 * s) * 0.85 * 0.6).toFloat())
+            }
+            drawRect(androidx.compose.ui.graphics.Brush.radialGradient(*(listOf(0f to Color.Transparent) + stops).toTypedArray(), center = Offset(size.width / 2, size.height / 2), radius = r))
+        }
         wipe?.let { (travel, angle) ->
             val span = hypot(w, h)
             val notch = span * 0.08

@@ -494,7 +494,8 @@ fun LyricFlowScreen(
                 paperColor = theme.background,
                 inkColor = onBackdrop,
                 accentColor = theme.accent,
-                fontFamily = GuangYueDesign.Serif,
+                // Folia 凝彩用主题字体栈（默认无衬线）600 字重。
+                fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
                 reduceMotion = reduceMotion,
                 topReserve = 136.dp,
                 bottomReserve = 128.dp,
