@@ -14,7 +14,7 @@ shot() { adb exec-out screencap -p > "shots/$1.png"; echo "shot $1"; }
 
 # 只拍一个样式（workflow_dispatch 的 scene 输入；R4 商籁起）：拍完把截图 base64 打进日志后直接退出。
 emit_and_exit() {
-  adb logcat -d -s AndroidRuntime SonnetStage RuntimeShader > shots/logcat.txt 2>&1 || true
+  adb logcat -d -s AndroidRuntime SonnetStage RuntimeShader ActivityManager:E ActivityTaskManager:W > shots/logcat.txt 2>&1 || true
   echo "===LOGCAT==="; tail -c 4000 shots/logcat.txt
   for f in shots/*.png; do
     n=$(basename "$f" .png)
@@ -24,15 +24,20 @@ emit_and_exit() {
   exit 0
 }
 if [ "${SCENE:-}" = "sonnet" ]; then
-  son() { # $1 = 名字, $2 = 毫秒
-    adb shell am force-stop com.guangyue.music
-    adb shell am start -W -n $A --es v0c_style sonnet --es v0c_fixture probe --el v0c_ms $2 --ez v0c_dark true >/dev/null
-    sleep 25
-    adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
-    sleep 1
+  son() { # $1 = 名字, $2 = 毫秒；前台不是取证页（刚开机系统忙、被 ANR 关掉）就重拍，最多 3 次
+    for try in 1 2 3; do
+      adb shell am force-stop com.guangyue.music
+      adb shell am start -W -n $A --es v0c_style sonnet --es v0c_fixture probe --el v0c_ms $2 --ez v0c_dark true >/dev/null
+      sleep 25
+      top=$(adb shell dumpsys activity activities | grep -m1 -E "topResumedActivity|mResumedActivity")
+      echo "son $1 try $try top: $top"
+      if echo "$top" | grep -q V0cStageActivity; then break; fi
+      adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
+      sleep 10
+    done
     shot "$1"
   }
-  adb shell am start -W -n $A --es v0c_style sonnet --es v0c_fixture probe --el v0c_ms 37500 --ez v0c_dark true >/dev/null; sleep 20
+  adb shell am start -W -n $A --es v0c_style sonnet --es v0c_fixture probe --el v0c_ms 37500 --ez v0c_dark true >/dev/null; sleep 60
   son sonnet-port-37 37500
   son sonnet-port-44 44500
   adb shell settings put system user_rotation 1
