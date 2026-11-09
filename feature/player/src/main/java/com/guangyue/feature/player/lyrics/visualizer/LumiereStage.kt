@@ -11,7 +11,9 @@
 //   1. 第 2 阶段的层先留接口不画（lyricEcho 已在 LumiereEcho.kt 接上）：星空点亮（starfall）、线稿（lineart）、浮尘与前景散景（motes）、
 //      十字爆闪（crossBurst）、主题图标。见 LumierePhase2 里的空实现。
 //   2. 文字组 bloom（strength 1.15、threshold 0.12）用每个已唱字底下一份 BlurMaskFilter 模糊字近似；图形组 bloom 在着色器里近似。
-//   3. 段落转场：Folia 运行时在边界两侧各画一个单元并做交叉渐变 / 模糊；这里只画当前单元，套它的进出帧（alpha、scale），不做模糊。
+//   3. 段落转场：照 lumiereSceneFrames.ts 在进入窗口里画两层交叉渐变（alpha、scale）；帧里的 blur（闪白 7、拉焦 12 逻辑像素）
+//      还没画——Canvas 上整层模糊要 RenderNode + RenderEffect（API 31+），软件 GPU 上太贵，先略。reduceMotion 时硬切（同 staticMode）。
+//      两层各用一份 LumiereFogField / LumiereFieldCache。
 //   4. 颗粒：Folia 的颗粒来自共享背景层的网点纹理，这里在暗场上铺一层 3 dp 间距的淡网点（LUMIERE_GRAIN_ALPHA）。
 //   5. 光场在 2 dp 一像素的离屏合成层里算、最多 20 帧 / 秒（LumiereFieldCache），再放大合成。
 //   7. 光色（第 2 阶段第 1 项）：Folia 的 theme.accentColor 是主题里给的强调色，广乐的 theme.emphasis 是封面取出来的饱和色
@@ -199,8 +201,9 @@ internal fun LumiereStage(
     }
     val shader = remember { if (lumiereSupportsShader()) RuntimeShader(LUMIERE_LIGHT_AGSL) else null }
     val blurs = remember { HashMap<Int, BlurMaskFilter>() }
-    val fogField = remember { LumiereFogField() }
-    val fieldCache = remember { LumiereFieldCache() }
+    // 进入窗口里两层同时画，各用一份烟雾网格与光场缓存（按段落序号奇偶分配，相邻两段不会撞同一份）。
+    val fogFields = remember { List(2) { LumiereFogField() } }
+    val fieldCaches = remember { List(2) { LumiereFieldCache() } }
     val measure = remember(measurePaint) { LumiereTextMeasure { text, px -> measurePaint.textSize = px.toFloat(); measurePaint.measureText(text).toDouble() } }
     val motion = if (reduceMotion) 0.6 else 1.0
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -222,26 +225,14 @@ internal fun LumiereStage(
             val dfc = darkField.first
             drawRect(Color(dfc[0].toFloat(), dfc[1].toFloat(), dfc[2].toFloat()), alpha = darkField.second.toFloat())
             drawIntoCanvas { it.nativeCanvas.drawRect(0f, 0f, size.width, size.height, grainPaint) }
-            val index = findLumiereParagraphIndexAtTime(program, time)
-            val state = unitAt(index)
-            // 段落转场（lumiereTransitions.ts）：出场窗口里套 exit 帧；上一段转场之后 enterDuration 秒里套 enter 帧。
-            var alpha = 1.0
-            var scale = 1.0
-            program.paragraphs[index].transitionOut?.let { out ->
-                if (time >= out.startTime) {
-                    val f = lumiereTransitionFrame(out.kind, true, (time - out.startTime) / max(out.endTime - out.startTime, 1e-3))
-                    if (out.kind != "lights-out") { alpha *= f.alpha; scale *= f.scale }
-                }
-            }
-            program.paragraphs.getOrNull(index - 1)?.transitionOut?.let { prev ->
-                val enter = lumiereEnterDuration(prev.kind, prev.startTime, prev.endTime)
-                if (time < prev.endTime + enter) {
-                    val f = lumiereTransitionFrame(prev.kind, false, (time - prev.endTime) / enter)
-                    alpha *= f.alpha; scale *= f.scale
-                }
-            }
+            // 段落转场（lumiereSceneFrames.ts + lumiereTransitions.ts）：出场窗口里当前段套 exit 帧；边界之后的进入窗口里
+            // 新段套 enter 帧，同时与停在出场终点帧的上一段交叉渐变（两层，上一段在下）。
+            val layers = resolveLumiereSceneFrames(program, time, !reduceMotion)
             withTransform({ scale(density, density, Offset.Zero) }) {
-                drawUnit(state, time, palette, alpha, scale, shader, fogField, fieldCache, textPaint, glowPaint, spritePaint, dot, star, blurs, echoFill, echoStroke, measure)
+                for (layer in layers) {
+                    val k = layer.index and 1
+                    drawUnit(unitAt(layer.index), time, palette, layer.alpha, layer.scale, shader, fogFields[k], fieldCaches[k], textPaint, glowPaint, spritePaint, dot, star, blurs, echoFill, echoStroke, measure)
+                }
                 drawLumiereOverlay(wDp.toDouble(), hDp.toDouble(), palette.light)
             }
         }

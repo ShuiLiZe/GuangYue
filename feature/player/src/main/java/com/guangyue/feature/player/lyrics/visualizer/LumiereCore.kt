@@ -326,6 +326,43 @@ internal fun lumiereChooseTransition(seed: String, paragraphIndex: Int, previous
     return choices[(abs(hash.toLong()) % choices.size).toInt()]
 }
 
+// ───────────────────────────── lumiereSceneFrames.ts ─────────────────────────────
+
+/** 某一时刻要画的一层：段落序号与套在它容器上的帧（blur 为逻辑像素）。 */
+internal class LumiereLayerFrame(val index: Int, val alpha: Double, val scale: Double, val blur: Double)
+
+private fun lumiereExitFrameOf(program: LumiereProgram, index: Int, time: Double): LumiereTransitionFrame {
+    val out = program.paragraphs.getOrNull(index)?.transitionOut
+    if (out == null || time < out.startTime) return LumiereTransitionFrame(1.0, 1.0, 0.0)
+    val f = lumiereTransitionFrame(out.kind, true, (time - out.startTime) / max(out.endTime - out.startTime, 1e-3))
+    // 熄灯：变暗交给场景自己的 fadeOut，外层不压透明度。
+    return if (out.kind == "lights-out") LumiereTransitionFrame(1.0, f.scale, f.blur) else f
+}
+
+/** resolveLumiereSceneFrames：从下往上画的层；进入窗口里两层（停在出场终点帧的上一段在下，随进入进度淡掉）。 */
+internal fun resolveLumiereSceneFrames(program: LumiereProgram, time: Double, transitionsEnabled: Boolean = true): List<LumiereLayerFrame> {
+    if (program.paragraphs.isEmpty()) return emptyList()
+    val active = findLumiereParagraphIndexAtTime(program, time)
+    if (!transitionsEnabled) return listOf(LumiereLayerFrame(active, 1.0, 1.0, 0.0))
+    val paragraph = program.paragraphs[active]
+    val current = lumiereExitFrameOf(program, active, time)
+    val previousOut = if (active > 0) program.paragraphs[active - 1].transitionOut else null
+    if (previousOut != null) {
+        val enterDuration = lumiereEnterDuration(previousOut.kind, previousOut.startTime, previousOut.endTime)
+        val progress = (time - paragraph.startTime) / enterDuration
+        if (progress >= 0 && progress < 1) {
+            val enter = lumiereTransitionFrame(previousOut.kind, false, progress)
+            val weight = lumiereSmooth(progress)
+            val peak = lumiereExitFrameOf(program, active - 1, previousOut.endTime)
+            val layers = ArrayList<LumiereLayerFrame>(2)
+            if (peak.alpha * (1 - weight) > 0.002) layers += LumiereLayerFrame(active - 1, peak.alpha * (1 - weight), peak.scale, peak.blur)
+            layers += LumiereLayerFrame(active, min(enter.alpha, weight) * current.alpha, enter.scale * current.scale, max(enter.blur, current.blur))
+            return layers
+        }
+    }
+    return listOf(LumiereLayerFrame(active, current.alpha, current.scale, current.blur))
+}
+
 // ───────────────────────────── 整首编译（lumiereProgram.ts + lumiereSeamless.ts） ─────────────────────────────
 
 internal const val LUMIERE_REOPEN_GAP = 2.5
