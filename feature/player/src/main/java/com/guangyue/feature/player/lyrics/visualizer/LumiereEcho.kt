@@ -7,7 +7,8 @@
 // 偏离：
 //   1. Folia 把一行先栅格化成空心字画布（描边 + 0.14 透明度填充），再按字切成精灵；这里每帧直接用 Paint 画字
 //      （FILL 0.14 + STROKE，描边宽 = 字号 × 0.012），省掉按需栅格化 / 释放（PREPARE）那一套。
-//   2. 关键字色（keywords / keywordEchoColor）留到第 3 项接；目前碎片一律用光色。
+//   2. 关键字色：Folia 用主题 wordColors 经 wordColoring 匹配；广乐主题没有 wordColors，这里留 keywordColorsOf 入口（逐字 rgb 或 null），
+//      缺省 null = 不着色（与 Folia wordColors 为空时相同）。混色照 keywordColors.ts 的 keywordEchoColor（占比 0.3）。
 //   3. Pixi 的 skew(x, 0) 按 Pixi 的矩阵公式（a=cos(r)·sx, b=sin(r)·sx, c=−sin(r−k)·sy, d=cos(r−k)·sy）手算成 Android Matrix。
 package com.guangyue.feature.player.lyrics.visualizer
 
@@ -29,7 +30,21 @@ private const val ECHO_BIRTH_DISTANCE = 0.08
 private const val ECHO_LETTER_SPACING = 0.04
 private const val ECHO_OUTLINE = 0.012
 
-internal class LumiereEchoGlyph(val char: String, val blank: Boolean, val dx: Double, val dy: Double, val speed: Double, val spin: Double) {
+// ───── keywordColors.ts（纯函数）─────
+internal object LumiereKeywordMix { const val GLYPH = 0.6; const val HALO = 0.75; const val STAR = 0.55; const val BURST = 0.7; const val ECHO = 0.3 }
+
+/** keywordLight：关键字色（先拉满亮度，只取色相）与光色按 amount 混合，最亮通道拉回光色亮度。 */
+internal fun lumiereKeywordLight(light: DoubleArray, keyword: DoubleArray, amount: Double): DoubleArray {
+    val kp = keyword.max()
+    val hue = if (kp > 1e-4) lumiereScaleRgb(keyword, 1 / kp) else LUMIERE_WHITE
+    val mixed = lumiereMixRgb(light, hue, amount)
+    val peak = mixed.max()
+    return if (peak > 1e-4) lumiereScaleRgb(mixed, light.max() / peak) else light
+}
+
+internal fun lumiereKeywordEchoColor(light: DoubleArray, keyword: DoubleArray) = lumiereKeywordLight(light, keyword, LumiereKeywordMix.ECHO)
+
+internal class LumiereEchoGlyph(val char: String, val blank: Boolean, val dx: Double, val dy: Double, val speed: Double, val spin: Double, val keyword: DoubleArray? = null) {
     /** 字在词里的位置（dp，按最大字号）；首次画到时量。 */
     var offset = Double.NaN
 }
@@ -49,6 +64,8 @@ internal class LumiereLyricEcho(
     size: Double,
     private val opacity: Double = 1.0,
     split: LumiereWordSplitter = defaultSonnetWordSplitter,
+    /** resolveGlyphKeywordColors：一行逐字的关键字色（不是关键字为 null）。null = 没有 wordColors。 */
+    keywordColorsOf: ((String) -> List<DoubleArray?>)? = null,
 ) {
     val fontPx = size * height
     val fragments: List<LumiereEchoFragment>
@@ -59,6 +76,7 @@ internal class LumiereLyricEcho(
         lines.forEachIndexed { lineIndex, line ->
             val graphemes = GraphemeTimings.splitLyricGraphemes(line.fullText)
             val timings = lumiereGlyphTimings(line)
+            val keywordColors = keywordColorsOf?.invoke(line.fullText)
             for (word in lumiereSegmentWords(line, split)) {
                 if (word.blank) continue
                 val end = min(word.end, graphemes.size)
@@ -71,11 +89,11 @@ internal class LumiereLyricEcho(
                 val stretch = 0.75 + rng.next() * 0.7
                 val shear = (rng.next() - 0.5) * 0.12
                 val spin = (rng.next() - 0.5) * 0.08
-                val glyphs = graphemes.subList(word.start, end).map { ch ->
+                val glyphs = graphemes.subList(word.start, end).mapIndexed { k, ch ->
                     val angle = rng.next() * PI * 2
                     val gs = 0.3 + rng.next() * 0.9
                     val gspin = (rng.next() - 0.5) * 0.5
-                    LumiereEchoGlyph(ch, ch.trim().isEmpty(), cos(angle), sin(angle), gs, gspin)
+                    LumiereEchoGlyph(ch, ch.trim().isEmpty(), cos(angle), sin(angle), gs, gspin, keywordColors?.getOrNull(word.start + k))
                 }
                 out += LumiereEchoFragment(birth, across, speed, scale, rotation, stretch, shear, spin, lineIndex, word.start, end, glyphs)
             }
@@ -86,6 +104,9 @@ internal class LumiereLyricEcho(
     private val lineSlices = HashMap<Int, List<LumiereGlyphSlice>>()
     private val matrix = Matrix()
     private val values = FloatArray(9)
+    // 关键字碎片的颜色按光色缓存（光色通常整个单元不变）。
+    private val keywordHex = HashMap<DoubleArray, Int>()
+    private var keywordFor = -1
 
     private fun ensureOffsets(fragment: LumiereEchoFragment, measure: LumiereTextMeasure) {
         if (!fragment.glyphs.first().offset.isNaN()) return
@@ -141,12 +162,17 @@ internal class LumiereLyricEcho(
             val splitK = 0.05 * age.pow(1.3)
             val lit = lumiereCompressLight(lumiereLightAt(beams, x / height, y / height))
             val glyphAlpha = (alpha * (0.05 + 0.4 * lit)).coerceIn(0.0, 1.0)
-            fill.color = (((glyphAlpha * 0.14 * 255).toInt()) shl 24) or (color and 0xffffff)
-            stroke.color = (((glyphAlpha * 255).toInt()) shl 24) or (color and 0xffffff)
+            val fillA = ((glyphAlpha * 0.14 * 255).toInt()) shl 24
+            val strokeA = ((glyphAlpha * 255).toInt()) shl 24
             nc.save()
             nc.concat(matrix)
             for (g in fragment.glyphs) {
                 if (g.blank) continue
+                if (keywordFor != color) { keywordHex.clear(); keywordFor = color }
+                val kw = g.keyword
+                val tint = if (kw != null) keywordHex.getOrPut(kw) { lumiereHexOf(lumiereKeywordEchoColor(lumiereRgbOfArgb(color), kw)) } else color and 0xffffff
+                fill.color = fillA or tint
+                stroke.color = strokeA or tint
                 val gx = (g.offset + g.dx * fontPx * splitK * g.speed).toFloat()
                 val gy = (g.dy * fontPx * splitK * g.speed).toFloat()
                 nc.save()
