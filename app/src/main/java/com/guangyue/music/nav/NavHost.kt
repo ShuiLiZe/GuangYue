@@ -341,6 +341,14 @@ fun GuangYueNavHost(
         composable(Routes.SEARCH) {
             val vm: SearchViewModel = hiltViewModel()
             val state by vm.state.collectAsStateWithLifecycle()
+            // 0.0.14 真机：搜索页点下载/加入歌单没有任何反馈，看起来像「不能下载」。
+            val searchCtx = androidx.compose.ui.platform.LocalContext.current
+            androidx.compose.runtime.LaunchedEffect(state.message) {
+                state.message?.let {
+                    android.widget.Toast.makeText(searchCtx, it, android.widget.Toast.LENGTH_SHORT).show()
+                    vm.clearMessage()
+                }
+            }
             ShellColumn(
                 content = {
                     FoliaSearchScreen(

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -234,6 +235,8 @@ private fun SearchHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // 0.0.14 真机：搜索框顶到状态栏上了，这里自己让出状态栏高度。
+            .statusBarsPadding()
             .padding(start = GySpace.pageH, end = GySpace.pageH, top = GySpace.m, bottom = GySpace.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
