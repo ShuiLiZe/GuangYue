@@ -30,6 +30,8 @@ jobs:
         run: ./gradlew :feature:player:testDebugUnitTest --tests '*Nebbia*' --no-daemon --stacktrace
       - name: 商籁纯逻辑单测（feature:player，只跑 Sonnet*，与 Folia 金标对拍）
         run: ./gradlew :feature:player:testDebugUnitTest --tests '*Sonnet*' --no-daemon --stacktrace
+      - name: 绘光纯逻辑单测（feature:player，只跑 Lumiere*，与 Folia 金标对拍）
+        run: ./gradlew :feature:player:testDebugUnitTest --tests '*Lumiere*' --no-daemon --stacktrace
       - name: 编译 debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
       - name: 上传 debug APK

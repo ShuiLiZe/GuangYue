@@ -207,7 +207,8 @@ fun LyricFlowScreen(
         resolveSubtitleOverlayContent(
             activeLine = activeLine,
             nextLines = kernelLines.drop(currentIndex.coerceAtLeast(0) + 1),
-            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET && lyricStyle != LyricStyle.PENDOLO && lyricStyle != LyricStyle.NEBBIA && lyricStyle != LyricStyle.HANABI && lyricStyle != LyricStyle.TEMPERA && lyricStyle != LyricStyle.LUMIERE,
+            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET && lyricStyle != LyricStyle.PENDOLO && lyricStyle != LyricStyle.NEBBIA && lyricStyle != LyricStyle.HANABI && lyricStyle != LyricStyle.TEMPERA,
+            // R5：绘光画译文（Folia VisualizerSubtitleOverlay 在绘光上照常显示，基准图里是「translation 12」）。
         )
     }
 
@@ -466,7 +467,7 @@ fun LyricFlowScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        // P9 绘光：整屏暗场 + 光位，字排在让开顶栏与底部胶囊的文字区里。
+        // R5 绘光：Folia lumiere 原版对译（段落 → 镜头 → 光位；暗场 + 光场着色器 + 歌词窗口 + 画框），整屏铺满。
         if (lyricStyle == LyricStyle.LUMIERE && kernelLines.isNotEmpty() && emptyKind == null) {
             com.guangyue.feature.player.lyrics.visualizer.LumiereStage(
                 lines = kernelLines,
@@ -478,6 +479,10 @@ fun LyricFlowScreen(
                 topReserve = 136.dp,
                 bottomReserve = 128.dp,
                 modifier = Modifier.fillMaxSize(),
+                primaryColor = onBackdrop,
+                secondaryColor = theme.secondary,
+                backgroundColor = theme.background,
+                seed = playback.item?.key ?: "lumiere",
             )
         }
         // P8 凝彩：整屏纸面 + 构图色块，字排在让开顶栏与底部胶囊的区域里，文字 Difference 反色。
