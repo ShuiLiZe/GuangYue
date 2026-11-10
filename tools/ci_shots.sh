@@ -28,6 +28,28 @@ emit_and_exit() {
   done
   exit 0
 }
+# 曲库集合页（2026-11-10 用户真机「我喜欢 1 首却是一片空白方块」）：假数据直接构图集合层，拍 0/1/2/16 首、列表与墙。
+if [ "${SCENE:-}" = "library" ]; then
+  L=com.guangyue.music/.LibraryShotActivity
+  lib() { # $1 名字，其余为 am start 参数
+    n=$1; shift
+    adb shell am force-stop com.guangyue.music
+    adb shell am start -W -n $L "$@" >/dev/null
+    sleep 8
+    adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
+    sleep 1
+    shot "$n"
+  }
+  adb shell am start -W -n $L --ei lib_n 1 >/dev/null; sleep 30
+  lib lib-1-auto --ei lib_n 1
+  lib lib-0-auto --ei lib_n 0
+  lib lib-2-auto --ei lib_n 2
+  lib lib-1-wall --ei lib_n 1 --es lib_list wall
+  lib lib-2-wall-dark --ei lib_n 2 --es lib_list wall --ez lib_dark true
+  lib lib-16-wall --ei lib_n 16
+  lib lib-16-list --ei lib_n 16 --es lib_list list --ez lib_dark true
+  emit_and_exit
+fi
 # 只拍一个样式（workflow_dispatch 的 scene 输入；R4 商籁起，R5 起任意样式：v0c_style=$SCENE）。
 # 前台不是取证页（刚开机系统忙、被 ANR 关掉）就重拍，最多 3 次。拍完把截图 base64 打进日志后直接退出。
 if [ -n "${SCENE:-}" ]; then

@@ -32,6 +32,10 @@ jobs:
         run: ./gradlew :feature:player:testDebugUnitTest --tests '*Sonnet*' --no-daemon --stacktrace
       - name: 绘光纯逻辑单测（feature:player，只跑 Lumiere*，与 Folia 金标对拍）
         run: ./gradlew :feature:player:testDebugUnitTest --tests '*Lumiere*' --no-daemon --stacktrace
+      - name: 曲库规则单测（core:data：合并 / 本地扫描过滤 / 元数据匹配打分）
+        run: ./gradlew :core:data:testDebugUnitTest --no-daemon --stacktrace
+      - name: 集合页布局单测（app，只跑 CollectionLayout*）
+        run: ./gradlew :app:testDebugUnitTest --tests '*CollectionLayout*' --no-daemon --stacktrace
       - name: 编译 debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
       - name: 上传 debug APK

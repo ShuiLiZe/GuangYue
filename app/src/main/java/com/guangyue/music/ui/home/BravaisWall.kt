@@ -117,6 +117,8 @@ fun BravaisWall(
     isQueued: (HomeTile) -> Boolean = { false },
     /** 0.0.19：聚焦卡单曲下载（只对歌曲块显示）。null 时不显示下载键。 */
     onDownloadTile: ((HomeTile) -> Unit)? = null,
+    /** 集合层初始是列表（true）/ 墙（false）；null = 按曲目数自动选（[CollectionLayout.preferList]）。取证用。 */
+    initialListMode: Boolean? = null,
 ) {
     // B1d：缝（Seam）横条的页签 = 墙的数据来源；第 0 个是「全部」（各段按 key 去重拼起来）。
     var tab by rememberSaveable { mutableStateOf(0) }  // 进播放页再回来保留页签
@@ -165,6 +167,43 @@ fun BravaisWall(
             scope.launch { camY.animateTo((g.centerY - vh / scale / 2).toFloat(), spec) }
         }
         val tracker = remember { VelocityTracker() }
+        // 2026-11-10 用户真机：「我喜欢」只有 1 首，集合页却是一整面空画框，找不到那首歌。
+        // 集合层：曲目少（≤ LIST_DEFAULT_MAX）或多到墙放不下（> 3×3 区块 108 槽）时默认用列表，信息条上可切换。
+        var listPref by rememberSaveable(collection?.name) { mutableStateOf(initialListMode) }
+        val listMode = collection != null && (listPref ?: CollectionLayout.preferList(tiles.size))
+        if (listMode && collection != null) {
+            Box(Modifier.fillMaxSize()) {
+                CollectionTrackList(
+                    tiles = tiles,
+                    topPad = statusTop + seamH,
+                    ink = inkColor,
+                    ground = groundColor,
+                    loading = collection.loading,
+                    isCurrent = isCurrent,
+                    playing = playing,
+                    onPlay = onOpenTile,
+                    onEnqueue = onEnqueueTile,
+                    onDownload = onDownloadTile,
+                )
+                Box(
+                    Modifier
+                        .offset { IntOffset(0, (statusTop * density.density).roundToInt()) }
+                        .fillMaxWidth()
+                        .height(seamH.dp)
+                        .zIndex(10f)
+                        .background(groundColor),
+                ) {
+                    SeamCollectionRow(collection, title, inkColor, listMode = true, onToggleList = { listPref = false })
+                }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .windowInsetsTopHeight(WindowInsets.statusBars)
+                        .zIndex(15f)
+                        .background(groundColor),
+                )
+            }
+        } else {
         Box(
             Modifier
                 .fillMaxSize()
@@ -265,7 +304,9 @@ fun BravaisWall(
                     ) {
                         val face = tile
                         if (face == null) {
-                            WallFrame(inkColor) { if (!dragging) expanded = null }
+                            // 集合层按真实曲目数画：没有曲目的槽不画空画框（首页仍按 Folia 留发丝线画框）。
+                            if (collection == null) WallFrame(inkColor) { if (!dragging) expanded = null }
+                            else Box(Modifier.fillMaxSize().clickable(indication = null, interactionSource = null) { if (!dragging) expanded = null })
                         } else {
                             val enter = onEnterTile?.takeIf { face.kind == HomeTileKind.PLAYLIST || face.kind == HomeTileKind.SHEET || face.kind == HomeTileKind.STATION }
                             Poster(
@@ -297,7 +338,7 @@ fun BravaisWall(
                     .background(groundColor),
             ) {
                 if (collection != null) {
-                    SeamCollectionRow(collection, title, inkColor)
+                    SeamCollectionRow(collection, title, inkColor, listMode = false, onToggleList = { listPref = true })
                 } else {
                     SeamHomeRow(title, listOf("全部") + sections.map { it.first }, tab, inkColor, onSelect = { tab = it; expanded = null }, onOpenSearch = onOpenSearch)
                 }
@@ -311,6 +352,7 @@ fun BravaisWall(
                     .background(groundColor),
             )
         }
+    }
     }
 }
 
@@ -347,7 +389,7 @@ data class SeamCollection(
  * 未移：收藏星标、过滤输入、列表面板、「⋯ 更多」、补页进度、每日推荐日期步进。
  */
 @Composable
-private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color) {
+private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listMode: Boolean = false, onToggleList: (() -> Unit)? = null) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(
@@ -402,6 +444,25 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color) {
                     .then(if (c.failed || c.count == 0) Modifier.clickable(onClick = c.onRetry) else Modifier),
             )
             val ready = !c.loading && !c.failed && (c.count ?: 0) > 0
+            if (onToggleList != null) {
+                // 列表 / 墙 切换（手机加的）：列表里能直接看到每首歌并点播。
+                Box(
+                    Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(ink.copy(alpha = 0.08f))
+                        .clickable(onClick = onToggleList),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (listMode) GuangYueIcons.LayoutGrid else GuangYueIcons.List,
+                        contentDescription = if (listMode) "切换为封面墙" else "切换为列表",
+                        tint = ink.copy(alpha = 0.8f),
+                        modifier = Modifier.size(17.dp),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+            }
             Row(
                 Modifier
                     .height(36.dp)
@@ -515,6 +576,9 @@ private fun Poster(
                 .padding(top = top)
                 .background(ink.copy(alpha = 0.06f)),
         ) {
+            // 没有封面 / 封面读不出来（手机本地歌常见）：先垫一块按歌名取色的占位块（首字 + 歌名），
+            // 封面加载成功就盖在上面；失败时 AsyncImage 什么都不画，占位块露出来，不会是空白方块。
+            ArtPlaceholder(tile.title, showTitle = !open)
             if (tile.artwork != null) {
                 AsyncImage(
                     model = tile.artwork,
@@ -608,3 +672,121 @@ private fun FocusCopy(
     }
 }
 
+
+/** 集合层布局选择（纯函数，单测覆盖）。 */
+object CollectionLayout {
+    /** 曲目数 ≤ 这个数默认用列表（墙上一屏只看得到一两块，少量曲目找不到歌）。 */
+    const val LIST_DEFAULT_MAX = 12
+
+    /** 墙的排名池是开场 3×3 区块（每块 12 槽），超过就放不下，也用列表。 */
+    const val WALL_CAPACITY = 9 * BlockTemplates.SLOTS_PER_BLOCK
+
+    fun preferList(count: Int): Boolean = count <= LIST_DEFAULT_MAX || count > WALL_CAPACITY
+
+    /** 占位块的首字：第一个字母 / 数字 / 汉字（按码点取，emoji 不拆半）；没有就 null（画音符）。 */
+    fun initial(title: String): String? {
+        val t = title.trim()
+        var i = 0
+        while (i < t.length) {
+            val cp = t.codePointAt(i)
+            if (Character.isLetterOrDigit(cp)) return String(Character.toChars(cp)).uppercase()
+            i += Character.charCount(cp)
+        }
+        return null
+    }
+
+    /** 占位块色相：按歌名稳定取（同一首歌每次一样）。 */
+    fun hue(title: String): Float = ((title.hashCode().toLong() and 0x7fffffffL) % 360L).toFloat()
+}
+
+/** 无封面占位：按歌名取色的色块 + 首字（没有就音符），够大时底部再写歌名。 */
+@Composable
+internal fun ArtPlaceholder(title: String, showTitle: Boolean = true, modifier: Modifier = Modifier) {
+    val bg = remember(title) { Color.hsl(CollectionLayout.hue(title), 0.32f, 0.46f) }
+    val initial = remember(title) { CollectionLayout.initial(title) }
+    BoxWithConstraints(modifier.fillMaxSize().background(bg), contentAlignment = Alignment.Center) {
+        val side = minOf(maxWidth.value, maxHeight.value)
+        if (initial != null) {
+            Text(initial, color = Color.White.copy(alpha = 0.92f), fontSize = (side * 0.42f).sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        } else {
+            Icon(GuangYueIcons.Music, contentDescription = null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size((side * 0.42f).dp))
+        }
+        if (showTitle && side >= 72f && title.isNotBlank()) {
+            Text(
+                title, color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+/**
+ * 集合层的曲目列表（手机加的，Folia 集合层是墙 + 列表面板；列表面板未移，这里用一张简单列表代替）：
+ * 封面（或占位块）+ 歌名 + 歌手，点一行就播放；右侧「加入队列」「下载」。
+ */
+@Composable
+private fun CollectionTrackList(
+    tiles: List<HomeTile>,
+    topPad: Float,
+    ink: Color,
+    ground: Color,
+    loading: Boolean,
+    isCurrent: (HomeTile) -> Boolean,
+    playing: Boolean,
+    onPlay: (HomeTile) -> Unit,
+    onEnqueue: (HomeTile) -> Unit,
+    onDownload: ((HomeTile) -> Unit)?,
+) {
+    if (tiles.isEmpty()) {
+        Box(Modifier.fillMaxSize().padding(top = topPad.dp), contentAlignment = Alignment.Center) {
+            Text(if (loading) "加载中…" else "这里还没有歌曲", color = ink.copy(alpha = 0.5f), fontSize = 14.sp)
+        }
+        return
+    }
+    androidx.compose.foundation.lazy.LazyColumn(
+        Modifier.fillMaxSize().background(ground),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = (topPad + 4f).dp, bottom = 200.dp),
+    ) {
+        items(tiles.size, key = { tiles[it].key }) { i ->
+            val t = tiles[i]
+            val cur = isCurrent(t)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onPlay(t) }
+                    .background(if (cur) ink.copy(alpha = 0.06f) else Color.Transparent)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(48.dp).clip(RoundedCornerShape(6.dp))) {
+                    ArtPlaceholder(t.title, showTitle = false)
+                    if (t.artwork != null) {
+                        AsyncImage(model = t.artwork, contentDescription = t.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    }
+                }
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(
+                        t.title, color = ink, fontSize = 15.sp, fontWeight = if (cur) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    if (t.subtitle.isNotBlank()) {
+                        Text(
+                            (if (cur) (if (playing) "正在播放 · " else "已暂停 · ") else "") + t.subtitle,
+                            color = ink.copy(alpha = 0.6f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Box(
+                    Modifier.size(36.dp).clip(CircleShape).clickable { onEnqueue(t) },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(GuangYueIcons.ListPlus, contentDescription = "加入队列", tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(18.dp)) }
+                if (onDownload != null) {
+                    Box(
+                        Modifier.size(36.dp).clip(CircleShape).clickable { onDownload(t) },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(GuangYueIcons.Download, contentDescription = "下载", tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(18.dp)) }
+                }
+            }
+        }
+    }
+}

@@ -55,6 +55,19 @@ interface TrackDao {
     @Query("SELECT COUNT(*) FROM track")
     suspend fun count(): Int
 
+    /** 手机本地音乐（MediaStore）行。 */
+    @Query("SELECT * FROM track WHERE `key` LIKE 'mediastore:%'")
+    suspend fun deviceRows(): List<TrackEntity>
+
+    /** 2026-11-10：清掉以前扫进来的录音 / 铃声（[com.guangyue.core.data.model.LibraryRules.purgeable]，收藏的不删）。 */
+    @Transaction
+    suspend fun purgeDevice(rejectedKeys: Set<String>): Int {
+        if (rejectedKeys.isEmpty()) return 0
+        val keys = com.guangyue.core.data.model.LibraryRules.purgeable(deviceRows(), rejectedKeys)
+        keys.forEach { delete(it) }
+        return keys.size
+    }
+
     @Query("SELECT `key` FROM track WHERE favorite = 1")
     suspend fun favoriteKeys(): List<String>
 

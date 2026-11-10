@@ -94,6 +94,13 @@ object LibraryRules {
         else -> row
     }
 
+    /**
+     * 2026-11-10：以前扫进来过的录音 / 铃声（这次被 [DeviceAudioRules] 排除的 [rejectedKeys]）要从库里清掉，
+     * 免得还挂在「最近播放」里。只删手机本地音乐行（`mediastore:` 前缀）且没被收藏的；收藏过的一律不动。
+     */
+    fun purgeable(rows: List<TrackEntity>, rejectedKeys: Set<String>): List<String> =
+        rows.filter { it.key.startsWith(DEVICE_PREFIX) && it.key in rejectedKeys && !it.favorite }.map { it.key }
+
     /** 手机本地音乐（MediaStore）行的 key 前缀：`mediastore:<id>`。 */
     const val DEVICE_PREFIX = "mediastore:"
 }

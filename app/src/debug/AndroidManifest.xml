@@ -11,6 +11,10 @@
             android:exported="true"
             android:theme="@style/Theme.GuangYue" />
         <activity
+            android:name=".LibraryShotActivity"
+            android:exported="true"
+            android:theme="@style/Theme.GuangYue" />
+        <activity
             android:name=".PluginProbeActivity"
             android:exported="true"
             android:theme="@style/Theme.GuangYue" />

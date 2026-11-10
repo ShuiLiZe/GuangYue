@@ -104,6 +104,9 @@ class TrackRepository @Inject constructor(private val db: GuangYueDatabase) {
     suspend fun delete(key: String) = dao.delete(key)
 
     suspend fun count(): Int = dao.count()
+
+    /** 清掉被过滤规则排除的手机本地音乐行（录音 / 铃声），收藏的不删。返回删了几行。 */
+    suspend fun purgeDevice(rejectedKeys: Set<String>): Int = dao.purgeDevice(rejectedKeys)
 }
 
 @Singleton

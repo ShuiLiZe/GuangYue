@@ -349,7 +349,9 @@ class HomeViewModel @Inject constructor(
         .map { list ->
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 val downloaded = list.map { d -> TrackEntity(key = d.key, title = d.title, localUri = d.uri) }
-                com.guangyue.core.data.model.LibraryRules.allSongs(downloaded, DeviceAudio.scan(appContext)).size
+                val scan = DeviceAudio.scanDetailed(appContext)
+                runCatching { tracks.purgeDevice(scan.rejectedKeys) }
+                com.guangyue.core.data.model.LibraryRules.allSongs(downloaded, scan.tracks).size
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -375,7 +377,10 @@ class HomeViewModel @Inject constructor(
                     val downloaded = downloadedLibrary.tracks.value
                         .filter { downloadedLibrary.exists(it) }
                         .map { downloadedLibrary.toPlayable(it) }
-                    rules.allSongs(downloaded, DeviceAudio.scan(appContext), tracks.favoriteKeys())
+                    val scan = DeviceAudio.scanDetailed(appContext)
+                    // 2026-11-10：以前扫进来过的录音 / 铃声这次被过滤掉了，库里残留的行（最近播放）一起清掉，收藏的不删。
+                    runCatching { tracks.purgeDevice(scan.rejectedKeys) }
+                    rules.allSongs(downloaded, scan.tracks, tracks.favoriteKeys())
                 }
                 else -> emptyList()
             }
