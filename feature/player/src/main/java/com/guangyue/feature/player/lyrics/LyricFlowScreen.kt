@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
@@ -288,6 +289,50 @@ fun LyricFlowScreen(
         return
     }
 
+    // ---------------- 沉浸：播放时 3 秒无触摸隐藏顶栏与胶囊（Folia usePlayerChromeAutoHide 的 auto-hide 档） ----------------
+    // 任意触摸立刻显出并重新计时；隐藏时的第一下触摸只用来显出（不穿透到按键 / 画布）。横屏另隐藏系统栏。
+    val immersiveReady = kernelLines.isNotEmpty() && emptyKind == null
+    var chromeTouch by remember { mutableIntStateOf(0) }
+    var chromeHidden by remember { mutableStateOf(false) }
+    LaunchedEffect(chromeTouch, playback.isPlaying, immersiveReady, panelOpen) {
+        chromeHidden = false
+        if (immersiveReady && playback.isPlaying && !panelOpen && !runningUnderRobolectric) {
+            kotlinx.coroutines.delay(3_000)
+            chromeHidden = true
+        }
+    }
+    val chromeAlpha by androidx.compose.animation.core.animateFloatAsState(
+        if (chromeHidden) 0f else 1f,
+        androidx.compose.animation.core.tween(300),
+        label = "chromeAlpha",
+    )
+    val immersiveConf = LocalConfiguration.current
+    val immersiveLandscape = immersiveConf.screenWidthDp > immersiveConf.screenHeightDp
+    val immersiveView = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(immersiveLandscape, immersiveReady) {
+        val w = (immersiveView.context as? android.app.Activity)?.window
+        val c = w?.let { androidx.core.view.WindowCompat.getInsetsController(it, immersiveView) }
+        val hide = immersiveLandscape && immersiveReady && c != null
+        if (hide) {
+            c!!.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            c.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose { if (hide) c?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
+    }
+    val chromeTouchModifier = Modifier.pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) {
+                val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                if (e.type == androidx.compose.ui.input.pointer.PointerEventType.Press) {
+                    if (chromeHidden) e.changes.forEach { it.consume() }
+                    chromeTouch++
+                } else if (chromeHidden) {
+                    e.changes.forEach { it.consume() }
+                }
+            }
+        }
+    }
+
     // 背景层：Folia FluidBackground —— 取色底色 @0.8 + 放大 1.5× 的模糊封面 + bottom-right overlay 渐变。
     VisualizerBackdrop(
         palette = palette,
@@ -295,6 +340,7 @@ fun LyricFlowScreen(
         dark = darkMode,
         modifier = modifier
             .fillMaxSize()
+            .then(chromeTouchModifier)
             .testTag(LyricRootTag),
     ) {
         // Folia backgrounds/common：通用几何背景（静止不画背景；浮名按自己的「通用几何图形」开关）。
@@ -387,17 +433,7 @@ fun LyricFlowScreen(
         if (lyricStyle == LyricStyle.MONET && kernelLines.isNotEmpty() && emptyKind == null) {
             val monetConf = LocalConfiguration.current
             val monetLandscape = monetConf.screenWidthDp > monetConf.screenHeightDp
-            // R1b：横屏即沉浸（Folia 桌面整窗无系统栏），隐藏状态栏 / 导航栏，离开时还原。
-            val monetView = androidx.compose.ui.platform.LocalView.current
-            androidx.compose.runtime.DisposableEffect(monetLandscape) {
-                val w = (monetView.context as? android.app.Activity)?.window
-                val c = w?.let { androidx.core.view.WindowCompat.getInsetsController(it, monetView) }
-                if (monetLandscape && c != null) {
-                    c.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    c.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-                }
-                onDispose { if (monetLandscape) c?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
-            }
+            // R1b 的横屏沉浸已上提为全样式通用（见函数开头「沉浸」段）。
             com.guangyue.feature.player.lyrics.visualizer.MonetLyricStage(
                 lines = kernelLines,
                 currentIndex = currentIndex,
@@ -559,6 +595,7 @@ fun LyricFlowScreen(
             Row(
                 Modifier
                     .fillMaxWidth()
+                    .alpha(chromeAlpha)
                     .heightIn(min = 56.dp)
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -746,11 +783,13 @@ fun LyricFlowScreen(
                 scrimColor = theme.background,
                 viewportWidthDp = LocalConfiguration.current.screenWidthDp.toFloat(),
                 fontFamily = GuangYueDesign.Sans,
-                modifier = Modifier.padding(bottom = SUBTITLE_BAR_RESERVE + SUBTITLE_STAGE_RESERVE),
+                // 横屏屏高只有 ~400dp，竖屏那套 136dp 预留会把字幕顶到屏幕正中、压在正文上（用户 11-10 实拍）；
+                // 横屏照 Folia subtitleBottomPx 紧贴底栏之上。
+                modifier = Modifier.padding(bottom = if (immersiveLandscape) 4.dp else SUBTITLE_BAR_RESERVE + SUBTITLE_STAGE_RESERVE),
             )
 
             // ---------------- 底部播放胶囊 ----------------
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().alpha(chromeAlpha), verticalAlignment = Alignment.CenterVertically) {
                 LyricBar(
                     modifier = Modifier.weight(1f),
                     positionMs = positionMs,
