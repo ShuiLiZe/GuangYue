@@ -12,6 +12,9 @@ import com.guangyue.core.data.model.TrackEntity
 import com.guangyue.core.plugin.MusicItem
 import com.guangyue.core.player.Quality
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -54,6 +57,65 @@ class DownloadManager @Inject constructor(
 
     private val channels = Executors.newFixedThreadPool(CHANNELS) { r ->
         Thread(r, "GuangYueDownload-${ThreadCounter.incrementAndGet()}").apply { isDaemon = true }
+    }
+
+    /**
+     * 0.0.19：未完成的下载请求落盘（filesDir/download_pending.json）。
+     *
+     * 以前 [requests] 只在内存里，App 被杀后下载页的失败任务一点「重试」就报「下载请求已失效」；
+     * 现在冷启动时读回来：还没下完的任务以「上次没下完」失败态出现在下载页，点重试即可接着下
+     * （WorkManager 若自己把任务续跑起来，Worker 会把状态改回进行中）。
+     */
+    private val pendingFile: File get() = File(context.filesDir, PENDING_FILE)
+
+    private val pendingJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+    init {
+        restorePending()
+    }
+
+    private fun restorePending() {
+        if (!pendingFile.exists()) return
+        val list = runCatching {
+            pendingJson.decodeFromString<List<DownloadRequest>>(pendingFile.readText())
+        }.onFailure { android.util.Log.w("GYDownload", "restore pending failed", it) }.getOrNull() ?: return
+        android.util.Log.i("GYDownload", "restore pending n=" + list.size)
+        var changed = false
+        for (request in list) {
+            val done = library.find(request.key)
+            if (done != null && library.exists(done)) {
+                changed = true
+                continue
+            }
+            requests[request.key] = request
+            if (store.find(request.key) == null) {
+                store.upsert(
+                    DownloadProgress(
+                        key = request.key,
+                        title = request.title,
+                        artist = request.artist,
+                        stage = DownloadStage.FAILED,
+                        error = "上次没下完（App 被关闭），点重试继续",
+                        quality = request.quality,
+                        artwork = request.artwork,
+                    ),
+                )
+            }
+        }
+        if (changed) savePending()
+    }
+
+    /** 把还没下完的请求写回磁盘（每次增删都整份重写，几十条以内很小）。 */
+    private fun savePending() {
+        val snapshot = requests.values.filter { library.find(it.key) == null }
+        runCatching {
+            val tmp = File(context.filesDir, "$PENDING_FILE.tmp")
+            tmp.writeText(pendingJson.encodeToString(snapshot))
+            if (!tmp.renameTo(pendingFile)) {
+                pendingFile.delete()
+                tmp.renameTo(pendingFile)
+            }
+        }.onFailure { android.util.Log.w("GYDownload", "save pending failed", it) }
     }
 
     // ------------------------------------------------------------------ 入队
@@ -103,6 +165,7 @@ class DownloadManager @Inject constructor(
         }
 
         requests[request.key] = request
+        savePending()
         store.upsert(
             DownloadProgress(
                 key = request.key,
@@ -125,6 +188,7 @@ class DownloadManager @Inject constructor(
     fun cancel(key: String) {
         synchronized(waiting) { waiting.remove(key) }
         requests.remove(key)
+        savePending()
         workManager.cancelUniqueWork(workName(key))
         store.patch(key) { it.copy(stage = DownloadStage.CANCELED) }
         release(key)
@@ -138,6 +202,8 @@ class DownloadManager @Inject constructor(
             store.patch(p.key) { it.copy(stage = DownloadStage.CANCELED) }
         }
         running.toList().forEach(::release)
+        requests.clear()
+        savePending()
     }
 
     /** 重试失败 / 取消的任务（重新解析直链，从 `.part` 继续）。 */
@@ -166,6 +232,7 @@ class DownloadManager @Inject constructor(
             }
             requests.remove(progress.key)
         }
+        savePending()
         store.clearFinished()
     }
 
@@ -207,12 +274,17 @@ class DownloadManager @Inject constructor(
                 ) {
                     continue
                 }
-                val request = requests[key]
-                if (request == null) {
-                    store.patch(key) {
-                        it.copy(stage = DownloadStage.FAILED, error = "下载请求已失效，请重新下载")
-                    }
-                    continue
+                // 极老的记录没留请求：用 key（platform:id）+ 标题拼一个最小请求，Worker 会自己补全 MusicItem。
+                val request = requests[key] ?: DownloadRequest(
+                    key = key,
+                    title = progress.title.ifBlank { "未命名" },
+                    artist = progress.artist.ifBlank { "未知艺术家" },
+                    artwork = progress.artwork,
+                    pluginId = key.substringBefore(':'),
+                    quality = progress.quality,
+                ).also {
+                    requests[key] = it
+                    savePending()
                 }
                 running.add(key)
                 channels.execute { runTask(request) }
@@ -249,6 +321,10 @@ class DownloadManager @Inject constructor(
         // 用一个能看到「结束」的协程监工：任务变 DONE / FAILED 就释放通道
         store.watch(request.key) { stage ->
             if (stage == DownloadStage.DONE || stage == DownloadStage.FAILED || stage == DownloadStage.CANCELED) {
+                if (stage == DownloadStage.DONE) {
+                    requests.remove(request.key)
+                    savePending()
+                }
                 release(request.key)
                 // 已完成记录由 DownloadWorker 直接写进 DownloadedLibrary（带本地封面 / 歌词）。
             }
@@ -267,6 +343,8 @@ class DownloadManager @Inject constructor(
 
         /** 并行下载通道数。 */
         const val CHANNELS = 3
+
+        private const val PENDING_FILE = "download_pending.json"
 
         private val ThreadCounter = AtomicInteger()
     }

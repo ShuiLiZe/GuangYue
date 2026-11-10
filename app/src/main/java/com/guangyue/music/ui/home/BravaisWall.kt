@@ -115,6 +115,8 @@ fun BravaisWall(
     onEnterPlayback: (() -> Unit)? = null,
     /** B1h：「已在队列」按真实队列判断。 */
     isQueued: (HomeTile) -> Boolean = { false },
+    /** 0.0.19：聚焦卡单曲下载（只对歌曲块显示）。null 时不显示下载键。 */
+    onDownloadTile: ((HomeTile) -> Unit)? = null,
 ) {
     // B1d：缝（Seam）横条的页签 = 墙的数据来源；第 0 个是「全部」（各段按 key 去重拼起来）。
     var tab by rememberSaveable { mutableStateOf(0) }  // 进播放页再回来保留页签
@@ -276,6 +278,7 @@ fun BravaisWall(
                                 onToggle = onTogglePlayback,
                                 onEnterPlayback = onEnterPlayback,
                                 inQueue = isQueued(face),
+                                onDownload = onDownloadTile?.takeIf { face.kind == HomeTileKind.TRACK }?.let { { it(face) } },
                             ) {
                                 if (dragging) return@Poster
                                 if (isOpen) (enter ?: onOpenTile)(face) else expand(base)
@@ -334,6 +337,8 @@ data class SeamCollection(
     val onPlayAll: () -> Unit,
     val onShuffle: () -> Unit,
     val onRetry: () -> Unit,
+    /** 0.0.19：整张歌单 / 榜单下载。 */
+    val onDownloadAll: (() -> Unit)? = null,
 )
 
 /**
@@ -344,7 +349,7 @@ data class SeamCollection(
 @Composable
 private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(
                 Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = c.onBack).padding(end = 6.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -354,6 +359,24 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color) {
             }
             Text(" / ", color = ink.copy(alpha = 0.3f), fontSize = 13.sp)
             Text(c.kindLabel, color = ink.copy(alpha = 0.62f), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            if (c.onDownloadAll != null) {
+                // 0.0.19：整张下载。窄屏（270dp）上第三行放不下第三颗键，放到面包屑行右端。
+                val ready = !c.loading && !c.failed && (c.count ?: 0) > 0
+                Spacer(Modifier.weight(1f))
+                Row(
+                    Modifier
+                        .height(32.dp)
+                        .clip(CircleShape)
+                        .background(ink.copy(alpha = 0.08f))
+                        .clickable(enabled = ready, onClick = c.onDownloadAll)
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(GuangYueIcons.Download, contentDescription = null, tint = ink.copy(alpha = if (ready) 0.8f else 0.3f), modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("全部下载", color = ink.copy(alpha = if (ready) 0.8f else 0.3f), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                }
+            }
         }
         Spacer(Modifier.height(6.dp))
         Text(
@@ -466,6 +489,7 @@ private fun Poster(
     onPlay: () -> Unit = {}, onEnqueue: () -> Unit = {}, onEnter: (() -> Unit)? = null,
     current: Boolean = false, playing: Boolean = false, onToggle: () -> Unit = {}, onEnterPlayback: (() -> Unit)? = null,
     inQueue: Boolean = false,
+    onDownload: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val stacked = !open && tile.kind == HomeTileKind.PLAYLIST || tile.kind == HomeTileKind.SHEET || tile.kind == HomeTileKind.STATION
@@ -499,7 +523,7 @@ private fun Poster(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            if (open) FocusCopy(tile, onPlay, onEnqueue, onEnter, current, playing, onToggle, onEnterPlayback, inQueue)
+            if (open) FocusCopy(tile, onPlay, onEnqueue, onEnter, current, playing, onToggle, onEnterPlayback, inQueue, onDownload)
         }
     }
 }
@@ -513,6 +537,7 @@ private fun FocusCopy(
     tile: HomeTile, onPlay: () -> Unit, onEnqueue: () -> Unit, onEnter: (() -> Unit)? = null,
     current: Boolean = false, playing: Boolean = false, onToggle: () -> Unit = {}, onEnterPlayback: (() -> Unit)? = null,
     inQueue: Boolean = false,
+    onDownload: (() -> Unit)? = null,
 ) {
     var tapped by remember(tile.key) { mutableStateOf(false) }
     val queued = tapped || inQueue
@@ -562,6 +587,13 @@ private fun FocusCopy(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(if (queued) "✓ 已在队列" else "+ 加入队列", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                }
+                if (onDownload != null) {
+                    // 0.0.19：单曲下载（Folia 聚焦卡没有；手机上歌单页要能挑着下，放在加入队列旁）。
+                    Box(
+                        Modifier.padding(start = 10.dp).size(40.dp).background(Color.White.copy(alpha = 0.18f), CircleShape).clickable(onClick = onDownload),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(GuangYueIcons.Download, contentDescription = "下载", tint = Color.White, modifier = Modifier.size(18.dp)) }
                 }
                 if (onEnter != null) {
                     Spacer(Modifier.weight(1f))

@@ -47,7 +47,19 @@ class HomeViewModel @Inject constructor(
     private val bridge: MusicPluginBridge,
     db: GuangYueDatabase,
     private val downloadedLibrary: com.guangyue.core.download.DownloadedLibrary,
+    private val downloads: com.guangyue.core.download.DownloadManager,
 ) : ViewModel() {
+
+    /**
+     * 0.0.19：歌单 / 榜单页「全部下载」与聚焦卡单曲下载。
+     * 返回 (新加入数, 已下载或正在下的数)，界面据此给提示。
+     */
+    fun downloadTracks(list: List<TrackEntity>, quality: com.guangyue.core.player.Quality): Pair<Int, Int> {
+        var added = 0
+        // 本地扫描来的歌本来就在手机里，不用下。
+        for (t in list) if (t.source != TrackEntity.SOURCE_LOCAL && downloads.enqueue(t, quality)) added++
+        return added to (list.size - added)
+    }
 
     /** 已安装插件（只统计能当音源用的），供空状态文案判断。 */
     init {
@@ -423,6 +435,10 @@ class HomeViewModel @Inject constructor(
         album = album.orEmpty(),
         artwork = artwork,
         source = platform,
+        platform = platform,
+        songId = id,
+        // 0.0.19：榜单 / 单曲也带上插件原始对象（下载与洛雪取链要 songmid/hash 等字段）。
+        rawJson = raw?.toString(),
     )
 
     private fun PlaylistEntity.toTile() = HomeTile(
@@ -813,6 +829,8 @@ class DownloadViewModel @Inject constructor(
     fun remove(key: String) {
         val wasDone = library.find(key) != null
         library.remove(key)
+        // 0.0.19：连同落盘的待下载请求一起删，否则下次启动又冒出来。
+        if (!wasDone) manager.cancel(key)
         manager.storeRef.remove(key)
         _message.value = if (wasDone) "已删除本地文件和歌词" else "已移除"
     }

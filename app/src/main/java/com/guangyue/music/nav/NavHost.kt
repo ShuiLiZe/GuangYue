@@ -287,6 +287,17 @@ fun GuangYueNavHost(
                 com.guangyue.feature.library.home.HomeTileKind.STATION -> "榜单"
                 else -> "歌单"
             }
+            val collectionCtx = androidx.compose.ui.platform.LocalContext.current
+            // 0.0.19：歌单 / 榜单「全部下载」与单曲下载，结果用 Toast 告诉用户（和搜索页一致）。
+            val downloadSome: (List<com.guangyue.core.data.model.TrackEntity>) -> Unit = { picked ->
+                val (added, skipped) = vm.downloadTracks(picked, playback.defaultQuality)
+                val msg = when {
+                    added > 0 && skipped > 0 -> "已加入下载 $added 首（$skipped 首已下载或在下载中）"
+                    added > 0 -> if (picked.size == 1) "已加入下载：${picked[0].title}" else "已加入下载 $added 首"
+                    else -> if (picked.size == 1) "这首已经下载过或正在下载" else "这些歌都已下载或正在下载"
+                }
+                android.widget.Toast.makeText(collectionCtx, msg, android.widget.Toast.LENGTH_SHORT).show()
+            }
             ShellColumn(
                 content = {
                     com.guangyue.music.ui.home.BravaisWall(
@@ -296,6 +307,7 @@ fun GuangYueNavHost(
                         groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
                         onOpenSearch = { navController.navigate(Routes.SEARCH) },
                         onEnqueueTile = { t -> trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> playback.appendTracks(listOf(list[i])) } },
+                        onDownloadTile = { t -> trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> downloadSome(listOf(list[i])) } },
                         onOpenTile = { t ->
                             val i = trackTiles.indexOf(t)
                             if (i >= 0) {
@@ -330,6 +342,7 @@ fun GuangYueNavHost(
                                 }
                             },
                             onRetry = { attempt++ },
+                            onDownloadAll = { if (list.isNotEmpty()) downloadSome(list) },
                         ),
                     )
                 },
