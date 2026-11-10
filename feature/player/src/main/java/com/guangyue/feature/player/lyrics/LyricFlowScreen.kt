@@ -742,7 +742,7 @@ fun LyricFlowScreen(
             // 舞台的 weight(1f) 因此天然收在字幕层之上，1.3 倍字号换行也压不到播放条（审图第 2 条）。
             LyricSubtitleOverlay(
                 content = subtitleContent,
-                secondaryColor = theme.secondary,
+                secondaryColor = if (lyricStyle == LyricStyle.LUMIERE) com.guangyue.feature.player.lyrics.visualizer.LumiereSubtitleColor else theme.secondary,
                 scrimColor = theme.background,
                 viewportWidthDp = LocalConfiguration.current.screenWidthDp.toFloat(),
                 fontFamily = GuangYueDesign.Sans,

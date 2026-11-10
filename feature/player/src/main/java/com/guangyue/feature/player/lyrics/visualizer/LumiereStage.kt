@@ -8,8 +8,8 @@
 // 单位：舞台按 density 整体缩放，内部一律用 dp（= Folia 的 CSS 像素），常数原样照搬。
 //
 // 偏离（第 1 阶段）：
-//   1. 第 2 阶段的层先留接口不画（lyricEcho 已在 LumiereEcho.kt 接上，线稿已在 LumiereLineart.kt 接上）：星空点亮（starfall）、浮尘与前景散景（motes）、
-//      十字爆闪（crossBurst）、主题图标。见 LumierePhase2 里的空实现。
+//   1. 第 2 阶段的层先留接口不画（lyricEcho 已在 LumiereEcho.kt、线稿在 LumiereLineart.kt、浮尘与前景散景在 LumiereMotes.kt 接上）：星空点亮（starfall）、
+//      十字爆闪（crossBurst）。见 LumierePhase2 里的空实现。主题图标（themeIcons）不做：广乐主题没有 lyricsIcons，Folia 此时也不画。
 //   2. 文字组 bloom（strength 1.15、threshold 0.12）用每个已唱字底下一份 BlurMaskFilter 模糊字近似；图形组 bloom 在着色器里近似。
 //   3. 段落转场：照 lumiereSceneFrames.ts 在进入窗口里画两层交叉渐变（alpha、scale）；帧里的 blur（闪白 7、拉焦 12 逻辑像素）
 //      还没画——Canvas 上整层模糊要 RenderNode + RenderEffect（API 31+），软件 GPU 上太贵，先略。reduceMotion 时硬切（同 staticMode）。
@@ -19,7 +19,12 @@
 //   7. 光色（第 2 阶段第 1 项）：Folia 的 theme.accentColor 是主题里给的强调色，广乐的 theme.emphasis 是封面取出来的饱和色
 //      （常偏红），直接当 accentColor 用会把香槟金光染红。缺省 followThemeAccent=false：强调色按 Folia rgbOf 的退路取香槟金，
 //      再走原版 resolveLumierePalette（themeColorMix 0.3 不变），光色 = 香槟金、点亮的字 = 主色（白）偏暖。
-//   6. 译文由 LyricFlowScreen 的字幕层（LyricSubtitleOverlay）画，同 Folia 的 VisualizerSubtitleOverlay。
+//   6. 译文由 LyricFlowScreen 的字幕层（LyricSubtitleOverlay）画，同 Folia 的 VisualizerSubtitleOverlay；颜色用 LumiereSubtitleColor
+//      （Folia 缺省主题的 secondaryColor 冷灰），不用广乐封面取出的 theme.secondary（取证页偏红）。
+//   8. 暗场底：Folia 的暗场 = 主题背景 × 0.06，底下压着 Folia 的共享背景层（中性灰）；广乐的 theme.background 是封面取色（常偏棕），
+//      缺省 neutralDarkField=true 取同亮度中性灰。
+//   9. 点亮的字：Folia 文字组 bloom（strength 1.15）会把亮字冲到近白、四周有一圈明显辉光。这里字身按受光向白推 55%，
+//      再叠宽（光点贴图，1.7 倍字号）、窄（0.2 字号模糊字）两层近似。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.graphics.Bitmap
@@ -64,8 +69,6 @@ private const val LUMIERE_GRAIN_ALPHA = 0.05f
 internal object LumierePhase2 {
     /** light/starfall.ts：开场光点倾泻 + 星空 + 光雨。 */
     @Suppress("UNUSED_PARAMETER") fun drawStarfall(scope: DrawScope, unit: LumiereUnitModel, light: LumiereLightFrame, time: Double) = Unit
-    /** light/motes.ts：浮尘（领头光位的 motes）与前景散景（front）。 */
-    @Suppress("UNUSED_PARAMETER") fun drawMotes(scope: DrawScope, unit: LumiereUnitModel, light: LumiereLightFrame, time: Double, front: Boolean) = Unit
     /** light/crossBurst.ts：十字爆闪（profile.burst），在字的下面。 */
     @Suppress("UNUSED_PARAMETER") fun drawBursts(scope: DrawScope, unit: LumiereUnitModel, window: LumiereLyricWindow, time: Double) = Unit
 }
@@ -122,6 +125,48 @@ private class LumiereUnitState(val model: LumiereUnitModel, val window: LumiereL
     val lineArts: List<LumiereLineArtLayer> = model.shots.mapIndexed { i, shot ->
         LumiereLineArtLayer(shot.profile.lineArt(model.aspect, lumiereRng("${model.seed}:$i:${shot.profile.kind}:art")), model.height)
     }
+    /** 浮尘（领头光位的 motes，moteAmount 1）与前景散景（front，没有就不画）：scene.ts 235、339 行。 */
+    val motes = LumiereMotes(model.width, model.height, "${model.seed}:motes", model.lead.motes)
+    val front: LumiereMotes? = model.lead.front?.let { LumiereMotes(model.width, model.height, "${model.seed}:front", it) }
+}
+
+/** light/sprites.ts 的 drawDot(128)：径向渐变 1 → 0.72（0.18）→ 0.2（0.45）→ 0。浮尘用。 */
+private fun lumiereFoliaDotBitmap(): Bitmap {
+    val size = 128
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    val w = android.graphics.Color.WHITE
+    fun a(v: Float) = android.graphics.Color.argb((v * 255).toInt(), 255, 255, 255)
+    p.shader = RadialGradient(64f, 64f, 64f, intArrayOf(w, a(0.72f), a(0.2f), a(0f)), floatArrayOf(0f, 0.18f, 0.45f, 1f), Shader.TileMode.CLAMP)
+    android.graphics.Canvas(bmp).drawRect(0f, 0f, size.toFloat(), size.toFloat(), p)
+    return bmp
+}
+
+/** light/sprites.ts 的 drawBokeh(128)：半透明圆盘、边缘一圈亮环。前景散景用。 */
+private fun lumiereBokehBitmap(): Bitmap {
+    val size = 128
+    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    fun a(v: Float) = android.graphics.Color.argb((v * 255).toInt(), 255, 255, 255)
+    p.shader = RadialGradient(64f, 64f, 64f * 0.96f, intArrayOf(a(0.35f), a(0.42f), a(0.75f), a(0f)), floatArrayOf(0f, 0.78f, 0.9f, 1f), Shader.TileMode.CLAMP)
+    android.graphics.Canvas(bmp).drawCircle(64f, 64f, 64f * 0.96f, p)
+    return bmp
+}
+
+/** motes.ts 的绘制：每颗一张贴图，中心在 (x, y)，直径 size，alpha，tint = 光色。 */
+private fun drawLumiereMotes(nc: android.graphics.Canvas, motes: LumiereMotes, texture: Bitmap, paint: Paint, color: Int, layerAlpha: Float) {
+    paint.colorFilter = PorterDuffColorFilter((0xff shl 24) or (color and 0xffffff), PorterDuff.Mode.MULTIPLY)
+    val rect = RectF()
+    for (s in motes.sprites) {
+        if (!s.visible) continue
+        val a = (s.alpha * layerAlpha).coerceIn(0.0, 1.0)
+        if (a <= 0.004) continue
+        val r = (s.size / 2).toFloat()
+        rect.set(s.x.toFloat() - r, s.y.toFloat() - r, s.x.toFloat() + r, s.y.toFloat() + r)
+        paint.alpha = (a * 255).toInt()
+        nc.drawBitmap(texture, null, rect, paint)
+    }
+    paint.colorFilter = null
 }
 
 /** light/sprites.ts 的 dot：柔和的高斯光点（白色，按 tint 上色）。 */
@@ -183,13 +228,17 @@ internal fun LumiereStage(
     seamless: Boolean = false,
     /** 光色是否跟随广乐强调色（见文件头偏离 7）。缺省关 = Folia 默认的香槟金。 */
     followThemeAccent: Boolean = false,
+    /** 暗场是否取中性灰（见文件头偏离 8）。缺省开。 */
+    neutralDarkField: Boolean = true,
 ) {
     val program = remember(lines, seed, seamless) { compileLumiereProgram(lines, seed, seamless = seamless) }
     val density = LocalDensity.current.density
     val palette = remember(accentColor, primaryColor, secondaryColor, followThemeAccent) {
         resolveLumierePalette(if (followThemeAccent) lumiereRgbOfArgb(accentColor.toArgb()) else null, lumiereRgbOfArgb(primaryColor.toArgb()), secondaryColor?.let { lumiereRgbOfArgb(it.toArgb()) }, 0.3)
     }
-    val darkField = remember(backgroundColor) { resolveLumiereDarkField(lumiereRgbOfArgb(backgroundColor.toArgb()), 0.75) }
+    // 暗场底：缺省按主题背景的亮度取中性灰（见文件头偏离 8），不跟封面偏棕。
+    val fieldBackground = remember(backgroundColor, neutralDarkField) { if (neutralDarkField) lumiereNeutralOf(backgroundColor) else backgroundColor }
+    val darkField = remember(fieldBackground) { resolveLumiereDarkField(lumiereRgbOfArgb(fieldBackground.toArgb()), 0.75) }
     val typeface = remember { if (Build.VERSION.SDK_INT >= 28) Typeface.create(Typeface.SANS_SERIF, 500, false) else Typeface.DEFAULT }
     val textPaint = remember(typeface) { Paint(Paint.ANTI_ALIAS_FLAG).apply { this.typeface = typeface; textAlign = Paint.Align.CENTER } }
     val glowPaint = remember(typeface) { Paint(Paint.ANTI_ALIAS_FLAG).apply { this.typeface = typeface; textAlign = Paint.Align.CENTER } }
@@ -200,6 +249,8 @@ internal fun LumiereStage(
     val lineStroke = remember { Paint(Paint.ANTI_ALIAS_FLAG) }
     val dot = remember { lumiereDotBitmap() }
     val star = remember { lumiereStarBitmap() }
+    val moteDot = remember { lumiereFoliaDotBitmap() }
+    val bokeh = remember { lumiereBokehBitmap() }
     val grainPaint = remember(density) {
         Paint().apply { shader = BitmapShader(lumiereGrainBitmap(density), Shader.TileMode.REPEAT, Shader.TileMode.REPEAT); alpha = (LUMIERE_GRAIN_ALPHA * 255).toInt() }
     }
@@ -225,7 +276,7 @@ internal fun LumiereStage(
             val time = clock.readForDraw()
             if (wDp <= 0f || hDp <= 0f || program.paragraphs.isEmpty()) return@Canvas
             // 暗场底（在所有场景之下，不随转场变化）+ 颗粒。
-            drawRect(backgroundColor)
+            drawRect(fieldBackground)
             val dfc = darkField.first
             drawRect(Color(dfc[0].toFloat(), dfc[1].toFloat(), dfc[2].toFloat()), alpha = darkField.second.toFloat())
             drawIntoCanvas { it.nativeCanvas.drawRect(0f, 0f, size.width, size.height, grainPaint) }
@@ -235,7 +286,7 @@ internal fun LumiereStage(
             withTransform({ scale(density, density, Offset.Zero) }) {
                 for (layer in layers) {
                     val k = layer.index and 1
-                    drawUnit(unitAt(layer.index), time, palette, layer.alpha, layer.scale, shader, fogFields[k], fieldCaches[k], textPaint, glowPaint, spritePaint, dot, star, blurs, echoFill, echoStroke, measure, lineStroke)
+                    drawUnit(unitAt(layer.index), time, palette, layer.alpha, layer.scale, shader, fogFields[k], fieldCaches[k], textPaint, glowPaint, spritePaint, dot, star, blurs, echoFill, echoStroke, measure, lineStroke, moteDot, bokeh)
                 }
                 drawLumiereOverlay(wDp.toDouble(), hDp.toDouble(), palette.light)
             }
@@ -246,7 +297,7 @@ internal fun LumiereStage(
 private fun DrawScope.drawUnit(
     state: LumiereUnitState, time: Double, palette: LumierePalette, alpha: Double, transitionScale: Double, shader: RuntimeShader?, fogField: LumiereFogField, fieldCache: LumiereFieldCache,
     textPaint: Paint, glowPaint: Paint, spritePaint: Paint, dot: Bitmap, star: Bitmap, blurs: HashMap<Int, BlurMaskFilter>,
-    echoFill: Paint, echoStroke: Paint, measure: LumiereTextMeasure, lineStroke: Paint,
+    echoFill: Paint, echoStroke: Paint, measure: LumiereTextMeasure, lineStroke: Paint, moteDot: Bitmap, bokeh: Bitmap,
 ) {
     val model = state.model
     val w = model.width.toFloat(); val h = model.height.toFloat()
@@ -288,12 +339,18 @@ private fun DrawScope.drawUnit(
                 if (fade * layerAlpha > 0.003) layer.draw(nc, time, draw, fade * layerAlpha, light.beams, lightHex, lineStroke, spritePaint, star)
             }
         }
-        LumierePhase2.drawMotes(this, model, light, time, front = false)
+        // 浮尘：进了光束才亮（scene.ts 485 行；没有音频，高频加成为 0）。
+        state.motes.update(time, light.beams, light.exit)
+        drawIntoCanvas { canvas -> drawLumiereMotes(canvas.nativeCanvas, state.motes, moteDot, spritePaint, lumiereHexOf(palette.light), layerAlpha) }
         LumierePhase2.drawBursts(this, model, state.window, time)
         val textIntensity = lumiereSmooth((time - model.paragraph.startTime) / 0.6) * light.exit
         val frame = state.window.frame(time, light.beams, palette.lit, palette.unlit, 0.22, textIntensity * layerAlpha)
         drawIntoCanvas { canvas -> drawWindow(canvas.nativeCanvas, frame, textPaint, glowPaint, spritePaint, dot, star, blurs) }
-        LumierePhase2.drawMotes(this, model, light, time, front = true)
+        // 前景散景（front 容器，在文字之上）。
+        state.front?.let { front ->
+            front.update(time, light.beams, light.exit)
+            drawIntoCanvas { canvas -> drawLumiereMotes(canvas.nativeCanvas, front, bokeh, spritePaint, lumiereHexOf(palette.light), layerAlpha) }
+        }
     }
 }
 
@@ -307,7 +364,24 @@ private inline fun DrawScope.withCameraTransform(model: LumiereUnitModel, cam: L
     }, block)
 }
 
+/** 0xRRGGBB 向白色混 k（0..1）。 */
+private fun lumiereTowardWhite(rgb: Int, k: Double): Int {
+    fun ch(shift: Int): Int { val c = (rgb shr shift) and 0xff; return (c + (255 - c) * k).toInt().coerceIn(0, 255) shl shift }
+    return ch(16) or ch(8) or ch(0)
+}
+
+/** 同亮度的中性灰（Rec.709 亮度，保留 alpha）：绘光暗场底、译文用，不跟封面取出的色相走。 */
+internal fun lumiereNeutralOf(color: Color): Color {
+    val y = (0.2126f * color.red + 0.7152f * color.green + 0.0722f * color.blue).coerceIn(0f, 1f)
+    return Color(y, y, y, color.alpha)
+}
+
+/** 译文字幕在绘光下的颜色：Folia 缺省主题的 secondaryColor（#9CA3AF，冷灰），不跟广乐封面取出的强调色偏红。 */
+internal val LumiereSubtitleColor = Color(0xFF9CA3AF)
+
 private fun argbOf(rgb: Int, alpha: Double) = (((alpha.coerceIn(0.0, 1.0) * 255).toInt()) shl 24) or (rgb and 0xffffff)
+
+private val glowRect = RectF()
 
 /** lyricWindow.ts 的绘制：光斑 → 光晕 → 字（底下垫一份模糊字近似文字组 bloom）→ 闪点。 */
 private fun drawWindow(nc: android.graphics.Canvas, frame: LumiereWindowFrame, textPaint: Paint, glowPaint: Paint, spritePaint: Paint, dot: Bitmap, star: Bitmap, blurs: HashMap<Int, BlurMaskFilter>) {
@@ -334,14 +408,24 @@ private fun drawWindow(nc: android.graphics.Canvas, frame: LumiereWindowFrame, t
         val baseline = (g.y - (fm.ascent + fm.descent) / 2).toFloat()
         nc.save()
         nc.rotate((g.rotation * 180 / PI).toFloat(), g.x.toFloat(), g.y.toFloat())
+        // 文字组 bloom 近似（偏离 2、9）：宽（光点贴图）、窄（模糊字）两层叠加，点亮的字身向白色推（bloom 叠加在亮处会冲到近白）。
+        val core = if (g.lit > 0.05) lumiereTowardWhite(g.color, 0.55 * min(1.0, g.lit)) else g.color
         if (g.lit > 0.05) {
-            val radius = max(1, (px * 0.22f).toInt())
-            glowPaint.maskFilter = blurs.getOrPut(radius) { BlurMaskFilter(radius.toFloat(), BlurMaskFilter.Blur.NORMAL) }
             glowPaint.textSize = px
-            glowPaint.color = argbOf(g.color, g.alpha * g.lit * 0.85)
+            // 宽的一层用光点贴图（1.7 倍字号）代替大半径 BlurMaskFilter：后者在 HWUI 上逐字走软件光栅，
+            // 第 2 轮取证 5 张里 3 张弹「无响应」。
+            spritePaint.colorFilter = PorterDuffColorFilter(argbOf(g.color, 1.0), PorterDuff.Mode.MULTIPLY)
+            spritePaint.alpha = (g.alpha * g.lit * 0.4).coerceIn(0.0, 1.0).times(255).toInt()
+            val halo = px * 0.85f
+            glowRect.set(g.x.toFloat() - halo, g.y.toFloat() - halo, g.x.toFloat() + halo, g.y.toFloat() + halo)
+            nc.drawBitmap(dot, null, glowRect, spritePaint)
+            spritePaint.colorFilter = null
+            val radius = max(1, (px * 0.2f).toInt())
+            glowPaint.maskFilter = blurs.getOrPut(radius) { BlurMaskFilter(radius.toFloat(), BlurMaskFilter.Blur.NORMAL) }
+            glowPaint.color = argbOf(core, g.alpha * g.lit * 0.95)
             nc.drawText(g.char, g.x.toFloat(), baseline, glowPaint)
         }
-        textPaint.color = argbOf(g.color, g.alpha)
+        textPaint.color = argbOf(core, g.alpha)
         nc.drawText(g.char, g.x.toFloat(), baseline, textPaint)
         nc.restore()
     }
