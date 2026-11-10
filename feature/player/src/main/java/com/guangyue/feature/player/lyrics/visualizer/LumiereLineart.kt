@@ -11,7 +11,8 @@
 //   1. lineart/themeIcons.ts + iconPaths.ts（主题图标，theme.lyricsIcons）没有译：广乐主题没有 lyricsIcons，
 //      Folia 在没有图标时也是一组都不画（不退回默认图标），所以结果相同。
 //   2. Pixi 每条线一个 Graphics、描线进度变化才重建几何；这里每条线缓存一个 android.graphics.Path，进度变了才重建，
-//      受光强弱只改画笔透明度（同 Folia 只改 alpha）。两道描边（3.2 倍宽 0.12 透明的光晕 + 本体）照搬。
+//      受光强弱只改画笔透明度（同 Folia 只改 alpha）。Folia 写了两道描边（3.2 倍宽 0.12 透明的光晕 + 本体），但 Pixi 8 的
+//      stroke() 会清掉路径，第二道实际不出图；这里照实际出图只画第一道（见 LumiereLineartDraw.kt）。
 //   3. GPU 数据的装卸（idle / shouldUnloadLineArt）是 Pixi 的显存管理，Canvas 上没有对应物；藏起来的镜头只是不画。
 package com.guangyue.feature.player.lyrics.visualizer
 

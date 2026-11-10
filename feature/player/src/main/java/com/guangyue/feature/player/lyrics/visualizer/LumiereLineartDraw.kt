@@ -75,7 +75,7 @@ internal class LumiereLineArtLayer(val spec: LumiereLineArtSpec, private val hei
 
     /**
      * draw：整组描线进度（未夹到 0..1，同 Folia）；fade：整体亮度。color：光色 0xRRGGBB（Pixi tint）。
-     * 两道描边：3.2 倍宽、0.12 透明的光晕 + 本体；整条线的 alpha = min(1, alpha·fade·(0.55 + 0.9·受光))。
+     * 描边只有 3.2 倍宽、0.12 透明的一道（见下面注释：Folia 第二道本体实际不出图）；整条线的 alpha = min(1, alpha·fade·(0.55 + 0.9·受光))。
      */
     fun draw(nc: android.graphics.Canvas, time: Double, draw: Double, fade: Double, beams: List<LumiereResolvedBeam>, color: Int, stroke: Paint, spritePaint: Paint, star: Bitmap) {
         stroke.style = Paint.Style.STROKE
@@ -94,12 +94,12 @@ internal class LumiereLineArtLayer(val spec: LumiereLineArtSpec, private val hei
             val lit = lumiereCompressLight(lumiereLightAt(beams, b.midpoint.x, b.midpoint.y))
             val alpha = min(1.0, b.spec.alpha * fade * (0.55 + 0.9 * lit))
             if (alpha <= 0.002) continue
+            // 只画 3.2 倍宽、0.12 透明的那一道：Folia 写了两道 stroke（光晕 + 本体），但 Pixi 8.21 的 GraphicsContext.stroke()
+            // 画完会清掉当前路径（_initNextPathLocation），第二道本体没有几何、实际不出图。基准图里细线只有约 3 像素宽、
+            // 比底色亮 +9 左右，正是光晕那一道；照 Folia 实际出图画。
             val px = (b.spec.width * height).toFloat()
             stroke.strokeWidth = px * 3.2f
             stroke.color = ((alpha * 0.12 * 255).toInt().coerceIn(0, 255) shl 24) or rgb
-            nc.drawPath(b.path, stroke)
-            stroke.strokeWidth = px
-            stroke.color = ((alpha * 255).toInt().coerceIn(0, 255) shl 24) or rgb
             nc.drawPath(b.path, stroke)
         }
         if (spec.nodes.isEmpty()) return
