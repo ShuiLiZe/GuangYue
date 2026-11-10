@@ -310,7 +310,10 @@ fun LyricFlowScreen(
     val immersiveLandscape = immersiveConf.screenWidthDp > immersiveConf.screenHeightDp
     val immersiveView = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.DisposableEffect(immersiveLandscape, immersiveReady) {
-        val w = (immersiveView.context as? android.app.Activity)?.window
+        // context 可能是 ContextWrapper（主题包装 / 取证入口），逐层解包找 Activity，否则系统栏藏不掉（CI 横屏图仍有状态栏）。
+        var ctx: android.content.Context? = immersiveView.context
+        while (ctx is android.content.ContextWrapper && ctx !is android.app.Activity) ctx = ctx.baseContext
+        val w = (ctx as? android.app.Activity)?.window
         val c = w?.let { androidx.core.view.WindowCompat.getInsetsController(it, immersiveView) }
         val hide = immersiveLandscape && immersiveReady && c != null
         if (hide) {
