@@ -23,8 +23,8 @@
 //      （Folia 缺省主题的 secondaryColor 冷灰），不用广乐封面取出的 theme.secondary（取证页偏红）。
 //   8. 暗场底：Folia 的暗场 = 主题背景 × 0.06，底下压着 Folia 的共享背景层（中性灰）；广乐的 theme.background 是封面取色（常偏棕），
 //      缺省 neutralDarkField=true 取同亮度中性灰。
-//   9. 点亮的字：Folia 文字组 bloom（strength 1.15）会把亮字冲到近白、四周有一圈明显辉光。这里字身按受光向白推 55%，
-//      再叠宽（光点贴图，1.7 倍字号）、窄（0.2 字号模糊字）两层近似。
+//   9. 点亮的字：Folia 文字组 bloom（strength 1.15）会把亮字冲到近白、四周有一圈明显辉光。这里字身按受光向白推 85%（基准亮字约 255/250/235），
+//      再叠宽（光点贴图，1.7 倍字号，向白 35%、透明 0.5）、窄（0.2 字号模糊字）两层近似。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.graphics.Bitmap
@@ -409,13 +409,13 @@ private fun drawWindow(nc: android.graphics.Canvas, frame: LumiereWindowFrame, t
         nc.save()
         nc.rotate((g.rotation * 180 / PI).toFloat(), g.x.toFloat(), g.y.toFloat())
         // 文字组 bloom 近似（偏离 2、9）：宽（光点贴图）、窄（模糊字）两层叠加，点亮的字身向白色推（bloom 叠加在亮处会冲到近白）。
-        val core = if (g.lit > 0.05) lumiereTowardWhite(g.color, 0.55 * min(1.0, g.lit)) else g.color
+        val core = if (g.lit > 0.05) lumiereTowardWhite(g.color, 0.85 * min(1.0, g.lit)) else g.color
         if (g.lit > 0.05) {
             glowPaint.textSize = px
             // 宽的一层用光点贴图（1.7 倍字号）代替大半径 BlurMaskFilter：后者在 HWUI 上逐字走软件光栅，
             // 第 2 轮取证 5 张里 3 张弹「无响应」。
-            spritePaint.colorFilter = PorterDuffColorFilter(argbOf(g.color, 1.0), PorterDuff.Mode.MULTIPLY)
-            spritePaint.alpha = (g.alpha * g.lit * 0.4).coerceIn(0.0, 1.0).times(255).toInt()
+            spritePaint.colorFilter = PorterDuffColorFilter(argbOf(lumiereTowardWhite(g.color, 0.35 * min(1.0, g.lit)), 1.0), PorterDuff.Mode.MULTIPLY)
+            spritePaint.alpha = (g.alpha * g.lit * 0.5).coerceIn(0.0, 1.0).times(255).toInt()
             val halo = px * 0.85f
             glowRect.set(g.x.toFloat() - halo, g.y.toFloat() - halo, g.x.toFloat() + halo, g.y.toFloat() + halo)
             nc.drawBitmap(dot, null, glowRect, spritePaint)
