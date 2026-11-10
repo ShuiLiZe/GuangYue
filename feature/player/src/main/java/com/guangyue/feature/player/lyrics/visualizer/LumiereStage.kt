@@ -9,7 +9,7 @@
 //
 // 偏离（第 1 阶段）：
 //   1. 第 2 阶段的层（lyricEcho 在 LumiereEcho.kt、线稿在 LumiereLineart.kt、浮尘与前景散景在 LumiereMotes.kt、十字爆闪在 LumiereBurst.kt）；
-//      星空点亮（starfall）见 LumierePhase2 里的空实现。主题图标（themeIcons）不做：广乐主题没有 lyricsIcons，Folia 此时也不画。
+//      星空开场（starfall）在 LumiereStarfall.kt。主题图标（themeIcons）不做：广乐主题没有 lyricsIcons，Folia 此时也不画。
 //   2. 文字组 bloom（strength 1.15、threshold 0.12）用每个已唱字底下一份 BlurMaskFilter 模糊字近似；图形组 bloom 在着色器里近似。
 //   3. 段落转场：照 lumiereSceneFrames.ts 在进入窗口里画两层交叉渐变（alpha、scale）；帧里的 blur（闪白 7、拉焦 12 逻辑像素）
 //      还没画——Canvas 上整层模糊要 RenderNode + RenderEffect（API 31+），软件 GPU 上太贵，先略。reduceMotion 时硬切（同 staticMode）。
@@ -24,7 +24,7 @@
 //   8. 暗场底：Folia 的暗场 = 主题背景 × 0.06，底下压着 Folia 的共享背景层（中性灰）；广乐的 theme.background 是封面取色（常偏棕），
 //      缺省 neutralDarkField=true 取同亮度中性灰。
 //   9. 点亮的字：Folia 文字组 bloom（strength 1.15）会把亮字冲到近白、四周有一圈明显辉光。这里字身按受光向白推 85%（基准亮字约 255/250/235），
-//      再叠宽（光点贴图，1.7 倍字号，向白 35%、透明 0.5）、窄（0.2 字号模糊字）两层近似。
+//      再叠光点贴图（1.7 倍字号）+ 预烘模糊字贴图宽（0.45 字号）窄（0.16 字号）两层加色（LumiereGlyphGlowCache），亮字芯再加色叠一次。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.graphics.Bitmap
@@ -64,12 +64,6 @@ import kotlin.math.max
 import kotlin.math.min
 
 private const val LUMIERE_GRAIN_ALPHA = 0.05f
-
-/** 第 2 阶段的层：接口先留着，舞台每帧按 scene.ts 的顺序调用。 */
-internal object LumierePhase2 {
-    /** light/starfall.ts：开场光点倾泻 + 星空 + 光雨。 */
-    @Suppress("UNUSED_PARAMETER") fun drawStarfall(scope: DrawScope, unit: LumiereUnitModel, light: LumiereLightFrame, time: Double) = Unit
-}
 
 /**
  * 光场缓存：着色器画进一个 2 dp 一像素的离屏合成层（RenderNode + setUseCompositingLayer，API 29+），每秒最多重录 20 次、
@@ -126,6 +120,9 @@ private class LumiereUnitState(val model: LumiereUnitModel, val window: LumiereL
     /** 浮尘（领头光位的 motes，moteAmount 1）与前景散景（front，没有就不画）：scene.ts 235、339 行。 */
     val motes = LumiereMotes(model.width, model.height, "${model.seed}:motes", model.lead.motes)
     val front: LumiereMotes? = model.lead.front?.let { LumiereMotes(model.width, model.height, "${model.seed}:front", it) }
+    /** 星空开场（领头光位有 starfall 才有，LumiereStarfall.kt）与它的 local 偏移（不开场的单元直接落定）。 */
+    val starfall: Pair<LumiereStarfall, Double>? = lumiereStarfallSetup(model.lead.starfall, model.paragraph.opening, model.paragraph.endTime - model.paragraph.startTime)
+        ?.let { LumiereStarfall(model.width, model.height, model.seed, it.first) to it.second }
     /** 十字爆闪的引爆表（scene.ts 315 行，LumiereBurst.kt）：按光色上色，光色变了重算。 */
     private var burstFor: DoubleArray? = null
     private var burstCache: List<LumiereBurstTrigger> = emptyList()
@@ -260,6 +257,7 @@ internal fun LumiereStage(
     val moteDot = remember { lumiereFoliaDotBitmap() }
     val bokeh = remember { lumiereBokehBitmap() }
     val burstTextures = remember(moteDot, bokeh) { arrayOf(lumiereStreakBitmap(), moteDot, bokeh) }
+    val foliaStar = remember { lumiereFoliaStarBitmap() }
     val grainPaint = remember(density) {
         Paint().apply { shader = BitmapShader(lumiereGrainBitmap(density), Shader.TileMode.REPEAT, Shader.TileMode.REPEAT); alpha = (LUMIERE_GRAIN_ALPHA * 255).toInt() }
     }
@@ -295,7 +293,7 @@ internal fun LumiereStage(
             withTransform({ scale(density, density, Offset.Zero) }) {
                 for (layer in layers) {
                     val k = layer.index and 1
-                    drawUnit(unitAt(layer.index), time, palette, layer.alpha, layer.scale, shader, fogFields[k], fieldCaches[k], textPaint, glowPaint, spritePaint, dot, star, blurs, echoFill, echoStroke, measure, lineStroke, moteDot, bokeh, burstTextures)
+                    drawUnit(unitAt(layer.index), time, palette, layer.alpha, layer.scale, shader, fogFields[k], fieldCaches[k], textPaint, glowPaint, spritePaint, dot, star, blurs, echoFill, echoStroke, measure, lineStroke, moteDot, bokeh, burstTextures, foliaStar)
                 }
                 drawLumiereOverlay(wDp.toDouble(), hDp.toDouble(), palette.light)
             }
@@ -306,7 +304,7 @@ internal fun LumiereStage(
 private fun DrawScope.drawUnit(
     state: LumiereUnitState, time: Double, palette: LumierePalette, alpha: Double, transitionScale: Double, shader: RuntimeShader?, fogField: LumiereFogField, fieldCache: LumiereFieldCache,
     textPaint: Paint, glowPaint: Paint, spritePaint: Paint, dot: Bitmap, star: Bitmap, blurs: HashMap<Int, BlurMaskFilter>,
-    echoFill: Paint, echoStroke: Paint, measure: LumiereTextMeasure, lineStroke: Paint, moteDot: Bitmap, bokeh: Bitmap, burstTextures: Array<Bitmap>,
+    echoFill: Paint, echoStroke: Paint, measure: LumiereTextMeasure, lineStroke: Paint, moteDot: Bitmap, bokeh: Bitmap, burstTextures: Array<Bitmap>, foliaStar: Bitmap,
 ) {
     val model = state.model
     val w = model.width.toFloat(); val h = model.height.toFloat()
@@ -330,6 +328,8 @@ private fun DrawScope.drawUnit(
             fogField.update(time, light.rig.fog, 5, model.width, model.height, overscan.toDouble())
             shader.setLumiereField(input, fogField)
             fieldCache.draw(nc, shader, time, model.width.toFloat(), model.height.toFloat(), overscan)
+            // 主光路细亮线（LumiereLight.kt drawLumiereBeamCores）：光场是 2 dp 一格算的，细光线的芯在这里按设备像素补画。
+            drawLumiereBeamCores(nc, light.beams, model.width, model.height, 1f)
         }
         nc.restoreToCount(saved)
     }
@@ -338,7 +338,11 @@ private fun DrawScope.drawUnit(
         // 背景歌词碎片（lyricEcho）：光场之上、星空与线稿之下；intensity = smooth(local / 1.2) × exit（scene.ts）。
         val echoIntensity = lumiereSmooth((time - model.paragraph.startTime) / 1.2) * light.exit * layerAlpha
         drawIntoCanvas { canvas -> state.echo.draw(canvas.nativeCanvas, time, light.beams, lumiereHexOf(palette.light), echoIntensity, echoFill, echoStroke, measure) }
-        LumierePhase2.drawStarfall(this, model, light, time)
+        // 星空（scene.ts 459 行）：local + 偏移，fade = exit，tint = 光色。
+        state.starfall?.let { (sf, offset) ->
+            sf.update(time - model.paragraph.startTime + offset, time, light.beams, light.exit)
+            drawIntoCanvas { canvas -> drawLumiereStarfall(canvas.nativeCanvas, sf, burstTextures[1], foliaStar, burstTextures[0], spritePaint, lumiereHexOf(palette.light), layerAlpha) }
+        }
         // 线稿（lineart/）：每个镜头提前 0.6 秒开始描、3.6 秒描完，镜头结束后 0.8 秒淡出；受光的线更亮（scene.ts 458–482 行）。
         drawIntoCanvas { canvas ->
             val nc = canvas.nativeCanvas
@@ -396,6 +400,52 @@ internal val LumiereSubtitleColor = Color(0xFF9CA3AF)
 private fun argbOf(rgb: Int, alpha: Double) = (((alpha.coerceIn(0.0, 1.0) * 255).toInt()) shl 24) or (rgb and 0xffffff)
 
 private val glowRect = RectF()
+private val glyphGlowCache = LumiereGlyphGlowCache()
+
+/**
+ * 预烘字形辉光：每个 (字, 字号档, 宽/窄) 在软件位图上用 BlurMaskFilter 模糊一次（低分辨率，1 px = 1 dp），之后当贴图画——
+ * 硬件画布上逐帧大半径 BlurMaskFilter 会在模拟器上 ANR，贴图不会。字号按 4 dp 分档，最多缓存 240 张（LRU）。
+ */
+internal class LumiereGlyphGlowCache {
+    private val cache = object : LinkedHashMap<String, Bitmap>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>?) = size > 240
+    }
+    private val bake = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; color = android.graphics.Color.WHITE }
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val rect = RectF()
+
+    private fun bitmapOf(char: String, bucket: Int, typeface: Typeface?, wide: Boolean): Bitmap {
+        val key = "$char|$bucket|$wide|${typeface?.hashCode() ?: 0}"
+        return cache.getOrPut(key) {
+            val radius = bucket * (if (wide) 0.45f else 0.16f)
+            val side = ceil(bucket * 1.3f + radius * 2.6f).toInt().coerceAtLeast(8)
+            val bmp = Bitmap.createBitmap(side, side, Bitmap.Config.ALPHA_8)
+            bake.typeface = typeface
+            bake.textSize = bucket.toFloat()
+            bake.maskFilter = BlurMaskFilter(max(1f, radius), BlurMaskFilter.Blur.NORMAL)
+            val fm = bake.fontMetrics
+            android.graphics.Canvas(bmp).drawText(char, side / 2f, side / 2f - (fm.ascent + fm.descent) / 2, bake)
+            bmp
+        }
+    }
+
+    fun draw(nc: android.graphics.Canvas, char: String, px: Float, typeface: Typeface?, x: Float, y: Float, wide: Boolean, argb: Int, additive: Boolean) {
+        if ((argb ushr 24) < 2) return
+        val bucket = max(8, (Math.round(px / 4f) * 4))
+        val bmp = bitmapOf(char, bucket, typeface, wide)
+        val half = bmp.width / 2f * (px / bucket)
+        rect.set(x - half, y - half, x + half, y + half)
+        // ALPHA_8 位图按 paint 颜色上色。
+        paint.color = argb
+        if (additive && Build.VERSION.SDK_INT >= 29) paint.blendMode = android.graphics.BlendMode.PLUS
+        nc.drawBitmap(bmp, null, rect, paint)
+        if (additive && Build.VERSION.SDK_INT >= 29) paint.blendMode = null
+    }
+}
+private val trackPath = android.graphics.Path()
+private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE; strokeWidth = 1.2f; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
+}
 
 /** lyricWindow.ts 的绘制：光斑 → 光晕 → 字（底下垫一份模糊字近似文字组 bloom）→ 闪点。 */
 private fun drawWindow(nc: android.graphics.Canvas, frame: LumiereWindowFrame, textPaint: Paint, glowPaint: Paint, spritePaint: Paint, dot: Bitmap, star: Bitmap, blurs: HashMap<Int, BlurMaskFilter>) {
@@ -406,6 +456,19 @@ private fun drawWindow(nc: android.graphics.Canvas, frame: LumiereWindowFrame, t
         nc.save(); nc.rotate((spot.rotation * 180 / PI).toFloat(), spot.x.toFloat(), spot.y.toFloat())
         rect.set((spot.x - spot.width / 2).toFloat(), (spot.y - spot.height / 2).toFloat(), (spot.x + spot.width / 2).toFloat(), (spot.y + spot.height / 2).toFloat())
         nc.drawBitmap(dot, null, rect, spritePaint); nc.restore()
+    }
+    // 径迹层（在光斑与光晕之间）：每个字一条折线，线宽 1.2、圆头圆角。
+    if (frame.tracks.isNotEmpty()) {
+        val paint = trackPaint
+        for (tr in frame.tracks) {
+            paint.color = argbOf(tr.color, tr.alpha)
+            val path = trackPath; path.rewind()
+            val p = tr.points
+            path.moveTo(p[0], p[1])
+            var i = 2
+            while (i < p.size) { path.lineTo(p[i], p[i + 1]); i += 2 }
+            nc.drawPath(path, paint)
+        }
     }
     for (g in frame.glyphs) {
         if (g.haloAlpha <= 0) continue
@@ -425,22 +488,31 @@ private fun drawWindow(nc: android.graphics.Canvas, frame: LumiereWindowFrame, t
         // 文字组 bloom 近似（偏离 2、9）：宽（光点贴图）、窄（模糊字）两层叠加，点亮的字身向白色推（bloom 叠加在亮处会冲到近白）。
         val core = if (g.lit > 0.05) lumiereTowardWhite(g.color, 0.85 * min(1.0, g.lit)) else g.color
         if (g.lit > 0.05) {
-            glowPaint.textSize = px
+            val lit = min(1.0, g.lit)
             // 宽的一层用光点贴图（1.7 倍字号）代替大半径 BlurMaskFilter：后者在 HWUI 上逐字走软件光栅，
             // 第 2 轮取证 5 张里 3 张弹「无响应」。
-            spritePaint.colorFilter = PorterDuffColorFilter(argbOf(lumiereTowardWhite(g.color, 0.35 * min(1.0, g.lit)), 1.0), PorterDuff.Mode.MULTIPLY)
-            spritePaint.alpha = (g.alpha * g.lit * 0.5).coerceIn(0.0, 1.0).times(255).toInt()
+            spritePaint.colorFilter = PorterDuffColorFilter(argbOf(lumiereTowardWhite(g.color, 0.35 * lit), 1.0), PorterDuff.Mode.MULTIPLY)
+            spritePaint.alpha = (g.alpha * lit * 0.55).coerceIn(0.0, 1.0).times(255).toInt()
             val halo = px * 0.85f
             glowRect.set(g.x.toFloat() - halo, g.y.toFloat() - halo, g.x.toFloat() + halo, g.y.toFloat() + halo)
             nc.drawBitmap(dot, null, glowRect, spritePaint)
-            spritePaint.colorFilter = null
-            val radius = max(1, (px * 0.2f).toInt())
-            glowPaint.maskFilter = blurs.getOrPut(radius) { BlurMaskFilter(radius.toFloat(), BlurMaskFilter.Blur.NORMAL) }
-            glowPaint.color = argbOf(core, g.alpha * g.lit * 0.95)
-            nc.drawText(g.char, g.x.toFloat(), baseline, glowPaint)
+            // 字形辉光（优化项）：预烘的模糊字贴图（LumiereGlyphGlowCache，软件位图上只模糊一次），加色叠两层——
+            // 宽（半径 0.45 字号）与窄（0.16 字号），近似 Folia 文字组 bloom 的多级降采样。每帧不再跑 BlurMaskFilter。
+            val add = Build.VERSION.SDK_INT >= 29
+            glyphGlowCache.draw(nc, g.char, px, textPaint.typeface, g.x.toFloat(), g.y.toFloat(), wide = true,
+                argb = argbOf(lumiereTowardWhite(g.color, 0.5 * lit), g.alpha * lit * 0.75), additive = add)
+            glyphGlowCache.draw(nc, g.char, px, textPaint.typeface, g.x.toFloat(), g.y.toFloat(), wide = false,
+                argb = argbOf(core, g.alpha * lit * 0.9), additive = add)
         }
         textPaint.color = argbOf(core, g.alpha)
         nc.drawText(g.char, g.x.toFloat(), baseline, textPaint)
+        // 亮字芯再加色叠一次（bloom 叠在亮处会冲到近白），只在真正点亮时。
+        if (g.lit > 0.3 && Build.VERSION.SDK_INT >= 29) {
+            textPaint.blendMode = android.graphics.BlendMode.PLUS
+            textPaint.color = argbOf(core, g.alpha * (min(1.0, g.lit) - 0.3) * 0.6)
+            nc.drawText(g.char, g.x.toFloat(), baseline, textPaint)
+            textPaint.blendMode = null
+        }
         nc.restore()
     }
     for (g in frame.glyphs) {

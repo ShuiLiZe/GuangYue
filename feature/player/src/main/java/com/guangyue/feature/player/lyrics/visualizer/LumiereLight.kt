@@ -22,6 +22,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import kotlin.math.abs
+import kotlin.math.exp
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
@@ -114,7 +116,9 @@ float glowMask(float4 A, float4 B, float4 C, float reach, float2 p) {
     float along = dot(d, A.zw);
     if (along <= 0.0) return 0.0;
     float perp = abs(d.x * -A.w + d.y * A.z);
-    float half_ = abs(B.x + along * B.y) * 5.0 + 0.012;
+    // 细光路（半宽 ≤ 0.0065、几乎不散）外发光收窄（×2.5 + 0.004）：芯由舞台上的矢量细线画（drawLumiereBeamCores），这里只留一圈柔光。
+    bool thin = B.x <= 0.0065 && B.y <= 0.006;
+    float half_ = thin ? abs(B.x + along * B.y) * 2.5 + 0.004 : abs(B.x + along * B.y) * 5.0 + 0.012;
     float s = perp / half_;
     float edge = smoothstep(1.0, 0.0, s);
     float falloff = exp(-along / max(B.w, 0.001));
@@ -371,3 +375,48 @@ internal fun DrawScope.drawLumiereFallbackLight(input: LumiereFieldInput) {
 }
 
 internal fun lumiereSupportsShader() = Build.VERSION.SDK_INT >= 33
+
+
+/** 细光路判定（与着色器 glowMask 的 thin 一致）：光学追迹类的窄光线。 */
+internal fun lumiereIsThinBeam(b: LumiereResolvedBeam) = b.halfWidth <= 0.0065 && b.tanSpread <= 0.006
+
+private val beamCorePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+    style = android.graphics.Paint.Style.STROKE; strokeCap = android.graphics.Paint.Cap.BUTT
+}
+
+/**
+ * 主光路细亮线（优化项，偏离）：Folia 的光场按设备像素算，追迹光线（半宽约 2 dp）是一道细亮芯 + 图形组 bloom 的柔光；
+ * 广乐光场在 2 dp 一格的离屏层里算（防模拟器 ANR），细芯被放大成一条宽发光带。这里在光场之上按光束几何补画矢量细芯：
+ * 宽 1.3 dp 的近白芯 + 3.6 dp 的半透明内晕，沿光束按 falloff（exp(-along/length)）与射程（reach）分 8 段递减。
+ * 只画细光路（lumiereIsThinBeam）；坐标是舞台 dp（与光场 fragCoord 一致）。
+ */
+internal fun drawLumiereBeamCores(nc: android.graphics.Canvas, beams: List<LumiereResolvedBeam>, width: Double, height: Double, alpha: Float) {
+    if (alpha <= 0.003f) return
+    val p = beamCorePaint
+    for (b in beams) {
+        if (!lumiereIsThinBeam(b) || b.intensity <= 0.01) continue
+        // 射程：有 reach 用 reach；否则画到出画（按画面对角线封顶）。
+        val maxLen = if (b.reach > 0) b.reach else hypot(width / height, 1.0) * 1.2
+        val steps = 8
+        val ox = b.ox * height; val oy = b.oy * height
+        val peak = maxOf(b.r, b.g, b.b, 1e-4)
+        fun ch(v: Double, k: Double) = ((v / peak + (1 - v / peak) * k).coerceIn(0.0, 1.0) * 255).toInt()
+        val coreRgb = (ch(b.r, 0.7) shl 16) or (ch(b.g, 0.7) shl 8) or ch(b.b, 0.7)
+        val glowRgb = (ch(b.r, 0.2) shl 16) or (ch(b.g, 0.2) shl 8) or ch(b.b, 0.2)
+        for (k in 0 until steps) {
+            val a0 = maxLen * k / steps; val a1 = maxLen * (k + 1) / steps
+            val mid = (a0 + a1) / 2
+            val start = lumiereSmooth(mid / (b.halfWidth * 2 + 0.01))
+            val reachFade = if (b.reach > 0) 1 - lumiereSmooth((mid - (b.reach - max(0.04, b.halfWidth * 2.5))) / max(0.04, b.halfWidth * 2.5)) else 1.0
+            val v = b.intensity * peak * exp(-mid / max(b.length, 0.001)) * start * reachFade
+            val mapped = (1 - exp(-v * 1.6)) * alpha
+            if (mapped <= 0.004) continue
+            val x0 = (ox + b.dx * a0 * height).toFloat(); val y0 = (oy + b.dy * a0 * height).toFloat()
+            val x1 = (ox + b.dx * a1 * height).toFloat(); val y1 = (oy + b.dy * a1 * height).toFloat()
+            p.strokeWidth = 3.6f; p.color = ((mapped * 0.28 * 255).toInt().coerceIn(0, 255) shl 24) or glowRgb
+            nc.drawLine(x0, y0, x1, y1, p)
+            p.strokeWidth = 1.3f; p.color = ((mapped * 0.95 * 255).toInt().coerceIn(0, 255) shl 24) or coreRgb
+            nc.drawLine(x0, y0, x1, y1, p)
+        }
+    }
+}

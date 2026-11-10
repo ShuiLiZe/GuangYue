@@ -568,7 +568,12 @@ internal class LumiereGlyphDraw(
 
 internal class LumiereSpotDraw(val x: Double, val y: Double, val rotation: Double, val width: Double, val height: Double, val alpha: Double, val color: Int)
 
-internal class LumiereWindowFrame(val glyphs: List<LumiereGlyphDraw>, val spots: List<LumiereSpotDraw>)
+internal class LumiereWindowFrame(val glyphs: List<LumiereGlyphDraw>, val spots: List<LumiereSpotDraw>, val tracks: List<LumiereTrackDraw> = emptyList())
+
+/** 一条字的径迹（lyricWindow.ts drawTracks）：折线 xy 交替（dp），线宽 1.2，圆头圆角，颜色 = 点亮色。 */
+internal class LumiereTrackDraw(val points: FloatArray, val alpha: Double, val color: Int)
+
+internal const val LUMIERE_TRACK_SAMPLES = 20
 
 internal class LumiereLyricWindow(
     val width: Double,
@@ -901,10 +906,53 @@ internal class LumiereLyricWindow(
 
     // ── lyricWindow.ts 的 update ──
 
-    fun frame(time: Double, beams: List<LumiereResolvedBeam>, litColor: DoubleArray, unlitColor: DoubleArray, unlitAlpha: Double, intensity: Double): LumiereWindowFrame {
+    /**
+     * 径迹（lyricWindow.ts drawTracks）：字在画面上过去 TRACK_TIME 秒里真正走过的路（叠加了行本身的移动、转动与缩放），加一点
+     * 垂直方向的抖动，像云室里的粒子径迹；字到位后尾端追上来，径迹收拢消失。只画这一次滑动开始之后的部分、且至少一个采样在飞。
+     * 径迹越长越亮（长度 / 3 字号封顶 1），几乎不动（< 0.05）的字不留；字头落在当前行保护框里时跟字一起压暗。
+     */
+    private fun tracksOf(index: Int, view: LumiereLineView, time: Double, transform: LumiereLineTransform, alpha: Double, color: Int, out: MutableList<LumiereTrackDraw>) {
+        if (alpha <= 0.003 || !transform.slideStart.isFinite()) return
+        if (time > transform.slideStart + LUMIERE_SLIDE + LUMIERE_TRACK_TIME) return
+        val from = max(transform.slideStart, time - LUMIERE_TRACK_TIME)
+        if (time - from < 1e-3) return
+        val samples = DoubleArray(LUMIERE_TRACK_SAMPLES + 1) { from + ((time - from) * it) / LUMIERE_TRACK_SAMPLES }
+        val transforms = samples.map { lineTransform(index, it) }
+        if (transforms.none { it.fly }) return
+        for (glyph in view.glyphs) {
+            if (glyph.blank) continue
+            var length = 0.0
+            var px = 0.0; var py = 0.0
+            var fontPx = heroPx
+            var flying = 0.0
+            val pts = FloatArray(samples.size * 2)
+            samples.forEachIndexed { i, sample ->
+                val t = transforms[i]
+                val local = glyphLocal(view, glyph, sample, t)
+                val cs = cos(t.rotation); val sn = sin(t.rotation)
+                val wx = t.x + (local.x * cs - local.y * sn) * t.scale
+                val wy = t.y + (local.x * sn + local.y * cs) * t.scale
+                fontPx = heroPx * t.scale * local.scale
+                flying = local.flying
+                val wobble = sin(i * 0.9 + glyph.flight.wobble + sample * 6) * heroPx * 0.02
+                val x = wx + wobble
+                val y = wy - wobble * 0.6
+                if (i > 0) length += hypot(x - px, y - py)
+                px = x; py = y
+                pts[i * 2] = x.toFloat(); pts[i * 2 + 1] = y.toFloat()
+            }
+            val strength = min(1.0, length / (heroPx * 3))
+            if (strength <= 0.05) continue
+            val sh = shield(index, px, py, fontPx / 2, flying)
+            out += LumiereTrackDraw(pts, alpha * 0.55 * strength * sh, color)
+        }
+    }
+
+    fun frame(time: Double, beams: List<LumiereResolvedBeam>, litColor: DoubleArray, unlitColor: DoubleArray, unlitAlpha: Double, intensity: Double, hideTrails: Boolean = false): LumiereWindowFrame {
         val out = ArrayList<LumiereGlyphDraw>()
         val spots = ArrayList<LumiereSpotDraw>()
-        if (lineCount == 0) return LumiereWindowFrame(out, spots)
+        val tracks = ArrayList<LumiereTrackDraw>()
+        if (lineCount == 0) return LumiereWindowFrame(out, spots, tracks)
         val litHex = lumiereHexOf(litColor)
         val starHex = lumiereHexOf(lumiereMixRgb(litColor, LUMIERE_WHITE, 0.5))
         val (low, high, cursor) = activeRange(time)
@@ -921,6 +969,7 @@ internal class LumiereLyricWindow(
             val passedDim = if (passed) lumiereLerp(1.0, 0.75, lumiereClamp01(passedAge / 2.5)) else 1.0
             val lineFontPx = heroPx * t.scale
             val cs = cos(t.rotation); val sn = sin(t.rotation)
+            if (!hideTrails) tracksOf(index, view, time, t, lineAlpha * passedDim, litHex, tracks)
             for (glyph in view.glyphs) {
                 if (glyph.blank) continue
                 val local = glyphLocal(view, glyph, time, t)
@@ -964,7 +1013,7 @@ internal class LumiereLyricWindow(
                 spots += LumiereSpotDraw(px, py, t.rotation, size * (if (vertical) 1.0 else 1.6), size * (if (vertical) 1.6 else 1.0), 0.07 * spotAlpha, litHex)
             }
         }
-        return LumiereWindowFrame(out, spots)
+        return LumiereWindowFrame(out, spots, tracks)
     }
 
     /** glyphAnchor：某个字在时刻 time 的位置（dp，含崩解偏移）与字号，给十字爆闪定位。 */
