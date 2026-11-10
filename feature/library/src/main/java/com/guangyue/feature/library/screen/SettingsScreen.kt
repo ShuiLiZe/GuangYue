@@ -109,7 +109,7 @@ fun SettingsScreen(
             add(SettingItem(SettingsPage.PLAYBACK, "音源", "音源插件管理", "装音源、选当前音源、看体检结果", icon(GuangYueIcons.Puzzle), trailing = chevron, onClick = onOpenPlugins))
         }
         if (onOpenDownloads != null) {
-            add(SettingItem(SettingsPage.STORAGE, "下载", "下载设置", "并发数、音质、存储位置", icon(GuangYueIcons.Download), trailing = chevron, onClick = onOpenDownloads))
+            add(SettingItem(SettingsPage.STORAGE, "下载", "下载设置", "下载音质、歌词、同时下载数、存储与暂存", icon(GuangYueIcons.Download), trailing = chevron, onClick = onOpenDownloads))
         }
         add(SettingItem(SettingsPage.ABOUT, "关于", "版本", "广乐 $versionName", icon(GuangYueIcons.Info)))
         add(SettingItem(SettingsPage.ABOUT, "关于", "开源许可", "AGPL-3.0 · 界面改写自 Folia", icon(GuangYueIcons.FileText), trailing = chevron, onClick = onOpenLicenses))

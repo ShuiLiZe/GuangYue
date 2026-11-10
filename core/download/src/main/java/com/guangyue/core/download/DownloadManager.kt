@@ -39,6 +39,7 @@ class DownloadManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val store: DownloadStore,
     val library: DownloadedLibrary,
+    val settings: DownloadSettings,
 ) {
 
     /** 进行中/排队任务的实时快照（界面上「下载管理器」直接订阅它）。 */
@@ -55,7 +56,7 @@ class DownloadManager @Inject constructor(
     /** 正在占用通道的 key。 */
     private val running = ConcurrentHashMap.newKeySet<String>()
 
-    private val channels = Executors.newFixedThreadPool(CHANNELS) { r ->
+    private val channels = Executors.newFixedThreadPool(DownloadPolicy.MAX_CONCURRENCY) { r ->
         Thread(r, "GuangYueDownload-${ThreadCounter.incrementAndGet()}").apply { isDaemon = true }
     }
 
@@ -156,7 +157,10 @@ class DownloadManager @Inject constructor(
     fun enqueueAll(items: List<MusicItem>, quality: Quality = Quality.HIGH): Int =
         items.count { enqueue(it, quality) }
 
-    fun enqueue(request: DownloadRequest): Boolean {
+    fun enqueue(raw: DownloadRequest): Boolean {
+        // 下载设置为准：不管从哪个入口点下载（搜索 / 播放页 / 网页端），都按「下载设置 · 下载音质」取链。
+        val cfg = settings.current()
+        val request = raw.copy(quality = cfg.quality.wire, withLyric = raw.withLyric && cfg.saveLyric)
         if (requests.containsKey(request.key) && store.isActive(request.key)) return false
         library.find(request.key)?.let { done ->
             // 已经下过且文件还在，不重复下；文件被用户删了就清掉记录重新下。
@@ -236,6 +240,41 @@ class DownloadManager @Inject constructor(
         store.clearFinished()
     }
 
+    // ------------------------------------------------------------------ 暂存缓存
+
+    /**
+     * 暂存占用：下载中途留下的 `.part`、没搬进音乐库的残留文件，以及已删歌曲留下的私有封面 / 歌词。
+     * 不含已下载的歌曲本身（那些在系统音乐库里，删歌请到下载管理）。
+     */
+    fun cacheBytes(): Long = cacheFiles().sumOf { it.length() }
+
+    /**
+     * 清理暂存（Folia 存储页「清空缓存」）。有任务正在下载时不碰 `.part`，免得断点续传丢进度。
+     * @return 释放的字节数
+     */
+    fun clearCache(): Long {
+        var freed = 0L
+        cacheFiles().forEach { f ->
+            val len = f.length()
+            if (f.delete()) freed += len
+        }
+        return freed
+    }
+
+    private fun cacheFiles(): List<java.io.File> {
+        val busy = store.snapshot().any { it.isActive }
+        val staging = if (busy) emptyList() else
+            DownloadPaths.stagingDir(context).listFiles()?.filter { it.isFile && it.name != "index.json" }.orEmpty()
+        val kept = library.tracks.value.flatMap { t ->
+            listOfNotNull(t.lyricPath, t.translationPath, t.artwork?.takeIf { it.startsWith("file:") }?.let { android.net.Uri.parse(it).path })
+        }.map { java.io.File(it).absolutePath }.toSet()
+        val activeKeys = store.snapshot().filter { it.isActive }.map { it.key }
+        val private = listOf("downloads/covers", "downloads/lyrics").flatMap { d ->
+            java.io.File(context.filesDir, d).listFiles()?.filter { it.isFile }.orEmpty()
+        }.filter { f -> f.absolutePath !in kept && activeKeys.none { k -> f.name.startsWith(k.replace(Regex("[^A-Za-z0-9._-]"), "_")) } }
+        return staging + private
+    }
+
     // ------------------------------------------------------------------ 查询
 
     /** 进行中（含排队）+ 已完成，按入队顺序。 */
@@ -266,7 +305,7 @@ class DownloadManager @Inject constructor(
     /** 按通道数放行排队任务。 */
     private fun pump() {
         synchronized(waiting) {
-            while (running.size < CHANNELS && waiting.isNotEmpty()) {
+            while (running.size < settings.current().concurrency && waiting.isNotEmpty()) {
                 val key = waiting.removeFirst()
                 val progress = store.find(key)
                 if (progress == null || progress.isFinished || progress.stage == DownloadStage.FAILED ||
@@ -341,8 +380,8 @@ class DownloadManager @Inject constructor(
     companion object {
         const val TAG_DOWNLOAD = "guangyue-download"
 
-        /** 并行下载通道数。 */
-        const val CHANNELS = 3
+        /** 默认并行下载通道数（实际以「下载设置 · 同时下载」为准）。 */
+        const val CHANNELS = DownloadPolicy.DEFAULT_CONCURRENCY
 
         private const val PENDING_FILE = "download_pending.json"
 

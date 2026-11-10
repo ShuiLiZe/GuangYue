@@ -41,6 +41,8 @@ class DownloadWorker @AssistedInject constructor(
     private val lx: com.guangyue.core.plugin.lx.LxSourceManager,
     private val prefs: com.guangyue.core.prefs.AppPreferences,
     private val library: DownloadedLibrary,
+    private val settings: DownloadSettings,
+    private val plugins: com.guangyue.core.plugin.PluginManager,
 ) : CoroutineWorker(context, params) {
 
     private val meter = BandwidthMeter()
@@ -70,6 +72,11 @@ class DownloadWorker @AssistedInject constructor(
 
             // ---------------------------------------------------------------- 1. 解析直链
             val source = resolveSource(request)
+            val usedQuality = source.quality?.let { com.guangyue.core.player.QualityLadder.map(it)?.wire } ?: request.quality
+            if (usedQuality != request.quality) {
+                android.util.Log.i(LOG_TAG, "quality ${request.quality} -> $usedQuality for ${request.key}")
+                store.patch(request.key) { it.copy(quality = usedQuality) }
+            }
             val extension = DownloadPaths.extensionFrom(source.url, source.mime).ifBlank { "mp3" }
             val mime = mimeFor(extension)
             val targetName = uniqueName(staging, DownloadPaths.fileName(request.artist, request.title, extension))
@@ -128,6 +135,9 @@ class DownloadWorker @AssistedInject constructor(
                     kotlinx.coroutines.withTimeoutOrNull(LYRIC_BUDGET_MS) { bridge.getLyric(request.pluginId.ifBlank { item.platform }, item) }
                 }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.getOrNull()
             } else null
+            // 下载设置：保存歌词关掉时不写 .lrc、不嵌进标签（App 内离线播放仍用私有副本显示歌词）。
+            val cfg = settings.current()
+            val exportLyric = request.withLyric && cfg.saveLyric
             val lrcText = lyric?.rawLrc?.takeIf { it.isNotBlank() }
                 ?: request.rawJson?.let(::inlineLrc)
             val transText = lyric?.translation?.takeIf { it.isNotBlank() }
@@ -141,7 +151,7 @@ class DownloadWorker @AssistedInject constructor(
                 album = album,
                 artworkUrl = null,
                 artworkBytes = cover,
-                lyrics = lrcText?.let { mergedLrc(it, transText) },
+                lyrics = if (exportLyric) lrcText?.let { DownloadPolicy.lrcContent(it, transText, cfg.lyricTranslation) } else null,
             )
             android.util.Log.i(LOG_TAG, "tagged=$tagged cover=${cover?.size ?: 0}B lyric=${lrcText?.length ?: 0} album=$album for ${request.key}")
 
@@ -168,11 +178,11 @@ class DownloadWorker @AssistedInject constructor(
 
             // ---------------------------------------------------------------- 5. 公共 .lrc（给系统音乐 App 用）
             var lrcUri: String? = null
-            if (lrcText != null) {
+            if (exportLyric && lrcText != null) {
                 store.patch(request.key) { it.copy(stage = DownloadStage.LYRICS) }
                 // 歌词只是附带品：写不进去也不能让整首下载算失败（0.0.15 真机就是这样卡住的）。
                 lrcUri = runCatching {
-                    PublicMusicStorage.writeText(context, DownloadPaths.lrcName(targetName), mergedLrc(lrcText, transText))?.toString()
+                    PublicMusicStorage.writeText(context, DownloadPaths.lrcName(targetName), DownloadPolicy.lrcContent(lrcText, transText, cfg.lyricTranslation))?.toString()
                 }.onFailure { android.util.Log.w(LOG_TAG, "lyric skipped for ${request.key}: ${it.message}") }.getOrNull()
             }
 
@@ -191,7 +201,7 @@ class DownloadWorker @AssistedInject constructor(
                     uri = audioUri.toString(),
                     fileName = targetName,
                     sizeBytes = size,
-                    quality = request.quality,
+                    quality = usedQuality,
                     rawJson = request.rawJson ?: item?.raw?.toString(),
                     artworkUrl = artworkUrl,
                     lyricPath = lyricPath,
@@ -210,7 +220,7 @@ class DownloadWorker @AssistedInject constructor(
                     fraction = 1f,
                     uri = audioUri.toString(),
                     fileName = targetName,
-                    quality = request.quality,
+                    quality = usedQuality,
                     artwork = coverUri ?: artworkUrl,
                 ),
             )
@@ -233,26 +243,37 @@ class DownloadWorker @AssistedInject constructor(
 
     // ------------------------------------------------------------------ steps
 
-    private class Source(val url: String, val mime: String?, val headers: Map<String, String>)
+    /** [quality] = 实际取到链接的那一档（降级后可能低于请求的档位）；洛雪 / 直链兜底时为 null。 */
+    private class Source(val url: String, val mime: String?, val headers: Map<String, String>, val quality: String? = null)
 
     private suspend fun resolveSource(request: DownloadRequest): Source {
         // 插件直链有有效期，重试时必须重新解析
         val raw: JsonObject? = request.rawJson?.let { runCatching { Json2.parse(it) as? JsonObject }.getOrNull() }
         val item = raw?.let { MusicItem.from(it, request.pluginId) } ?: fallbackItem(request)
         if (raw != null || item != null) {
-            val fresh = runCatching {
-                kotlinx.coroutines.withTimeoutOrNull(PLUGIN_BUDGET_MS) {
-                    bridge.getMediaSource(
-                        pluginId = request.pluginId,
-                        musicItemRaw = raw,
-                        item = item,
-                        quality = request.quality,
-                    )
+            // 下载音质按设置的档位取链，取不到就一档档往下降（Folia audioQualityFor：只降不升）。
+            val declared = (plugins.find(request.pluginId) ?: item?.platform?.let(plugins::findByPlatform))
+                ?.supportedQualities.orEmpty()
+            val ladder = DownloadPolicy.pluginWires(com.guangyue.core.player.Quality.fromWire(request.quality), declared)
+            val fresh = kotlinx.coroutines.withTimeoutOrNull(PLUGIN_BUDGET_MS) {
+                for (q in ladder) {
+                    val r = runCatching {
+                        bridge.getMediaSource(
+                            pluginId = request.pluginId,
+                            musicItemRaw = raw,
+                            item = item,
+                            quality = q,
+                        )
+                    }.onFailure {
+                        if (it is kotlinx.coroutines.CancellationException) throw it
+                        android.util.Log.w(LOG_TAG, "plugin getMediaSource($q) threw for ${request.key}: ${it.message}")
+                    }.getOrNull()
+                    if (r != null && r.url.isNotBlank()) return@withTimeoutOrNull Source(r.url, r.mimeType, r.headers, q)
                 }
-            }.onFailure { android.util.Log.w(LOG_TAG, "plugin getMediaSource threw for ${request.key}: ${it.message}") }
-                .getOrNull()
-            if (fresh != null && fresh.url.isNotBlank()) return Source(fresh.url, fresh.mimeType, fresh.headers)
-            android.util.Log.w(LOG_TAG, "plugin gave no url for ${request.key}, trying lx sources")
+                null
+            }
+            if (fresh != null) return fresh
+            android.util.Log.w(LOG_TAG, "plugin gave no url for ${request.key} at ${ladder.joinToString()}, trying lx sources")
         }
 
         // 2026-11-08 修「不能下载」：播放链路在插件取不到链时会问洛雪取链源，下载以前不会，
@@ -362,12 +383,6 @@ class DownloadWorker @AssistedInject constructor(
         val o = runCatching { Json2.parse(rawJson) as? JsonObject }.getOrNull() ?: return null
         val v = (o["rawLrc"] ?: o["lyric"] ?: o["lrc"]) as? kotlinx.serialization.json.JsonPrimitive ?: return null
         return v.content.takeIf { LRC_TIME.containsMatchIn(it) }
-    }
-
-    /** 原文 + 翻译合成一份标准 LRC：同一时间戳两行，播放器会当作双语显示。 */
-    private fun mergedLrc(lrc: String, translation: String?): String = buildString {
-        append(lrc.trimEnd()).append('\n')
-        translation?.lineSequence()?.filter { LRC_TIME.containsMatchIn(it) }?.forEach { append(it).append('\n') }
     }
 
     private fun readableError(t: Throwable): String = when {

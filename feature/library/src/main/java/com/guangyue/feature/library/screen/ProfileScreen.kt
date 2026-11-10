@@ -218,7 +218,7 @@ fun ProfileScreen(
                         )
                         com.guangyue.feature.library.design.FoliaRow(
                             label = "下载设置",
-                            hint = "并发数、音质、存储位置",
+                            hint = "下载音质、歌词、同时下载数、存储与暂存",
                             leading = {
                                 Icon(
                                     GuangYueIcons.Download,

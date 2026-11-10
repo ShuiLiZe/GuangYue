@@ -66,6 +66,8 @@ fun DownloadScreen(
     // 0.0.16 真机：只传 uri 时播放页标题变成 MediaStore 编号、也匹配不到歌词。带上整条记录。
     // 0.0.18：交给 ViewModel 先在后台备好本地封面 / 歌词，再把完整曲目行交出去。
     onPlayDownloaded: ((com.guangyue.core.data.model.TrackEntity) -> Unit)? = null,
+    /** 顶栏「设置」→ 下载设置。 */
+    onOpenSettings: (() -> Unit)? = null,
     vm: DownloadViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -78,6 +80,9 @@ fun DownloadScreen(
                 title = "下载管理",
                 onBack = onBack,
                 actions = {
+                    if (onOpenSettings != null) {
+                        TextAction("设置") { onOpenSettings() }
+                    }
                     if (state.active.isNotEmpty()) {
                         TextAction("全部暂停") { vm.cancelAll() }
                     }

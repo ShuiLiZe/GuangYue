@@ -69,6 +69,7 @@ object Routes {
     const val COLLECTION = "collection"
     const val PLUGINS = "plugins"
     const val DOWNLOADS = "downloads"
+    const val DOWNLOAD_SETTINGS = "downloadSettings"
     const val SETTINGS = "settings"
     const val LICENSES = "licenses"
     const val ABOUT = "about"
@@ -448,7 +449,7 @@ fun GuangYueNavHost(
                         allSongsCount = allSongs,
                         onOpenAllSongs = { openLibrary(com.guangyue.feature.library.viewmodel.LibraryTiles.all) },
                         onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
-                        onOpenDownloadSettings = { navController.navigate(Routes.DOWNLOADS) },
+                        onOpenDownloadSettings = { navController.navigate(Routes.DOWNLOAD_SETTINGS) },
                         onToggleDark = { onDarkModeChange(!darkMode) },
                         onOpenLicenses = { navController.navigate(Routes.LICENSES) },
                         onOpenAbout = { navController.navigate(Routes.ABOUT) },
@@ -594,7 +595,15 @@ fun GuangYueNavHost(
                     playback.setQueueFromTracks(listOf(entity), 0, true)
                     navController.navigate(Routes.LYRIC_FLOW)
                 },
+                onOpenSettings = { navController.navigate(Routes.DOWNLOAD_SETTINGS) { launchSingleTop = true } },
                 vm = vm,
+            )
+        }
+
+        composable(Routes.DOWNLOAD_SETTINGS) {
+            com.guangyue.feature.library.screen.DownloadSettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenDownloads = { navController.navigate(Routes.DOWNLOADS) { launchSingleTop = true } },
             )
         }
 
@@ -646,7 +655,7 @@ fun GuangYueNavHost(
                     defaultQuality = q
                 },
                 onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
-                onOpenDownloads = { navController.navigate(Routes.DOWNLOADS) },
+                onOpenDownloads = { navController.navigate(Routes.DOWNLOAD_SETTINGS) },
                 versionName = com.guangyue.music.BuildConfig.VERSION_NAME,
             )
         }
