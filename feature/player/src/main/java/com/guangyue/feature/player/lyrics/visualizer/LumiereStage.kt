@@ -403,19 +403,20 @@ private val glowRect = RectF()
 private val glyphGlowCache = LumiereGlyphGlowCache()
 
 /**
- * 预烘字形辉光：每个 (字, 字号档, 宽/窄) 在软件位图上用 BlurMaskFilter 模糊一次（低分辨率，1 px = 1 dp），之后当贴图画——
- * 硬件画布上逐帧大半径 BlurMaskFilter 会在模拟器上 ANR，贴图不会。字号按 4 dp 分档，最多缓存 240 张（LRU）。
+ * 预烘字形辉光：每个 (字, 宽/窄) 在软件位图上按固定参考字号（48 px）用 BlurMaskFilter 模糊一次，之后当贴图按字号缩放画——
+ * 硬件画布上逐帧大半径 BlurMaskFilter 会在模拟器上 ANR，贴图不会。不按字号分档：字号随运镜 / 换位连续变化，分档会不停新建位图、
+ * 每张都要在 RenderThread 上传纹理（第 1 轮取证竖屏 37.5 s 因此 RenderProxy.setStopped 卡住弹「无响应」）。最多缓存 400 张（LRU）。
  */
 internal class LumiereGlyphGlowCache {
     private val cache = object : LinkedHashMap<String, Bitmap>(64, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>?) = size > 240
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>?) = size > 400
     }
     private val bake = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; color = android.graphics.Color.WHITE }
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val rect = RectF()
 
     private fun bitmapOf(char: String, bucket: Int, typeface: Typeface?, wide: Boolean): Bitmap {
-        val key = "$char|$bucket|$wide|${typeface?.hashCode() ?: 0}"
+        val key = "$char|$wide|${typeface?.hashCode() ?: 0}"
         return cache.getOrPut(key) {
             val radius = bucket * (if (wide) 0.45f else 0.16f)
             val side = ceil(bucket * 1.3f + radius * 2.6f).toInt().coerceAtLeast(8)
@@ -431,7 +432,7 @@ internal class LumiereGlyphGlowCache {
 
     fun draw(nc: android.graphics.Canvas, char: String, px: Float, typeface: Typeface?, x: Float, y: Float, wide: Boolean, argb: Int, additive: Boolean) {
         if ((argb ushr 24) < 2) return
-        val bucket = max(8, (Math.round(px / 4f) * 4))
+        val bucket = 48
         val bmp = bitmapOf(char, bucket, typeface, wide)
         val half = bmp.width / 2f * (px / bucket)
         rect.set(x - half, y - half, x + half, y + half)
