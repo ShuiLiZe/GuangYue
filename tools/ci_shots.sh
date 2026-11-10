@@ -100,6 +100,11 @@ if [ -n "${SCENE:-}" ]; then
     son "$SCENE-land-3" 3000
     son "$SCENE-land-14" 14000
     son "$SCENE-land-44" 44000
+    # 绘光：12.88 s 是探针里第一串十字爆闪（wave-sources 12.16–14.47 s）；1.2 s 是开场星空倾泻。
+    if [ "$SCENE" = "lumiere" ]; then
+      son lumiere-land-12 12880
+      son lumiere-land-1 1200
+    fi
   fi
   adb shell settings put system user_rotation 0
   adb shell wm user-rotation lock 0 || adb shell cmd window user-rotation lock 0 || true

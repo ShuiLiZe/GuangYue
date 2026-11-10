@@ -967,7 +967,17 @@ internal class LumiereLyricWindow(
         return LumiereWindowFrame(out, spots)
     }
 
-    /** glyphTimes：十字爆闪按它挑字（第 2 阶段）。 */
+    /** glyphAnchor：某个字在时刻 time 的位置（dp，含崩解偏移）与字号，给十字爆闪定位。 */
+    fun glyphAnchor(lineIndex: Int, glyphIndex: Int, time: Double): Triple<Double, Double, Double> {
+        val t = lineTransform(lineIndex, time)
+        val view = lineOf(lineIndex)
+        val glyph = view.glyphs.getOrNull(glyphIndex)?.takeIf { it.index == glyphIndex } ?: view.glyphs.first { it.index == glyphIndex }
+        val local = glyphLocal(view, glyph, time, t)
+        val cs = cos(t.rotation); val sn = sin(t.rotation)
+        return Triple(t.x + (local.x * cs - local.y * sn) * t.scale, t.y + (local.x * sn + local.y * cs) * t.scale, heroPx * t.scale * local.scale)
+    }
+
+    /** glyphTimes：十字爆闪按它挑字。 */
     fun glyphTimes(lineIndex: Int): List<Pair<Int, Double>> {
         val chars = graphemes.getOrNull(lineIndex) ?: return emptyList()
         val timings = lumiereGlyphTimings(lines[lineIndex])

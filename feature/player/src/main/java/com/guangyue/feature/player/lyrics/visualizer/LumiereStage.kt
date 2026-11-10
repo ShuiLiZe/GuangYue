@@ -8,8 +8,8 @@
 // 单位：舞台按 density 整体缩放，内部一律用 dp（= Folia 的 CSS 像素），常数原样照搬。
 //
 // 偏离（第 1 阶段）：
-//   1. 第 2 阶段的层先留接口不画（lyricEcho 已在 LumiereEcho.kt、线稿在 LumiereLineart.kt、浮尘与前景散景在 LumiereMotes.kt 接上）：星空点亮（starfall）、
-//      十字爆闪（crossBurst）。见 LumierePhase2 里的空实现。主题图标（themeIcons）不做：广乐主题没有 lyricsIcons，Folia 此时也不画。
+//   1. 第 2 阶段的层（lyricEcho 在 LumiereEcho.kt、线稿在 LumiereLineart.kt、浮尘与前景散景在 LumiereMotes.kt、十字爆闪在 LumiereBurst.kt）；
+//      星空点亮（starfall）见 LumierePhase2 里的空实现。主题图标（themeIcons）不做：广乐主题没有 lyricsIcons，Folia 此时也不画。
 //   2. 文字组 bloom（strength 1.15、threshold 0.12）用每个已唱字底下一份 BlurMaskFilter 模糊字近似；图形组 bloom 在着色器里近似。
 //   3. 段落转场：照 lumiereSceneFrames.ts 在进入窗口里画两层交叉渐变（alpha、scale）；帧里的 blur（闪白 7、拉焦 12 逻辑像素）
 //      还没画——Canvas 上整层模糊要 RenderNode + RenderEffect（API 31+），软件 GPU 上太贵，先略。reduceMotion 时硬切（同 staticMode）。
@@ -69,8 +69,6 @@ private const val LUMIERE_GRAIN_ALPHA = 0.05f
 internal object LumierePhase2 {
     /** light/starfall.ts：开场光点倾泻 + 星空 + 光雨。 */
     @Suppress("UNUSED_PARAMETER") fun drawStarfall(scope: DrawScope, unit: LumiereUnitModel, light: LumiereLightFrame, time: Double) = Unit
-    /** light/crossBurst.ts：十字爆闪（profile.burst），在字的下面。 */
-    @Suppress("UNUSED_PARAMETER") fun drawBursts(scope: DrawScope, unit: LumiereUnitModel, window: LumiereLyricWindow, time: Double) = Unit
 }
 
 /**
@@ -128,6 +126,16 @@ private class LumiereUnitState(val model: LumiereUnitModel, val window: LumiereL
     /** 浮尘（领头光位的 motes，moteAmount 1）与前景散景（front，没有就不画）：scene.ts 235、339 行。 */
     val motes = LumiereMotes(model.width, model.height, "${model.seed}:motes", model.lead.motes)
     val front: LumiereMotes? = model.lead.front?.let { LumiereMotes(model.width, model.height, "${model.seed}:front", it) }
+    /** 十字爆闪的引爆表（scene.ts 315 行，LumiereBurst.kt）：按光色上色，光色变了重算。 */
+    private var burstFor: DoubleArray? = null
+    private var burstCache: List<LumiereBurstTrigger> = emptyList()
+    fun bursts(light: DoubleArray): List<LumiereBurstTrigger> {
+        if (burstFor?.contentEquals(light) != true) {
+            burstCache = lumiereSceneBursts(model.shots, model.paragraph.lines.size, window::glyphTimes, light, model.seed)
+            burstFor = light.copyOf()
+        }
+        return burstCache
+    }
 }
 
 /** light/sprites.ts 的 drawDot(128)：径向渐变 1 → 0.72（0.18）→ 0.2（0.45）→ 0。浮尘用。 */
@@ -251,6 +259,7 @@ internal fun LumiereStage(
     val star = remember { lumiereStarBitmap() }
     val moteDot = remember { lumiereFoliaDotBitmap() }
     val bokeh = remember { lumiereBokehBitmap() }
+    val burstTextures = remember(moteDot, bokeh) { arrayOf(lumiereStreakBitmap(), moteDot, bokeh) }
     val grainPaint = remember(density) {
         Paint().apply { shader = BitmapShader(lumiereGrainBitmap(density), Shader.TileMode.REPEAT, Shader.TileMode.REPEAT); alpha = (LUMIERE_GRAIN_ALPHA * 255).toInt() }
     }
@@ -286,7 +295,7 @@ internal fun LumiereStage(
             withTransform({ scale(density, density, Offset.Zero) }) {
                 for (layer in layers) {
                     val k = layer.index and 1
-                    drawUnit(unitAt(layer.index), time, palette, layer.alpha, layer.scale, shader, fogFields[k], fieldCaches[k], textPaint, glowPaint, spritePaint, dot, star, blurs, echoFill, echoStroke, measure, lineStroke, moteDot, bokeh)
+                    drawUnit(unitAt(layer.index), time, palette, layer.alpha, layer.scale, shader, fogFields[k], fieldCaches[k], textPaint, glowPaint, spritePaint, dot, star, blurs, echoFill, echoStroke, measure, lineStroke, moteDot, bokeh, burstTextures)
                 }
                 drawLumiereOverlay(wDp.toDouble(), hDp.toDouble(), palette.light)
             }
@@ -297,11 +306,12 @@ internal fun LumiereStage(
 private fun DrawScope.drawUnit(
     state: LumiereUnitState, time: Double, palette: LumierePalette, alpha: Double, transitionScale: Double, shader: RuntimeShader?, fogField: LumiereFogField, fieldCache: LumiereFieldCache,
     textPaint: Paint, glowPaint: Paint, spritePaint: Paint, dot: Bitmap, star: Bitmap, blurs: HashMap<Int, BlurMaskFilter>,
-    echoFill: Paint, echoStroke: Paint, measure: LumiereTextMeasure, lineStroke: Paint, moteDot: Bitmap, bokeh: Bitmap,
+    echoFill: Paint, echoStroke: Paint, measure: LumiereTextMeasure, lineStroke: Paint, moteDot: Bitmap, bokeh: Bitmap, burstTextures: Array<Bitmap>,
 ) {
     val model = state.model
     val w = model.width.toFloat(); val h = model.height.toFloat()
-    val light = model.light(time, palette)
+    val bursts = state.bursts(palette.light)
+    val light = model.light(time, palette, boost = lumiereBurstBoost(bursts, time))
     val cam = model.camera(time)
     val layerAlpha = alpha.toFloat().coerceIn(0f, 1f)
     if (layerAlpha <= 0.003f) return
@@ -342,7 +352,11 @@ private fun DrawScope.drawUnit(
         // 浮尘：进了光束才亮（scene.ts 485 行；没有音频，高频加成为 0）。
         state.motes.update(time, light.beams, light.exit)
         drawIntoCanvas { canvas -> drawLumiereMotes(canvas.nativeCanvas, state.motes, moteDot, spritePaint, lumiereHexOf(palette.light), layerAlpha) }
-        LumierePhase2.drawBursts(this, model, state.window, time)
+        // 十字爆闪：在字的下面（字压在光上才读得清），LumiereBurst.kt。
+        if (bursts.isNotEmpty()) {
+            val (events, _) = lumiereActiveBursts(bursts, time) { li, gi -> state.window.glyphAnchor(li, gi, time) }
+            if (events.isNotEmpty()) drawIntoCanvas { canvas -> drawLumiereBursts(canvas.nativeCanvas, events, burstTextures, spritePaint, layerAlpha) }
+        }
         val textIntensity = lumiereSmooth((time - model.paragraph.startTime) / 0.6) * light.exit
         val frame = state.window.frame(time, light.beams, palette.lit, palette.unlit, 0.22, textIntensity * layerAlpha)
         drawIntoCanvas { canvas -> drawWindow(canvas.nativeCanvas, frame, textPaint, glowPaint, spritePaint, dot, star, blurs) }
