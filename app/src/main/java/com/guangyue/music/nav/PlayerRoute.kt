@@ -74,15 +74,18 @@ fun IPlayerRoute(
     val res = playerStrings()
     val ctx = LocalContext.current
     val resolver: (Int) -> String = { ctx.getString(it) }
-    val tracks = LocalTrackRepository.current
+    // 2026-11-10：LocalTrackRepository 从来没人提供（一直是 null），收藏点了只改了图标、没写库——
+    // 「我喜欢」永远是空的根因。没提供时从 Hilt 取单例。
+    val tracks = LocalTrackRepository.current ?: remember { runCatching { trackRepositoryOf(ctx) }.getOrNull() }
     val scope = rememberCoroutineScope()
 
     // 收藏态：从库里按 key 取（旧页面的 liked 与「我的·喜欢」是同一张表）
     var liked by remember(playbackState.item?.key) { mutableStateOf(false) }
     var pending by remember(playbackState.item?.key) { mutableStateOf(false) }
+    // 2026-11-10：收藏态跟库走（别处改了这里同步；以前只在换歌时读一次）。
     LaunchedEffect(playbackState.item?.key) {
-        val key = playbackState.item?.key
-        liked = if (key == null) false else runCatching { tracks?.byKey(key)?.favorite == true }.getOrDefault(false)
+        val key = playbackState.item?.key ?: return@LaunchedEffect
+        runCatching { tracks?.observe(key)?.collect { row -> if (!pending) liked = row?.favorite == true } }
     }
 
     val queueRows = remember(playbackState.index, playbackState.queueSize, playbackState.item?.key) {
@@ -148,10 +151,12 @@ fun IPlayerRoute(
                         else -> LikeState.Idle
                     },
                 )
-                if (key != null && target != null) {
+                val row = playbackState.item?.toCachedTrack()
+                if (key != null && target != null && row != null) {
                     pending = true
                     scope.launch {
-                        runCatching { tracks?.setFavorite(key, target) }
+                        // 库里没这一行（下载页 / 歌单直连开播）就先建行，「我喜欢」里才看得到。
+                        runCatching { tracks?.setFavorite(row, target) }
                             .onSuccess { liked = target }
                         pending = false
                     }
@@ -200,15 +205,17 @@ fun StagePanelHost(
     lyricSourceNote: String = "",
 ) {
     val ctx = LocalContext.current
-    val tracks = LocalTrackRepository.current
+    // 2026-11-10：LocalTrackRepository 从来没人提供（一直是 null），收藏点了只改了图标、没写库——
+    // 「我喜欢」永远是空的根因。没提供时从 Hilt 取单例。
+    val tracks = LocalTrackRepository.current ?: remember { runCatching { trackRepositoryOf(ctx) }.getOrNull() }
     val scope = rememberCoroutineScope()
     val item = playbackState.item
 
     var liked by remember(item?.key) { mutableStateOf(false) }
     var pending by remember(item?.key) { mutableStateOf(false) }
     LaunchedEffect(item?.key) {
-        val key = item?.key
-        liked = if (key == null) false else runCatching { tracks?.byKey(key)?.favorite == true }.getOrDefault(false)
+        val key = item?.key ?: return@LaunchedEffect
+        runCatching { tracks?.observe(key)?.collect { row -> if (!pending) liked = row?.favorite == true } }
     }
     val like = when {
         pending -> LikeState.Pending
@@ -263,10 +270,11 @@ fun StagePanelHost(
         onToggleLike = {
             val key = item?.key
             val target = nextLikeTarget(like)
-            if (key != null && target != null) {
+            val row = item?.toCachedTrack()
+            if (key != null && target != null && row != null) {
                 pending = true
                 scope.launch {
-                    runCatching { tracks?.setFavorite(key, target) }.onSuccess { liked = target }
+                    runCatching { tracks?.setFavorite(row, target) }.onSuccess { liked = target }
                     pending = false
                 }
             }
@@ -326,6 +334,17 @@ internal fun downloadRequestOf(item: com.guangyue.core.player.QueueItem): com.gu
 interface DownloadEntryPoint {
     fun downloads(): com.guangyue.core.download.DownloadManager
 }
+
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface TrackRepositoryEntryPoint {
+    fun tracks(): TrackRepository
+}
+
+internal fun trackRepositoryOf(ctx: android.content.Context): TrackRepository =
+    dagger.hilt.android.EntryPointAccessors
+        .fromApplication(ctx.applicationContext, TrackRepositoryEntryPoint::class.java)
+        .tracks()
 
 internal fun downloadManagerOf(ctx: android.content.Context): com.guangyue.core.download.DownloadManager =
     dagger.hilt.android.EntryPointAccessors

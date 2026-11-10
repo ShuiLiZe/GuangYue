@@ -27,7 +27,8 @@ interface TrackDao {
     @Query("SELECT * FROM track WHERE `key` = :key")
     fun observe(key: String): Flow<TrackEntity?>
 
-    @Query("SELECT * FROM track ORDER BY last_played_at DESC LIMIT :limit")
+    // 2026-11-10：只算真播过的（以前搜索结果写库也算「最近播放」）。
+    @Query("SELECT * FROM track WHERE last_played_at > 0 ORDER BY last_played_at DESC LIMIT :limit")
     fun recentlyPlayed(limit: Int = 50): Flow<List<TrackEntity>>
 
     @Query("SELECT * FROM track WHERE favorite = 1 ORDER BY added_at DESC")
@@ -53,6 +54,32 @@ interface TrackDao {
 
     @Query("SELECT COUNT(*) FROM track")
     suspend fun count(): Int
+
+    @Query("SELECT `key` FROM track WHERE favorite = 1")
+    suspend fun favoriteKeys(): List<String>
+
+    /** 写库但保留收藏 / 播放次数 / 本地文件（[com.guangyue.core.data.model.LibraryRules.merge]）。 */
+    @Transaction
+    suspend fun mergeUpsert(track: TrackEntity) {
+        upsert(com.guangyue.core.data.model.LibraryRules.merge(byKey(track.key), track))
+    }
+
+    @Transaction
+    suspend fun mergeUpsertAll(tracks: List<TrackEntity>) {
+        tracks.forEach { mergeUpsert(it) }
+    }
+
+    /** 收藏 / 取消收藏：库里没这一行就用 [fallback] 建行（下载页 / 歌单直连开播时常见）。 */
+    @Transaction
+    suspend fun setFavoriteTrack(fallback: TrackEntity, favorite: Boolean, now: Long) {
+        upsert(com.guangyue.core.data.model.LibraryRules.favorite(byKey(fallback.key), fallback, favorite, now))
+    }
+
+    /** 记一次播放（最近播放 / 播放次数），没有行先建行。 */
+    @Transaction
+    suspend fun touchPlayed(track: TrackEntity, now: Long) {
+        upsert(com.guangyue.core.data.model.LibraryRules.played(byKey(track.key), track, now))
+    }
 }
 
 @Dao

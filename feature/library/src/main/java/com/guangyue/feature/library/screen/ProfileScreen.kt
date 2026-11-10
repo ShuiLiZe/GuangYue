@@ -45,7 +45,7 @@ import com.guangyue.feature.library.home.HomeTile
 /**
  * 「我的」页（m00161）。
  *
- * 内容顺序：三个快捷入口（我喜欢 / 本地下载 / 最近播放）→ 我的歌单（横滑）→ 设置组
+ * 内容顺序：四个快捷入口（我喜欢 / 全部歌曲 / 本地下载 / 最近播放）→ 我的歌单（横滑）→ 设置组
  * （音源插件管理、下载设置、外观、开源许可、关于）。插件管理与下载管理都是二级页，
  * 从这里进入，不出现在首页。
  */
@@ -70,6 +70,9 @@ fun ProfileScreen(
     miniPlayer: (@Composable () -> Unit)? = null,
     /** S1：顶栏齿轮 → 设置页（Folia 标题旁的 Settings 键）。 */
     onOpenSettings: (() -> Unit)? = null,
+    /** 2026-11-10：「全部歌曲」（Folia 本地页签的 all-songs）：已下载 + 手机本地音乐。 */
+    allSongsCount: Int = 0,
+    onOpenAllSongs: (() -> Unit)? = null,
 ) {
     Box(modifier.fillMaxSize().marbleBackground()) {
         Column(Modifier.fillMaxSize()) {
@@ -112,33 +115,48 @@ fun ProfileScreen(
                 contentPadding = PaddingValues(bottom = 96.dp),
             ) {
                 item(key = "library") {
-                    Row(
+                    // 2026-11-10：四个入口排 2×2（一行四个在 320dp 上字会挤掉），
+                    // 我喜欢 / 全部歌曲在上（Folia 本地页签的 local-favorites、all-songs 两张特殊卡）。
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = GySpace.pageH, vertical = GySpace.s),
-                        horizontalArrangement = Arrangement.spacedBy(GySpace.s),
+                        verticalArrangement = Arrangement.spacedBy(GySpace.s),
                     ) {
-                        QuickTile(
-                            title = "我喜欢",
-                            count = likedCount,
-                            icon = GuangYueIcons.Heart,
-                            onClick = onOpenLiked,
-                            modifier = Modifier.weight(1f),
-                        )
-                        QuickTile(
-                            title = "本地下载",
-                            count = downloadedCount,
-                            icon = GuangYueIcons.Download,
-                            onClick = onOpenDownloads,
-                            modifier = Modifier.weight(1f),
-                        )
-                        QuickTile(
-                            title = "最近播放",
-                            count = recentCount,
-                            icon = GuangYueIcons.History,
-                            onClick = onOpenRecent,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GySpace.s)) {
+                            QuickTile(
+                                title = "我喜欢",
+                                count = likedCount,
+                                icon = GuangYueIcons.Heart,
+                                onClick = onOpenLiked,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (onOpenAllSongs != null) {
+                                QuickTile(
+                                    title = "全部歌曲",
+                                    count = allSongsCount,
+                                    icon = GuangYueIcons.ListMusic,
+                                    onClick = onOpenAllSongs,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GySpace.s)) {
+                            QuickTile(
+                                title = "本地下载",
+                                count = downloadedCount,
+                                icon = GuangYueIcons.Download,
+                                onClick = onOpenDownloads,
+                                modifier = Modifier.weight(1f),
+                            )
+                            QuickTile(
+                                title = "最近播放",
+                                count = recentCount,
+                                icon = GuangYueIcons.History,
+                                onClick = onOpenRecent,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                 }
 

@@ -266,9 +266,28 @@ fun GuangYueNavHost(
             var tracks by remember(tile.key) { mutableStateOf<List<com.guangyue.core.data.model.TrackEntity>?>(null) }
             var failed by remember(tile.key) { mutableStateOf(false) }
             var attempt by remember(tile.key) { mutableStateOf(0) }
-            LaunchedEffect(tile.key, attempt) {
+            // 2026-11-10：我喜欢 / 全部歌曲 / 最近播放（lib:*）跟着收藏数、下载数变就重取，
+            // 在播放页取消收藏回来列表就是新的。
+            val isLib = tile.key.startsWith(com.guangyue.feature.library.viewmodel.LibraryTiles.PREFIX)
+            val likedNow by vm.likedCount.collectAsStateWithLifecycle()
+            val downloadedNow by vm.downloadedCount.collectAsStateWithLifecycle()
+            val libVersion = if (isLib) "$likedNow/$downloadedNow" else ""
+            // 全部歌曲要读手机里的音乐：没授权先问一次，拒了也照样列出下载的歌。
+            val collCtx = androidx.compose.ui.platform.LocalContext.current
+            val audioPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+            ) { granted -> if (granted) { vm.refreshDeviceAudio(); attempt++ } }
+            LaunchedEffect(tile.key) {
+                if (tile.key == com.guangyue.feature.library.viewmodel.LibraryTiles.ALL &&
+                    !com.guangyue.feature.library.viewmodel.DeviceAudio.granted(collCtx)
+                ) {
+                    runCatching { audioPermission.launch(com.guangyue.feature.library.viewmodel.DeviceAudio.permission) }
+                }
+            }
+            LaunchedEffect(tile.key, attempt, libVersion) {
                 failed = false
-                tracks = null
+                // 曲库页重取时保留旧列表直到新列表到（先清空再填回，曲目墙会停在空白）。
+                if (!isLib) tracks = null
                 vm.loadTracksOf(tile) { list -> if (list == null) failed = true else tracks = list }
             }
             val list = tracks.orEmpty()
@@ -283,9 +302,12 @@ fun GuangYueNavHost(
                     )
                 }
             }
-            val kindLabel = when (tile.kind) {
+            val kindLabel = when {
+                isLib -> "曲库"
+                else -> when (tile.kind) {
                 com.guangyue.feature.library.home.HomeTileKind.STATION -> "榜单"
                 else -> "歌单"
+                }
             }
             val collectionCtx = androidx.compose.ui.platform.LocalContext.current
             // 0.0.19：歌单 / 榜单「全部下载」与单曲下载，结果用 Toast 告诉用户（和搜索页一致）。
@@ -403,6 +425,12 @@ fun GuangYueNavHost(
             val recent by home.recentTiles.collectAsStateWithLifecycle()
             val liked by home.likedCount.collectAsStateWithLifecycle()
             val downloaded by home.downloadedCount.collectAsStateWithLifecycle()
+            val allSongs by home.allSongsCount.collectAsStateWithLifecycle()
+            // 2026-11-10：曲库入口都进集合层（以前「我喜欢」跳搜索页、「最近播放」跳首页）。
+            fun openLibrary(t: com.guangyue.feature.library.home.HomeTile) {
+                openedCollection = t
+                navController.navigate(Routes.COLLECTION)
+            }
 
             ShellColumn(
                 content = {
@@ -412,15 +440,13 @@ fun GuangYueNavHost(
                         recentCount = recent.size,
                         playlists = playlists,
                         isDark = darkMode,
-                        onOpenLiked = { navController.navigate(Routes.SEARCH) },
+                        onOpenLiked = { openLibrary(com.guangyue.feature.library.viewmodel.LibraryTiles.liked) },
                         onOpenDownloads = { navController.navigate(Routes.DOWNLOADS) },
-                        onOpenRecent = { navController.navigate(Routes.HOME) },
-                        onOpenPlaylist = { tile ->
-                            home.playTracksOf(tile) { tracks, at ->
-                                playback.setQueueFromTracks(tracks, at, true)
-                                navController.navigate(Routes.LYRIC_FLOW)
-                            }
-                        },
+                        onOpenRecent = { openLibrary(com.guangyue.feature.library.viewmodel.LibraryTiles.recent) },
+                        // 歌单与 Folia 一样先进集合层看曲目，再播放全部 / 随机 / 单首。
+                        onOpenPlaylist = { tile -> openLibrary(tile) },
+                        allSongsCount = allSongs,
+                        onOpenAllSongs = { openLibrary(com.guangyue.feature.library.viewmodel.LibraryTiles.all) },
                         onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
                         onOpenDownloadSettings = { navController.navigate(Routes.DOWNLOADS) },
                         onToggleDark = { onDarkModeChange(!darkMode) },

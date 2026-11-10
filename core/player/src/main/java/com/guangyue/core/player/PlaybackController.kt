@@ -61,18 +61,23 @@ data class QueueItem(
      * 队列项 → 可落库行。首页 / 歌单直连开播的曲目本地库里还没有这一行，
      * 取链时 TrackMapper.toMusicItem 就还原不出带 raw 的 MusicItem（洛雪源依赖 raw）。
      */
-    fun toCachedTrack(): TrackEntity? = TrackEntity(
-        key = key,
-        title = title.ifBlank { "未知歌曲" },
-        artist = artist.ifBlank { "未知艺术家" },
-        album = album.orEmpty(),
-        artwork = artworkUri,
-        platform = origin.pluginId,
-        songId = origin.trackKey.substringAfter(":"),
-        source = TrackEntity.SOURCE_PLUGIN,
-        quality = origin.quality.wire,
-        rawJson = rawJson,
-    )
+    fun toCachedTrack(): TrackEntity? {
+        // 2026-11-10：本地文件（下载 / 手机音乐）开播时记成 local 行，「本地音乐」与收藏才认得出它。
+        val local = origin.directUrl?.takeIf { it.startsWith("file:") || it.startsWith("content:") || it.startsWith("/") }
+        return TrackEntity(
+            key = key,
+            title = title.ifBlank { "未知歌曲" },
+            artist = artist.ifBlank { "未知艺术家" },
+            album = album.orEmpty(),
+            artwork = artworkUri,
+            platform = origin.pluginId,
+            songId = origin.trackKey.substringAfter(":"),
+            source = if (local != null) TrackEntity.SOURCE_LOCAL else TrackEntity.SOURCE_PLUGIN,
+            quality = origin.quality.wire,
+            rawJson = rawJson,
+            localUri = local,
+        )
+    }
 
     companion object {
         /** Builds a queue entry from a persisted track row. */
@@ -204,6 +209,10 @@ class PlaybackController @Inject constructor(
                     _state.value = _state.value.copy(error = null)
                 }
                 currentQueueItem(key)?.let { scope.launch { _trackChanged.emit(it) } }
+                // 2026-11-10：记「最近播放」（以前 markPlayed 没人调，最近播放其实是随便几行缓存）。
+                currentQueueItem(key)?.toCachedTrack()?.let { row ->
+                    scope.launch { try { tracks.played(row) } catch (_: Throwable) { } }
+                }
                 publish()
             }
 

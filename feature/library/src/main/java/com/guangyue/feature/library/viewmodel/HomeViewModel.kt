@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -48,6 +49,7 @@ class HomeViewModel @Inject constructor(
     db: GuangYueDatabase,
     private val downloadedLibrary: com.guangyue.core.download.DownloadedLibrary,
     private val downloads: com.guangyue.core.download.DownloadManager,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
 ) : ViewModel() {
 
     /**
@@ -341,6 +343,44 @@ class HomeViewModel @Inject constructor(
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
+    /** 「我的」页「全部歌曲」个数：已下载 + 手机本地音乐（去重后）。下载列表一变就重数。 */
+    private val _deviceRevision = MutableStateFlow(0)
+    val allSongsCount: StateFlow<Int> = combine(downloadedLibrary.tracks, _deviceRevision) { list, _ -> list }
+        .map { list ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val downloaded = list.map { d -> TrackEntity(key = d.key, title = d.title, localUri = d.uri) }
+                com.guangyue.core.data.model.LibraryRules.allSongs(downloaded, DeviceAudio.scan(appContext)).size
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /** 授权读手机音乐后重数「全部歌曲」。 */
+    fun refreshDeviceAudio() { _deviceRevision.value++ }
+
+    /**
+     * 我喜欢 / 全部歌曲 / 最近播放：Folia 本地页签的 local-favorites、all-songs 卡片，
+     * 点开都是同一个集合层（曲目墙 + 播放全部 / 随机），不再跳搜索页。
+     */
+    private suspend fun libraryTracks(which: String): List<TrackEntity> =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val rules = com.guangyue.core.data.model.LibraryRules
+            fun overlay(rows: List<TrackEntity>) = rows.map { row ->
+                val d = downloadedLibrary.find(row.key)?.takeIf { downloadedLibrary.exists(it) }
+                rules.playable(row, d?.let { downloadedLibrary.toPlayable(it) })
+            }
+            when (which) {
+                LibraryTiles.LIKED -> overlay(tracks.favorites().first())
+                LibraryTiles.RECENT -> overlay(tracks.recentlyPlayed(50).first())
+                LibraryTiles.ALL -> {
+                    val downloaded = downloadedLibrary.tracks.value
+                        .filter { downloadedLibrary.exists(it) }
+                        .map { downloadedLibrary.toPlayable(it) }
+                    rules.allSongs(downloaded, DeviceAudio.scan(appContext), tracks.favoriteKeys())
+                }
+                else -> emptyList()
+            }
+        }
+
     /**
      * 点开一个首页 / 歌单卡片后播放它。
      *
@@ -350,7 +390,7 @@ class HomeViewModel @Inject constructor(
     /** B2：集合页取曲目，空 / 失败也回调（null = 出错）。 */
     fun loadTracksOf(tile: HomeTile, onDone: (List<TrackEntity>?) -> Unit) {
         viewModelScope.launch {
-            onDone(runCatching { resolveTracks(tile) }.getOrNull())
+            onDone(runCatching { resolveTracks(tile) }.onFailure { e -> android.util.Log.w("GYHOME", "loadTracksOf ${tile.key} failed", e) }.getOrNull())
         }
     }
 
@@ -362,6 +402,7 @@ class HomeViewModel @Inject constructor(
     }
 
     private suspend fun resolveTracks(tile: HomeTile): List<TrackEntity> {
+        if (tile.key.startsWith(LibraryTiles.PREFIX)) return libraryTracks(tile.key)
         run {
             val list = when (tile.kind) {
                 HomeTileKind.PLAYLIST -> {
@@ -849,4 +890,16 @@ class DownloadViewModel @Inject constructor(
     fun clearMessage() {
         _message.value = null
     }
+}
+
+/** 「我的」页三个曲库入口对应的集合卡（key 以 lib: 开头，走 [HomeViewModel.loadTracksOf]）。 */
+object LibraryTiles {
+    const val PREFIX = "lib:"
+    const val LIKED = "lib:liked"
+    const val ALL = "lib:all"
+    const val RECENT = "lib:recent"
+
+    val liked = HomeTile(key = LIKED, title = "我喜欢", subtitle = "收藏的歌曲", kind = HomeTileKind.PLAYLIST)
+    val all = HomeTile(key = ALL, title = "全部歌曲", subtitle = "下载与手机里的歌", kind = HomeTileKind.PLAYLIST)
+    val recent = HomeTile(key = RECENT, title = "最近播放", subtitle = "播放过的歌曲", kind = HomeTileKind.PLAYLIST)
 }

@@ -44,14 +44,14 @@ class PlaylistRepository @Inject constructor(private val db: GuangYueDatabase) {
     /** Adds plugin items to a playlist, caching the track rows on the way in. */
     suspend fun addTracks(playlistId: Long, items: List<MusicItem>, quality: String = "standard") {
         val tracks = items.map { TrackMapper.fromPlugin(it, quality) }
-        db.trackDao().upsertAll(tracks)
+        db.trackDao().mergeUpsertAll(tracks)
         dao.appendTracks(playlistId, tracks.map { it.key })
     }
 
     suspend fun addTrackKeys(playlistId: Long, keys: List<String>) = dao.appendTracks(playlistId, keys)
 
     suspend fun addTracks(playlistId: Long, tracks: List<TrackEntity>) {
-        db.trackDao().upsertAll(tracks)
+        db.trackDao().mergeUpsertAll(tracks)
         dao.appendTracks(playlistId, tracks.map { it.key })
     }
 
@@ -78,13 +78,24 @@ class TrackRepository @Inject constructor(private val db: GuangYueDatabase) {
 
     suspend fun byKey(key: String): TrackEntity? = dao.byKey(key)
 
+    // 2026-11-10：写库一律合并（以前 REPLACE 整行，开一次播 / 搜一次就把收藏冲掉）。
     suspend fun cache(items: List<MusicItem>, quality: String = "standard") {
-        dao.upsertAll(items.map { TrackMapper.fromPlugin(it, quality) })
+        dao.mergeUpsertAll(items.map { TrackMapper.fromPlugin(it, quality) })
     }
 
-    suspend fun cache(track: TrackEntity) = dao.upsert(track)
+    suspend fun cache(track: TrackEntity) = dao.mergeUpsert(track)
+
+    fun observe(key: String): Flow<TrackEntity?> = dao.observe(key)
+
+    suspend fun favoriteKeys(): Set<String> = dao.favoriteKeys().toSet()
 
     suspend fun setFavorite(key: String, favorite: Boolean) = dao.setFavorite(key, favorite)
+
+    /** 收藏 / 取消：库里没有这一行就用 [track] 建行，「我喜欢」里一定能看到。 */
+    suspend fun setFavorite(track: TrackEntity, favorite: Boolean) = dao.setFavoriteTrack(track, favorite, System.currentTimeMillis())
+
+    /** 记一次播放（最近播放）。 */
+    suspend fun played(track: TrackEntity) = dao.touchPlayed(track, System.currentTimeMillis())
 
     suspend fun markPlayed(key: String) = dao.markPlayed(key)
 
