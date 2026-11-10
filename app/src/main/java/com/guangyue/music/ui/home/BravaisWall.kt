@@ -466,7 +466,7 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listM
                     .then(if (c.failed || c.count == 0) Modifier.clickable(onClick = c.onRetry) else Modifier),
             )
             val ready = !c.loading && !c.failed && (c.count ?: 0) > 0
-            if (onToggleList != null) {
+            if (onToggleList != null && (c.count ?: 0) > 0) {
                 // 列表 / 墙 切换（手机加的）：列表里能直接看到每首歌并点播。
                 Box(
                     Modifier
