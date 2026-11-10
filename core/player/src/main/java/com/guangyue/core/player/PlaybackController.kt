@@ -264,6 +264,17 @@ class PlaybackController @Inject constructor(
 
     fun queueSnapshot(): List<QueueItem> = queue.toList()
 
+    /**
+     * 2026-11-10：自动补全封面后换掉队列里这首的封面（播放页 / 迷你条马上用上）。
+     * 只改界面状态，不重设 MediaItem（避免打断正在播的这首）。
+     */
+    fun updateArtwork(key: String, uri: String) {
+        val i = queue.indexOfFirst { it.key == key }
+        if (i < 0 || queue[i].artworkUri == uri) return
+        queue[i] = queue[i].copy(artworkUri = uri)
+        publish()
+    }
+
     fun setQueue(items: List<QueueItem>, startIndex: Int = 0, play: Boolean = true) {
         if (items.isEmpty()) return
         // 0.0.18：以前只在插件取到链时才拉起播放服务，本地下载 / 洛雪源开播时系统里没有 media session，

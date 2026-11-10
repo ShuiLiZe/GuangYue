@@ -381,6 +381,10 @@ data class SeamCollection(
     val onRetry: () -> Unit,
     /** 0.0.19：整张歌单 / 榜单下载。 */
     val onDownloadAll: (() -> Unit)? = null,
+    /** 2026-11-10：曲库「补全信息」（缺歌词 / 封面的歌自动匹配）。null 时不显示。 */
+    val onFillMeta: (() -> Unit)? = null,
+    /** 补全进行中（按钮置灰、文字换成「补全中…」）。 */
+    val fillingMeta: Boolean = false,
 )
 
 /**
@@ -401,10 +405,28 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listM
             }
             Text(" / ", color = ink.copy(alpha = 0.3f), fontSize = 13.sp)
             Text(c.kindLabel, color = ink.copy(alpha = 0.62f), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            if (c.onDownloadAll != null || c.onFillMeta != null) Spacer(Modifier.weight(1f))
+            if (c.onFillMeta != null) {
+                // 2026-11-10：曲库补全歌词 / 封面（自动匹配当前音源）。
+                val ready = !c.loading && !c.failed && (c.count ?: 0) > 0 && !c.fillingMeta
+                Row(
+                    Modifier
+                        .height(32.dp)
+                        .clip(CircleShape)
+                        .background(ink.copy(alpha = 0.08f))
+                        .clickable(enabled = ready, onClick = c.onFillMeta)
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(GuangYueIcons.WandSparkles, contentDescription = null, tint = ink.copy(alpha = if (ready) 0.8f else 0.3f), modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (c.fillingMeta) "补全中…" else "补全信息", color = ink.copy(alpha = if (ready) 0.8f else 0.3f), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                }
+                if (c.onDownloadAll != null) Spacer(Modifier.width(6.dp))
+            }
             if (c.onDownloadAll != null) {
                 // 0.0.19：整张下载。窄屏（270dp）上第三行放不下第三颗键，放到面包屑行右端。
                 val ready = !c.loading && !c.failed && (c.count ?: 0) > 0
-                Spacer(Modifier.weight(1f))
                 Row(
                     Modifier
                         .height(32.dp)

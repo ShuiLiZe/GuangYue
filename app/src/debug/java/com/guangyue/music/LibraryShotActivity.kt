@@ -70,6 +70,7 @@ class LibraryShotActivity : ComponentActivity() {
                             onShuffle = {},
                             onRetry = {},
                             onDownloadAll = {},
+                            onFillMeta = {},
                         ),
                     )
                 }

@@ -40,6 +40,7 @@ class LyricsViewModel @Inject constructor(
     private val playback: PlaybackController,
     private val bridge: MusicPluginBridge,
     private val tracks: TrackRepository,
+    private val meta: com.guangyue.core.data.meta.TrackMetaService,
     @ApplicationContext context: Context,
 ) : ViewModel() {
 
@@ -125,25 +126,54 @@ class LyricsViewModel @Inject constructor(
         lyricJob = viewModelScope.launch {
             _loading.value = true
             try {
+                // 2026-11-10：自动补全过的歌词 / 封面先用缓存。
+                val (cached, artOk) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { meta.cached(item.key) }.getOrNull() to meta.artworkReadable(item.artworkUri)
+                }
+                if (!artOk) cached?.artworkUri?.let { playback.updateArtwork(item.key, it) }
                 // 0.0.18：本地下载的歌把歌词塞在 rawJson（rawLrc / translation）里，先用它，离线也有歌词。
                 val inline = item.rawJson?.let { embeddedLrc(it) }
                 val inlineTrans = item.rawJson?.let { embeddedTranslation(it) }
-                val source = if (inline != null) {
-                    com.guangyue.core.plugin.LyricSourceResult(rawLrc = inline, translation = inlineTrans)
-                } else {
-                    val row = runCatching { tracks.byKey(item.key) }.getOrNull()
-                    val songId = item.key.substringAfter(':', item.key)
-                    val musicItem = row?.let { TrackMapper.toMusicItem(it) }
-                        ?: item.rawJson?.let { r -> (Json2.parse(r) as? JsonObject)?.let { MusicItem.from(it, item.origin.pluginId) } }
-                        ?: MusicItem(
-                            platform = item.origin.pluginId,
-                            // 以前误传整条 key（platform:id），插件按 id 取不到歌词。
-                            id = songId,
+                var source: com.guangyue.core.plugin.LyricSourceResult? = when {
+                    inline != null -> com.guangyue.core.plugin.LyricSourceResult(rawLrc = inline, translation = inlineTrans)
+                    cached?.lrc != null -> com.guangyue.core.plugin.LyricSourceResult(rawLrc = cached.lrc, translation = cached.translation)
+                    // 手机本地歌没有插件可问，直接走自动匹配。
+                    isDeviceTrack(item) -> null
+                    else -> runCatching {
+                        val row = runCatching { tracks.byKey(item.key) }.getOrNull()
+                        val songId = item.key.substringAfter(':', item.key)
+                        val musicItem = row?.let { TrackMapper.toMusicItem(it) }
+                            ?: item.rawJson?.let { r -> (Json2.parse(r) as? JsonObject)?.let { MusicItem.from(it, item.origin.pluginId) } }
+                            ?: MusicItem(
+                                platform = item.origin.pluginId,
+                                // 以前误传整条 key（platform:id），插件按 id 取不到歌词。
+                                id = songId,
+                                title = item.title,
+                                artist = item.artist,
+                                album = item.album,
+                            )
+                        bridge.getLyric(item.origin.pluginId, musicItem)
+                    }.getOrNull()
+                }
+                val hasLyric = !source?.rawLrc.isNullOrBlank()
+                val needCover = !artOk && cached?.artworkUri == null
+                if (!hasLyric || needCover) {
+                    // 2026-11-10：没歌词 / 没封面 → 用歌名 + 歌手去当前音源找最匹配的一条，缓存下来。失败静默。
+                    val got = meta.ensure(
+                        com.guangyue.core.data.meta.TrackMetaService.Request(
+                            key = item.key,
                             title = item.title,
                             artist = item.artist,
-                            album = item.album,
-                        )
-                    bridge.getLyric(item.origin.pluginId, musicItem)
+                            durationMs = durationOf(item.key),
+                        ),
+                        needLyric = !hasLyric,
+                        needCover = needCover,
+                    )
+                    if (lastKey != item.key) return@launch
+                    if (needCover) got?.artworkUri?.let { playback.updateArtwork(item.key, it) }
+                    if (!hasLyric && got?.lrc != null) {
+                        source = com.guangyue.core.plugin.LyricSourceResult(rawLrc = got.lrc, translation = got.translation)
+                    }
                 }
                 val raw = source?.rawLrc
                 if (raw.isNullOrBlank()) {
@@ -155,12 +185,30 @@ class LyricsViewModel @Inject constructor(
                 _lyric.value = parsed
                 sync.setLyric(parsed)
                 _syncState.value = sync.state.value
+            } catch (t: kotlinx.coroutines.CancellationException) {
+                throw t
             } catch (t: Throwable) {
-                _message.value = "歌词获取失败：${t.message}"
+                _message.value = "暂无歌词"
             } finally {
                 _loading.value = false
             }
         }
+    }
+
+    /** 手机本地音乐（MediaStore）行：没有插件能问歌词。 */
+    private fun isDeviceTrack(item: QueueItem): Boolean =
+        item.key.startsWith(com.guangyue.core.data.model.LibraryRules.DEVICE_PREFIX) ||
+            item.origin.pluginId == "mediastore" || item.origin.pluginId == "local"
+
+    /** 时长（打分用）：库里有就用库里的，否则等播放器报出时长（最多 3 秒），拿不到就 0（不按时长打分）。 */
+    private suspend fun durationOf(key: String): Long {
+        runCatching { tracks.byKey(key)?.durationMs }.getOrNull()?.takeIf { it > 0 }?.let { return it }
+        repeat(12) {
+            val st = playback.state.value
+            if (st.item?.key == key && st.durationMs > 0) return st.durationMs
+            kotlinx.coroutines.delay(250)
+        }
+        return 0L
     }
 
     /** Some plugins inline the LRC in the music item (MusicFree `rawLrc`). */

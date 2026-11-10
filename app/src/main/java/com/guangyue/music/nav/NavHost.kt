@@ -267,6 +267,7 @@ fun GuangYueNavHost(
             var tracks by remember(tile.key) { mutableStateOf<List<com.guangyue.core.data.model.TrackEntity>?>(null) }
             var failed by remember(tile.key) { mutableStateOf(false) }
             var attempt by remember(tile.key) { mutableStateOf(0) }
+            var fillingMeta by remember(tile.key) { mutableStateOf(false) }
             // 2026-11-10：我喜欢 / 全部歌曲 / 最近播放（lib:*）跟着收藏数、下载数变就重取，
             // 在播放页取消收藏回来列表就是新的。
             val isLib = tile.key.startsWith(com.guangyue.feature.library.viewmodel.LibraryTiles.PREFIX)
@@ -366,6 +367,24 @@ fun GuangYueNavHost(
                             },
                             onRetry = { attempt++ },
                             onDownloadAll = { if (list.isNotEmpty()) downloadSome(list) },
+                            // 2026-11-10：曲库（我喜欢 / 全部歌曲 / 最近播放）补全歌词与封面。
+                            onFillMeta = if (isLib) ({
+                                if (list.isNotEmpty() && !fillingMeta) {
+                                    fillingMeta = true
+                                    android.widget.Toast.makeText(collectionCtx, "正在为 ${list.size} 首歌匹配歌词和封面…", android.widget.Toast.LENGTH_SHORT).show()
+                                    vm.fillMeta(list) { filled, missed ->
+                                        fillingMeta = false
+                                        attempt++
+                                        val msg = when {
+                                            filled == 0 && missed == 0 -> "这些歌的歌词和封面都已齐全"
+                                            missed == 0 -> "已补全 $filled 首"
+                                            else -> "已补全 $filled 首，$missed 首没找到匹配"
+                                        }
+                                        android.widget.Toast.makeText(collectionCtx, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }) else null,
+                            fillingMeta = fillingMeta,
                         ),
                     )
                 },

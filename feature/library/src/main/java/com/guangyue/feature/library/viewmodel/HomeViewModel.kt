@@ -49,6 +49,7 @@ class HomeViewModel @Inject constructor(
     db: GuangYueDatabase,
     private val downloadedLibrary: com.guangyue.core.download.DownloadedLibrary,
     private val downloads: com.guangyue.core.download.DownloadManager,
+    private val meta: com.guangyue.core.data.meta.TrackMetaService,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
 ) : ViewModel() {
 
@@ -364,6 +365,44 @@ class HomeViewModel @Inject constructor(
      * 点开都是同一个集合层（曲目墙 + 播放全部 / 随机），不再跳搜索页。
      */
     private suspend fun libraryTracks(which: String): List<TrackEntity> =
+        withCachedArt(libraryTracksRaw(which))
+
+    /** 2026-11-10：自动补全过封面的歌，曲库里换成缓存的封面（只看文件在不在，便宜）。 */
+    private suspend fun withCachedArt(list: List<TrackEntity>): List<TrackEntity> =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            list.map { t -> meta.cachedArtwork(t.key)?.let { t.copy(artwork = it) } ?: t }
+        }
+
+    /**
+     * 曲库「补全信息」：逐首给缺歌词 / 缺封面的歌自动匹配（当前音源搜 → 打分 → 缓存）。
+     * 只处理手机本地歌和下载的歌（在线歌播放时插件自己给歌词）；跑完回调 (补到几首, 没找到几首)。
+     */
+    fun fillMeta(list: List<TrackEntity>, onDone: (Int, Int) -> Unit) {
+        viewModelScope.launch {
+            var filled = 0
+            var missed = 0
+            for (t in list) {
+                val local = t.source == TrackEntity.SOURCE_LOCAL || t.key.startsWith(com.guangyue.core.data.model.LibraryRules.DEVICE_PREFIX)
+                val (hasLyric, artOk) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val cached = meta.cached(t.key)
+                    (cached?.lrc != null || (t.rawJson?.let { r -> FILL_LRC_TIME.containsMatchIn(r) } == true)) to
+                        (cached?.artworkUri != null || meta.artworkReadable(t.artwork))
+                }
+                val needLyric = local && !hasLyric
+                val needCover = !artOk
+                if (!needLyric && !needCover) continue
+                val got = meta.ensure(
+                    com.guangyue.core.data.meta.TrackMetaService.Request(t.key, t.title, t.artist, t.durationMs),
+                    needLyric = needLyric, needCover = needCover, force = true,
+                )
+                val ok = (needLyric && got?.lrc != null) || (needCover && got?.artworkUri != null)
+                if (ok) filled++ else missed++
+            }
+            onDone(filled, missed)
+        }
+    }
+
+    private suspend fun libraryTracksRaw(which: String): List<TrackEntity> =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val rules = com.guangyue.core.data.model.LibraryRules
             fun overlay(rows: List<TrackEntity>) = rows.map { row ->
@@ -503,6 +542,9 @@ class HomeViewModel @Inject constructor(
         kind = HomeTileKind.TRACK,
     )
 }
+
+/** 补全信息：rawJson 里带时间戳的歌词（下载的歌把歌词塞在 rawLrc 里）。 */
+private val FILL_LRC_TIME = Regex("""\[\d{1,3}:\d{1,2}([.:]\d{1,3})?]""")
 
 @HiltViewModel
 class PluginViewModel @Inject constructor(
