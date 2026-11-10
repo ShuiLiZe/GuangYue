@@ -8,7 +8,7 @@
 // 单位：舞台按 density 整体缩放，内部一律用 dp（= Folia 的 CSS 像素），常数原样照搬。
 //
 // 偏离（第 1 阶段）：
-//   1. 第 2 阶段的层先留接口不画（lyricEcho 已在 LumiereEcho.kt 接上）：星空点亮（starfall）、线稿（lineart）、浮尘与前景散景（motes）、
+//   1. 第 2 阶段的层先留接口不画（lyricEcho 已在 LumiereEcho.kt 接上，线稿已在 LumiereLineart.kt 接上）：星空点亮（starfall）、浮尘与前景散景（motes）、
 //      十字爆闪（crossBurst）、主题图标。见 LumierePhase2 里的空实现。
 //   2. 文字组 bloom（strength 1.15、threshold 0.12）用每个已唱字底下一份 BlurMaskFilter 模糊字近似；图形组 bloom 在着色器里近似。
 //   3. 段落转场：照 lumiereSceneFrames.ts 在进入窗口里画两层交叉渐变（alpha、scale）；帧里的 blur（闪白 7、拉焦 12 逻辑像素）
@@ -64,8 +64,6 @@ private const val LUMIERE_GRAIN_ALPHA = 0.05f
 internal object LumierePhase2 {
     /** light/starfall.ts：开场光点倾泻 + 星空 + 光雨。 */
     @Suppress("UNUSED_PARAMETER") fun drawStarfall(scope: DrawScope, unit: LumiereUnitModel, light: LumiereLightFrame, time: Double) = Unit
-    /** lineart 目录：每个镜头提前 0.6 秒描线稿，镜头结束后 0.8 秒淡出（LumiereProfile.lineArt 给 spec）。 */
-    @Suppress("UNUSED_PARAMETER") fun drawLineArt(scope: DrawScope, unit: LumiereUnitModel, light: LumiereLightFrame, time: Double) = Unit
     /** light/motes.ts：浮尘（领头光位的 motes）与前景散景（front）。 */
     @Suppress("UNUSED_PARAMETER") fun drawMotes(scope: DrawScope, unit: LumiereUnitModel, light: LumiereLightFrame, time: Double, front: Boolean) = Unit
     /** light/crossBurst.ts：十字爆闪（profile.burst），在字的下面。 */
@@ -119,7 +117,12 @@ internal class LumiereFieldCache {
 }
 
 /** 一个段落单元在当前尺寸下的全部状态（换尺寸重建）。 */
-private class LumiereUnitState(val model: LumiereUnitModel, val window: LumiereLyricWindow, val echo: LumiereLyricEcho)
+private class LumiereUnitState(val model: LumiereUnitModel, val window: LumiereLyricWindow, val echo: LumiereLyricEcho) {
+    /** 每个镜头一组线稿（scene.ts：种子 `${单元种子}:${镜头序号}:${kind}:art`）。 */
+    val lineArts: List<LumiereLineArtLayer> = model.shots.mapIndexed { i, shot ->
+        LumiereLineArtLayer(shot.profile.lineArt(model.aspect, lumiereRng("${model.seed}:$i:${shot.profile.kind}:art")), model.height)
+    }
+}
 
 /** light/sprites.ts 的 dot：柔和的高斯光点（白色，按 tint 上色）。 */
 private fun lumiereDotBitmap(): Bitmap {
@@ -194,6 +197,7 @@ internal fun LumiereStage(
     val spritePaint = remember { Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG) }
     val echoFill = remember(typeface) { Paint(Paint.ANTI_ALIAS_FLAG).apply { this.typeface = typeface } }
     val echoStroke = remember(typeface) { Paint(Paint.ANTI_ALIAS_FLAG).apply { this.typeface = typeface } }
+    val lineStroke = remember { Paint(Paint.ANTI_ALIAS_FLAG) }
     val dot = remember { lumiereDotBitmap() }
     val star = remember { lumiereStarBitmap() }
     val grainPaint = remember(density) {
@@ -231,7 +235,7 @@ internal fun LumiereStage(
             withTransform({ scale(density, density, Offset.Zero) }) {
                 for (layer in layers) {
                     val k = layer.index and 1
-                    drawUnit(unitAt(layer.index), time, palette, layer.alpha, layer.scale, shader, fogFields[k], fieldCaches[k], textPaint, glowPaint, spritePaint, dot, star, blurs, echoFill, echoStroke, measure)
+                    drawUnit(unitAt(layer.index), time, palette, layer.alpha, layer.scale, shader, fogFields[k], fieldCaches[k], textPaint, glowPaint, spritePaint, dot, star, blurs, echoFill, echoStroke, measure, lineStroke)
                 }
                 drawLumiereOverlay(wDp.toDouble(), hDp.toDouble(), palette.light)
             }
@@ -242,7 +246,7 @@ internal fun LumiereStage(
 private fun DrawScope.drawUnit(
     state: LumiereUnitState, time: Double, palette: LumierePalette, alpha: Double, transitionScale: Double, shader: RuntimeShader?, fogField: LumiereFogField, fieldCache: LumiereFieldCache,
     textPaint: Paint, glowPaint: Paint, spritePaint: Paint, dot: Bitmap, star: Bitmap, blurs: HashMap<Int, BlurMaskFilter>,
-    echoFill: Paint, echoStroke: Paint, measure: LumiereTextMeasure,
+    echoFill: Paint, echoStroke: Paint, measure: LumiereTextMeasure, lineStroke: Paint,
 ) {
     val model = state.model
     val w = model.width.toFloat(); val h = model.height.toFloat()
@@ -274,7 +278,16 @@ private fun DrawScope.drawUnit(
         val echoIntensity = lumiereSmooth((time - model.paragraph.startTime) / 1.2) * light.exit * layerAlpha
         drawIntoCanvas { canvas -> state.echo.draw(canvas.nativeCanvas, time, light.beams, lumiereHexOf(palette.light), echoIntensity, echoFill, echoStroke, measure) }
         LumierePhase2.drawStarfall(this, model, light, time)
-        LumierePhase2.drawLineArt(this, model, light, time)
+        // 线稿（lineart/）：每个镜头提前 0.6 秒开始描、3.6 秒描完，镜头结束后 0.8 秒淡出；受光的线更亮（scene.ts 458–482 行）。
+        drawIntoCanvas { canvas ->
+            val nc = canvas.nativeCanvas
+            val lightHex = lumiereHexOf(palette.light)
+            state.lineArts.forEachIndexed { i, layer ->
+                val shot = model.shots[i]
+                val (draw, fade) = lumiereLineArtTiming(i, model.shots.size, shot.startTime, shot.endTime, model.paragraph.startTime, model.ignition, time, light.exit, shot.profile.artGain)
+                if (fade * layerAlpha > 0.003) layer.draw(nc, time, draw, fade * layerAlpha, light.beams, lightHex, lineStroke, spritePaint, star)
+            }
+        }
         LumierePhase2.drawMotes(this, model, light, time, front = false)
         LumierePhase2.drawBursts(this, model, state.window, time)
         val textIntensity = lumiereSmooth((time - model.paragraph.startTime) / 0.6) * light.exit

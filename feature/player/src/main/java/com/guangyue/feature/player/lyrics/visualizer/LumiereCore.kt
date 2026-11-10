@@ -4,16 +4,16 @@
 //   ../paragraphStructure.ts（分段与段落性质，recursiveSplit）、program.ts（切块、选光位、chain）、
 //   lumiereProgram.ts（整首编译、前奏段、纯音乐、段落转场与星空开场）、lumiereSeamless.ts（轨迹过渡并段）、
 //   lumiereTransitions.ts（熄灯 / 闪白 / 拉焦）、lumiereUnit.ts（段落 → 场景镜头、shotAt）、
-//   lumiereUnitLayout.ts（领头光位、每行排版、运镜）、catalog.ts + rigs/*.ts（10 族 × 10 种光位 profile）、
+//   lumiereUnitLayout.ts（领头光位、每行排版、运镜）、catalog.ts + rigs 目录各文件（10 族 × 10 种光位 profile）、
 //   light/rig.ts（光束声明、resolveBeams、beamMask、噪声，与着色器同一公式）、color.ts、scene.ts 的 resolveLumierePalette /
 //   blendRig / 每帧的光位交接、lumiereDarkField.ts 的 resolveLumiereDarkField。
 // 单位：Folia 的 CSS 像素在这里就是 dp（舞台按 density 整体缩放），所以常数原样照搬。
 //
 // 偏离：
-//   1. rigs/*.ts 的 light(context) 是 100 个函数。除了用到随机数的两个（optics-raytrace、prism-shard，这里手译），
+//   1. rigs 目录各文件 的 light(context) 是 100 个函数。除了用到随机数的两个（optics-raytrace、prism-shard，这里手译），
 //      其余只依赖宽高比：由 Folia 源码在 node 里对 5 个宽高比（0.45 / 0.5625 / 1 / 1.7778 / 2.2222）求值，
 //      存成 resources/lumiere_rigs.txt，运行时按宽高比在相邻两份之间逐项线性插值（720×1600 与 1600×720 正好命中采样点，逐值一致）。
-//   2. lineArt(context) 是第 2 阶段：这里只留接口（LumiereLineArtSpec 为空）。
+//   2. lineArt(context) 在 LumiereLineart.kt（lineart/ 目录 + 各光位的 lineArt 逐个对译，金标 LumiereLineartTest）。
 //   3. Folia 文件头里那些 LUMIERE_NEUTRAL_OFFSET（x − x 恒为 0）直接省掉。
 package com.guangyue.feature.player.lyrics.visualizer
 
@@ -689,7 +689,7 @@ internal fun lumiereLightAt(beams: List<LumiereResolvedBeam>, x: Double, y: Doub
 
 internal fun lumiereCompressLight(value: Double) = 1 - exp(-value)
 
-// ───────────────────────────── 光位目录（catalog.ts + rigs/*.ts） ─────────────────────────────
+// ───────────────────────────── 光位目录（catalog.ts + rigs 目录各文件） ─────────────────────────────
 
 internal class LumiereMotesSpec(val count: Int, val sizeMin: Double, val sizeMax: Double, val driftX: Double, val driftY: Double, val swirl: Double, val swirlPeriod: Double, val twinkle: Double, val ambient: Double, val gain: Double)
 internal class LumiereStarfallSpec(val stars: Int, val opening: Double, val rain: Int, val rainSpeed: Double, val rainSpread: Double, val brightness: Double)
@@ -697,9 +697,6 @@ internal class LumiereBurstSpec(val mode: String, val density: Double, val every
 internal class LumiereRegion(val cx: Double, val cy: Double, val w: Double, val h: Double)
 internal class LumiereDecaySpec(val strength: Double, val delay: Double)
 internal class LumiereCameraSpec(val push: Double, val driftX: Double, val driftY: Double)
-
-/** 线稿（第 2 阶段）：lineart/lineArt.ts 的 LineArtSpec 的占位。 */
-internal class LumiereLineArtSpec(val paths: List<DoubleArray> = emptyList())
 
 internal class LumiereProfile(
     val kind: String, val label: String, val family: String, val mood: String, val typography: String,
@@ -715,9 +712,8 @@ internal class LumiereProfile(
         else -> lumiereInterpolateRig(samples, aspect)
     }
 
-    /** lineArt(context)：第 2 阶段。 */
-    @Suppress("UNUSED_PARAMETER")
-    fun lineArt(aspect: Double, random: LumiereRng): LumiereLineArtSpec = LumiereLineArtSpec()
+    /** lineArt(context)：rigs 目录各文件 各光位的线稿（LumiereLineart.kt 逐个对译）。 */
+    fun lineArt(aspect: Double, random: LumiereRng): LumiereLineArtSpec = lumiereProfileLineArt(kind, aspect, random)
 }
 
 private fun lumiereLerpArr(a: DoubleArray?, b: DoubleArray?, k: Double): DoubleArray? =
@@ -959,9 +955,12 @@ internal class LumiereUnitModel(
     /** 文字区（高度单位）：整个单元按领头光位排字。 */
     val textRegion = LumiereRegion(lead.region.cx * aspect, lead.region.cy, lead.region.w * aspect, lead.region.h)
     private val fadeOut = paragraph.transitionOut?.takeIf { it.kind == "lights-out" }
-    /** 开场（星空点亮）是第 2 阶段：这里没有 starfall 的点亮时刻，开场按 0 秒点亮处理（光从 −0.4 秒开始升起）。 */
+    /**
+     * 开场（scene.ts 243–255 行）：单元 ≥ 2 秒且领头光位有星空才播；开场时长 = min(星空 opening, max(0.8, 单元时长 × 0.4))，
+     * 主光柱在 45% 处点亮（ignition）。星空本身还没画（第 2 阶段），点亮时刻照算——光的升起、线稿第一个镜头的起描都按它。
+     */
     private val opening = paragraph.opening && (paragraph.endTime - paragraph.startTime) >= 2 && lead.starfall != null
-    private val ignition = if (opening) lumiereStarfallIgnition(lead.starfall!!) else 0.0
+    val ignition = if (opening) lead.starfall!!.opening.coerceAtMost(max(0.8, (paragraph.endTime - paragraph.startTime) * 0.4)) * 0.45 else 0.0
 
     fun activeShot(time: Double): Int {
         var index = 0
