@@ -12,7 +12,8 @@
 //      星空开场（starfall）在 LumiereStarfall.kt。主题图标（themeIcons）不做：广乐主题没有 lyricsIcons，Folia 此时也不画。
 //   2. 文字组 bloom（strength 1.15、threshold 0.12）用每个已唱字底下一份 BlurMaskFilter 模糊字近似；图形组 bloom 在着色器里近似。
 //   3. 段落转场：照 lumiereSceneFrames.ts 在进入窗口里画两层交叉渐变（alpha、scale）；帧里的 blur（闪白 7、拉焦 12 逻辑像素）
-//      还没画——Canvas 上整层模糊要 RenderNode + RenderEffect（API 31+），软件 GPU 上太贵，先略。reduceMotion 时硬切（同 staticMode）。
+//      用 LumiereBlurSlots：该层画进半分辨率 RenderNode 再套缓存的 RenderEffect 模糊（API 31+；σ 量化取缓存，不逐帧新建），
+//      对应 lumiereSceneEntry.ts 的 BlurFilter（quality 3、resolution 0.5）。blur ≤ 0.3 不挂（BLUR_EPSILON）。reduceMotion 时硬切（同 staticMode）。
 //      两层各用一份 LumiereFogField / LumiereFieldCache。
 //   4. 颗粒：Folia 的颗粒来自共享背景层的网点纹理，这里在暗场上铺一层 3 dp 间距的淡网点（LUMIERE_GRAIN_ALPHA）。
 //   5. 光场在 2 dp 一像素的离屏合成层里算、最多 20 帧 / 秒（LumiereFieldCache），再放大合成。
@@ -46,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -263,6 +265,9 @@ internal fun LumiereStage(
     }
     val shader = remember { if (lumiereSupportsShader()) RuntimeShader(LUMIERE_LIGHT_AGSL) else null }
     val blurs = remember { HashMap<Int, BlurMaskFilter>() }
+    // 段落转场的整层模糊（闪白 / 拉焦）：两个槽按段落序号奇偶分配，同 fogFields。
+    val blurSlots = remember { if (Build.VERSION.SDK_INT >= 31) LumiereBlurSlots() else null }
+    val blurScope = remember { androidx.compose.ui.graphics.drawscope.CanvasDrawScope() }
     // 进入窗口里两层同时画，各用一份烟雾网格与光场缓存（按段落序号奇偶分配，相邻两段不会撞同一份）。
     val fogFields = remember { List(2) { LumiereFogField() } }
     val fieldCaches = remember { List(2) { LumiereFieldCache() } }
@@ -293,7 +298,19 @@ internal fun LumiereStage(
             withTransform({ scale(density, density, Offset.Zero) }) {
                 for (layer in layers) {
                     val k = layer.index and 1
-                    drawUnit(unitAt(layer.index), time, palette, layer.alpha, layer.scale, shader, fogFields[k], fieldCaches[k], textPaint, glowPaint, spritePaint, dot, star, blurs, echoFill, echoStroke, measure, lineStroke, moteDot, bokeh, burstTextures, foliaStar)
+                    val unit = unitAt(layer.index)
+                    if (layer.blur > LUMIERE_BLUR_EPSILON && blurSlots != null && Build.VERSION.SDK_INT >= 31) {
+                        val outer = this
+                        drawIntoCanvas { canvas ->
+                            blurSlots.draw(canvas.nativeCanvas, k, wDp, hDp, density, layer.blur.toFloat()) { rc ->
+                                blurScope.draw(outer, layoutDirection, androidx.compose.ui.graphics.Canvas(rc), Size(wDp, hDp)) {
+                                    drawUnit(unit, time, palette, layer.alpha, layer.scale, shader, fogFields[k], fieldCaches[k], textPaint, glowPaint, spritePaint, dot, star, blurs, echoFill, echoStroke, measure, lineStroke, moteDot, bokeh, burstTextures, foliaStar)
+                                }
+                            }
+                        }
+                    } else {
+                        drawUnit(unit, time, palette, layer.alpha, layer.scale, shader, fogFields[k], fieldCaches[k], textPaint, glowPaint, spritePaint, dot, star, blurs, echoFill, echoStroke, measure, lineStroke, moteDot, bokeh, burstTextures, foliaStar)
+                    }
                 }
                 drawLumiereOverlay(wDp.toDouble(), hDp.toDouble(), palette.light)
             }
@@ -553,3 +570,48 @@ private fun DrawScope.drawLumiereOverlay(width: Double, height: Double, light: D
     }
 }
 
+
+/** lumiereSceneEntry.ts BLUR_EPSILON：模糊强度不到 0.3 逻辑像素就不挂滤镜。 */
+private const val LUMIERE_BLUR_EPSILON = 0.3
+
+/**
+ * 段落转场的整层模糊（lumiereSceneEntry.ts：holder.filters = [BlurFilter(strength, quality 3, resolution 0.5)]）。
+ * 该层画进半分辨率（设备像素 × 0.5）的 RenderNode，再套模糊 RenderEffect；效果按 σ 0.5 px 量化缓存，逐帧只换引用、不新建
+ * （同花火 HbBlurSlots）。Pixi BlurFilter strength 按 σ ≈ strength（逻辑像素）近似，半分辨率层里 σ 再减半，封顶 12。
+ */
+@androidx.annotation.RequiresApi(31)
+internal class LumiereBlurSlots {
+    private val nodes = Array(2) { android.graphics.RenderNode("lumiere-blur-$it") }
+    private val effects = HashMap<Int, android.graphics.RenderEffect>()
+
+    /** c 当前坐标系是 dp（外层已按 density 缩放）；block 在 dp 坐标里画。 */
+    fun draw(c: android.graphics.Canvas, slot: Int, wDp: Float, hDp: Float, density: Float, blurDp: Float, block: (android.graphics.Canvas) -> Unit) {
+        val node = nodes[slot.coerceIn(0, nodes.size - 1)]
+        val res = density * 0.5f
+        val bw = max(2, ceil(wDp * res).toInt()); val bh = max(2, ceil(hDp * res).toInt())
+        node.setPosition(0, 0, bw, bh)
+        val rc = node.beginRecording(bw, bh)
+        try {
+            rc.scale(res, res)
+            block(rc)
+        } finally {
+            node.endRecording()
+        }
+        val sigma = min(SIGMA_CAP, blurDp * res)
+        val q = kotlin.math.round(sigma * 2f).toInt()
+        val effect = effects.getOrPut(q) {
+            // HWUI：σ = 0.57735·radius + 0.5 → 反解 radius。
+            val r = max(0.5f, (q / 2f - 0.5f) / 0.57735f)
+            android.graphics.RenderEffect.createBlurEffect(r, r, Shader.TileMode.DECAL)
+        }
+        node.setRenderEffect(effect)
+        c.save()
+        c.scale(1f / res, 1f / res)
+        c.drawRenderNode(node)
+        c.restore()
+    }
+
+    companion object {
+        const val SIGMA_CAP = 12f
+    }
+}
