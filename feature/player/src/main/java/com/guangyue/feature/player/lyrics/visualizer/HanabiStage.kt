@@ -6,7 +6,7 @@
 // Blocks / Text / Scene（均与 Folia 金标对拍）；这里只做绘制：Pixi 的 Container 变换链换成 android Canvas 的 save / concat / restore，
 // 精灵换成预烘的白色 ALPHA_8 纹理（画笔颜色着色），字照 glyphs.ts 建单元时画进图集（字 × px × 填充 / 加粗描边 / 光晕），逐帧只贴图（矩阵含 Pixi 的 skew）。
 // 辉光：烟花层 glow + 全屏 bloom 用预烘近似（HanabiBloom.kt：亮精灵叠软光贴图、字叠预烘模糊字，强度随副歌曲线）。
-// 未接（与 Folia 的差距）：MG 装饰件、PV 拼贴、段落转场模糊、画框装饰、片尾卡、随拍开花。
+// 未接（与 Folia 的差距）：MG 装饰件、PV 拼贴、段落转场模糊、片尾卡的 PV 拼贴与歌词退场模糊、随拍开花。片尾卡见 HanabiCredits.kt。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.graphics.Bitmap
@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.Dp
 import com.guangyue.core.lyrics.Line
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 
@@ -91,6 +92,10 @@ private class HbRenderer(
     private val theme: HbTheme,
     private val fontScale: Double,
     private val transitions: Boolean,
+    /** 片尾卡的曲目信息（Folia metadata：title / artist / album）。 */
+    private val songTitle: String? = null,
+    private val songArtist: String? = null,
+    private val songAlbum: String? = null,
 ) {
     private val textures = HbTextures().let { t -> arrayOf(t.glow.extractAlpha(), t.dot.extractAlpha(), t.star4.extractAlpha(), t.streak.extractAlpha()) }
     private val tuning = HbTuning()
@@ -154,18 +159,96 @@ private class HbRenderer(
     }
 
     private fun bakeAtlas(scene: HbScene) {
-        for (b in scene.built) {
-            val tx = b.text ?: continue
-            for (k in atlasKeys(tx)) {
-                if (atlas.containsKey(k)) continue
-                val parts = k.split('|', limit = 3)
-                atlas[k] = bakeGlyph(parts[2], parts[1].toDouble(), parts[0].toInt())
-            }
+        for (b in scene.built) b.text?.let { bakeText(it) }
+    }
+
+    private fun bakeText(tx: HbText) {
+        for (k in atlasKeys(tx)) {
+            if (atlas.containsKey(k)) continue
+            val parts = k.split('|', limit = 3)
+            atlas[k] = bakeGlyph(parts[2], parts[1].toDouble(), parts[0].toInt())
         }
     }
 
+    // ─── 片尾卡（credits.ts / hanabiCreditsLayer.ts）：最后一句唱完前 4 s 预建，尺寸变了重建。 ───
+    private var credits: HbCredits? = null
+    private val detailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = if (Build.VERSION.SDK_INT >= 28) Typeface.create(Typeface.SANS_SERIF, 600, false) else Typeface.DEFAULT_BOLD
+        textAlign = Paint.Align.CENTER
+    }
+
+    private fun ensureCredits(t: Double, w: Float, h: Float, frame: HbCreditsFrame): HbCredits? {
+        val end = program.lyricEndTime ?: return null
+        if (!hasHanabiCredits(songTitle, songArtist, songAlbum)) return null
+        credits?.let { if (it.width != w.toDouble() || it.height != h.toDouble()) credits = null }
+        if (credits == null && (frame.active || t >= end - HB_CREDITS_PREBUILD)) {
+            credits = createHanabiCredits(w.toDouble(), h.toDouble(), theme, songTitle, songArtist, songAlbum, tuning, fontScale, measure).also { cr ->
+                cr.text?.let { bakeText(it) }
+            }
+        }
+        return credits
+    }
+
+    private fun drawCredits(cr: HbCredits, elapsed: Double, frame: HbCreditsFrame, w: Float, h: Float) {
+        val c = canvas
+        val time = max(0.0, elapsed)
+        cr.update(elapsed)
+        alpha = frame.posterAlpha
+        c.save()
+        // holder：以画面中心为枢轴，上下偏移、缩放（花火片尾恒为 0 / 1）。
+        c.translate(w / 2, h / 2 + (frame.posterOffsetY * h).toFloat())
+        c.scale(frame.posterScale.toFloat(), frame.posterScale.toFloat())
+        c.translate(-w / 2, -h / 2)
+        // 烟花层：尾迹 + 金冠 / 千輪 / 柳环（maxParticles 1400）。
+        activePlans.clear()
+        for (e in cr.bursts) if (time >= e.at && time <= e.at + e.spec.duration) {
+            activePlans += cr.plans.getOrPut(e) { hbPlanBurst(e, cr.palette.sparks, cr.unit, max(0.0, tuning.sparkAmount)) }
+        }
+        var used = 0
+        val counting = HbSparkEmit { tex, x, y, ww, hh, r, a, tint -> if (used >= HB_CREDITS_PARTICLES) false else { used++; emit.emit(tex, x, y, ww, hh, r, a, tint) } }
+        for (l in cr.launches) if (!hbDrawLaunch(l, time, cr.unit, counting)) break
+        if (activePlans.isNotEmpty()) hbDrawBursts(activePlans, time, HB_CREDITS_PARTICLES - used, emit)
+        sprite.xfermode = null
+        // 曲名：一行「歌词」，放在画面正中（text.view.position = (w/2, h·0.5)）。
+        cr.text?.let { tx ->
+            c.save(); c.translate(w / 2, h * 0.5f); drawText(tx, time); c.restore()
+        }
+        // 艺人 / 专辑：居中，字距 = 字号 × spacing（Paint.letterSpacing 以 em 计），超出 0.7 屏宽就按比例缩小（Pixi 是换行）。
+        for (d in cr.details) {
+            if (d.alpha <= 0.002) continue
+            detailPaint.textSize = d.size.toFloat()
+            detailPaint.letterSpacing = d.spacing.toFloat()
+            val width = detailPaint.measureText(d.text)
+            if (width > w * 0.7f) detailPaint.textSize = (d.size * w * 0.7f / width).toFloat()
+            detailPaint.color = 0xff000000.toInt() or cr.palette.paper
+            detailPaint.alpha = a255(d.alpha)
+            val fm = detailPaint.fontMetrics
+            c.drawText(d.text, w / 2, (d.y * h + d.offsetY).toFloat() - (fm.ascent + fm.descent) / 2, detailPaint)
+        }
+        c.restore()
+        alpha = 1.0
+    }
+
+    /** 全屏 bloom 的预烘版（图集变体 3）：只有模糊、没有实心芯，按 TEXT_BAKE_SCALE 缩小烘，drawGlyph 里放大回去、加色叠在字上。 */
+    private fun bakeBloomGlyph(ch: String, px: Double): Bitmap {
+        val q = HbGlowLook.TEXT_BAKE_SCALE
+        val qpx = px * q
+        val side = kotlin.math.ceil(qpx * 1.3 + 2 * qpx * HbGlowLook.TEXT_PAD + 4).toInt().coerceAtLeast(4)
+        val bmp = Bitmap.createBitmap(side, side, Bitmap.Config.ALPHA_8)
+        val c = android.graphics.Canvas(bmp)
+        bake.textSize = qpx.toFloat()
+        bake.style = Paint.Style.FILL
+        bake.alpha = 255
+        bake.maskFilter = android.graphics.BlurMaskFilter((qpx * HbGlowLook.TEXT_BLUR).toFloat().coerceAtLeast(1f), android.graphics.BlurMaskFilter.Blur.NORMAL)
+        val fm = bake.fontMetrics
+        c.drawText(ch, side / 2f, side / 2f - (fm.ascent + fm.descent) / 2, bake)
+        bake.maskFilter = null
+        return bmp
+    }
+
     private fun bakeGlyph(ch: String, px: Double, v: Int): Bitmap {
-        val pad = when (v) { 1 -> HB_OUTLINE_WIDTH * px; 2 -> px * 0.32; 3 -> px * HbGlowLook.TEXT_PAD; else -> 0.0 }
+        if (v == 3) return bakeBloomGlyph(ch, px)
+        val pad = when (v) { 1 -> HB_OUTLINE_WIDTH * px; 2 -> px * 0.32; else -> 0.0 }
         val side = kotlin.math.ceil(px * 1.3 + 2 * pad + 4).toInt().coerceAtLeast(4)
         val bmp = Bitmap.createBitmap(side, side, Bitmap.Config.ALPHA_8)
         val c = android.graphics.Canvas(bmp)
@@ -185,13 +268,6 @@ private class HbRenderer(
                 bake.maskFilter = null
                 c.drawText(ch, cx, cy, bake)
             }
-            3 -> {
-                // 全屏 bloom 的预烘版：只有模糊、没有实心芯，逐帧加色叠在字上。
-                bake.style = Paint.Style.FILL
-                bake.maskFilter = android.graphics.BlurMaskFilter((px * HbGlowLook.TEXT_BLUR).toFloat().coerceAtLeast(1f), android.graphics.BlurMaskFilter.Blur.NORMAL)
-                c.drawText(ch, cx, cy, bake)
-                bake.maskFilter = null
-            }
             else -> { bake.style = Paint.Style.FILL; c.drawText(ch, cx, cy, bake) }
         }
         bake.style = Paint.Style.FILL
@@ -201,6 +277,8 @@ private class HbRenderer(
     private fun a255(a: Double) = (a.coerceIn(0.0, 1.0) * alpha * 255).toInt()
     /** 这一帧的全屏 bloom 强度（resolveHanabiScreenBloomStrength），draw 开头算一次。 */
     private var screenBloom = 0.0
+    /** 本帧还能叠几张火花光晕。 */
+    private var haloBudget = 0
 
     private val emit = HbSparkEmit { tex, x, y, w, h, r, a, tint ->
         val bmp = when (tex) { HbSparkTexture.DOT -> textures[1]; HbSparkTexture.STAR4 -> textures[2]; HbSparkTexture.STREAK -> textures[3]; else -> textures[0] }
@@ -220,9 +298,10 @@ private class HbRenderer(
             canvas.drawBitmap(bmp, null, rect, sprite)
         }
         // 预烘辉光：亮精灵上叠一张软光贴图（加色），代替 Folia 烟花层 bloom + 全屏 bloom 的整屏模糊。
-        if (tex != HbSparkTexture.FLASH) {
+        if (tex != HbSparkTexture.FLASH && haloBudget > 0 && a >= HbGlowLook.HALO_MIN_ALPHA) {
             val ha = HbGlowLook.sparkHaloAlpha(if (a > 1) 1.0 else a, tuning.glow, screenBloom)
             if (ha > 0.01) {
+                haloBudget--
                 val hs = (maxOf(w, h) * HbGlowLook.HALO_SIZE / 2).toFloat()
                 sprite.alpha = a255(ha)
                 sprite.xfermode = additive
@@ -247,22 +326,30 @@ private class HbRenderer(
         sky.alpha = (tuning.sky * 255).toInt()
         c.drawRect(0f, 0f, w, h, sky)
         if (program.paragraphs.isEmpty()) return
+        haloBudget = HbGlowLook.HALO_BUDGET
         screenBloom = resolveHanabiScreenBloomStrength(tuning.bloom, tuning.chorusBloom, resolveHanabiChorusWeight(program.chorus, t))
+        val creditsFrame = resolveHanabiCreditsLayerFrame(t, program.lyricEndTime, songTitle, songArtist, songAlbum)
+        val cr = ensureCredits(t, w, h, creditsFrame)
+        val lyricAlpha = if (creditsFrame.active) creditsFrame.lyricAlpha else 1.0
         val (_, layers) = resolveHanabiSceneFrames(program, t, transitions)
         for (layer in layers) {
             val f = layer.frame
-            if (f.alpha <= 0.002) continue
+            if (f.alpha * lyricAlpha <= 0.002) continue
             val scene = unitOf(layer.index, w, h)
             c.save()
             c.translate(w / 2, h / 2 + (f.y * h).toFloat())
             c.rotate((f.rotation * DEG).toFloat())
             c.scale(f.scale.toFloat(), f.scale.toFloat())
             c.translate(-w / 2, -h / 2)
-            alpha = f.alpha
+            alpha = f.alpha * lyricAlpha
             drawScene(scene, t, w, h)
             c.restore()
         }
         alpha = 1.0
+        // 片尾卡在场景层之上、画框之下（Folia stage：sky → sceneLayer → credits.holder → overlayLayer）。
+        if (cr != null && creditsFrame.active && creditsFrame.posterAlpha > 0.002) {
+            drawCredits(cr, t - (program.lyricEndTime ?: t), creditsFrame, w, h)
+        }
         drawOverlay(w, h)
     }
 
@@ -447,6 +534,7 @@ private class HbRenderer(
         matrix.setValues(mv)
         c.save()
         c.concat(matrix)
+        if (mode == 3) c.scale((1 / HbGlowLook.TEXT_BAKE_SCALE).toFloat(), (1 / HbGlowLook.TEXT_BAKE_SCALE).toFloat())
         val half = bmp.width / 2f
         if (s.half != 0) {
             if (tx.halvesLr) { if (s.half == 1) c.clipRect(-half, -half, 0f, half) else c.clipRect(0f, -half, half, half) }
@@ -522,12 +610,18 @@ internal fun HanabiStage(
     secondaryColor: Color = accentColor,
     /** Folia 的 programSeed（歌曲身份）：同一首歌每次编排一样。 */
     seed: String = "hanabi",
+    /** 片尾卡（Folia metadata）：三者全空就不出片尾卡、歌词也不淡出。 */
+    songTitle: String? = null,
+    songArtist: String? = null,
+    songAlbum: String? = null,
 ) {
     val program = remember(lines, seed) { compileHanabiProgram(lines, seed) }
     val theme = remember(backgroundColor, primaryColor, accentColor, secondaryColor) {
         HbTheme(backgroundColor.toArgb() and 0xffffff, primaryColor.toArgb() and 0xffffff, accentColor.toArgb() and 0xffffff, secondaryColor.toArgb() and 0xffffff)
     }
-    val renderer = remember(lines, program, theme, lyricsFontScale, reduceMotion) { HbRenderer(lines, program, theme, lyricsFontScale, !reduceMotion) }
+    val renderer = remember(lines, program, theme, lyricsFontScale, reduceMotion, songTitle, songArtist, songAlbum) {
+        HbRenderer(lines, program, theme, lyricsFontScale, !reduceMotion, songTitle, songArtist, songAlbum)
+    }
     val bg = backgroundColor.toArgb()
     Canvas(modifier.fillMaxSize()) {
         val t = clock.readForDraw()

@@ -39,11 +39,16 @@ internal fun resolveHanabiScreenBloomStrength(bloom: Double, chorusBloom: Double
 
 /**
  * 预烘辉光的手机系数（不是 Folia 的值，是对着 Folia 截图调的近似）：
- * 光晕贴图边长 = 精灵长边 × HALO_SIZE；烟花光晕透明度 = 精灵 α × (glow × FIREWORK + 全屏强度 × SCREEN_SPARK)；
+ * 光晕贴图边长 = 精灵长边 × HALO_SIZE（每帧至多 HALO_BUDGET 张，只给 α ≥ HALO_MIN_ALPHA 的火花）；烟花光晕透明度 = 精灵 α × (glow × FIREWORK + 全屏强度 × SCREEN_SPARK)；
  * 字的光晕透明度 = 字 α × 全屏强度 × SCREEN_TEXT（Folia 全屏 bloom 阈值 0.5：只有亮字、亮火花进 bloom）。
  */
 internal object HbGlowLook {
-    const val HALO_SIZE = 2.6
+    const val HALO_SIZE = 2.2
+    /** 每帧最多叠几张火花光晕、只给多亮的火花叠（模拟器 swiftshader 上 750 颗 × 大光晕的加色填充会拖垮 RenderThread → ANR）。 */
+    const val HALO_BUDGET = 140
+    const val HALO_MIN_ALPHA = 0.15
+    /** 预烘模糊字按 1/4 分辨率烘、画时放大（模糊本来就软，省图集内存和贴图带宽）。 */
+    const val TEXT_BAKE_SCALE = 0.25
     const val FIREWORK = 0.26
     const val SCREEN_SPARK = 0.12
     const val SCREEN_TEXT = 0.42

@@ -509,6 +509,10 @@ fun LyricFlowScreen(
                 primaryColor = theme.primary,
                 secondaryColor = theme.secondary,
                 seed = playback.item?.key ?: "hanabi",
+                // 片尾卡：Folia 给 hanabi 运行时传 metadata（title / artist / album）。
+                songTitle = playback.item?.title,
+                songArtist = playback.item?.artist,
+                songAlbum = playback.item?.album,
             )
         }
         // R5 绘光：Folia lumiere 原版对译（段落 → 镜头 → 光位；暗场 + 光场着色器 + 歌词窗口 + 画框），整屏铺满。

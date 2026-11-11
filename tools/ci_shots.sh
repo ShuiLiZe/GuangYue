@@ -107,8 +107,9 @@ if [ -n "${SCENE:-}" ]; then
       son lumiere-land-1 1200
     fi
     # 凝彩片尾海报：探针最后一句 119.9 s 唱完，+0.35 s 起出现、+2 s 升满。
-    if [ "$SCENE" = "tempera" ]; then
-      son tempera-land-123 123500
+    # 凝彩 / 花火片尾：探针最后一句 119.9 s 唱完（花火 +1.1 s 金冠开花、+1.45 s 起曲名逐字弹出）。
+    if [ "$SCENE" = "tempera" ] || [ "$SCENE" = "hanabi" ]; then
+      son "$SCENE-land-123" 123500
     fi
   fi
   adb shell settings put system user_rotation 0
