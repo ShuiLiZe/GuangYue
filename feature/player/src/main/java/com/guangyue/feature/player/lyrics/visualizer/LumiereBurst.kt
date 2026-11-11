@@ -144,11 +144,34 @@ internal fun lumiereStreakBitmap(): Bitmap {
 }
 
 private val burstRect = RectF()
+private val burstAdd = android.graphics.PorterDuffXfermode(PorterDuff.Mode.ADD)
+/** 光晕层：透明度、放大倍数、细线（光芒）加粗倍数。 */
+private const val BURST_HALO_ALPHA = 0.42
+private const val BURST_HALO_WIDE = 1.35
+private const val BURST_HALO_THICK = 4.0
 
 /** 画一批十字（字的下面）。textures = [streak, dot, bokeh]。layerAlpha = 段落转场透明度。 */
 internal fun drawLumiereBursts(nc: android.graphics.Canvas, events: List<LumiereBurstEvent>, textures: Array<Bitmap>, paint: Paint, layerAlpha: Float) {
     for (e in events) {
-        for (s in lumiereBurstSprites(e)) {
+        val sprites = lumiereBurstSprites(e)
+        // 爆闪的光晕：Folia 里爆闪挂在文字组下，跟字共用文字组 bloom（LUMIERE_BLOOM.text：strength 1.15、threshold 0.12、5 级）。
+        // 这里不做整层 bloom，按字的做法近似：每个精灵先用柔光点贴图放大加色画一层（宽 × HALO_WIDE、细线加粗 × HALO_THICK），再画本体。
+        paint.xfermode = burstAdd
+        for (s in sprites) {
+            val a = s.alpha * layerAlpha * BURST_HALO_ALPHA
+            if (a <= 0.003 || s.width <= 0 || s.height <= 0) continue
+            paint.colorFilter = PorterDuffColorFilter((0xff shl 24) or s.tint, PorterDuff.Mode.MULTIPLY)
+            paint.alpha = (a.coerceIn(0.0, 1.0) * 255).toInt()
+            val cx = (e.x + s.x).toFloat(); val cy = (e.y + s.y).toFloat()
+            val hw = (s.width / 2 * BURST_HALO_WIDE).toFloat()
+            val hh = (max(s.height / 2 * BURST_HALO_WIDE, min(s.width, s.height) / 2 * BURST_HALO_THICK)).toFloat()
+            burstRect.set(cx - hw, cy - hh, cx + hw, cy + hh)
+            val tex = textures[if (s.texture == 0) 0 else 1]
+            if (s.rotation != 0.0) { nc.save(); nc.rotate((s.rotation * 180 / PI).toFloat(), cx, cy); nc.drawBitmap(tex, null, burstRect, paint); nc.restore() }
+            else nc.drawBitmap(tex, null, burstRect, paint)
+        }
+        paint.xfermode = null
+        for (s in sprites) {
             val a = s.alpha * layerAlpha
             if (a <= 0.003 || s.width <= 0 || s.height <= 0) continue
             paint.colorFilter = PorterDuffColorFilter((0xff shl 24) or s.tint, PorterDuff.Mode.MULTIPLY)
