@@ -5,7 +5,8 @@
 // R7⑥c：旧 P7 精简舞台整体换成 Folia 原版结构。纯逻辑全在 HanabiCore / Timeline / Burst / Color / Frames / Layout / Animations /
 // Blocks / Text / Scene（均与 Folia 金标对拍）；这里只做绘制：Pixi 的 Container 变换链换成 android Canvas 的 save / concat / restore，
 // 精灵换成预烘的白色 ALPHA_8 纹理（画笔颜色着色），字照 glyphs.ts 建单元时画进图集（字 × px × 填充 / 加粗描边 / 光晕），逐帧只贴图（矩阵含 Pixi 的 skew）。
-// 未接（与 Folia 的差距）：MG 装饰件、PV 拼贴、烟花辉光与全屏 bloom、段落转场模糊、画框装饰、片尾卡、随拍开花。
+// 辉光：烟花层 glow + 全屏 bloom 用预烘近似（HanabiBloom.kt：亮精灵叠软光贴图、字叠预烘模糊字，强度随副歌曲线）。
+// 未接（与 Folia 的差距）：MG 装饰件、PV 拼贴、段落转场模糊、画框装饰、片尾卡、随拍开花。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.graphics.Bitmap
@@ -146,6 +147,7 @@ private class HbRenderer(
             out += key(r.char, r.entryPx, 0)
             if (fat) out += key(r.char, r.entryPx, 1)
             if (tx.spec.sing == "glow") out += key(r.char, r.entryPx, 2)
+            out += key(r.char, r.entryPx, 3)
         }
         for (ch in tx.scramble) { out += key(ch, tx.scramblePx, 0); if (fat) out += key(ch, tx.scramblePx, 1) }
         return out
@@ -163,7 +165,8 @@ private class HbRenderer(
     }
 
     private fun bakeGlyph(ch: String, px: Double, v: Int): Bitmap {
-        val side = kotlin.math.ceil(px * 1.3 + 2 * maxOf(if (v == 1) HB_OUTLINE_WIDTH * px else 0.0, if (v == 2) px * 0.32 else 0.0) + 4).toInt().coerceAtLeast(4)
+        val pad = when (v) { 1 -> HB_OUTLINE_WIDTH * px; 2 -> px * 0.32; 3 -> px * HbGlowLook.TEXT_PAD; else -> 0.0 }
+        val side = kotlin.math.ceil(px * 1.3 + 2 * pad + 4).toInt().coerceAtLeast(4)
         val bmp = Bitmap.createBitmap(side, side, Bitmap.Config.ALPHA_8)
         val c = android.graphics.Canvas(bmp)
         bake.textSize = px.toFloat()
@@ -182,6 +185,13 @@ private class HbRenderer(
                 bake.maskFilter = null
                 c.drawText(ch, cx, cy, bake)
             }
+            3 -> {
+                // 全屏 bloom 的预烘版：只有模糊、没有实心芯，逐帧加色叠在字上。
+                bake.style = Paint.Style.FILL
+                bake.maskFilter = android.graphics.BlurMaskFilter((px * HbGlowLook.TEXT_BLUR).toFloat().coerceAtLeast(1f), android.graphics.BlurMaskFilter.Blur.NORMAL)
+                c.drawText(ch, cx, cy, bake)
+                bake.maskFilter = null
+            }
             else -> { bake.style = Paint.Style.FILL; c.drawText(ch, cx, cy, bake) }
         }
         bake.style = Paint.Style.FILL
@@ -189,6 +199,8 @@ private class HbRenderer(
     }
 
     private fun a255(a: Double) = (a.coerceIn(0.0, 1.0) * alpha * 255).toInt()
+    /** 这一帧的全屏 bloom 强度（resolveHanabiScreenBloomStrength），draw 开头算一次。 */
+    private var screenBloom = 0.0
 
     private val emit = HbSparkEmit { tex, x, y, w, h, r, a, tint ->
         val bmp = when (tex) { HbSparkTexture.DOT -> textures[1]; HbSparkTexture.STAR4 -> textures[2]; HbSparkTexture.STREAK -> textures[3]; else -> textures[0] }
@@ -207,6 +219,18 @@ private class HbRenderer(
             rect.set(x.toFloat() - hw, y.toFloat() - hh, x.toFloat() + hw, y.toFloat() + hh)
             canvas.drawBitmap(bmp, null, rect, sprite)
         }
+        // 预烘辉光：亮精灵上叠一张软光贴图（加色），代替 Folia 烟花层 bloom + 全屏 bloom 的整屏模糊。
+        if (tex != HbSparkTexture.FLASH) {
+            val ha = HbGlowLook.sparkHaloAlpha(if (a > 1) 1.0 else a, tuning.glow, screenBloom)
+            if (ha > 0.01) {
+                val hs = (maxOf(w, h) * HbGlowLook.HALO_SIZE / 2).toFloat()
+                sprite.alpha = a255(ha)
+                sprite.xfermode = additive
+                rect.set(x.toFloat() - hs, y.toFloat() - hs, x.toFloat() + hs, y.toFloat() + hs)
+                canvas.drawBitmap(textures[0], null, rect, sprite)
+                sprite.xfermode = null
+            }
+        }
         true
     }
 
@@ -223,6 +247,7 @@ private class HbRenderer(
         sky.alpha = (tuning.sky * 255).toInt()
         c.drawRect(0f, 0f, w, h, sky)
         if (program.paragraphs.isEmpty()) return
+        screenBloom = resolveHanabiScreenBloomStrength(tuning.bloom, tuning.chorusBloom, resolveHanabiChorusWeight(program.chorus, t))
         val (_, layers) = resolveHanabiSceneFrames(program, t, transitions)
         for (layer in layers) {
             val f = layer.frame
@@ -411,9 +436,9 @@ private class HbRenderer(
     }
 
     /** 一个精灵：Pixi 的 position / rotation / scale / skew.x（a = cos r·sx，b = sin r·sx，c = −sin(r − k)·sy，d = cos(r − k)·sy），贴图集里的字。 */
-    private fun drawGlyph(s: HbSprite, mode: Int, tx: HbText) {
+    private fun drawGlyph(s: HbSprite, mode: Int, tx: HbText, alphaMul: Double = 1.0, forceAdditive: Boolean = false) {
         if (!s.visible) return
-        val bmp = atlas[key(s.glyph, s.glyphPx, mode)] ?: atlas[key(s.glyph, s.glyphPx, 0)] ?: return
+        val bmp = atlas[key(s.glyph, s.glyphPx, mode)] ?: (if (mode == 3) null else atlas[key(s.glyph, s.glyphPx, 0)]) ?: return
         val c = canvas
         val r = s.rotation; val k = s.skew
         mv[0] = (cos(r) * s.sx).toFloat(); mv[1] = (-sin(r - k) * s.sy).toFloat(); mv[2] = s.x.toFloat()
@@ -428,8 +453,8 @@ private class HbRenderer(
             else { if (s.half == 1) c.clipRect(-half, -half, half, 0f) else c.clipRect(-half, 0f, half, half) }
         }
         glyphPaint.color = 0xff000000.toInt() or s.tint
-        glyphPaint.alpha = a255(s.alpha)
-        glyphPaint.xfermode = if (s.additive) additive else null
+        glyphPaint.alpha = a255(s.alpha * alphaMul)
+        glyphPaint.xfermode = if (s.additive || forceAdditive) additive else null
         c.drawBitmap(bmp, -half, -half, glyphPaint)
         c.restore()
     }
@@ -456,6 +481,9 @@ private class HbRenderer(
         if (tx.spec.sing == "glow") for (r in tx.rigs) drawGlyph(r.halo, 2, tx)
         for (r in tx.rigs) { drawGlyph(r.fxA, 0, tx); drawGlyph(r.fxB, 0, tx) }
         for (r in tx.rigs) drawGlyph(r.main, 0, tx)
+        // 全屏 bloom（预烘模糊字，加色）：整体辉光常驻，副歌里更亮。
+        val textBloom = screenBloom * HbGlowLook.SCREEN_TEXT
+        if (textBloom > 0.01) for (r in tx.rigs) drawGlyph(r.main, 3, tx, textBloom, true)
         c.restore()
         glyphPaint.xfermode = null
         if (tx.cursorVisible) {

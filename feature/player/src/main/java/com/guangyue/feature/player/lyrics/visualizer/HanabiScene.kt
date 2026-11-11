@@ -10,7 +10,7 @@ import kotlin.math.min
  * R7 花火⑥c：逐函数对译 Folia hanabi/scene.ts（场景单元装配）+ program.ts 的 sliceLine / shotLine + hanabiSceneEntry.ts 的单元参数。
  * 一个段落 = 一个单元：世界整体上升，每个镜头在世界里各自高度上组装主烟花 / 被唱到的小烟花 / 升空尾迹 / 字底色块 / 字。
  * 烟花事件构建时按镜头算好（纯数据，planShotEvents），每帧只按 t 求值。
- * 环境层见 HanabiAmbient.kt。本轮未接：MG 装饰件 ornaments、PV 拼贴 collage、烟花辉光 glow / 全屏 bloom、随拍开花 beatFx、片尾卡（见 HANDOFF）。
+ * 环境层见 HanabiAmbient.kt。本轮未接：MG 装饰件 ornaments、PV 拼贴 collage、随拍开花 beatFx、片尾卡（见 HANDOFF）。
  */
 
 /** HanabiTuning 里舞台用到的几项（Folia DEFAULT_HANABI_TUNING）。 */
@@ -23,6 +23,10 @@ internal class HbTuning(
     val launches: Boolean = true,
     val sky: Double = 0.85,
     val ambient: Double = 1.0,
+    /** 烟花层辉光 / 整体辉光 / 副歌辉光（Folia DEFAULT_HANABI_TUNING：1 / 0.8 / 1.3），见 HanabiBloom.kt。 */
+    val glow: Double = 1.0,
+    val bloom: Double = 0.8,
+    val chorusBloom: Double = 1.3,
 )
 
 /** 整首歌的旋转方向（按程序种子定）。 */
