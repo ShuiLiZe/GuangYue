@@ -2,3 +2,5 @@
 import * as D from '../../folia/src/components/visualizer/machi/engine/director';
 import * as B from '../../folia/src/components/visualizer/machi/engine/boardLayout';
 (globalThis as any).MC = { ...D, ...B };
+import * as EV from '../../folia/src/components/visualizer/machi/engine/environment';
+(globalThis as any).MCE = EV;
