@@ -5,7 +5,10 @@
 // R7⑥c：旧 P7 精简舞台整体换成 Folia 原版结构。纯逻辑全在 HanabiCore / Timeline / Burst / Color / Frames / Layout / Animations /
 // Blocks / Text / Scene（均与 Folia 金标对拍）；这里只做绘制：Pixi 的 Container 变换链换成 android Canvas 的 save / concat / restore，
 // 精灵换成预烘的白色 ALPHA_8 纹理（画笔颜色着色），字照 glyphs.ts 建单元时画进图集（字 × px × 填充 / 加粗描边 / 光晕），逐帧只贴图（矩阵含 Pixi 的 skew）。
-// 辉光：烟花层 glow + 全屏 bloom 用预烘近似（HanabiBloom.kt：亮精灵叠软光贴图、字叠预烘模糊字，强度随副歌曲线）。
+// 辉光（R7⑨）：API 31+ 硬件画布上照 Folia 的结构做「整层」辉光——场景层录进一个 RenderNode、烟花另录一份，
+// 各自按阈值（全屏 0.5 / 烟花 0.2）取亮部，降到 1/4 → 1/16 → 1/48 分辨率逐级模糊，再放大加色叠回（HbGlowNodes，对应 pixi/bloomFilter.ts
+// 的 dual-filter：亮部提取 → 逐级降采样 → 上采样叠加）。模糊只在很小的离屏层上做、RenderEffect 只在尺寸变化时建，逐帧只改透明度。
+// API ≤30 或软件画布退回旧的预烘近似（HanabiBloom.kt：亮精灵叠软光贴图、字叠预烘模糊字）。
 // 未接（与 Folia 的差距）：MG 装饰件、PV 拼贴、段落转场模糊、片尾卡的 PV 拼贴与歌词退场模糊、随拍开花。片尾卡见 HanabiCredits.kt。
 package com.guangyue.feature.player.lyrics.visualizer
 
@@ -32,6 +35,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
+import androidx.annotation.RequiresApi
 import com.guangyue.core.lyrics.Line
 import kotlin.math.PI
 import kotlin.math.abs
@@ -134,6 +138,8 @@ private class HbRenderer(
     private val songTitle: String? = null,
     private val songArtist: String? = null,
     private val songAlbum: String? = null,
+    /** 预烘字辉光（图集变体 3）：只有退回旧近似时才用得到，整层辉光时不烘。 */
+    private val bakeTextBloom: Boolean = true,
 ) {
     private val textures = HbTextures().let { t -> arrayOf(t.glow.extractAlpha(), t.dot.extractAlpha(), t.star4.extractAlpha(), t.streak.extractAlpha(),
         t.ring.extractAlpha(), t.square.extractAlpha(), t.triangle.extractAlpha(), t.petal.extractAlpha()) }
@@ -191,7 +197,7 @@ private class HbRenderer(
             out += key(r.char, r.entryPx, 0)
             if (fat) out += key(r.char, r.entryPx, 1)
             if (tx.spec.sing == "glow") out += key(r.char, r.entryPx, 2)
-            out += key(r.char, r.entryPx, 3)
+            if (bakeTextBloom) out += key(r.char, r.entryPx, 3)
         }
         for (ch in tx.scramble) { out += key(ch, tx.scramblePx, 0); if (fat) out += key(ch, tx.scramblePx, 1) }
         return out
@@ -318,6 +324,14 @@ private class HbRenderer(
     private var screenBloom = 0.0
     /** 本帧还能叠几张火花光晕。 */
     private var haloBudget = 0
+    /** 这一帧走整层辉光（HbGlowNodes）：不叠预烘光晕 / 预烘模糊字。 */
+    var nodeGlow = false
+    /** 整层辉光的烟花副本画布（只在 drawFireworks 期间非空，变换与场景画布同步）。 */
+    private var fw: android.graphics.Canvas? = null
+    private var fwTarget: android.graphics.Canvas? = null
+    private val fwMatrix = Matrix()
+    val fireworkGlow: Double get() = HB_FIREWORK_GLOW_STRENGTH * max(0.0, tuning.glow)
+    val screenBloomStrength: Double get() = screenBloom
 
     private val emit = HbSparkEmit { tex, x, y, w, h, r, a, tint ->
         val bmp = when (tex) { HbSparkTexture.DOT -> textures[1]; HbSparkTexture.STAR4 -> textures[2]; HbSparkTexture.STREAK -> textures[3]; else -> textures[0] }
@@ -336,8 +350,16 @@ private class HbRenderer(
             rect.set(x.toFloat() - hw, y.toFloat() - hh, x.toFloat() + hw, y.toFloat() + hh)
             canvas.drawBitmap(bmp, null, rect, sprite)
         }
+        // 整层辉光：烟花另画一份进烟花层（只取够亮的，暗火星进不了阈值 0.2 的亮部）。
+        val f = fw
+        if (f != null && sprite.alpha >= 20) {
+            if (r != 0.0) {
+                f.save(); f.translate(x.toFloat(), y.toFloat()); f.rotate((r * DEG).toFloat())
+                rect.set(-hw, -hh, hw, hh); f.drawBitmap(bmp, null, rect, sprite); f.restore()
+            } else f.drawBitmap(bmp, null, rect, sprite)
+        }
         // 预烘辉光：亮精灵上叠一张软光贴图（加色），代替 Folia 烟花层 bloom + 全屏 bloom 的整屏模糊。
-        if (tex != HbSparkTexture.FLASH && haloBudget > 0 && a >= HbGlowLook.HALO_MIN_ALPHA) {
+        if (!nodeGlow && tex != HbSparkTexture.FLASH && haloBudget > 0 && a >= HbGlowLook.HALO_MIN_ALPHA) {
             val ha = HbGlowLook.sparkHaloAlpha(if (a > 1) 1.0 else a, tuning.glow, screenBloom)
             if (ha > 0.01) {
                 haloBudget--
@@ -352,10 +374,16 @@ private class HbRenderer(
         true
     }
 
+    /** 退回路径：一张画布从底画到顶（预烘辉光）。 */
     fun draw(c: android.graphics.Canvas, t: Double, w: Float, h: Float, background: Int) {
         if (w <= 0f || h <= 0f) return
-        canvas = c
-        // 共享背景 + 夜空底（tuning.sky 0.85）。
+        drawSky(c, w, h, background)
+        drawScenes(c, null, t, w, h)
+        drawTop(c, t, w, h)
+    }
+
+    /** 共享背景 + 夜空底（tuning.sky 0.85）：不进辉光（Folia 的 bloom 挂在 sceneLayer 上，夜空底在它下面）。 */
+    fun drawSky(c: android.graphics.Canvas, w: Float, h: Float, background: Int) {
         c.drawColor(background)
         if (skyH != h) {
             skyH = h
@@ -364,11 +392,21 @@ private class HbRenderer(
         }
         sky.alpha = (tuning.sky * 255).toInt()
         c.drawRect(0f, 0f, w, h, sky)
-        if (program.paragraphs.isEmpty()) return
+    }
+
+    private var creditsNow: HbCredits? = null
+    private var creditsFrameNow: HbCreditsFrame? = null
+
+    /** 场景层（sceneLayer）：所有段落场景；fwCanvas 非空时烟花另画一份进烟花层（整层辉光的烟花 bloom 源）。 */
+    fun drawScenes(c: android.graphics.Canvas, fwCanvas: android.graphics.Canvas?, t: Double, w: Float, h: Float) {
+        canvas = c
+        fwTarget = fwCanvas
+        creditsNow = null; creditsFrameNow = null
         haloBudget = HbGlowLook.HALO_BUDGET
         screenBloom = resolveHanabiScreenBloomStrength(tuning.bloom, tuning.chorusBloom, resolveHanabiChorusWeight(program.chorus, t))
+        if (program.paragraphs.isEmpty()) return
         val creditsFrame = resolveHanabiCreditsLayerFrame(t, program.lyricEndTime, songTitle, songArtist, songAlbum)
-        val cr = ensureCredits(t, w, h, creditsFrame)
+        creditsNow = ensureCredits(t, w, h, creditsFrame); creditsFrameNow = creditsFrame
         val lyricAlpha = if (creditsFrame.active) creditsFrame.lyricAlpha else 1.0
         val (_, layers) = resolveHanabiSceneFrames(program, t, transitions)
         for (layer in layers) {
@@ -385,9 +423,21 @@ private class HbRenderer(
             c.restore()
         }
         alpha = 1.0
-        // 片尾卡在场景层之上、画框之下（Folia stage：sky → sceneLayer → credits.holder → overlayLayer）。
-        if (cr != null && creditsFrame.active && creditsFrame.posterAlpha > 0.002) {
+        fwTarget = null
+    }
+
+    /** 片尾卡在场景层之上、画框之下（Folia stage：sky → sceneLayer → credits.holder → overlayLayer），都不进全屏辉光。 */
+    fun drawTop(c: android.graphics.Canvas, t: Double, w: Float, h: Float) {
+        canvas = c
+        val cr = creditsNow
+        val creditsFrame = creditsFrameNow
+        if (cr != null && creditsFrame != null && creditsFrame.active && creditsFrame.posterAlpha > 0.002) {
+            // 片尾烟花在 Folia 里有自己的烟花层辉光：这里仍用预烘光晕。
+            val was = nodeGlow
+            nodeGlow = false
+            haloBudget = HbGlowLook.HALO_BUDGET
             drawCredits(cr, t - (program.lyricEndTime ?: t), creditsFrame, w, h)
+            nodeGlow = was
         }
         drawOverlay(w, h)
     }
@@ -609,6 +659,16 @@ private class HbRenderer(
     private val activePlans = ArrayList<HbBurstPlan>()
 
     private fun drawFireworks(scene: HbScene, item: HbBuiltShot, t: Double) {
+        fwTarget?.let { f ->
+            // 烟花层副本：拿场景画布当前的总变换（录制画布从单位矩阵起算），照搬给烟花层画布。
+            @Suppress("DEPRECATION") canvas.getMatrix(fwMatrix)
+            f.save(); f.setMatrix(fwMatrix); fw = f
+        }
+        drawFireworksInner(scene, item, t)
+        fw?.restore(); fw = null
+    }
+
+    private fun drawFireworksInner(scene: HbScene, item: HbBuiltShot, t: Double) {
         activePlans.clear()
         for (e in item.bursts) {
             if (e.at > t) break
@@ -719,7 +779,7 @@ private class HbRenderer(
         for (r in tx.rigs) drawGlyph(r.main, 0, tx)
         // 全屏 bloom（预烘模糊字，加色）：整体辉光常驻，副歌里更亮。
         val textBloom = screenBloom * HbGlowLook.SCREEN_TEXT
-        if (textBloom > 0.01) for (r in tx.rigs) drawGlyph(r.main, 3, tx, textBloom, true)
+        if (!nodeGlow && textBloom > 0.01) for (r in tx.rigs) drawGlyph(r.main, 3, tx, textBloom, true)
         c.restore()
         glyphPaint.xfermode = null
         if (tx.cursorVisible) {
@@ -767,12 +827,130 @@ internal fun HanabiStage(
     val theme = remember(backgroundColor, primaryColor, accentColor, secondaryColor) {
         HbTheme(backgroundColor.toArgb() and 0xffffff, primaryColor.toArgb() and 0xffffff, accentColor.toArgb() and 0xffffff, secondaryColor.toArgb() and 0xffffff)
     }
+    val useNodes = Build.VERSION.SDK_INT >= 31
     val renderer = remember(lines, program, theme, lyricsFontScale, reduceMotion, songTitle, songArtist, songAlbum) {
-        HbRenderer(lines, program, theme, lyricsFontScale, !reduceMotion, songTitle, songArtist, songAlbum)
+        HbRenderer(lines, program, theme, lyricsFontScale, !reduceMotion, songTitle, songArtist, songAlbum, bakeTextBloom = !useNodes)
     }
+    val nodes = remember { if (useNodes) HbGlowNodes() else null }
     val bg = backgroundColor.toArgb()
     Canvas(modifier.fillMaxSize()) {
         val t = clock.readForDraw()
-        drawIntoCanvas { renderer.draw(it.nativeCanvas, t, size.width, size.height, bg) }
+        drawIntoCanvas {
+            val nc = it.nativeCanvas
+            val w = size.width; val h = size.height
+            if (w <= 0f || h <= 0f) return@drawIntoCanvas
+            if (nodes != null && nc.isHardwareAccelerated && Build.VERSION.SDK_INT >= 31) {
+                renderer.nodeGlow = true
+                nodes.draw(nc, renderer, t, w, h, bg)
+            } else {
+                renderer.nodeGlow = false
+                renderer.draw(nc, t, w, h, bg)
+            }
+        }
+    }
+}
+
+/** Folia mg/glow.ts 烟花层 bloom 强度 1.1（× tuning.glow）。 */
+private const val HB_FIREWORK_GLOW_STRENGTH = 1.1
+
+/**
+ * 整层辉光（Folia pixi/bloomFilter.ts dual-filter 的手机版）：
+ * scene / fw 两个 RenderNode 每帧重录；tS / tF 把它们缩到 1/4 画进来、用颜色矩阵取亮部（阈值 0.5 / 0.2，Folia hanabiScreenBloom / mg/glow），
+ * 两者加色进 b0（1/4，模糊），b1（1/16）、b2（1/48）逐级从上一级缩小再模糊；d0..d2 把各级加色放大叠回屏幕。
+ * 除 scene / fw 外的节点只在尺寸变化时录一次（子节点按引用画，内容变了 HWUI 自己重画层），逐帧只改 tS / tF 的透明度 = 强度。
+ * Folia 每级上采样都把同级加回（spread 0.85，5 级）→ 光晕外缘被放大好几倍：这里用颜色矩阵增益 GAIN 补，权重见 LEVEL_WEIGHT。
+ */
+@RequiresApi(31)
+private class HbGlowNodes {
+    private val scene = android.graphics.RenderNode("hanabi-scene")
+    private val fw = android.graphics.RenderNode("hanabi-fireworks")
+    private val tS = android.graphics.RenderNode("hanabi-bright-scene")
+    private val tF = android.graphics.RenderNode("hanabi-bright-fireworks")
+    private val b = Array(LEVELS) { android.graphics.RenderNode("hanabi-bloom-$it") }
+    private val d = Array(LEVELS) { android.graphics.RenderNode("hanabi-bloom-out-$it") }
+    private val bw = IntArray(LEVELS)
+    private val bh = IntArray(LEVELS)
+    private var w = 0
+    private var h = 0
+
+    private fun plus() = Paint().apply { blendMode = android.graphics.BlendMode.PLUS }
+
+    private fun bright(threshold: Float): android.graphics.RenderEffect {
+        val s = GAIN / (1f - threshold)
+        val o = -threshold * s * 255f
+        val m = android.graphics.ColorMatrix(floatArrayOf(s, 0f, 0f, 0f, o, 0f, s, 0f, 0f, o, 0f, 0f, s, 0f, o, 0f, 0f, 0f, 1f, 0f))
+        return android.graphics.RenderEffect.createColorFilterEffect(android.graphics.ColorMatrixColorFilter(m))
+    }
+
+    private fun resize(width: Int, height: Int) {
+        if (width == w && height == h) return
+        w = width; h = height
+        scene.setPosition(0, 0, w, h); fw.setPosition(0, 0, w, h)
+        var div = 1
+        for (k in 0 until LEVELS) {
+            div *= STEP[k]
+            bw[k] = max(2, (w + div - 1) / div); bh[k] = max(2, (h + div - 1) / div)
+            b[k].setPosition(0, 0, bw[k], bh[k]); d[k].setPosition(0, 0, bw[k], bh[k])
+            b[k].setRenderEffect(android.graphics.RenderEffect.createBlurEffect(RADIUS[k], RADIUS[k], Shader.TileMode.DECAL))
+            d[k].setUseCompositingLayer(true, plus())
+            d[k].setAlpha(LEVEL_WEIGHT[k])
+        }
+        for ((node, src, thr) in listOf(Triple(tS, scene, 0.5f), Triple(tF, fw, 0.2f))) {
+            node.setPosition(0, 0, bw[0], bh[0])
+            node.setRenderEffect(bright(thr))
+            node.setUseCompositingLayer(true, plus())
+            val rc = node.beginRecording(bw[0], bh[0])
+            rc.scale(bw[0].toFloat() / w, bh[0].toFloat() / h)
+            rc.drawRenderNode(src)
+            node.endRecording()
+        }
+        var rc = b[0].beginRecording(bw[0], bh[0])
+        rc.drawRenderNode(tS); rc.drawRenderNode(tF)
+        b[0].endRecording()
+        for (k in 1 until LEVELS) {
+            rc = b[k].beginRecording(bw[k], bh[k])
+            rc.scale(bw[k].toFloat() / bw[k - 1], bh[k].toFloat() / bh[k - 1])
+            rc.drawRenderNode(b[k - 1])
+            b[k].endRecording()
+        }
+        for (k in 0 until LEVELS) {
+            rc = d[k].beginRecording(bw[k], bh[k])
+            rc.drawRenderNode(b[k])
+            d[k].endRecording()
+        }
+    }
+
+    fun draw(c: android.graphics.Canvas, renderer: HbRenderer, t: Double, width: Float, height: Float, background: Int) {
+        resize(kotlin.math.ceil(width).toInt(), kotlin.math.ceil(height).toInt())
+        renderer.drawSky(c, width, height, background)
+        val sc = scene.beginRecording(w, h)
+        val fc = fw.beginRecording(w, h)
+        try {
+            renderer.drawScenes(sc, fc, t, width, height)
+        } finally {
+            fw.endRecording()
+            scene.endRecording()
+        }
+        tS.setAlpha(min(1.0, renderer.screenBloomStrength).toFloat())
+        tF.setAlpha(min(1.0, renderer.fireworkGlow).toFloat())
+        c.drawRenderNode(scene)
+        for (k in 0 until LEVELS) {
+            c.save()
+            c.scale(w.toFloat() / bw[k], h.toFloat() / bh[k])
+            c.drawRenderNode(d[k])
+            c.restore()
+        }
+        renderer.drawTop(c, t, width, height)
+    }
+
+    companion object {
+        const val LEVELS = 3
+        /** 每级比上一级再缩几倍：1/4、1/16、1/48。 */
+        val STEP = intArrayOf(4, 4, 3)
+        /** 各级模糊半径（该级像素）：约合屏上 10 / 40 / 96 px。 */
+        val RADIUS = floatArrayOf(2.5f, 2.5f, 2f)
+        val LEVEL_WEIGHT = floatArrayOf(0.55f, 0.5f, 0.45f)
+        /** 亮部增益（取亮部后 × GAIN 再截到 1）：补 Folia 逐级同级回加放大的光晕外缘。 */
+        const val GAIN = 2.5f
     }
 }
