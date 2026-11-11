@@ -493,17 +493,22 @@ fun LyricFlowScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        // P7 花火：整屏夜空（烟花开在上部），歌词排在烟花下方、底部胶囊之上。
+        // R7 花火：Folia hanabi 原版结构（段落 → 镜头；世界上升 + 旋转；烟花 → 字底色块 → 逐字精灵），整屏铺满。
         if (lyricStyle == LyricStyle.HANABI && kernelLines.isNotEmpty() && emptyKind == null) {
             com.guangyue.feature.player.lyrics.visualizer.HanabiStage(
                 lines = kernelLines,
                 clock = clock,
                 lyricsFontScale = lyricsFontScale,
-                accentColor = lyricAccent,
-                fontFamily = GuangYueDesign.Serif,
+                accentColor = theme.accent,
+                // Folia 花火用主题字体栈（默认无衬线）800 字重；舞台自己用 sans-serif 800 画字。
+                fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
                 reduceMotion = reduceMotion,
                 bottomReserve = 104.dp,
                 modifier = Modifier.fillMaxSize(),
+                backgroundColor = theme.background,
+                primaryColor = theme.primary,
+                secondaryColor = theme.secondary,
+                seed = playback.item?.key ?: "hanabi",
             )
         }
         // R5 绘光：Folia lumiere 原版对译（段落 → 镜头 → 光位；暗场 + 光场着色器 + 歌词窗口 + 画框），整屏铺满。
