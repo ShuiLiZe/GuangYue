@@ -111,10 +111,10 @@ if [ -n "${SCENE:-}" ]; then
     if [ "$SCENE" = "tempera" ] || [ "$SCENE" = "hanabi" ]; then
       son "$SCENE-land-123" 123500
     fi
-    # 花火段落转场（R7⑪ 段落模糊）：探针每段 4 句、每句 3 s，段落边界附近各拍一张，看模糊与 ANR。
+    # 花火片尾歌词退场模糊（R7⑪ HbBlurSlots）：最后一句 119.9 s 唱完，+0.6 s 歌词半透明、模糊 3。
+    # 段落转场模糊在 CI 拍不到：模拟器 disable-animations → reduceMotion → 转场关掉（Folia 段落边界每 6 s，转场窗 x.2–x+1.0 s）。
     if [ "$SCENE" = "hanabi" ]; then
-      son hanabi-land-24 23900
-      son hanabi-land-36 35900
+      son hanabi-land-120 120500
     fi
   fi
   adb shell settings put system user_rotation 0
