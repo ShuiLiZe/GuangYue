@@ -8,7 +8,9 @@
 // 手机化取舍（写进对照表）：
 //   · 反色：Pixi 着色器逐像素读底色；这里按色块多边形算「偏墨」区域（同样的判据：底色亮度离墨更近 → 字取纸色），
 //     文字层先整层画墨色，再用该区域 SrcIn 填纸色。网线 / 细线不参与判定（太细，原版里也几乎不翻色）。
-//   · 未做：渐变色模式、用户图片层、墨染奥行（智能动感）、片尾海报、Pixi 后处理（颗粒 / 镜头畸变 / 暗角）、转场模糊。
+//   · 后处理（镜头畸变 → 颗粒 → 暗角）与 shape-carry 转场模糊见 TemperaPost.kt：每个段落场景录进自己的 GraphicsLayer，
+//     挂 RenderEffect（同 Folia 每个 scene 容器一条 filter 链），场景透明度在层上乘（Pixi 容器 alpha 在 filter 之后）。
+//   · 未做：渐变色模式、用户图片层、墨染奥行（智能动感，要 htdemucs 鼓点）、片尾海报。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import androidx.compose.foundation.Canvas
@@ -30,6 +32,8 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
@@ -40,6 +44,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Density
 import com.guangyue.core.lyrics.Line
 import com.guangyue.feature.player.lyrics.visualizer.tempera.IDLE_TP_TRANSITION
 import com.guangyue.feature.player.lyrics.visualizer.tempera.TpBlockOptions
@@ -259,6 +266,9 @@ internal fun TemperaStage(
     val widthCache = remember(style) { HashMap<String, Double>() }
     val layoutCache = remember(style) { HashMap<String, TextLayoutResult>() }
     val inversionPaint = remember { Paint() }
+    // 场景层：槽 0 = 当前段，槽 1 = 预卷的下一段（Folia scene cache 里同时上屏的最多两个）。
+    val sceneLayers = listOf(rememberGraphicsLayer(), rememberGraphicsLayer())
+    val postSlots = remember { listOf(TemperaPostSlot(), TemperaPostSlot()) }
 
     Canvas(modifier.fillMaxSize()) {
         val dens = density.density.toDouble()
@@ -340,23 +350,37 @@ internal fun TemperaStage(
             val sceneAlpha = tf.alpha
             if (sceneAlpha <= 0.001) continue
             val sceneM = root * TpAffine.pixi(w / 2 + tf.x * w, h / 2 + tf.y * h, tf.rotation, tf.scale, tf.scale, w / 2, h / 2)
-            // 纸色薄罩 + 底网点。
-            withTransform({ transform(sceneM.toMatrix()) }) {
-                drawRect(paper, topLeft = Offset.Zero, size = androidx.compose.ui.geometry.Size(w.toFloat(), h.toFloat()), alpha = (0.35 * sceneAlpha).toFloat())
-                drawPath(scene.screentone, Color(palette.tone4.argb()), alpha = (0.05 * sceneAlpha).toFloat())
+            val slot = if (isIncoming) 1 else 0
+            val layer = sceneLayers[slot]
+            val sceneSeed = sonnetHash("${program.seed}:${program.paragraphs[index].id}")
+            layer.renderEffect = postSlots[slot].effect(
+                size.width, size.height, temperaNoiseSeed(sceneSeed),
+                if (transitionsEnabled) temperaTransitionBlurSigma(tf.blur, dens) else 0.0,
+                post = !reduceMotion,
+            )
+            layer.alpha = sceneAlpha.toFloat()
+            // 不能用 DrawScope 的成员扩展 record{}：它把外层 LayoutNodeDrawScope 本身当 Density 传进去，
+            // 块内读 density 会在 CanvasDrawScope ↔ LayoutNodeDrawScope 间无限递归（CI 取证 StackOverflowError）。
+            layer.record(Density(density.density, density.fontScale), layoutDirection, IntSize(size.width.roundToInt(), size.height.roundToInt())) {
+                // 纸色薄罩 + 底网点。
+                withTransform({ transform(sceneM.toMatrix()) }) {
+                    drawRect(paper, topLeft = Offset.Zero, size = androidx.compose.ui.geometry.Size(w.toFloat(), h.toFloat()), alpha = 0.35f)
+                    drawPath(scene.screentone, Color(palette.tone4.argb()), alpha = 0.05f)
+                }
+                // 「偏墨」区域（屏幕坐标），给文字反色用；按绘制顺序叠加。
+                var dark = Path()
+                var active = 0
+                for (i in scene.shots.indices.reversed()) if (t >= scene.shots[i].shot.startTime) { active = i; break }
+                scene.shots.forEachIndexed { shotIndex, view ->
+                    val handing = shotIndex < active && resolveTemperaShotExit(view.shot, t) < 1
+                    if (shotIndex != active && !handing) return@forEachIndexed
+                    dark = drawShot(view, t, w, h, camera, motion, sceneM, 1.0, palette, paperL, inkL, dark, inversionPaint, reduceMotion)
+                }
             }
-            // 「偏墨」区域（屏幕坐标），给文字反色用；按绘制顺序叠加。
-            var dark = Path()
-            var active = 0
-            for (i in scene.shots.indices.reversed()) if (t >= scene.shots[i].shot.startTime) { active = i; break }
-            scene.shots.forEachIndexed { shotIndex, view ->
-                val handing = shotIndex < active && resolveTemperaShotExit(view.shot, t) < 1
-                if (shotIndex != active && !handing) return@forEachIndexed
-                dark = drawShot(view, t, w, h, camera, motion, sceneM, sceneAlpha, palette, paperL, inkL, dark, inversionPaint, reduceMotion)
-            }
+            drawLayer(layer)
         }
-        // 后处理暗角（sonnetPrintFilters 的 vignette：smoothstep(0.52, 1.08, r) × 0.85 × 0.6 压黑，r 以屏高为单位）。
-        if (!reduceMotion) {
+        // API 32 及以下没有着色器链：退回径向渐变暗角（sonnetPrintFilters 的 vignette：smoothstep(0.52, 1.08, r) × 0.85 × 0.6 压黑，r 以屏高为单位）。
+        if (!reduceMotion && !temperaSupportsPostShader()) {
             val r = 1.08f * size.height
             val stops = (0..8).map { k ->
                 val u = 0.52 + (1.08 - 0.52) * k / 8.0

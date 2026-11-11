@@ -14,8 +14,9 @@ shot() { adb exec-out screencap -p > "shots/$1.png"; echo "shot $1"; }
 
 # 只拍一个样式（workflow_dispatch 的 scene 输入；R4 商籁起）：拍完把截图 base64 打进日志后直接退出。
 emit_and_exit() {
-  adb logcat -d -s AndroidRuntime SonnetStage LumiereStage RuntimeShader ActivityManager:E ActivityTaskManager:W > shots/logcat.txt 2>&1 || true
+  adb logcat -d -s AndroidRuntime SonnetStage LumiereStage TemperaStage RuntimeShader ActivityManager:E ActivityTaskManager:W > shots/logcat.txt 2>&1 || true
   echo "===LOGCAT==="; tail -c 4000 shots/logcat.txt
+  echo "===FATAL==="; adb logcat -d | grep -A8 -E "FATAL EXCEPTION|TemperaStage" | head -60
   # ANR 主线程栈（google_apis 镜像可 adb root）
   adb root >/dev/null 2>&1; sleep 3
   echo "===ANR==="
