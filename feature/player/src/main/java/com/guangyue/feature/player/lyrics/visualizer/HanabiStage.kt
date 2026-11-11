@@ -10,7 +10,8 @@
 // 的 dual-filter：亮部提取 → 逐级降采样 → 上采样叠加）。模糊只在很小的离屏层上做、RenderEffect 只在尺寸变化时建，逐帧只改透明度。
 // API ≤30 或软件画布退回旧的预烘近似（HanabiBloom.kt：亮精灵叠软光贴图、字叠预烘模糊字）。
 // PV 拼贴（R7⑩）：HanabiCollage.kt（编排 / 姿态）+ HanabiCollagePaint.kt（纹理 / 绘制）。
-// 未接（与 Folia 的差距）：段落转场模糊、片尾卡的 PV 拼贴与歌词退场模糊、随拍开花（无节拍表）。片尾卡见 HanabiCredits.kt。
+// 段落转场模糊 / 片尾歌词退场模糊（R7⑪）：HbBlurSlots 半分辨率离屏层 + 高斯模糊（API 31+ 硬件画布）。
+// 未接（与 Folia 的差距）：随拍开花（无节拍表）。片尾卡见 HanabiCredits.kt。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.graphics.Bitmap
@@ -220,6 +221,7 @@ private class HbRenderer(
 
     // ─── 片尾卡（credits.ts / hanabiCreditsLayer.ts）：最后一句唱完前 4 s 预建，尺寸变了重建。 ───
     private var credits: HbCredits? = null
+    private var creditsCollage: List<HbCollageItem>? = null
     private val detailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = if (Build.VERSION.SDK_INT >= 28) Typeface.create(Typeface.SANS_SERIF, 600, false) else Typeface.DEFAULT_BOLD
         textAlign = Paint.Align.CENTER
@@ -228,7 +230,7 @@ private class HbRenderer(
     private fun ensureCredits(t: Double, w: Float, h: Float, frame: HbCreditsFrame): HbCredits? {
         val end = program.lyricEndTime ?: return null
         if (!hasHanabiCredits(songTitle, songArtist, songAlbum)) return null
-        credits?.let { if (it.width != w.toDouble() || it.height != h.toDouble()) credits = null }
+        credits?.let { if (it.width != w.toDouble() || it.height != h.toDouble()) { credits = null; creditsCollage = null } }
         if (credits == null && (frame.active || t >= end - HB_CREDITS_PREBUILD)) {
             credits = createHanabiCredits(w.toDouble(), h.toDouble(), theme, songTitle, songArtist, songAlbum, tuning, fontScale, measure).also { cr ->
                 cr.text?.let { bakeText(it) }
@@ -257,6 +259,10 @@ private class HbRenderer(
         for (l in cr.launches) if (!hbDrawLaunch(l, time, cr.unit, counting)) break
         if (activePlans.isNotEmpty()) hbDrawBursts(activePlans, time, HB_CREDITS_PARTICLES - used, emit)
         sprite.xfermode = null
+        // 片尾拼贴（credits.ts）：back 在烟花之上、字之下，front 在最上。
+        val creditsItems = creditsCollage ?: hbCreditsCollage(w.toDouble(), h.toDouble(), px.toDouble()).also { creditsCollage = it }
+        val ct = hbCreditsCollageTime(time)
+        collage.drawShot(c, creditsItems, ct, false, alpha)
         // 曲名：一行「歌词」，放在画面正中（text.view.position = (w/2, h·0.5)）。
         cr.text?.let { tx ->
             c.save(); c.translate(w / 2, h * 0.5f); drawText(tx, time); c.restore()
@@ -273,6 +279,7 @@ private class HbRenderer(
             val fm = detailPaint.fontMetrics
             c.drawText(d.text, w / 2, (d.y * h + d.offsetY).toFloat() - (fm.ascent + fm.descent) / 2, detailPaint)
         }
+        collage.drawShot(c, creditsItems, ct, true, alpha)
         c.restore()
         alpha = 1.0
     }
@@ -411,23 +418,47 @@ private class HbRenderer(
         val creditsFrame = resolveHanabiCreditsLayerFrame(t, program.lyricEndTime, songTitle, songArtist, songAlbum)
         creditsNow = ensureCredits(t, w, h, creditsFrame); creditsFrameNow = creditsFrame
         val lyricAlpha = if (creditsFrame.active) creditsFrame.lyricAlpha else 1.0
+        val lyricBlur = if (creditsFrame.active) creditsFrame.lyricBlur else 0.0
         val (_, layers) = resolveHanabiSceneFrames(program, t, transitions)
+        var slot = 0
         for (layer in layers) {
             val f = layer.frame
             if (f.alpha * lyricAlpha <= 0.002) continue
             val scene = unitOf(layer.index, w, h)
-            c.save()
-            c.translate(w / 2, h / 2 + (f.y * h).toFloat())
-            c.rotate((f.rotation * DEG).toFloat())
-            c.scale(f.scale.toFloat(), f.scale.toFloat())
-            c.translate(-w / 2, -h / 2)
             alpha = f.alpha * lyricAlpha
-            drawScene(scene, t, w, h)
-            c.restore()
+            // 段落转场模糊 / 片尾歌词退场模糊（applyHanabiLayerFrame：max(layer.blur, lyricBlur)，强度 > 0.3 才挂）：
+            // 整段画进半分辨率的离屏层再模糊（同 Folia 的半分辨率 BlurFilter），烟花层副本这时不画（模糊的段落不需要烟花 bloom）。
+            val blur = max(f.blur, lyricBlur)
+            val slots = blurSlots
+            if (slots != null && blur > HB_BLUR_EPSILON && Build.VERSION.SDK_INT >= 31) {
+                val keepFw = fwTarget
+                fwTarget = null
+                slots.draw(c, slot++, w, h, (HB_BLUR_SIGMA_PER_STRENGTH * blur * px).toFloat()) { rc ->
+                    canvas = rc
+                    drawSceneLayer(rc, scene, f, t, w, h)
+                }
+                canvas = c
+                fwTarget = keepFw
+            } else {
+                drawSceneLayer(c, scene, f, t, w, h)
+            }
         }
         alpha = 1.0
         fwTarget = null
     }
+
+    private fun drawSceneLayer(c: android.graphics.Canvas, scene: HbScene, f: HbTransitionFrame, t: Double, w: Float, h: Float) {
+        c.save()
+        c.translate(w / 2, h / 2 + (f.y * h).toFloat())
+        c.rotate((f.rotation * DEG).toFloat())
+        c.scale(f.scale.toFloat(), f.scale.toFloat())
+        c.translate(-w / 2, -h / 2)
+        drawScene(scene, t, w, h)
+        c.restore()
+    }
+
+    /** 段落模糊用的离屏层（API 31+ 硬件画布时由 HbGlowNodes 给）。 */
+    var blurSlots: HbBlurSlots? = null
 
     /** 片尾卡在场景层之上、画框之下（Folia stage：sky → sceneLayer → credits.holder → overlayLayer），都不进全屏辉光。 */
     fun drawTop(c: android.graphics.Canvas, t: Double, w: Float, h: Float) {
@@ -859,9 +890,55 @@ internal fun HanabiStage(
                 nodes.draw(nc, renderer, t, w, h, bg)
             } else {
                 renderer.nodeGlow = false
+                renderer.blurSlots = null
                 renderer.draw(nc, t, w, h, bg)
             }
         }
+    }
+}
+
+/** applyHanabiLayerFrame 的 BLUR_EPSILON：模糊强度超过它才挂模糊。 */
+private const val HB_BLUR_EPSILON = 0.3
+/** Pixi BlurFilter（quality 3）强度 s → 高斯 σ ≈ 1.72·s 逻辑像素（同凝彩 TemperaPost 的换算）。 */
+private const val HB_BLUR_SIGMA_PER_STRENGTH = 1.72
+
+/**
+ * 段落模糊的离屏层：每个在模糊的段落一个 RenderNode，半分辨率录进来、挂高斯模糊、放大画回（Folia 用半分辨率 BlurFilter）。
+ * 模糊效果按量化后的 σ 缓存（σ 封顶 HALF_SIGMA_CAP——凝彩的教训：swiftshader 上大半径整屏模糊会 ANR）。
+ */
+@RequiresApi(31)
+internal class HbBlurSlots {
+    private val nodes = Array(3) { android.graphics.RenderNode("hanabi-blur-$it") }
+    private val effects = HashMap<Int, android.graphics.RenderEffect>()
+
+    fun draw(c: android.graphics.Canvas, slot: Int, w: Float, h: Float, sigmaPx: Float, block: (android.graphics.Canvas) -> Unit) {
+        val node = nodes[slot.coerceIn(0, nodes.size - 1)]
+        val bw = max(2, kotlin.math.ceil(w / 2).toInt()); val bh = max(2, kotlin.math.ceil(h / 2).toInt())
+        node.setPosition(0, 0, bw, bh)
+        val rc = node.beginRecording(bw, bh)
+        try {
+            rc.scale(bw / w, bh / h)
+            block(rc)
+        } finally {
+            node.endRecording()
+        }
+        // 半分辨率层里的 σ；按 0.5 px 量化取缓存的效果。RenderEffect 的 radius → σ = 0.57735·r + 0.5（HWUI convertRadiusToSigma），反解出 radius。
+        val sigma = min(HALF_SIGMA_CAP, sigmaPx / 2f)
+        val q = kotlin.math.round(sigma * 2f).toInt()
+        val effect = effects.getOrPut(q) {
+            val r = max(0.5f, (q / 2f - 0.5f) / 0.57735f)
+            android.graphics.RenderEffect.createBlurEffect(r, r, Shader.TileMode.DECAL)
+        }
+        node.setRenderEffect(effect)
+        c.save()
+        c.scale(w / bw, h / bh)
+        c.drawRenderNode(node)
+        c.restore()
+    }
+
+    companion object {
+        /** 半分辨率层里 σ 的上限（≈ 全分辨率 24 px）。 */
+        const val HALF_SIGMA_CAP = 12f
     }
 }
 
@@ -881,6 +958,7 @@ private class HbGlowNodes {
     private val fw = android.graphics.RenderNode("hanabi-fireworks")
     private val tS = android.graphics.RenderNode("hanabi-bright-scene")
     private val tF = android.graphics.RenderNode("hanabi-bright-fireworks")
+    private val blurSlots = HbBlurSlots()
     private val b = Array(LEVELS) { android.graphics.RenderNode("hanabi-bloom-$it") }
     private val d = Array(LEVELS) { android.graphics.RenderNode("hanabi-bloom-out-$it") }
     private val bw = IntArray(LEVELS)
@@ -939,6 +1017,7 @@ private class HbGlowNodes {
     fun draw(c: android.graphics.Canvas, renderer: HbRenderer, t: Double, width: Float, height: Float, background: Int) {
         resize(kotlin.math.ceil(width).toInt(), kotlin.math.ceil(height).toInt())
         renderer.drawSky(c, width, height, background)
+        renderer.blurSlots = blurSlots
         val sc = scene.beginRecording(w, h)
         val fc = fw.beginRecording(w, h)
         try {

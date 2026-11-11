@@ -111,6 +111,11 @@ if [ -n "${SCENE:-}" ]; then
     if [ "$SCENE" = "tempera" ] || [ "$SCENE" = "hanabi" ]; then
       son "$SCENE-land-123" 123500
     fi
+    # 花火段落转场（R7⑪ 段落模糊）：探针每段 4 句、每句 3 s，段落边界附近各拍一张，看模糊与 ANR。
+    if [ "$SCENE" = "hanabi" ]; then
+      son hanabi-land-24 23900
+      son hanabi-land-36 35900
+    fi
   fi
   adb shell settings put system user_rotation 0
   adb shell wm user-rotation lock 0 || adb shell cmd window user-rotation lock 0 || true

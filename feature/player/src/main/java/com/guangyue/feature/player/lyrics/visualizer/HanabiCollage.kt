@@ -645,3 +645,36 @@ internal const val HB_DOT_TILE = 26.0
 
 @Suppress("unused")
 private fun roundD(v: Double) = round(v)
+
+// ───────────────────────────── credits.ts：片尾卡的拼贴 ─────────────────────────────
+
+/** 片尾卡拼贴：上方蕾丝、下方胶片、曲名四角贴纸、金冠开花时蹦出的图标、往上飘的贴纸气球；画面坐标，一直停着（不退场）。 */
+internal fun hbCreditsCollage(width: Double, height: Double, px: Double = 1.0): List<HbCollageItem> {
+    val unit = min(width, height)
+    val stayAt = 1e6; val stayDur = 1.0
+    fun band(style: String, y: Double, rotation: Double, color: Int, at: Double, from: Int) = HbCollageItem("strip", style = style, x = width / 2, y = y,
+        length = hypot(width, height) * 1.25, thickness = max(18.0 * px, unit * (if (style == "film") 0.075 else 0.06)), rotation = rotation,
+        color = color, speed = from * unit * (if (style == "film") 0.12 else 0.05), from = from, at = at, exitAt = stayAt, exitDuration = stayDur)
+    val items = arrayListOf(
+        band("film", height * 0.85, 0.06, HB_CANDY[0], HB_CREDITS_TITLE_START + 0.4, -1),
+        band("lace", height * 0.13, -0.05, HB_CANDY[3], HB_CREDITS_TITLE_START + 0.7, 1),
+        HbCollageItem("pop", x = width * 0.72, y = height * 0.22, icon = HB_FALLBACK_ICON, color = HB_ICON_INKS[0], size = unit * 0.12, rotation = 0.16,
+            at = HB_CREDITS_BLOOM_AT + 0.04, duration = 1.4),
+    )
+    val shapes = listOf("heart", "star", "ribbon", "sparkle")
+    shapes.forEachIndexed { k, shape ->
+        items += HbCollageItem("sticker", shape = shape, label = null, layer = "front",
+            x = width / 2 + (if (k == 0 || k == 3) -1 else 1) * min(width * 0.38, unit * 0.62),
+            y = height * 0.5 + (if (k < 2) -1 else 1) * unit * 0.1,
+            size = unit * 0.08, rotation = (if (k % 2 == 0) -1 else 1) * 0.25, color = HB_CANDY[(k + 3) % HB_CANDY.size],
+            at = HB_CREDITS_TITLE_START + 0.5 + k * 0.12, exitAt = stayAt, exitDuration = stayDur)
+    }
+    for (k in 0 until 6) {
+        items += HbCollageItem("floater", shape = shapes[k % shapes.size], x = width * (0.12 + ((k * 0.37) % 1) * 0.76), y = height * 1.08,
+            rise = height * 1.3, size = unit * (0.05 + (k % 3) * 0.012), color = HB_CANDY[k % HB_CANDY.size], at = 2.4 + k * 0.9, duration = 4.2, sway = unit * 0.03)
+    }
+    return items
+}
+
+/** 片尾卡拼贴的时钟：贴纸气球一轮飘完再从头来（片尾卡可能停很久）。 */
+internal fun hbCreditsCollageTime(time: Double) = if (time < 8) time else 2.4 + jsMod(time - 2.4, 5.6)

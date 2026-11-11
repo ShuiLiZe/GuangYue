@@ -2,7 +2,7 @@
 // + hanabiCreditsLayer.ts（最后一句唱完前 4 s 预建、以画面中心为枢轴）。
 // 最后一句唱完：一发升空尾迹从底边升起，1.1 s 在曲名上方开金冠（kamuro 150 星），两侧千輪，2.2 s 后再一朵柳环；
 // 曲名当一行「歌词」逐字弹出（同一个文字引擎，色带 band / pop / color），艺人（大写、字距 0.3）在下、专辑在上慢慢显出。
-// 未接：PV 拼贴（蕾丝 / 胶片 / 贴纸 / 气球，collage 整块还没移植）、歌词退场模糊 lyricBlur（舞台没有逐段模糊）。
+// PV 拼贴见 hbCreditsCollage（HanabiCollage.kt，R7⑪），歌词退场模糊 lyricBlur 由舞台 HbBlurSlots 套。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import com.guangyue.core.lyrics.Line
