@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import com.guangyue.core.lyrics.Line
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -41,7 +42,7 @@ import kotlin.math.sin
 
 private val DEG = (180.0 / PI).toFloat()
 
-/** 白色粒子纹理（mg/textures.ts 的 dot / glow / star4 / streak），只画一次。 */
+/** 白色粒子纹理（mg/textures.ts 的 dot / glow / star4 / streak + 装饰件用的 ring / square / triangle / petal），只画一次。 */
 private class HbTextures {
     val glow: Bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888).also { b ->
         val c = android.graphics.Canvas(b)
@@ -83,6 +84,43 @@ private class HbTextures {
         p.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
         c.drawRect(0f, 0f, 16f, 64f, p)
     }
+    /** 细圆环（textures.ts drawRing）。 */
+    val ring: Bitmap = Bitmap.createBitmap(80, 80, Bitmap.Config.ARGB_8888).also { b ->
+        val c = android.graphics.Canvas(b)
+        val line = 4f
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = line; color = android.graphics.Color.WHITE }
+        c.drawCircle(40f, 40f, 40f - line, p)
+    }
+    /** 实心方块（drawSquare）。 */
+    val square: Bitmap = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).also { it.eraseColor(android.graphics.Color.WHITE) }
+    /** 三角碎片（drawTriangle）：重心在纹理中心。 */
+    val triangle: Bitmap = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888).also { b ->
+        val c = android.graphics.Canvas(b)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+        val cc = 24.0; val r = 48 * 0.48
+        val path = Path()
+        for (i in 0 until 3) {
+            val a = -PI / 2 + (i * PI * 2) / 3
+            val x = (cc + cos(a) * r).toFloat(); val y = (cc + sin(a) * r + r * 0.12).toFloat()
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        path.close()
+        c.drawPath(path, p)
+    }
+    /** 樱花瓣（drawPetal）：上宽下尖，顶端一个小缺口。 */
+    val petal: Bitmap = Bitmap.createBitmap(32, 44, Bitmap.Config.ARGB_8888).also { b ->
+        val c = android.graphics.Canvas(b)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+        val w = 32f; val h = 44f; val cx = w / 2; val top = h * 0.06f; val bottom = h * 0.96f; val notch = h * 0.16f
+        val path = Path()
+        path.moveTo(cx, bottom)
+        path.cubicTo(cx - w * 0.62f, h * 0.62f, cx - w * 0.5f, top, cx - w * 0.14f, top)
+        path.lineTo(cx, top + notch)
+        path.lineTo(cx + w * 0.14f, top)
+        path.cubicTo(cx + w * 0.5f, top, cx + w * 0.62f, h * 0.62f, cx, bottom)
+        path.close()
+        c.drawPath(path, p)
+    }
 }
 
 /** 一首歌的花火渲染器：程序、场景单元缓存、纹理与画笔都只建一次；每帧只改画笔参数。 */
@@ -97,7 +135,8 @@ private class HbRenderer(
     private val songArtist: String? = null,
     private val songAlbum: String? = null,
 ) {
-    private val textures = HbTextures().let { t -> arrayOf(t.glow.extractAlpha(), t.dot.extractAlpha(), t.star4.extractAlpha(), t.streak.extractAlpha()) }
+    private val textures = HbTextures().let { t -> arrayOf(t.glow.extractAlpha(), t.dot.extractAlpha(), t.star4.extractAlpha(), t.streak.extractAlpha(),
+        t.ring.extractAlpha(), t.square.extractAlpha(), t.triangle.extractAlpha(), t.petal.extractAlpha()) }
     private val tuning = HbTuning()
     private val typeface: Typeface = if (Build.VERSION.SDK_INT >= 28) Typeface.create(Typeface.SANS_SERIF, 800, false) else Typeface.DEFAULT_BOLD
     private val measurePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = this@HbRenderer.typeface; textSize = 100f }
@@ -420,7 +459,9 @@ private class HbRenderer(
         c.rotate((scene.timeline.spin(t) * DEG).toFloat())
         c.translate(-w / 2, -h / 2 + rise.toFloat())
         for (item in scene.built) {
-            if (t < item.lifeStart || t > item.lifeEnd) continue
+            if (t < item.lifeStart || t > item.lifeEnd) { item.ornaments = null; continue }
+            val orns = item.ornaments ?: hbShotOrnaments(item, w.toDouble(), h.toDouble(), scene.seed, tuning).also { item.ornaments = it }
+            for (o in orns) o.update(t)
             val timing = item.timing
             val region = item.shot.profile.region
             val wy = timing.worldY.toFloat()
@@ -430,7 +471,10 @@ private class HbRenderer(
             c.translate(-w / 2, -(h / 2 + wy))
             c.translate((region.cx * w).toFloat(), (region.cy * h).toFloat() + wy)
             drawFireworks(scene, item, t)
+            // scene.ts 层序：fireworks → ornaments(back) → collage(back) → text → ornaments(front)。
+            drawOrnaments(orns, false)
             item.text?.let { drawText(it, t) }
+            drawOrnaments(orns, true)
             c.restore()
         }
         c.restore()
@@ -440,6 +484,110 @@ private class HbRenderer(
             for (d in amb.embers) drawDot(d)
         }
         c.restore()
+    }
+
+    // ─── MG 装饰件（HanabiOrnaments.kt 的节点表）：贴共享纹理 / 画预录路径，只有锯齿线、波线每帧重建路径。 ───
+    private class BakedShape(var version: Int, val paths: ArrayList<Path> = ArrayList())
+    private val baked = java.util.IdentityHashMap<HbOrnShape, BakedShape>()
+    private val ornOval = RectF()
+    private val ornStroke = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val ornText = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = this@HbRenderer.typeface; textAlign = Paint.Align.CENTER }
+
+    private fun bakedOf(shape: HbOrnShape): BakedShape {
+        val b = baked[shape] ?: BakedShape(-1).also { baked[shape] = it }
+        if (b.version == shape.version) return b
+        b.version = shape.version
+        while (b.paths.size < shape.passes.size) b.paths += Path()
+        shape.passes.forEachIndexed { k, pass ->
+            val p = b.paths[k]
+            p.reset()
+            for (i in pass[5].toInt() until pass[0].toInt()) {
+                val o = shape.ops[i]
+                when (o[0].toInt()) {
+                    0 -> p.moveTo(o[1].toFloat(), o[2].toFloat())
+                    1 -> p.lineTo(o[1].toFloat(), o[2].toFloat())
+                    2 -> {
+                        ornOval.set((o[1] - o[3]).toFloat(), (o[2] - o[3]).toFloat(), (o[1] + o[3]).toFloat(), (o[2] + o[3]).toFloat())
+                        p.arcTo(ornOval, (o[4] * DEG).toFloat(), ((o[5] - o[4]) * DEG).toFloat(), false)
+                    }
+                    3 -> p.addCircle(o[1].toFloat(), o[2].toFloat(), o[3].toFloat(), Path.Direction.CW)
+                    4 -> { ornOval.set((o[1] - o[3]).toFloat(), (o[2] - o[4]).toFloat(), (o[1] + o[3]).toFloat(), (o[2] + o[4]).toFloat()); p.addOval(ornOval, Path.Direction.CW) }
+                    5 -> p.addRect(o[1].toFloat(), o[2].toFloat(), (o[1] + o[3]).toFloat(), (o[2] + o[4]).toFloat(), Path.Direction.CW)
+                    else -> p.close()
+                }
+            }
+        }
+        return b
+    }
+
+    private fun drawOrnNode(n: HbOrnNode, alphaMul: Double, tintOverride: Int?) {
+        val c = canvas
+        val tint = tintOverride ?: n.tint
+        when (n) {
+            is HbOrnSprite -> {
+                val bmp = textures[when (n.tex) {
+                    HbOrnTex.GLOW -> 0; HbOrnTex.DOT -> 1; HbOrnTex.STAR4 -> 2; HbOrnTex.STREAK -> 3
+                    HbOrnTex.RING -> 4; HbOrnTex.SQUARE -> 5; HbOrnTex.TRIANGLE -> 6; HbOrnTex.PETAL -> 7
+                }]
+                val hw = (abs(n.width) / 2).toFloat(); val hh = (abs(n.height) / 2).toFloat()
+                if (hw < 0.05f || hh < 0.05f) return
+                sprite.color = 0xff000000.toInt() or tint
+                sprite.alpha = a255(n.alpha * alphaMul)
+                sprite.xfermode = null
+                if (n.rotation != 0.0) {
+                    c.save(); c.translate(n.x.toFloat(), n.y.toFloat()); c.rotate((n.rotation * DEG).toFloat())
+                    rect.set(-hw, -hh, hw, hh); c.drawBitmap(bmp, null, rect, sprite); c.restore()
+                } else {
+                    rect.set(n.x.toFloat() - hw, n.y.toFloat() - hh, n.x.toFloat() + hw, n.y.toFloat() + hh)
+                    c.drawBitmap(bmp, null, rect, sprite)
+                }
+            }
+            is HbOrnGraphics -> {
+                val shapeDef = n.shape
+                if (shapeDef.passes.isEmpty()) return
+                val b = bakedOf(shapeDef)
+                c.save(); c.translate(n.x.toFloat(), n.y.toFloat()); c.rotate((n.rotation * DEG).toFloat()); c.scale(n.scale.toFloat(), n.scale.toFloat())
+                ornStroke.color = 0xff000000.toInt() or tint
+                ornStroke.alpha = a255(n.alpha * alphaMul)
+                shapeDef.passes.forEachIndexed { k, pass ->
+                    if (pass[1] == 1.0) ornStroke.style = Paint.Style.FILL
+                    else {
+                        ornStroke.style = Paint.Style.STROKE
+                        ornStroke.strokeWidth = pass[2].toFloat()
+                        ornStroke.strokeCap = when (pass[3].toInt()) { 1 -> Paint.Cap.ROUND; 2 -> Paint.Cap.SQUARE; else -> Paint.Cap.BUTT }
+                        ornStroke.strokeJoin = if (pass[4].toInt() == 1) Paint.Join.ROUND else Paint.Join.MITER
+                    }
+                    c.drawPath(b.paths[k], ornStroke)
+                }
+                c.restore()
+            }
+            is HbOrnText -> {
+                ornText.textSize = n.fontSize.toFloat()
+                ornText.color = 0xff000000.toInt() or tint
+                ornText.alpha = a255(n.alpha * alphaMul)
+                // Pixi Text anchor (0.5, 0.54)：文字框高 = ascent + descent，基线在框顶 + ascent。
+                val fm = ornText.fontMetrics
+                val boxH = fm.descent - fm.ascent
+                c.drawText(n.text, n.x.toFloat(), (n.y - 0.54 * boxH - fm.ascent).toFloat(), ornText)
+            }
+            else -> {}
+        }
+    }
+
+    private fun drawOrnaments(orns: List<HbOrnament>, front: Boolean) {
+        val c = canvas
+        for (o in orns) {
+            if (!o.visible || (o.spec.layer == "front") != front) continue
+            for (n in o.nodes) {
+                if (!n.visible || n.parent != null) continue
+                if (n is HbOrnHolder) {
+                    // 印章：holder 的变换 / 透明度 / tint 传给子节点。
+                    c.save(); c.translate(n.x.toFloat(), n.y.toFloat()); c.rotate((n.rotation * DEG).toFloat()); c.scale(n.scale.toFloat(), n.scale.toFloat())
+                    for (ch in o.nodes) if (ch.parent === n && ch.visible) drawOrnNode(ch, n.alpha, n.tint)
+                    c.restore()
+                } else drawOrnNode(n, 1.0, null)
+            }
+        }
     }
 
     private val smokeSrc = android.graphics.Rect()

@@ -10,7 +10,7 @@ import kotlin.math.min
  * R7 花火⑥c：逐函数对译 Folia hanabi/scene.ts（场景单元装配）+ program.ts 的 sliceLine / shotLine + hanabiSceneEntry.ts 的单元参数。
  * 一个段落 = 一个单元：世界整体上升，每个镜头在世界里各自高度上组装主烟花 / 被唱到的小烟花 / 升空尾迹 / 字底色块 / 字。
  * 烟花事件构建时按镜头算好（纯数据，planShotEvents），每帧只按 t 求值。
- * 环境层见 HanabiAmbient.kt。本轮未接：MG 装饰件 ornaments、PV 拼贴 collage、随拍开花 beatFx、片尾卡（见 HANDOFF）。
+ * 环境层见 HanabiAmbient.kt，MG 装饰件见 HanabiOrnaments.kt（镜头第一次上场时建，同 Folia buildRig）。本轮未接：PV 拼贴 collage、随拍开花 beatFx（见 HANDOFF）。
  */
 
 /** HanabiTuning 里舞台用到的几项（Folia DEFAULT_HANABI_TUNING）。 */
@@ -27,6 +27,8 @@ internal class HbTuning(
     val glow: Double = 1.0,
     val bloom: Double = 0.8,
     val chorusBloom: Double = 1.3,
+    /** MG 装饰件数量倍率（Folia DEFAULT_HANABI_TUNING.ornamentAmount = 1，0..2）。 */
+    val ornamentAmount: Double = 1.0,
 )
 
 /** 整首歌的旋转方向（按程序种子定）。 */
@@ -102,6 +104,8 @@ internal class HbBuiltShot(
 ) {
     /** 烟花方案按事件缓存（同 fireworks.ts 的 plans）。 */
     val plans = HashMap<HbBurstEvent, HbBurstPlan>()
+    /** MG 装饰件（scene.ts buildRig 里 createOrnament）：上场时建、离场时放掉，见 hbShotOrnaments。 */
+    var ornaments: List<HbOrnament>? = null
 }
 
 private const val MAX_SUNG_BURSTS = 28

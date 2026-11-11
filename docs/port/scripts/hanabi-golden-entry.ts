@@ -8,3 +8,5 @@ import { createRng } from '../../folia/src/components/visualizer/hanabi/hanabiRa
 (globalThis as any).HB = { A, B, buildHanabiText, lineWords, layoutText, wordScales, estimateAdvance, isUprightGlyph, HANABI_PROFILES, burstPreset, BURST_KINDS, createRng };
 import { createAmbient } from '../../folia/src/components/visualizer/hanabi/mg/ambient';
 (globalThis as any).HB.createAmbient = createAmbient;
+import { createOrnament } from '../../folia/src/components/visualizer/hanabi/mg/ornaments';
+(globalThis as any).HB.createOrnament = createOrnament;
