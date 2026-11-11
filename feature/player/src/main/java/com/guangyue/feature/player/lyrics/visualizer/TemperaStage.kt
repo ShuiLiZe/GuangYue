@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -404,9 +405,12 @@ internal fun TemperaStage(
             // 块内读 density 会在 CanvasDrawScope ↔ LayoutNodeDrawScope 间无限递归（CI 取证 StackOverflowError）。
             layer.record(Density(density.density, density.fontScale), layoutDirection, IntSize(size.width.roundToInt(), (size.height * (if (maskY != null) 2 else 1)).roundToInt())) {
                 // 纸色薄罩 + 底网点。
-                withTransform({ transform(sceneM.toMatrix()) }) {
-                    drawRect(paper, topLeft = Offset.Zero, size = androidx.compose.ui.geometry.Size(w.toFloat(), h.toFloat()), alpha = 0.35f)
-                    drawPath(scene.screentone, Color(palette.tone4.argb()), alpha = 0.05f)
+                // 底只画在上半；下半留给文字蒙版（屏外的块不能漏进去）。
+                clipRect(0f, 0f, size.width, maskY ?: size.height) {
+                    withTransform({ transform(sceneM.toMatrix()) }) {
+                        drawRect(paper, topLeft = Offset.Zero, size = androidx.compose.ui.geometry.Size(w.toFloat(), h.toFloat()), alpha = 0.35f)
+                        drawPath(scene.screentone, Color(palette.tone4.argb()), alpha = 0.05f)
+                    }
                 }
                 // 「偏墨」区域（屏幕坐标），给文字反色用；按绘制顺序叠加。
                 var dark = Path()
@@ -503,7 +507,9 @@ private fun DrawScope.drawShot(
     val progress = tClamp01((t - shot.startTime) / blockDuration)
     val creep = easeTemperaInOut(progress) * view.carry * 0.35
     val flowX = cos(shot.flowAngle); val flowY = sin(shot.flowAngle)
-    view.nodes.forEachIndexed { i, rn ->
+    val backBottom = maskY ?: size.height
+    fun clipBack(block: DrawScope.() -> Unit) = clipRect(0f, 0f, size.width, backBottom, block = block)
+    clipBack { view.nodes.forEachIndexed { i, rn ->
         val e = if (reduceMotion) 1.0 else easeTemperaEnter((t - shot.startTime - view.delays[i]) / view.spans[i])
         if (e <= 0.001) return@forEachIndexed
         val itemAlpha = (rn.options.alpha ?: 1.0) * e
@@ -541,12 +547,12 @@ private fun DrawScope.drawShot(
                 if (out.op(dark, screen, if (isDark && alpha >= 0.5) PathOperation.Union else PathOperation.Difference)) dark = out
             }
         }
-    }
+    } }
 
     // ── 水印层（自身不反色；着色器路径里它算进底，文字照它反色，同 Folia）──
-    view.watermark?.let { wm ->
+    clipBack { view.watermark?.let { wm ->
         withTransform({ transform(shotM.toMatrix()) }) { drawTextItem(wm, Color(palette.tone4.argb()), wm.alpha * shotAlpha, 1.0, 1.0, density) }
-    }
+    } }
 
     // ── 文字层（阴影 + 碎字 + 字，整层反色）──
     val frames = view.glyphs.map { resolveTemperaGlyphMotion(it.motion, t, motion) }
@@ -574,7 +580,7 @@ private fun DrawScope.drawShot(
     }
 
     // ── 浮影层（tone4，不反色）──
-    if (!reduceMotion) {
+    clipBack { if (!reduceMotion) {
         val tone4 = Color(palette.tone4.argb())
         withTransform({ transform(shotM.toMatrix()) }) {
             view.glyphs.forEachIndexed { i, g ->
@@ -587,7 +593,7 @@ private fun DrawScope.drawShot(
                 }
             }
         }
-    }
+    } }
     return dark
 }
 
