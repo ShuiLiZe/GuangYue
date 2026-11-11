@@ -4,3 +4,5 @@ import * as B from '../../folia/src/components/visualizer/machi/engine/boardLayo
 (globalThis as any).MC = { ...D, ...B };
 import * as EV from '../../folia/src/components/visualizer/machi/engine/environment';
 (globalThis as any).MCE = EV;
+import * as PV from '../../folia/src/components/visualizer/machi/engine/palette';
+(globalThis as any).MCP = PV;
