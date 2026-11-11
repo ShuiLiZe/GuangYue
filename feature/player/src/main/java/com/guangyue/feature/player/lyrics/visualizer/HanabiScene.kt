@@ -10,7 +10,7 @@ import kotlin.math.min
  * R7 花火⑥c：逐函数对译 Folia hanabi/scene.ts（场景单元装配）+ program.ts 的 sliceLine / shotLine + hanabiSceneEntry.ts 的单元参数。
  * 一个段落 = 一个单元：世界整体上升，每个镜头在世界里各自高度上组装主烟花 / 被唱到的小烟花 / 升空尾迹 / 字底色块 / 字。
  * 烟花事件构建时按镜头算好（纯数据，planShotEvents），每帧只按 t 求值。
- * 本轮未接：环境层 ambient、MG 装饰件 ornaments、PV 拼贴 collage、烟花辉光 glow / 全屏 bloom、随拍开花 beatFx、片尾卡（见 HANDOFF）。
+ * 环境层见 HanabiAmbient.kt。本轮未接：MG 装饰件 ornaments、PV 拼贴 collage、烟花辉光 glow / 全屏 bloom、随拍开花 beatFx、片尾卡（见 HANDOFF）。
  */
 
 /** HanabiTuning 里舞台用到的几项（Folia DEFAULT_HANABI_TUNING）。 */
@@ -22,6 +22,7 @@ internal class HbTuning(
     val spin: Double = 1.0,
     val launches: Boolean = true,
     val sky: Double = 0.85,
+    val ambient: Double = 1.0,
 )
 
 /** 整首歌的旋转方向（按程序种子定）。 */
@@ -129,6 +130,8 @@ internal class HbScene(
     val unit = min(width, height)
     val timeline: HbTimeline
     val built: List<HbBuiltShot>
+    /** 环境层（整单元一份）：星点、薄烟、远方小烟花、火星、散景。 */
+    val ambient: HbAmbient?
 
     init {
         val paletteCache = HashMap<String, HbPalette>()
@@ -140,6 +143,9 @@ internal class HbScene(
             HbTimelineShot(s.startTime, s.endTime, if (s.isBridge) null else first, if (s.isBridge) null else last, s.isBridge,
                 s.profile.rise, s.profile.push, s.profile.roll, s.profile.punch)
         }
+        val lead = shots.firstOrNull()
+        val distantRate = shots.sumOf { when (it.profile.mood) { "quiet" -> 0.08; "loud" -> 0.35; else -> 0.2 } } / max(shots.size, 1)
+        ambient = if (lead != null && tuning.ambient > 0) HbAmbient("$seed:ambient", paletteOf(lead.profile), width, height, startTime, endTime, min(2.0, tuning.ambient), distantRate) else null
         val spinRng = lumiereRng("$seed:spin")
         val (angles, drift) = hbPlanSpin(shots.map { it.endTime - it.startTime }, max(0.0, tuning.spin), spinDirection) { spinRng.next() }
         timeline = hbBuildTimeline(tlShots, endTime, height, max(0.0, tuning.riseSpeed), motion * max(0.0, tuning.textMotion), exitStart, angles, drift)

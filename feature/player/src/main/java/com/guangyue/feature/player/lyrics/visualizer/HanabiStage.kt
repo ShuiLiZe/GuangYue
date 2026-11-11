@@ -5,7 +5,7 @@
 // R7⑥c：旧 P7 精简舞台整体换成 Folia 原版结构。纯逻辑全在 HanabiCore / Timeline / Burst / Color / Frames / Layout / Animations /
 // Blocks / Text / Scene（均与 Folia 金标对拍）；这里只做绘制：Pixi 的 Container 变换链换成 android Canvas 的 save / concat / restore，
 // 精灵换成预烘的白色 ALPHA_8 纹理（画笔颜色着色），字照 glyphs.ts 建单元时画进图集（字 × px × 填充 / 加粗描边 / 光晕），逐帧只贴图（矩阵含 Pixi 的 skew）。
-// 未接（与 Folia 的差距）：环境层、MG 装饰件、PV 拼贴、烟花辉光与全屏 bloom、段落转场模糊、画框装饰、片尾卡、随拍开花。
+// 未接（与 Folia 的差距）：MG 装饰件、PV 拼贴、烟花辉光与全屏 bloom、段落转场模糊、画框装饰、片尾卡、随拍开花。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.graphics.Bitmap
@@ -292,8 +292,21 @@ private class HbRenderer(
         c.translate(w / 2 + cam.dx.toFloat(), h / 2 + cam.dy.toFloat())
         c.rotate((cam.rotation * DEG).toFloat())
         c.scale(cam.scale.toFloat(), cam.scale.toFloat())
+        val rise = scene.timeline.rise(t)
+        val amb = scene.ambient
+        if (amb != null) {
+            // ambient.back 在 stage 里、spin 外：按屏幕坐标画、自己做视差。
+            amb.update(t, rise)
+            c.save(); c.translate(-w / 2, -h / 2)
+            for (d in amb.smoke) drawDot(d)
+            for (d in amb.stars) drawDot(d)
+            amb.drawDistant(t, rise, emit)
+            sprite.xfermode = null
+            c.restore()
+        }
+        c.save()
         c.rotate((scene.timeline.spin(t) * DEG).toFloat())
-        c.translate(-w / 2, -h / 2 + scene.timeline.rise(t).toFloat())
+        c.translate(-w / 2, -h / 2 + rise.toFloat())
         for (item in scene.built) {
             if (t < item.lifeStart || t > item.lifeEnd) continue
             val timing = item.timing
@@ -309,6 +322,28 @@ private class HbRenderer(
             c.restore()
         }
         c.restore()
+        if (amb != null) {
+            c.translate(-w / 2, -h / 2)
+            for (d in amb.bokeh) drawDot(d)
+            for (d in amb.embers) drawDot(d)
+        }
+        c.restore()
+    }
+
+    private val smokeSrc = android.graphics.Rect()
+
+    private fun drawDot(d: HbAmbientDot) {
+        if (!d.visible) return
+        val bmp = when (d.tex) { 1 -> textures[1]; 2 -> textures[2]; else -> textures[0] }
+        sprite.color = 0xff000000.toInt() or d.tint
+        sprite.alpha = a255(d.pa)
+        val hs = (d.ps / 2).toFloat()
+        rect.set(d.px.toFloat() - hs, d.py.toFloat() - hs, d.px.toFloat() + hs, d.py.toFloat() + hs)
+        if (d.tex == 3) {
+            val inset = (bmp.width * (1 - HB_SMOKE_CROP) / 2).toInt()
+            smokeSrc.set(inset, inset, bmp.width - inset, bmp.height - inset)
+            canvas.drawBitmap(bmp, smokeSrc, rect, sprite)
+        } else canvas.drawBitmap(bmp, null, rect, sprite)
     }
 
     private val activePlans = ArrayList<HbBurstPlan>()

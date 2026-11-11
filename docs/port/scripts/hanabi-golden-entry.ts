@@ -6,3 +6,5 @@ import { estimateAdvance, isUprightGlyph } from '../../folia/src/components/visu
 import { HANABI_PROFILES, burstPreset, BURST_KINDS } from '../../folia/src/components/visualizer/hanabi/catalog';
 import { createRng } from '../../folia/src/components/visualizer/hanabi/hanabiRandom';
 (globalThis as any).HB = { A, B, buildHanabiText, lineWords, layoutText, wordScales, estimateAdvance, isUprightGlyph, HANABI_PROFILES, burstPreset, BURST_KINDS, createRng };
+import { createAmbient } from '../../folia/src/components/visualizer/hanabi/mg/ambient';
+(globalThis as any).HB.createAmbient = createAmbient;
