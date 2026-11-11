@@ -10,7 +10,8 @@
 //     文字层先整层画墨色，再用该区域 SrcIn 填纸色。网线 / 细线不参与判定（太细，原版里也几乎不翻色）。
 //   · 后处理（镜头畸变 → 颗粒 → 暗角）与 shape-carry 转场模糊见 TemperaPost.kt：每个段落场景录进自己的 GraphicsLayer，
 //     挂 RenderEffect（同 Folia 每个 scene 容器一条 filter 链），场景透明度在层上乘（Pixi 容器 alpha 在 filter 之后）。
-//   · 未做：渐变色模式、用户图片层、墨染奥行（智能动感，要 htdemucs 鼓点）、片尾海报。
+//   · 片尾海报（temperaCreditsLayer.ts）：最后一段唱完淡出、海报升起（tempera/TemperaCredits.kt 对拍），歌名反色同上法。
+//   · 未做：渐变色模式、用户图片层、墨染奥行（智能动感，要 htdemucs 鼓点）。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import androidx.compose.foundation.Canvas
@@ -36,7 +37,10 @@ import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
@@ -50,6 +54,12 @@ import androidx.compose.ui.unit.Density
 import com.guangyue.core.lyrics.Line
 import com.guangyue.feature.player.lyrics.visualizer.tempera.IDLE_TP_TRANSITION
 import com.guangyue.feature.player.lyrics.visualizer.tempera.TpBlockOptions
+import com.guangyue.feature.player.lyrics.visualizer.tempera.TpCreditsFrame
+import com.guangyue.feature.player.lyrics.visualizer.tempera.TpCreditsPoster
+import com.guangyue.feature.player.lyrics.visualizer.tempera.TpItem
+import com.guangyue.feature.player.lyrics.visualizer.tempera.buildTemperaCreditsPoster
+import com.guangyue.feature.player.lyrics.visualizer.tempera.hasTemperaCreditsMetadata
+import com.guangyue.feature.player.lyrics.visualizer.tempera.resolveTemperaCreditsFrame
 import com.guangyue.feature.player.lyrics.visualizer.tempera.TpCompositionContext
 import com.guangyue.feature.player.lyrics.visualizer.tempera.TpDecorLite
 import com.guangyue.feature.player.lyrics.visualizer.tempera.TpGlyphMotion
@@ -251,6 +261,10 @@ internal fun TemperaStage(
     secondaryColor: Color = accentColor,
     /** Folia 的 programSeed（歌曲身份）：同一首歌每次编排一样。 */
     seed: String = "tempera",
+    /** 片尾海报（Folia songTitle / songArtist / songAlbum）：三者全空就不出海报。 */
+    songTitle: String? = null,
+    songArtist: String? = null,
+    songAlbum: String? = null,
 ) {
     val measurer = rememberTextMeasurer(cacheSize = 0)
     val density = LocalDensity.current
@@ -269,6 +283,8 @@ internal fun TemperaStage(
     // 场景层：槽 0 = 当前段，槽 1 = 预卷的下一段（Folia scene cache 里同时上屏的最多两个）。
     val sceneLayers = listOf(rememberGraphicsLayer(), rememberGraphicsLayer())
     val postSlots = remember { listOf(TemperaPostSlot(), TemperaPostSlot()) }
+    // 片尾海报：按尺寸 / 字号 / 歌曲信息建一次（Folia drawCredits 在 resize、换歌时重建）。
+    val creditsCache = remember(songTitle, songArtist, songAlbum, lyricsFontScale, style) { arrayOfNulls<TpCreditsView>(1) }
 
     Canvas(modifier.fillMaxSize()) {
         val dens = density.density.toDouble()
@@ -340,6 +356,26 @@ internal fun TemperaStage(
         val paperL = palette.paper.luminance
         val inkL = palette.ink.luminance
         var wipe: Pair<Double, Double>? = null
+        val finalEndTime = program.paragraphs.last().endTime
+        val creditsFrame = resolveTemperaCreditsFrame(t, finalEndTime)
+        val credits = if (!hasTemperaCreditsMetadata(songTitle, songArtist, songAlbum)) null else {
+            val cached = creditsCache[0]
+            if (cached != null && cached.w == w && cached.h == h) cached else {
+                fun titleLayout(text: String, fs: Double, wrap: Double) = measurer.measure(
+                    AnnotatedString(text),
+                    style.copy(fontSize = (fs / fontScaleSys).sp, textAlign = TextAlign.Center),
+                    constraints = Constraints(maxWidth = max(1, (wrap * dens).toInt())),
+                )
+                val poster = buildTemperaCreditsPoster(songTitle, songArtist, songAlbum, w, h, lyricsFontScale) { text, fs, wrap -> titleLayout(text, fs, wrap).size.height / dens }
+                TpCreditsView(
+                    w, h, poster,
+                    buildRenderNode(TpItem(poster.ground, TpBlockOptions(), null), poster.seed, 0),
+                    poster.items.mapIndexed { i, item -> item.node?.let { n -> buildRenderNode(TpItem(n, TpBlockOptions(), null), poster.seed, i + 1) } },
+                    poster.lines.map { titleLayout(it.text, it.fontSize, poster.wrapWidth) },
+                ).also { creditsCache[0] = it }
+            }
+        }
+        val hasCredits = credits != null
 
         val indices = listOfNotNull(paragraphIndex, if (preRoll && paragraphIndex + 1 < program.paragraphs.size) paragraphIndex + 1 else null)
         for (index in indices) {
@@ -347,7 +383,9 @@ internal fun TemperaStage(
             val isIncoming = index == paragraphIndex + 1
             val tf = resolveTemperaSceneTransitionFrame(program, index, t, isIncoming, outgoing, transitionsEnabled)
             if (tf.wipe > 0.001 && tf.wipe < 1.999) wipe = tf.wipe to tf.wipeAngle
-            val sceneAlpha = tf.alpha
+            // 最后一段在海报升起前淡出（Folia isFinalScene && hasCredits → creditsFrame.lyricAlpha）。
+            val lyricAlpha = if (index == program.paragraphs.size - 1 && hasCredits) creditsFrame.lyricAlpha else 1.0
+            val sceneAlpha = tf.alpha * lyricAlpha
             if (sceneAlpha <= 0.001) continue
             val sceneM = root * TpAffine.pixi(w / 2 + tf.x * w, h / 2 + tf.y * h, tf.rotation, tf.scale, tf.scale, w / 2, h / 2)
             val slot = if (isIncoming) 1 else 0
@@ -358,7 +396,7 @@ internal fun TemperaStage(
                 if (transitionsEnabled) temperaTransitionBlurSigma(tf.blur, dens) else 0.0,
                 post = !reduceMotion,
             )
-            layer.alpha = sceneAlpha.toFloat()
+            layer.alpha = sceneAlpha.coerceIn(0.0, 1.0).toFloat()
             // 不能用 DrawScope 的成员扩展 record{}：它把外层 LayoutNodeDrawScope 本身当 Density 传进去，
             // 块内读 density 会在 CanvasDrawScope ↔ LayoutNodeDrawScope 间无限递归（CI 取证 StackOverflowError）。
             layer.record(Density(density.density, density.fontScale), layoutDirection, IntSize(size.width.roundToInt(), size.height.roundToInt())) {
@@ -388,6 +426,9 @@ internal fun TemperaStage(
                 (u / 1.08).toFloat() to Color.Black.copy(alpha = (s * s * (3 - 2 * s) * 0.85 * 0.6).toFloat())
             }
             drawRect(androidx.compose.ui.graphics.Brush.radialGradient(*(listOf(0f to Color.Transparent) + stops).toTypedArray(), center = Offset(size.width / 2, size.height / 2), radius = r))
+        }
+        if (credits != null && creditsFrame.active && creditsFrame.posterAlpha > 0.001) {
+            drawCredits(credits, t - finalEndTime, creditsFrame, root, w, h, palette, paperL, inkL, inversionPaint)
         }
         wipe?.let { (travel, angle) ->
             val span = hypot(w, h)
@@ -539,6 +580,78 @@ private fun DrawScope.drawShot(
         }
     }
     return dark
+}
+
+/** 片尾海报的绘制缓存：纯数据海报 + 各节点路径 + 标题排版。 */
+private class TpCreditsView(
+    val w: Double,
+    val h: Double,
+    val poster: TpCreditsPoster,
+    val ground: TpRenderNode,
+    /** 与 poster.items 一一对应；标题层为 null。 */
+    val nodes: List<TpRenderNode?>,
+    val titleLayouts: List<TextLayoutResult>,
+)
+
+/** temperaCreditsLayer.applyFrame：容器居中、随帧上浮 / 放大 / 淡入；Pixi 容器 alpha 逐个乘到子节点上。 */
+private fun DrawScope.drawCredits(
+    view: TpCreditsView,
+    elapsed: Double,
+    frame: TpCreditsFrame,
+    root: TpAffine,
+    w: Double,
+    h: Double,
+    palette: TpPalette,
+    paperL: Double,
+    inkL: Double,
+    inversionPaint: Paint,
+) {
+    val poster = view.poster
+    poster.updateTime(elapsed)
+    val containerM = root * TpAffine.pixi(w / 2, h / 2 + frame.posterOffsetY * h, 0.0, frame.posterScale, frame.posterScale)
+    val containerAlpha = frame.posterAlpha
+    var dark = Path()
+    fun paint(rn: TpRenderNode, m: TpAffine, itemAlpha: Double) {
+        val rgb = palette.of(rn.node.tone)
+        val alpha = (rn.styleAlpha * itemAlpha * palette.alphaOf(rn.node.tone)).coerceIn(0.0, 1.0)
+        val color = Color(rgb.argb())
+        val matrix = m.toMatrix()
+        withTransform({ transform(matrix) }) {
+            when {
+                rn.strokeWidth > 0f -> drawPath(rn.path, color, alpha = (alpha * containerAlpha).toFloat(), style = Stroke(rn.strokeWidth))
+                else -> drawPath(rn.path, color, alpha = (alpha * containerAlpha).toFloat(), style = Fill)
+            }
+        }
+        // 反色判定同 drawShot：只看实心块，按块在容器里的透明度算（标题滤镜读的是容器内部的底）。
+        if (rn.solid) {
+            val lum = paperL + (rgb.luminance - paperL) * alpha
+            val isDark = abs(lum - inkL) < abs(lum - paperL)
+            if (alpha >= 0.5 || isDark) {
+                val screen = Path().apply { addPath(rn.path); transform(matrix) }
+                val out = Path()
+                if (out.op(dark, screen, if (isDark && alpha >= 0.5) PathOperation.Union else PathOperation.Difference)) dark = out
+            }
+        }
+    }
+    paint(view.ground, containerM, 1.0)
+    poster.items.forEachIndexed { i, item ->
+        if (!item.visible) return@forEachIndexed
+        val m = containerM * TpAffine.pixi(item.x, item.y, 0.0, item.scale, item.scale, item.pivotX, item.pivotY)
+        val rn = view.nodes[i]
+        if (rn != null) { paint(rn, m, item.alpha); return@forEachIndexed }
+        // 标题层：墨色字，偏墨区域 SrcIn 换纸色。
+        val ink = Color(palette.ink.argb())
+        drawIntoCanvas { canvas ->
+            canvas.saveLayer(Rect(0f, 0f, size.width, size.height), inversionPaint)
+            withTransform({ transform(m.toMatrix()) }) {
+                poster.lines.forEachIndexed { k, line ->
+                    drawGlyph(view.titleLayouts[k], ink, line.alpha * item.alpha * containerAlpha, 0.0, line.offsetY, 0.0, 1.0, 1.0, density)
+                }
+            }
+            drawPath(dark, Color(palette.paper.argb()), blendMode = BlendMode.SrcIn)
+            canvas.restore()
+        }
+    }
 }
 
 private fun DrawScope.drawGlyph(layout: TextLayoutResult, color: Color, alpha: Double, x: Double, y: Double, rotation: Double, sx: Double, sy: Double, dens: Float) {

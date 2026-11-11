@@ -547,6 +547,10 @@ fun LyricFlowScreen(
                 modifier = Modifier.fillMaxSize(),
                 secondaryColor = theme.secondary,
                 seed = playback.item?.key ?: "tempera",
+                // 片尾海报：Folia 给 tempera 运行时传 songTitle / songArtist / songAlbum。
+                songTitle = playback.item?.title,
+                songArtist = playback.item?.artist,
+                songAlbum = playback.item?.album,
             )
         }
         // R4 商籁：Folia sonnet 原版对译（PV 镜头：段落→镜头→版式→机位跟踪），整屏铺满。

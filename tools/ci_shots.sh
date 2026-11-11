@@ -106,6 +106,10 @@ if [ -n "${SCENE:-}" ]; then
       son lumiere-land-12 12880
       son lumiere-land-1 1200
     fi
+    # 凝彩片尾海报：探针最后一句 119.9 s 唱完，+0.35 s 起出现、+2 s 升满。
+    if [ "$SCENE" = "tempera" ]; then
+      son tempera-land-123 123500
+    fi
   fi
   adb shell settings put system user_rotation 0
   adb shell wm user-rotation lock 0 || adb shell cmd window user-rotation lock 0 || true
