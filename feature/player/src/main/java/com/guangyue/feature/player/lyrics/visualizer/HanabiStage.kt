@@ -9,7 +9,8 @@
 // 各自按阈值（全屏 0.5 / 烟花 0.2）取亮部，降到 1/4 → 1/16 → 1/48 分辨率逐级模糊，再放大加色叠回（HbGlowNodes，对应 pixi/bloomFilter.ts
 // 的 dual-filter：亮部提取 → 逐级降采样 → 上采样叠加）。模糊只在很小的离屏层上做、RenderEffect 只在尺寸变化时建，逐帧只改透明度。
 // API ≤30 或软件画布退回旧的预烘近似（HanabiBloom.kt：亮精灵叠软光贴图、字叠预烘模糊字）。
-// 未接（与 Folia 的差距）：MG 装饰件、PV 拼贴、段落转场模糊、片尾卡的 PV 拼贴与歌词退场模糊、随拍开花。片尾卡见 HanabiCredits.kt。
+// PV 拼贴（R7⑩）：HanabiCollage.kt（编排 / 姿态）+ HanabiCollagePaint.kt（纹理 / 绘制）。
+// 未接（与 Folia 的差距）：段落转场模糊、片尾卡的 PV 拼贴与歌词退场模糊、随拍开花（无节拍表）。片尾卡见 HanabiCredits.kt。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.graphics.Bitmap
@@ -140,6 +141,8 @@ private class HbRenderer(
     private val songAlbum: String? = null,
     /** 预烘字辉光（图集变体 3）：只有退回旧近似时才用得到，整层辉光时不烘。 */
     private val bakeTextBloom: Boolean = true,
+    /** Folia 逻辑像素（CSS px）→ 画布像素（= 屏幕密度），拼贴里按绝对尺寸画的纹理与下限用。 */
+    private val px: Float = 1f,
 ) {
     private val textures = HbTextures().let { t -> arrayOf(t.glow.extractAlpha(), t.dot.extractAlpha(), t.star4.extractAlpha(), t.streak.extractAlpha(),
         t.ring.extractAlpha(), t.square.extractAlpha(), t.triangle.extractAlpha(), t.petal.extractAlpha()) }
@@ -169,9 +172,9 @@ private class HbRenderer(
     private lateinit var canvas: android.graphics.Canvas
 
     private fun unitOf(index: Int, w: Float, h: Float): HbScene {
-        if (w != unitW || h != unitH) { units.clear(); unitW = w; unitH = h }
+        if (w != unitW || h != unitH) { units.clear(); unitW = w; unitH = h; collage.release() }
         units[index]?.let { return it }
-        val scene = hbBuildSceneUnit(program, index, lines, w.toDouble(), h.toDouble(), theme, tuning, fontScale, measure)
+        val scene = hbBuildSceneUnit(program, index, lines, w.toDouble(), h.toDouble(), theme, tuning, fontScale, measure, songTitle, songArtist, px.toDouble())
         bakeAtlas(scene)
         units[index] = scene
         while (units.size > 3) units.remove(units.keys.first())
@@ -486,6 +489,9 @@ private class HbRenderer(
         c.drawPath(path, stroke)
     }
 
+    /** PV 拼贴的纹理与绘制（HanabiCollagePaint.kt）；尺寸变了整份放掉重画。 */
+    private val collage = HbCollageDrawer(px)
+
     private fun drawScene(scene: HbScene, t: Double, w: Float, h: Float) {
         val c = canvas
         val cam = scene.timeline.camera(t)
@@ -495,14 +501,18 @@ private class HbRenderer(
         c.scale(cam.scale.toFloat(), cam.scale.toFloat())
         val rise = scene.timeline.rise(t)
         val amb = scene.ambient
-        if (amb != null) {
-            // ambient.back 在 stage 里、spin 外：按屏幕坐标画、自己做视差。
-            amb.update(t, rise)
+        val unitCollage = scene.unitCollage
+        if (amb != null || unitCollage != null) {
+            // ambient.back、unitCollage.back 在 stage 里、spin 外：按屏幕坐标画、自己做视差。
             c.save(); c.translate(-w / 2, -h / 2)
-            for (d in amb.smoke) drawDot(d)
-            for (d in amb.stars) drawDot(d)
-            amb.drawDistant(t, rise, emit)
-            sprite.xfermode = null
+            if (amb != null) {
+                amb.update(t, rise)
+                for (d in amb.smoke) drawDot(d)
+                for (d in amb.stars) drawDot(d)
+                amb.drawDistant(t, rise, emit)
+                sprite.xfermode = null
+            }
+            if (unitCollage != null) collage.drawUnitBack(c, unitCollage, rise, alpha)
             c.restore()
         }
         c.save()
@@ -521,18 +531,22 @@ private class HbRenderer(
             c.translate(-w / 2, -(h / 2 + wy))
             c.translate((region.cx * w).toFloat(), (region.cy * h).toFloat() + wy)
             drawFireworks(scene, item, t)
-            // scene.ts 层序：fireworks → ornaments(back) → collage(back) → text → ornaments(front)。
+            // scene.ts 层序：fireworks → ornaments(back) → collage(back) → text → ornaments(front) → collage(front)。
             drawOrnaments(orns, false)
+            if (item.collage.items.isNotEmpty()) collage.drawShot(c, item.collage.items, t, false, alpha)
             item.text?.let { drawText(it, t) }
             drawOrnaments(orns, true)
+            if (item.collage.items.isNotEmpty()) collage.drawShot(c, item.collage.items, t, true, alpha)
             c.restore()
         }
         c.restore()
+        c.translate(-w / 2, -h / 2)
         if (amb != null) {
-            c.translate(-w / 2, -h / 2)
             for (d in amb.bokeh) drawDot(d)
             for (d in amb.embers) drawDot(d)
         }
+        // unitCollage.front：左缘竖排胶片（ambient.front 之上）。
+        if (unitCollage != null) collage.drawUnitFront(c, unitCollage, t, rise, alpha)
         c.restore()
     }
 
@@ -828,8 +842,9 @@ internal fun HanabiStage(
         HbTheme(backgroundColor.toArgb() and 0xffffff, primaryColor.toArgb() and 0xffffff, accentColor.toArgb() and 0xffffff, secondaryColor.toArgb() and 0xffffff)
     }
     val useNodes = Build.VERSION.SDK_INT >= 31
-    val renderer = remember(lines, program, theme, lyricsFontScale, reduceMotion, songTitle, songArtist, songAlbum) {
-        HbRenderer(lines, program, theme, lyricsFontScale, !reduceMotion, songTitle, songArtist, songAlbum, bakeTextBloom = !useNodes)
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
+    val renderer = remember(lines, program, theme, lyricsFontScale, reduceMotion, songTitle, songArtist, songAlbum, density) {
+        HbRenderer(lines, program, theme, lyricsFontScale, !reduceMotion, songTitle, songArtist, songAlbum, bakeTextBloom = !useNodes, px = density)
     }
     val nodes = remember { if (useNodes) HbGlowNodes() else null }
     val bg = backgroundColor.toArgb()
@@ -875,8 +890,8 @@ private class HbGlowNodes {
 
     private fun plus() = Paint().apply { blendMode = android.graphics.BlendMode.PLUS }
 
-    private fun bright(threshold: Float): android.graphics.RenderEffect {
-        val s = GAIN / (1f - threshold)
+    private fun bright(threshold: Float, gain: Float): android.graphics.RenderEffect {
+        val s = gain / (1f - threshold)
         val o = -threshold * s * 255f
         val m = android.graphics.ColorMatrix(floatArrayOf(s, 0f, 0f, 0f, o, 0f, s, 0f, 0f, o, 0f, 0f, s, 0f, o, 0f, 0f, 0f, 1f, 0f))
         return android.graphics.RenderEffect.createColorFilterEffect(android.graphics.ColorMatrixColorFilter(m))
@@ -896,8 +911,9 @@ private class HbGlowNodes {
             d[k].setAlpha(LEVEL_WEIGHT[k])
         }
         for ((node, src, thr) in listOf(Triple(tS, scene, 0.5f), Triple(tF, fw, 0.2f))) {
+            val gain = if (node === tF) GAIN_FIREWORKS else GAIN
             node.setPosition(0, 0, bw[0], bh[0])
-            node.setRenderEffect(bright(thr))
+            node.setRenderEffect(bright(thr, gain))
             node.setUseCompositingLayer(true, plus())
             val rc = node.beginRecording(bw[0], bh[0])
             rc.scale(bw[0].toFloat() / w, bh[0].toFloat() / h)
@@ -952,5 +968,7 @@ private class HbGlowNodes {
         val LEVEL_WEIGHT = floatArrayOf(0.55f, 0.5f, 0.45f)
         /** 亮部增益（取亮部后 × GAIN 再截到 1）：补 Folia 逐级同级回加放大的光晕外缘。 */
         const val GAIN = 2.5f
+        /** 烟花层：火星细（降到 1/4 后只剩一两个像素、很淡），增益再大些，光晕才接近 Folia 烟花层 bloom（强度 1.1、阈值 0.2）。 */
+        const val GAIN_FIREWORKS = 4.5f
     }
 }

@@ -10,7 +10,8 @@ import kotlin.math.min
  * R7 花火⑥c：逐函数对译 Folia hanabi/scene.ts（场景单元装配）+ program.ts 的 sliceLine / shotLine + hanabiSceneEntry.ts 的单元参数。
  * 一个段落 = 一个单元：世界整体上升，每个镜头在世界里各自高度上组装主烟花 / 被唱到的小烟花 / 升空尾迹 / 字底色块 / 字。
  * 烟花事件构建时按镜头算好（纯数据，planShotEvents），每帧只按 t 求值。
- * 环境层见 HanabiAmbient.kt，MG 装饰件见 HanabiOrnaments.kt（镜头第一次上场时建，同 Folia buildRig）。本轮未接：PV 拼贴 collage、随拍开花 beatFx（见 HANDOFF）。
+ * 环境层见 HanabiAmbient.kt，MG 装饰件见 HanabiOrnaments.kt（镜头第一次上场时建，同 Folia buildRig），PV 拼贴见 HanabiCollage.kt（编排在建单元时排好）。
+ * 未接：随拍开花 beatFx（要节拍表，手机端没有 beat_this，Folia 没装好节拍表时也不开）。
  */
 
 /** HanabiTuning 里舞台用到的几项（Folia DEFAULT_HANABI_TUNING）。 */
@@ -29,6 +30,8 @@ internal class HbTuning(
     val chorusBloom: Double = 1.3,
     /** MG 装饰件数量倍率（Folia DEFAULT_HANABI_TUNING.ornamentAmount = 1，0..2）。 */
     val ornamentAmount: Double = 1.0,
+    /** PV 拼贴数量倍率（Folia DEFAULT_HANABI_TUNING.collage = 1，0..2）。 */
+    val collage: Double = 1.0,
 )
 
 /** 整首歌的旋转方向（按程序种子定）。 */
@@ -101,6 +104,8 @@ internal class HbBuiltShot(
     val launches: List<HbLaunchEvent>,
     val lifeStart: Double,
     val lifeEnd: Double,
+    /** PV 拼贴计划（scene.ts planShotCollage，构建时排好）。 */
+    val collage: HbCollagePlan = HbCollagePlan(null, emptyList()),
 ) {
     /** 烟花方案按事件缓存（同 fireworks.ts 的 plans）。 */
     val plans = HashMap<HbBurstEvent, HbBurstPlan>()
@@ -134,12 +139,23 @@ internal class HbScene(
     fontScale: Double,
     measure: (String) -> Double,
     motion: Double = 1.0,
+    /** 拼贴的字样（曲名在前，再 HANABI / 花火）。 */
+    motifs: List<String> = listOf("HANABI", "花火"),
+    /** 开场标题卡（只给歌曲第一个段落）：曲名 / 艺人。 */
+    openingTitle: String? = null,
+    openingArtist: String? = null,
+    /** 一句的关键词（pickCollageKeyword）；单测里可注入 Folia 的结果。 */
+    keywordOf: (Line?) -> String? = { hbPickCollageKeyword(it, hbDefaultCollageSplit) },
+    /** Folia 逻辑像素 → 画布像素。 */
+    px: Double = 1.0,
 ) {
     val unit = min(width, height)
     val timeline: HbTimeline
     val built: List<HbBuiltShot>
     /** 环境层（整单元一份）：星点、薄烟、远方小烟花、火星、散景。 */
     val ambient: HbAmbient?
+    /** 整单元拼贴：网点底纹 + 左缘竖排胶片（unitCollage.ts）。 */
+    val unitCollage: HbUnitCollage?
 
     init {
         val paletteCache = HashMap<String, HbPalette>()
@@ -154,9 +170,13 @@ internal class HbScene(
         val lead = shots.firstOrNull()
         val distantRate = shots.sumOf { when (it.profile.mood) { "quiet" -> 0.08; "loud" -> 0.35; else -> 0.2 } } / max(shots.size, 1)
         ambient = if (lead != null && tuning.ambient > 0) HbAmbient("$seed:ambient", paletteOf(lead.profile), width, height, startTime, endTime, min(2.0, tuning.ambient), distantRate) else null
+        val collageOn = tuning.collage > 0
+        val motifList = if (motifs.isNotEmpty()) motifs else listOf("HANABI", "花火")
+        unitCollage = if (collageOn && lead != null) HbUnitCollage(width, height, seed, paletteOf(lead.profile).paper, min(2.0, tuning.collage), startTime, px) else null
         val spinRng = lumiereRng("$seed:spin")
         val (angles, drift) = hbPlanSpin(shots.map { it.endTime - it.startTime }, max(0.0, tuning.spin), spinDirection) { spinRng.next() }
         timeline = hbBuildTimeline(tlShots, endTime, height, max(0.0, tuning.riseSpeed), motion * max(0.0, tuning.textMotion), exitStart, angles, drift)
+        var previousRecipe: String? = null
         built = shots.mapIndexed { index, shot ->
             val profile = shot.profile
             val timing = timeline.shots[index]
@@ -169,12 +189,26 @@ internal class HbScene(
                 palette, "$seed:${shot.id}:text", timing.enterAt, timing.exitAt, timing.exitDuration,
                 max(0.0, tuning.textMotion), min(1.0, max(0.0, tuning.blockOpacity)), measure,
             )) else null
-            val (bursts, launches) = planShotEvents(shot, index, timing, palette, text, region)
+            val (bursts, launches, mains) = planShotEvents(shot, index, timing, palette, text, region)
             val burstEnd = bursts.maxOfOrNull { it.at + it.spec.duration } ?: Double.NEGATIVE_INFINITY
             val launchEnd = launches.maxOfOrNull { it.at + it.duration + 0.7 } ?: Double.NEGATIVE_INFINITY
+            val regionBounds = HbCollageRect(-region.w * width / 2, -region.h * height / 2, region.w * width, region.h * height)
+            val collage = if (collageOn) hbPlanShotCollage(HbCollagePlanInput(
+                seed = "$seed:${shot.id}", family = profile.family, isBridge = shot.isBridge, block = profile.text.block, shotNumber = index,
+                bounds = text?.bounds?.let { HbCollageRect(it.x, it.y, it.width, it.height) } ?: regionBounds,
+                screen = HbCollageRect(-region.cx * width, -region.cy * height, width, height),
+                screenAt = { time -> val p = screenToShot(region, timing, 0.0, 0.0, time); HbCollageRect(p.first, p.second, width, height) },
+                unit = unit, palette = palette, enterAt = timing.enterAt, exitAt = timing.exitAt, exitDuration = timing.exitDuration,
+                start = timing.start, end = timing.end, keyword = keywordOf(shot.line), motifs = motifList,
+                bursts = mains.map { e -> HbCollageBurst(e.x, e.y, e.at, e.spec.kind, true, e.spec.radius * unit * e.scale) },
+                launches = launches, amount = min(2.0, tuning.collage), icons = null, previous = previousRecipe,
+                openingTitle = if (index == 0) openingTitle else null, openingArtist = if (index == 0) openingArtist else null, px = px,
+            )) else HbCollagePlan(null, emptyList())
+            previousRecipe = collage.recipe
+            val collageEnd = collage.items.maxOfOrNull { it.end } ?: Double.NEGATIVE_INFINITY
             HbBuiltShot(shot, timing, palette, text, bursts, launches,
                 min(timing.launchAt, timing.enterAt) - 0.25,
-                maxOf(timing.exitAt + timing.exitDuration + 0.3, burstEnd + 0.05, launchEnd))
+                maxOf(timing.exitAt + timing.exitDuration + 0.3, burstEnd + 0.05, launchEnd, collageEnd + 0.05), collage)
         }
     }
 
@@ -188,7 +222,8 @@ internal class HbScene(
             squash to (random() - 0.5) * 0.6
         } else null to null
 
-    private fun planShotEvents(shot: HbSceneShot, index: Int, timing: HbShotTiming, palette: HbPalette, text: HbText?, region: HbRegion): Pair<List<HbBurstEvent>, List<HbLaunchEvent>> {
+    /** planShotEvents：烟花事件 + 升空尾迹 + 主烟花（拼贴的图标贴纸跟主烟花开花）。 */
+    private fun planShotEvents(shot: HbSceneShot, index: Int, timing: HbShotTiming, palette: HbPalette, text: HbText?, region: HbRegion): Triple<List<HbBurstEvent>, List<HbLaunchEvent>, List<HbBurstEvent>> {
         val profile = shot.profile
         val rng = lumiereRng("$seed:${shot.id}:$index:events")
         val random = { rng.next() }
@@ -222,11 +257,13 @@ internal class HbScene(
                 bursts += HbBurstEvent(p.first, p.second, at, spec, "$seed:${shot.id}:b$k", scale, squash, rot)
                 if (tuning.launches) launchTo(p.first, p.second, at, "b$k")
             }
-            return bursts.sortedBy { it.at } to launches
+            val sorted = bursts.sortedBy { it.at }
+            return Triple(sorted, launches, sorted)
         }
         val b = text?.bounds ?: HbBounds(-region.w * width / 2, -region.h * height / 2, region.w * width, region.h * height)
         val centerX = b.x + b.width / 2
         val centerY = b.y + b.height / 2
+        val mains = ArrayList<HbBurstEvent>()
         val main = profile.burst
         if (main != null) {
             val radius = main.radius * unit
@@ -255,7 +292,9 @@ internal class HbScene(
             points.forEachIndexed { k, pt ->
                 val x = max(-region.cx * width + width * 0.06, min(width * (1 - region.cx) - width * 0.06, pt.x))
                 val (squash, rot) = shape(main, random)
-                bursts += HbBurstEvent(x, pt.y, pt.at, main, "$key$k", 1.0, squash, rot)
+                val event = HbBurstEvent(x, pt.y, pt.at, main, "$key$k", 1.0, squash, rot)
+                bursts += event
+                mains += event
                 if (withLaunch && main.kind != "mine") launchTo(x, pt.y, pt.at, "main$k")
             }
         }
@@ -282,7 +321,7 @@ internal class HbScene(
                 }
             }
         }
-        return bursts.sortedBy { it.at } to launches
+        return Triple(bursts.sortedBy { it.at }, launches, mains)
     }
 
     fun planOf(item: HbBuiltShot, event: HbBurstEvent): HbBurstPlan =
@@ -301,6 +340,7 @@ internal fun hbLaunchDemand(l: HbLaunchEvent, time: Double): Int {
 internal fun hbBuildSceneUnit(
     program: HbProgram, index: Int, lines: List<Line>, width: Double, height: Double, theme: HbTheme, tuning: HbTuning,
     fontScale: Double, measure: (String) -> Double,
+    songTitle: String? = null, songArtist: String? = null, px: Double = 1.0,
 ): HbScene {
     val paragraph = program.paragraphs[index]
     val lineMap = paragraph.lineIndices.associateWith { lines[it] }
@@ -309,5 +349,14 @@ internal fun hbBuildSceneUnit(
     })
     if (shots.isEmpty()) shots += HbSceneShot(paragraph.id, hanabiProfileOf(""), paragraph.startTime, paragraph.endTime, true, null)
     return HbScene(width, height, "${program.seed}:${paragraph.id}", theme, tuning, shots, paragraph.startTime, paragraph.endTime,
-        paragraph.transitionOut?.startTime, hbSpinDirection(program.seed), fontScale, measure)
+        paragraph.transitionOut?.startTime, hbSpinDirection(program.seed), fontScale, measure,
+        motifs = listOfNotNull(songTitle?.trim()?.takeIf { it.isNotEmpty() }) + listOf("HANABI", "花火"),
+        openingTitle = if (index == 0) songTitle?.trim()?.takeIf { it.isNotEmpty() } else null,
+        openingArtist = if (index == 0 && !songTitle.isNullOrBlank()) songArtist?.trim()?.takeIf { it.isNotEmpty() } else null,
+        px = px)
 }
+
+private val HB_PUNCTUATION_ONLY = Regex("^[\\s\\p{P}\\p{S}]+$")
+
+/** 拼贴关键词用的分词：segmentLyricWords（保存的分词 → 自动分词 → BreakIterator），isWordLike = 不是纯空白 / 标点。 */
+internal val hbDefaultCollageSplit: (Line) -> List<Pair<String, Boolean>> = { line -> defaultSonnetWordSplitter(line).map { it to !HB_PUNCTUATION_ONLY.matches(it) } }
