@@ -64,8 +64,8 @@ class DownloadManager @Inject constructor(
      * 0.0.19：未完成的下载请求落盘（filesDir/download_pending.json）。
      *
      * 以前 [requests] 只在内存里，App 被杀后下载页的失败任务一点「重试」就报「下载请求已失效」；
-     * 现在冷启动时读回来：还没下完的任务以「上次没下完」失败态出现在下载页，点重试即可接着下
-     * （WorkManager 若自己把任务续跑起来，Worker 会把状态改回进行中）。
+     * 现在冷启动时读回来，直接排回队列按通道数自动续下（续下用 REPLACE 入队，
+     * 与 WorkManager 自己续跑的同名任务不会重复）。
      */
     private val pendingFile: File get() = File(context.filesDir, PENDING_FILE)
 
@@ -82,6 +82,7 @@ class DownloadManager @Inject constructor(
         }.onFailure { android.util.Log.w("GYDownload", "restore pending failed", it) }.getOrNull() ?: return
         android.util.Log.i("GYDownload", "restore pending n=" + list.size)
         var changed = false
+        var resumed = 0
         for (request in list) {
             val done = library.find(request.key)
             if (done != null && library.exists(done)) {
@@ -95,15 +96,21 @@ class DownloadManager @Inject constructor(
                         key = request.key,
                         title = request.title,
                         artist = request.artist,
-                        stage = DownloadStage.FAILED,
-                        error = "上次没下完（App 被关闭），点重试继续",
+                        stage = DownloadStage.QUEUED,
                         quality = request.quality,
                         artwork = request.artwork,
                     ),
                 )
+                synchronized(waiting) { if (request.key !in waiting) waiting.addLast(request.key) }
+                resumed++
             }
         }
         if (changed) savePending()
+        // 0.1.0：冷启动自动续下（以前要在下载页一首首点重试，模拟器实测一次 App 更新就攒出 28 条「上次没下完」）。
+        if (resumed > 0) {
+            android.util.Log.i("GYDownload", "auto resume n=$resumed")
+            pump()
+        }
     }
 
     /** 把还没下完的请求写回磁盘（每次增删都整份重写，几十条以内很小）。 */
