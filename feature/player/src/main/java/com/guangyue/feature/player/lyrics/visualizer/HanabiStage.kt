@@ -968,10 +968,20 @@ private class HbGlowNodes {
 
     private fun plus() = Paint().apply { blendMode = android.graphics.BlendMode.PLUS }
 
-    private fun bright(threshold: Float, gain: Float): android.graphics.RenderEffect {
-        val s = gain / (1f - threshold)
-        val o = -threshold * s * 255f
-        val m = android.graphics.ColorMatrix(floatArrayOf(s, 0f, 0f, 0f, o, 0f, s, 0f, 0f, o, 0f, 0f, s, 0f, o, 0f, 0f, 0f, 1f, 0f))
+    /**
+     * 取亮部：out = a·(c − 阈值) + k·(c − 亮度)。前一项是按亮度的阈值（灰 / 白只看亮度），后一项把色相差放大回去——
+     * 只做逐通道阈值时粉彩色（三个通道都高）会被截成白光，Folia 的阈值按最大通道整体缩放、光晕保持原色。
+     */
+    private fun bright(threshold: Float, gain: Float, chroma: Float): android.graphics.RenderEffect {
+        val a = gain / (1f - threshold)
+        val k = chroma
+        val o = -threshold * a * 255f
+        val lr = 0.3f * k; val lg = 0.59f * k; val lb = 0.11f * k
+        val m = android.graphics.ColorMatrix(floatArrayOf(
+            a + k - lr, -lg, -lb, 0f, o,
+            -lr, a + k - lg, -lb, 0f, o,
+            -lr, -lg, a + k - lb, 0f, o,
+            0f, 0f, 0f, 1f, 0f))
         return android.graphics.RenderEffect.createColorFilterEffect(android.graphics.ColorMatrixColorFilter(m))
     }
 
@@ -990,8 +1000,9 @@ private class HbGlowNodes {
         }
         for ((node, src, thr) in listOf(Triple(tS, scene, 0.5f), Triple(tF, fw, 0.2f))) {
             val gain = if (node === tF) GAIN_FIREWORKS else GAIN
+            val chroma = if (node === tF) 0f else CHROMA
             node.setPosition(0, 0, bw[0], bh[0])
-            node.setRenderEffect(bright(thr, gain))
+            node.setRenderEffect(bright(thr, gain, chroma))
             node.setUseCompositingLayer(true, plus())
             val rc = node.beginRecording(bw[0], bh[0])
             rc.scale(bw[0].toFloat() / w, bh[0].toFloat() / h)
@@ -1044,10 +1055,12 @@ private class HbGlowNodes {
         val STEP = intArrayOf(4, 4, 3)
         /** 各级模糊半径（该级像素）：约合屏上 10 / 40 / 96 px。 */
         val RADIUS = floatArrayOf(2.5f, 2.5f, 2f)
-        val LEVEL_WEIGHT = floatArrayOf(0.55f, 0.5f, 0.45f)
+        val LEVEL_WEIGHT = floatArrayOf(0.75f, 0.7f, 0.6f)
         /** 亮部增益（取亮部后 × GAIN 再截到 1）：补 Folia 逐级同级回加放大的光晕外缘。 */
-        const val GAIN = 2.5f
+        const val GAIN = 1.3f
+        /** 全屏亮部的色相放大（见 bright）：让粉彩字块 / 贴纸的光晕带颜色，不发白。 */
+        const val CHROMA = 2f
         /** 烟花层：火星细（降到 1/4 后只剩一两个像素、很淡），增益再大些，光晕才接近 Folia 烟花层 bloom（强度 1.1、阈值 0.2）。 */
-        const val GAIN_FIREWORKS = 4.5f
+        const val GAIN_FIREWORKS = 3.4f
     }
 }
