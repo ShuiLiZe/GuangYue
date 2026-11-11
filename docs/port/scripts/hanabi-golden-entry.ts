@@ -1,0 +1,8 @@
+import * as A from '../../folia/src/components/visualizer/hanabi/text/animations';
+import * as B from '../../folia/src/components/visualizer/hanabi/text/blocks';
+import { buildHanabiText, lineWords } from '../../folia/src/components/visualizer/hanabi/text/lyricText';
+import { layoutText, wordScales } from '../../folia/src/components/visualizer/hanabi/text/layout';
+import { estimateAdvance, isUprightGlyph } from '../../folia/src/components/visualizer/hanabi/text/glyphs';
+import { HANABI_PROFILES, burstPreset, BURST_KINDS } from '../../folia/src/components/visualizer/hanabi/catalog';
+import { createRng } from '../../folia/src/components/visualizer/hanabi/hanabiRandom';
+(globalThis as any).HB = { A, B, buildHanabiText, lineWords, layoutText, wordScales, estimateAdvance, isUprightGlyph, HANABI_PROFILES, burstPreset, BURST_KINDS, createRng };
