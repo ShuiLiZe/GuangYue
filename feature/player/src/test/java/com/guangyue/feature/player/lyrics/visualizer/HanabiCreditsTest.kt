@@ -67,7 +67,7 @@ class HanabiCreditsTest {
         val l0 = cr.launches[0]
         assertEquals(400.0 - 16.0, l0.fromX, 1e-9); assertEquals(360 * 1.03, l0.fromY, 1e-9)
         assertEquals(1.1 - 0.45, l0.at, 1e-12); assertEquals(0.45, l0.duration, 0.0)
-        assertEquals(560.0 + 16.0, cr.launches[1].fromX, 1e-9)
+        assertEquals(160.0 + 16.0, cr.launches[1].fromX, 1e-9)  // 左千輪 width*0.2，奇数号从右侧 +2% 升空
         // 艺人大写在 0.66、专辑在 0.35；曲名两字唱完 1.45 + 0.24 后艺人开始显出，专辑再晚 0.3 s。
         assertEquals("JAY CHOU", cr.details[0].text)
         assertEquals(0.66, cr.details[0].y, 0.0)
