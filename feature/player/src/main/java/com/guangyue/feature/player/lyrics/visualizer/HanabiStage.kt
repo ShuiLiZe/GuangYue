@@ -4,7 +4,7 @@
 //
 // R7⑥c：旧 P7 精简舞台整体换成 Folia 原版结构。纯逻辑全在 HanabiCore / Timeline / Burst / Color / Frames / Layout / Animations /
 // Blocks / Text / Scene（均与 Folia 金标对拍）；这里只做绘制：Pixi 的 Container 变换链换成 android Canvas 的 save / concat / restore，
-// 精灵换成预烘的白色纹理位图 + 颜色滤镜（滤镜按颜色缓存，不逐帧新建），字用 Paint.drawText（字号 = 图集格 px，矩阵含 Pixi 的 skew）。
+// 精灵换成预烘的白色 ALPHA_8 纹理（画笔颜色着色），字照 glyphs.ts 建单元时画进图集（字 × px × 填充 / 加粗描边 / 光晕），逐帧只贴图（矩阵含 Pixi 的 skew）。
 // 未接（与 Folia 的差距）：环境层、MG 装饰件、PV 拼贴、烟花辉光与全屏 bloom、段落转场模糊、画框装饰、片尾卡、随拍开花。
 package com.guangyue.feature.player.lyrics.visualizer
 
@@ -14,7 +14,6 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PorterDuff
-import android.graphics.PorterDuffColorFilter
 import android.graphics.PorterDuffXfermode
 import android.graphics.RadialGradient
 import android.graphics.RectF
@@ -92,7 +91,7 @@ private class HbRenderer(
     private val fontScale: Double,
     private val transitions: Boolean,
 ) {
-    private val textures = HbTextures()
+    private val textures = HbTextures().let { t -> arrayOf(t.glow.extractAlpha(), t.dot.extractAlpha(), t.star4.extractAlpha(), t.streak.extractAlpha()) }
     private val tuning = HbTuning()
     private val typeface: Typeface = if (Build.VERSION.SDK_INT >= 28) Typeface.create(Typeface.SANS_SERIF, 800, false) else Typeface.DEFAULT_BOLD
     private val measurePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = this@HbRenderer.typeface; textSize = 100f }
@@ -106,8 +105,7 @@ private class HbRenderer(
 
     private val sprite = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val additive = PorterDuffXfermode(PorterDuff.Mode.ADD)
-    private val tintFilters = HashMap<Int, PorterDuffColorFilter>()
-    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = this@HbRenderer.typeface; textAlign = Paint.Align.CENTER }
+    private val glyphPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val shape = Paint(Paint.ANTI_ALIAS_FLAG)
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeJoin = Paint.Join.MITER; strokeCap = Paint.Cap.SQUARE }
     private val sky = Paint()
@@ -123,23 +121,79 @@ private class HbRenderer(
         if (w != unitW || h != unitH) { units.clear(); unitW = w; unitH = h }
         units[index]?.let { return it }
         val scene = hbBuildSceneUnit(program, index, lines, w.toDouble(), h.toDouble(), theme, tuning, fontScale, measure)
+        bakeAtlas(scene)
         units[index] = scene
         while (units.size > 3) units.remove(units.keys.first())
+        if (atlas.size > 900) {
+            // 只留仍在缓存里的单元用到的字。
+            val keep = HashSet<String>()
+            units.values.forEach { u -> u.built.forEach { b -> b.text?.let { keep.addAll(atlasKeys(it)) } } }
+            atlas.keys.retainAll(keep)
+        }
         return scene
     }
 
-    private fun filterOf(tint: Int): PorterDuffColorFilter {
-        tintFilters[tint]?.let { return it }
-        if (tintFilters.size > 384) tintFilters.clear()
-        return PorterDuffColorFilter(0xff000000.toInt() or tint, PorterDuff.Mode.MULTIPLY).also { tintFilters[tint] = it }
+    // ─── 字形图集（text/glyphs.ts）：每个 字 × 字号 × 变体 在建单元时画一次（ALPHA_8，着色靠画笔颜色），逐帧只贴图。 ───
+    private val atlas = HashMap<String, Bitmap>()
+    private val bake = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = this@HbRenderer.typeface; textAlign = Paint.Align.CENTER; color = android.graphics.Color.WHITE }
+
+    private fun key(ch: String, px: Double, v: Int) = "$v|${px.toInt()}|$ch"
+
+    private fun atlasKeys(tx: HbText): List<String> {
+        val out = ArrayList<String>()
+        val fat = tx.spec.outline
+        for (r in tx.rigs) {
+            out += key(r.char, r.entryPx, 0)
+            if (fat) out += key(r.char, r.entryPx, 1)
+            if (tx.spec.sing == "glow") out += key(r.char, r.entryPx, 2)
+        }
+        for (ch in tx.scramble) { out += key(ch, tx.scramblePx, 0); if (fat) out += key(ch, tx.scramblePx, 1) }
+        return out
+    }
+
+    private fun bakeAtlas(scene: HbScene) {
+        for (b in scene.built) {
+            val tx = b.text ?: continue
+            for (k in atlasKeys(tx)) {
+                if (atlas.containsKey(k)) continue
+                val parts = k.split('|', limit = 3)
+                atlas[k] = bakeGlyph(parts[2], parts[1].toDouble(), parts[0].toInt())
+            }
+        }
+    }
+
+    private fun bakeGlyph(ch: String, px: Double, v: Int): Bitmap {
+        val side = kotlin.math.ceil(px * 1.3 + 2 * maxOf(if (v == 1) HB_OUTLINE_WIDTH * px else 0.0, if (v == 2) px * 0.32 else 0.0) + 4).toInt().coerceAtLeast(4)
+        val bmp = Bitmap.createBitmap(side, side, Bitmap.Config.ALPHA_8)
+        val c = android.graphics.Canvas(bmp)
+        bake.textSize = px.toFloat()
+        bake.maskFilter = null
+        bake.alpha = 255
+        val fm = bake.fontMetrics
+        val cx = side / 2f
+        val cy = side / 2f - (fm.ascent + fm.descent) / 2
+        when (v) {
+            1 -> { bake.style = Paint.Style.FILL_AND_STROKE; bake.strokeWidth = (HB_OUTLINE_WIDTH * px * 2).toFloat(); bake.strokeJoin = Paint.Join.ROUND; c.drawText(ch, cx, cy, bake) }
+            2 -> {
+                bake.style = Paint.Style.FILL
+                bake.alpha = (0.85 * 255).toInt()
+                bake.maskFilter = android.graphics.BlurMaskFilter((px * 0.22).toFloat().coerceAtLeast(1f), android.graphics.BlurMaskFilter.Blur.NORMAL)
+                c.drawText(ch, cx, cy, bake); c.drawText(ch, cx, cy, bake)
+                bake.maskFilter = null
+                c.drawText(ch, cx, cy, bake)
+            }
+            else -> { bake.style = Paint.Style.FILL; c.drawText(ch, cx, cy, bake) }
+        }
+        bake.style = Paint.Style.FILL
+        return bmp
     }
 
     private fun a255(a: Double) = (a.coerceIn(0.0, 1.0) * alpha * 255).toInt()
 
     private val emit = HbSparkEmit { tex, x, y, w, h, r, a, tint ->
-        val bmp = when (tex) { HbSparkTexture.DOT -> textures.dot; HbSparkTexture.STAR4 -> textures.star4; HbSparkTexture.STREAK -> textures.streak; else -> textures.glow }
+        val bmp = when (tex) { HbSparkTexture.DOT -> textures[1]; HbSparkTexture.STAR4 -> textures[2]; HbSparkTexture.STREAK -> textures[3]; else -> textures[0] }
+        sprite.color = 0xff000000.toInt() or tint
         sprite.alpha = a255(if (a > 1) 1.0 else a)
-        sprite.colorFilter = filterOf(tint)
         sprite.xfermode = if (tex == HbSparkTexture.FLASH) additive else null
         val hw = (w / 2).toFloat(); val hh = (h / 2).toFloat()
         if (r != 0.0) {
@@ -184,6 +238,51 @@ private class HbRenderer(
             c.restore()
         }
         alpha = 1.0
+        drawOverlay(w, h)
+    }
+
+    private val overlayPalette = resolveHanabiPalette("kawaii", theme, "mixed")
+    private val overlayText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = if (Build.VERSION.SDK_INT >= 28) Typeface.create(Typeface.SANS_SERIF, 700, false) else Typeface.DEFAULT_BOLD
+        textAlign = Paint.Align.CENTER
+    }
+
+    /** overlay.ts：左上「花火」朱印、右缘竖排 HANABI、左下三颗烟花色圆点 + 细线、右下角标（静态、小而淡）。 */
+    private fun drawOverlay(w: Float, h: Float) {
+        val c = canvas
+        val p = overlayPalette
+        val unit = min(w, h)
+        val padX = maxOf(w * 0.07f, unit * 0.06f)
+        val padY = maxOf(h * 0.08f, unit * 0.06f)
+        val line = maxOf(1.2f, unit / 640f)
+        val seal = unit * 0.024f
+        val sx = padX + seal; val sy = padY + seal
+        shape.color = 0xff000000.toInt() or p.blocks[0]; shape.alpha = (0.85 * 255).toInt()
+        c.drawCircle(sx, sy, seal, shape)
+        stroke.strokeWidth = line; stroke.color = 0xff000000.toInt() or p.blocks[0]; stroke.alpha = (0.5 * 255).toInt()
+        c.drawCircle(sx, sy, seal * 1.28f, stroke)
+        overlayText.textSize = seal * 0.66f; overlayText.letterSpacing = -0.04f
+        overlayText.color = 0xff000000.toInt() or p.ink
+        var fm = overlayText.fontMetrics
+        c.drawText("花火", sx, sy - (fm.ascent + fm.descent) / 2, overlayText)
+        val letter = unit * 0.017f
+        overlayText.textSize = letter; overlayText.letterSpacing = 0f
+        overlayText.color = 0xff000000.toInt() or p.paper; overlayText.alpha = (0.55 * 255).toInt()
+        fm = overlayText.fontMetrics
+        "HANABI".forEachIndexed { i, ch -> c.drawText(ch.toString(), w - padX, padY + letter * (0.6f + i * 1.5f) - (fm.ascent + fm.descent) / 2, overlayText) }
+        val stemTop = padY + letter * (0.6f + 6 * 1.5f)
+        stroke.color = 0xff000000.toInt() or p.paper; stroke.alpha = (0.35 * 255).toInt()
+        c.drawLine(w - padX, stemTop, w - padX, stemTop + unit * 0.08f, stroke)
+        val dotY = h - padY
+        p.sparks.take(3).forEachIndexed { i, col ->
+            shape.color = 0xff000000.toInt() or col; shape.alpha = (0.85 * 255).toInt()
+            c.drawCircle(padX + i * unit * 0.018f, dotY, unit * 0.0055f, shape)
+        }
+        c.drawLine(padX + unit * 0.05f, dotY, padX + unit * 0.16f, dotY, stroke)
+        val arm = unit * 0.035f
+        stroke.strokeWidth = line * 1.4f; stroke.color = 0xff000000.toInt() or p.accent; stroke.alpha = (0.6 * 255).toInt()
+        path.reset(); path.moveTo(w - padX - arm, h - padY); path.lineTo(w - padX, h - padY); path.lineTo(w - padX, h - padY - arm)
+        c.drawPath(path, stroke)
     }
 
     private fun drawScene(scene: HbScene, t: Double, w: Float, h: Float) {
@@ -231,7 +330,6 @@ private class HbRenderer(
         }
         if (activePlans.isNotEmpty()) hbDrawBursts(activePlans, t, HB_SHOT_PARTICLES - used, emit)
         sprite.xfermode = null
-        sprite.colorFilter = null
     }
 
     // ─── 字与色块 ───
@@ -277,9 +375,10 @@ private class HbRenderer(
         }
     }
 
-    /** 一个精灵：Pixi 的 position / rotation / scale / skew.x（a = cos r·sx，b = sin r·sx，c = −sin(r − k)·sy，d = cos(r − k)·sy）。 */
+    /** 一个精灵：Pixi 的 position / rotation / scale / skew.x（a = cos r·sx，b = sin r·sx，c = −sin(r − k)·sy，d = cos(r − k)·sy），贴图集里的字。 */
     private fun drawGlyph(s: HbSprite, mode: Int, tx: HbText) {
         if (!s.visible) return
+        val bmp = atlas[key(s.glyph, s.glyphPx, mode)] ?: atlas[key(s.glyph, s.glyphPx, 0)] ?: return
         val c = canvas
         val r = s.rotation; val k = s.skew
         mv[0] = (cos(r) * s.sx).toFloat(); mv[1] = (-sin(r - k) * s.sy).toFloat(); mv[2] = s.x.toFloat()
@@ -288,23 +387,15 @@ private class HbRenderer(
         matrix.setValues(mv)
         c.save()
         c.concat(matrix)
-        val px = s.glyphPx.toFloat()
-        text.textSize = px
-        text.color = 0xff000000.toInt() or s.tint
-        text.alpha = a255(s.alpha)
-        text.xfermode = if (s.additive) additive else null
+        val half = bmp.width / 2f
         if (s.half != 0) {
-            if (tx.halvesLr) { if (s.half == 1) c.clipRect(-px, -px, 0f, px) else c.clipRect(0f, -px, px, px) }
-            else { if (s.half == 1) c.clipRect(-px, -px, px, 0f) else c.clipRect(-px, 0f, px, px) }
+            if (tx.halvesLr) { if (s.half == 1) c.clipRect(-half, -half, 0f, half) else c.clipRect(0f, -half, half, half) }
+            else { if (s.half == 1) c.clipRect(-half, -half, half, 0f) else c.clipRect(-half, 0f, half, half) }
         }
-        val fm = text.fontMetrics
-        val baseline = -(fm.ascent + fm.descent) / 2
-        when (mode) {
-            1 -> { text.style = Paint.Style.FILL_AND_STROKE; text.strokeWidth = (2 * HB_OUTLINE_WIDTH * px).toFloat(); text.strokeJoin = Paint.Join.ROUND }
-            2 -> { text.style = Paint.Style.STROKE; text.strokeWidth = px * 0.3f; text.strokeJoin = Paint.Join.ROUND; text.alpha = a255(s.alpha * 0.45) }
-            else -> text.style = Paint.Style.FILL
-        }
-        c.drawText(s.glyph, 0f, baseline, text)
+        glyphPaint.color = 0xff000000.toInt() or s.tint
+        glyphPaint.alpha = a255(s.alpha)
+        glyphPaint.xfermode = if (s.additive) additive else null
+        c.drawBitmap(bmp, -half, -half, glyphPaint)
         c.restore()
     }
 
@@ -331,7 +422,7 @@ private class HbRenderer(
         for (r in tx.rigs) { drawGlyph(r.fxA, 0, tx); drawGlyph(r.fxB, 0, tx) }
         for (r in tx.rigs) drawGlyph(r.main, 0, tx)
         c.restore()
-        text.xfermode = null
+        glyphPaint.xfermode = null
         if (tx.cursorVisible) {
             c.save()
             c.translate(tx.cursorX.toFloat(), tx.cursorY.toFloat())
