@@ -107,6 +107,8 @@ internal fun temperaSupportsPostShader() = Build.VERSION.SDK_INT >= 33
  * 一个场景槽（当前段 / 预卷的下一段）的后处理。RenderEffect 只在尺寸、种子或模糊档位变了时重建：
  * 平时每帧零分配；shape-carry 转场里模糊半径按 0.25 σ 量化，约一秒十几次。
  */
+internal const val BLUR_SIGMA_CAP_PX = 24.0
+
 internal class TemperaPostSlot {
     private val shader: RuntimeShader? = if (temperaSupportsPostShader()) runCatching { RuntimeShader(TEMPERA_POST_AGSL) }
         .onFailure { android.util.Log.e("TemperaStage", "post shader", it) }.getOrNull() else null
@@ -115,7 +117,9 @@ internal class TemperaPostSlot {
 
     fun effect(widthPx: Float, heightPx: Float, seed: Double, blurSigma: Double, post: Boolean): RenderEffect? {
         if (Build.VERSION.SDK_INT < 31) return null
-        val blurQ = if (blurSigma > 0.05) (blurSigma * 4).toInt() / 4f else 0f
+        // 模糊 σ 封顶 BLUR_SIGMA_CAP_PX、按整像素量化：CI 模拟器（软件 GL）在 t=37.5 的 shape-carry 转场里
+        // 大 σ 模糊叠两层全屏着色器，RenderThread 一帧超 5 s → 主线程卡在 HardwareRenderer.setStopped 报 ANR。
+        val blurQ = if (blurSigma > 0.5) blurSigma.coerceAtMost(BLUR_SIGMA_CAP_PX).toInt().toFloat() else 0f
         val k = "$widthPx|$heightPx|$seed|$blurQ|$post"
         if (k == key) return effect
         key = k
