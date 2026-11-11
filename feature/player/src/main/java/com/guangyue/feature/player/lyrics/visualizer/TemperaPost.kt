@@ -60,6 +60,10 @@ internal fun temperaNoiseSeed(sceneHash: Long): Double = ((sceneHash and 0xFFFFF
 /** Pixi BlurFilter strength（CSS px，半分辨率纹理）→ Android 模糊 σ（设备像素）。 */
 internal fun temperaTransitionBlurSigma(strength: Double, density: Double): Double = strength * 1.29 / 0.75 * density
 
+// 反色（temperaDifferenceFilter.inversionFragment 照译）：节点录成 2 倍高，上半是场景底（块、水印、浮影），
+// 下半（y + uSize.y）是文字层蒙版（墨色、带阴影/碎字的 alpha）。着色器在镜头畸变之前逐像素读底的亮度
+// （5 点平均，抽头 ±1.5 px，无绘处 alpha×3 混向纸色），离纸远就涂纸色、离墨远就涂墨色，再叠回底上。
+// uPost = 0（减弱动效）时只做反色，不做畸变/颗粒/暗角。
 internal const val TEMPERA_POST_AGSL = """
 uniform shader content;
 uniform float2 uSize;
@@ -67,10 +71,42 @@ uniform float uDistortion;
 uniform float uNoise;
 uniform float uSeed;
 uniform float uVignette;
+uniform float uPost;
+uniform float uInvert;
+uniform float3 uInk;
+uniform float3 uPaper;
+uniform float uInkL;
+uniform float uPaperL;
+uniform float uBias;
 
 float rand(float2 co) { return fract(sin(dot(co, float2(12.9898, 78.233))) * 43758.5453); }
 
+float backLum(float2 q) {
+    half4 b = content.eval(clamp(q, float2(0.5, 0.5), uSize - 0.5));
+    float3 s = float3(b.rgb) / max(float(b.a), 1e-4);
+    float l = dot(s, float3(0.2126, 0.7152, 0.0722));
+    return mix(uPaperL, l, clamp(float(b.a) * 3.0, 0.0, 1.0));
+}
+
+half4 scene(float2 q) {
+    half4 back = content.eval(q);
+    if (uInvert < 0.5) return back;
+    half4 front = content.eval(q + float2(0.0, uSize.y));
+    if (front.a <= 0.0) return back;
+    float t = 1.5;
+    float lum = backLum(q) * 0.4
+        + (backLum(q + float2(t, t)) + backLum(q - float2(t, t))
+            + backLum(q + float2(t, -t)) + backLum(q + float2(-t, t))) * 0.15;
+    float dPaper = abs(lum - uPaperL);
+    float dInk = abs(lum - uInkL);
+    float3 tone = mix(uInk, uPaper, step(dInk + uBias, dPaper));
+    float fa = float(front.a);
+    return half4(tone * fa, fa) + back * half(1.0 - fa);
+}
+
 half4 main(float2 p) {
+    if (p.y >= uSize.y) return half4(0.0);
+    if (uPost < 0.5) return scene(p);
     float2 uv = p / uSize;
     float aspect = uSize.x / max(uSize.y, 1.0);
     // 镜头畸变（sonnetLensFilter，dispersion = 0 时只剩 center 采样）。
@@ -83,7 +119,7 @@ half4 main(float2 p) {
     lc.x /= aspect;
     float2 luv = lc + 0.5;
     half4 col = half4(0.0);
-    if (luv.x >= 0.0 && luv.y >= 0.0 && luv.x <= 1.0 && luv.y <= 1.0) col = content.eval(luv * uSize);
+    if (luv.x >= 0.0 && luv.y >= 0.0 && luv.x <= 1.0 && luv.y <= 1.0) col = scene(min(luv * uSize, uSize - 0.5));
     // 颗粒（Pixi NoiseFilter：去预乘 → rgb += diff → 再预乘）。
     if (uNoise > 0.0) {
         float diff = (rand(p * uSeed) - 0.5) * uNoise;
@@ -115,22 +151,35 @@ internal class TemperaPostSlot {
     private var key: String? = null
     private var effect: RenderEffect? = null
 
-    fun effect(widthPx: Float, heightPx: Float, seed: Double, blurSigma: Double, post: Boolean): RenderEffect? {
+    /** 着色器可用：文字层改录进节点下半，由着色器读真实底色反色；否则调用方走 Path 近似。 */
+    val inverts: Boolean get() = shader != null
+
+    /** heightPx 是可见高度；inverts 时节点实际录成 2 × heightPx。ink / paper 为 0xRRGGBB。 */
+    fun effect(widthPx: Float, heightPx: Float, seed: Double, blurSigma: Double, post: Boolean, ink: Int = 0, paper: Int = 0xFFFFFF): RenderEffect? {
         if (Build.VERSION.SDK_INT < 31) return null
         // 模糊 σ 封顶 BLUR_SIGMA_CAP_PX、按整像素量化：CI 模拟器（软件 GL）在 t=37.5 的 shape-carry 转场里
         // 大 σ 模糊叠两层全屏着色器，RenderThread 一帧超 5 s → 主线程卡在 HardwareRenderer.setStopped 报 ANR。
         val blurQ = if (blurSigma > 0.5) blurSigma.coerceAtMost(BLUR_SIGMA_CAP_PX).toInt().toFloat() else 0f
-        val k = "$widthPx|$heightPx|$seed|$blurQ|$post"
+        val k = "$widthPx|$heightPx|$seed|$blurQ|$post|$ink|$paper"
         if (k == key) return effect
         key = k
-        effect = runCatching { build(widthPx, heightPx, seed, blurQ, post) }
+        effect = runCatching { build(widthPx, heightPx, seed, blurQ, post, ink, paper) }
             .onFailure { android.util.Log.e("TemperaStage", "post effect", it) }.getOrNull()
         return effect
     }
 
-    private fun build(widthPx: Float, heightPx: Float, seed: Double, blurQ: Float, post: Boolean): RenderEffect? {
+    private fun build(widthPx: Float, heightPx: Float, seed: Double, blurQ: Float, post: Boolean, ink: Int, paper: Int): RenderEffect? {
         var native: android.graphics.RenderEffect? = null
-        if (post && shader != null && Build.VERSION.SDK_INT >= 33) {
+        if (shader != null && Build.VERSION.SDK_INT >= 33) {
+            fun ch(c: Int, s: Int) = ((c shr s) and 0xFF) / 255f
+            fun lum(c: Int) = ch(c, 16) * 0.2126f + ch(c, 8) * 0.7152f + ch(c, 0) * 0.0722f
+            shader.setFloatUniform("uPost", if (post) 1f else 0f)
+            shader.setFloatUniform("uInvert", 1f)
+            shader.setFloatUniform("uInk", ch(ink, 16), ch(ink, 8), ch(ink, 0))
+            shader.setFloatUniform("uPaper", ch(paper, 16), ch(paper, 8), ch(paper, 0))
+            shader.setFloatUniform("uInkL", lum(ink))
+            shader.setFloatUniform("uPaperL", lum(paper))
+            shader.setFloatUniform("uBias", 0f)
             shader.setFloatUniform("uSize", widthPx, heightPx)
             shader.setFloatUniform("uDistortion", TemperaPostDefaults.LENS_DISTORTION.toFloat())
             shader.setFloatUniform("uNoise", TemperaPostDefaults.NOISE.toFloat())

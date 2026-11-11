@@ -395,11 +395,14 @@ internal fun TemperaStage(
                 size.width, size.height, temperaNoiseSeed(sceneSeed),
                 if (transitionsEnabled) temperaTransitionBlurSigma(tf.blur, dens) else 0.0,
                 post = !reduceMotion,
+                ink = palette.ink.argb() and 0xFFFFFF, paper = palette.paper.argb() and 0xFFFFFF,
             )
+            // API 33+：文字录进节点下半（y + 可见高），由后处理着色器读真实底色反色（temperaDifferenceFilter）。
+            val maskY = if (postSlots[slot].inverts && layer.renderEffect != null) size.height else null
             layer.alpha = sceneAlpha.coerceIn(0.0, 1.0).toFloat()
             // 不能用 DrawScope 的成员扩展 record{}：它把外层 LayoutNodeDrawScope 本身当 Density 传进去，
             // 块内读 density 会在 CanvasDrawScope ↔ LayoutNodeDrawScope 间无限递归（CI 取证 StackOverflowError）。
-            layer.record(Density(density.density, density.fontScale), layoutDirection, IntSize(size.width.roundToInt(), size.height.roundToInt())) {
+            layer.record(Density(density.density, density.fontScale), layoutDirection, IntSize(size.width.roundToInt(), (size.height * (if (maskY != null) 2 else 1)).roundToInt())) {
                 // 纸色薄罩 + 底网点。
                 withTransform({ transform(sceneM.toMatrix()) }) {
                     drawRect(paper, topLeft = Offset.Zero, size = androidx.compose.ui.geometry.Size(w.toFloat(), h.toFloat()), alpha = 0.35f)
@@ -412,7 +415,7 @@ internal fun TemperaStage(
                 scene.shots.forEachIndexed { shotIndex, view ->
                     val handing = shotIndex < active && resolveTemperaShotExit(view.shot, t) < 1
                     if (shotIndex != active && !handing) return@forEachIndexed
-                    dark = drawShot(view, t, w, h, camera, motion, sceneM, 1.0, palette, paperL, inkL, dark, inversionPaint, reduceMotion)
+                    dark = drawShot(view, t, w, h, camera, motion, sceneM, 1.0, palette, paperL, inkL, dark, inversionPaint, reduceMotion, maskY)
                 }
             }
             drawLayer(layer)
@@ -461,6 +464,8 @@ private fun DrawScope.drawShot(
     darkIn: Path,
     inversionPaint: Paint,
     reduceMotion: Boolean,
+    /** 非 null：文字只按墨色画进 y + maskY 的蒙版区，反色交给着色器；不算 Path 近似。 */
+    maskY: Float? = null,
 ): Path {
     var dark = darkIn
     val shot = view.shot
@@ -526,7 +531,7 @@ private fun DrawScope.drawShot(
                 else -> drawPath(rn.path, color, alpha = alpha, style = Fill)
             }
         }
-        if (rn.solid) {
+        if (rn.solid && maskY == null) {
             val lum = paperL + (rgb.luminance - paperL) * alpha
             val isDark = abs(lum - inkL) < abs(lum - paperL)
             if (alpha >= 0.5 || isDark) {
@@ -538,7 +543,7 @@ private fun DrawScope.drawShot(
         }
     }
 
-    // ── 水印层（不反色）──
+    // ── 水印层（自身不反色；着色器路径里它算进底，文字照它反色，同 Folia）──
     view.watermark?.let { wm ->
         withTransform({ transform(shotM.toMatrix()) }) { drawTextItem(wm, Color(palette.tone4.argb()), wm.alpha * shotAlpha, 1.0, 1.0, density) }
     }
@@ -546,9 +551,7 @@ private fun DrawScope.drawShot(
     // ── 文字层（阴影 + 碎字 + 字，整层反色）──
     val frames = view.glyphs.map { resolveTemperaGlyphMotion(it.motion, t, motion) }
     val ink = Color(palette.ink.argb())
-    drawIntoCanvas { canvas ->
-        canvas.saveLayer(Rect(0f, 0f, size.width, size.height), inversionPaint)
-        withTransform({ transform(shotM.toMatrix()) }) {
+    fun textLayer() = withTransform({ transform(shotM.toMatrix()) }) {
             view.fragments.forEach { drawTextItem(it, ink, it.alpha * shotAlpha, 1.0, 1.0, density) }
             view.glyphs.forEachIndexed { i, g ->
                 val f = frames[i]
@@ -559,7 +562,13 @@ private fun DrawScope.drawShot(
                 drawGlyph(g.layout, ink, f.alpha * 0.34 * shotAlpha, x + p.fontSize * 0.06, y + p.fontSize * 0.08, f.rotation, f.scaleX, f.scaleY, density)
                 drawGlyph(g.layout, ink, f.alpha * shotAlpha, x, y, f.rotation, f.scaleX, f.scaleY, density)
             }
-        }
+    }
+    if (maskY != null) {
+        // 裁到下半：屏外（y < 0）的字不能漏进上半的底里。
+        withTransform({ clipRect(0f, maskY, size.width, maskY * 2); translate(0f, maskY) }) { textLayer() }
+    } else drawIntoCanvas { canvas ->
+        canvas.saveLayer(Rect(0f, 0f, size.width, size.height), inversionPaint)
+        textLayer()
         drawPath(dark, Color(palette.paper.argb()), blendMode = BlendMode.SrcIn)
         canvas.restore()
     }
