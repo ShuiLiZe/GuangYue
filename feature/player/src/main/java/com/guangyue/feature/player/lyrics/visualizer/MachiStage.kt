@@ -198,7 +198,9 @@ private class MachiRenderer(
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 6)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         // 场景
-        val pose = synchronized(rig) { rig.setAspect(aspectW, aspectH); rig.pose(timeSeconds(), 1.0) }
+        // 运镜按氛围时间（camera.ts motionTime：下面每帧累加的 ambient，帧间隔封顶 0.1 s，用上一帧的值），不是歌曲进度；幅度 4 s 内从 0 升满（DRIFT_RAMP_SECONDS）。
+        // 之前误用歌曲秒数，37.5 s 处 drift.zoom≈1.08 + 转角偏移，整片比 Folia 放大约 1.1 倍。
+        val pose = synchronized(rig) { rig.setAspect(aspectW, aspectH); rig.pose(ambient, kotlin.math.min(1.0, ambient / 4.0)) }
         GLES30.glUseProgram(program)
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uVP"), 1, false, pose.viewProjection(), 0)
         GLES30.glUniform3fv(GLES30.glGetUniformLocation(program, "uSunDir"), 1, light.sunDir, 0)
