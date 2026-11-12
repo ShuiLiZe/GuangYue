@@ -245,6 +245,7 @@ private class MachiRenderer(
                 glowColorA = FloatArray(3) { (glowColorA[it] * 0.42 * neon).toFloat() },
                 glowB = floatArrayOf(MachiKowloonLayout.SCREEN_X.toFloat(), 0f, (-1.5 + 0.8).toFloat(), 3.0f),
                 glowColorB = FloatArray(3) { (glowColorB[it] * 0.36 * look.artificial).toFloat() },
+                stars = look.stars,
             ),
             bloomStrength = look.bloom,
         )

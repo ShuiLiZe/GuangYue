@@ -5,7 +5,7 @@
 //   雾中散射、天空的云）→ 亮部提取（半分辨率）→ 5 级逐级降采样的可分离高斯 → 合成时把 5 级按 lerpBloomFactor 加回去
 //   → 色调映射 + sRGB 上屏。Folia 的 bloom 是先合成进半分辨率再加色叠回，这里在最后一道里直接相加，结果相同、少两遍。
 // 模拟器（swiftshader）省力：场景目标长边封顶 1600 px（Folia 的画质分档也按 DPR 降），bloom 从半分辨率起。
-// 还没做：横向光条（MachiStreakPass）、镜头 pass（景深 / 色差 / 暗角 / 颗粒 / 星星，MachiLens 纯函数已在）、抗锯齿。
+// 镜头 pass 只做了色差 0.014 / 暗角 0.55 / 颗粒 0.032 / 晴夜星星（合进最后一道）；景深散景、横向光条（MachiStreakPass）、抗锯齿还没做。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.opengl.GLES30
@@ -166,6 +166,13 @@ uniform sampler2D blur4;
 uniform sampler2D blur5;
 uniform float bloomStrength;
 uniform float bloomRadius;
+uniform highp sampler2D tDepth;
+uniform float uAberration;
+uniform float uVignette;
+uniform float uGrain;
+uniform float uStars;
+uniform float uTime;
+uniform float uAspect;
 in vec2 vUv;
 out vec4 fragColor;
 float lerpBloomFactor(float factor) { return mix(factor, 1.2 - factor, bloomRadius); }
@@ -187,8 +194,13 @@ vec3 srgb(vec3 c) {
     c = clamp(c, 0.0, 1.0);
     return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
 }
+float gHash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main() {
-    vec3 color = texture(tScene, vUv).rgb;
+    // lensPass.ts 的色差（红蓝沿径向错开）；bloom 只在中心取一次（Folia 是 bloom 叠回后整张错开，差别看不出）。
+    vec2 centered = vUv - 0.5;
+    float edge = dot(centered, centered);
+    vec2 shift = centered * edge * uAberration;
+    vec3 color = vec3(texture(tScene, vUv + shift).r, texture(tScene, vUv).g, texture(tScene, vUv - shift).b);
     if (bloomStrength > 0.0) {
         color += 3.0 * bloomStrength * (
             lerpBloomFactor(1.0) * texture(blur1, vUv).rgb +
@@ -197,7 +209,23 @@ void main() {
             lerpBloomFactor(0.4) * texture(blur4, vUv).rgb +
             lerpBloomFactor(0.2) * texture(blur5, vUv).rgb);
     }
-    fragColor = vec4(srgb(neutral(color)), 1.0);
+    // 晴夜的星星、暗角、颗粒（lensPass.ts；景深散景还没做）。
+    float depth01 = texture(tDepth, vUv).x;
+    if (uStars > 0.001 && depth01 > 0.9999) {
+        vec2 sp = vec2(vUv.x * uAspect, vUv.y) * 140.0;
+        vec2 cell = floor(sp);
+        float starSeed = gHash(cell);
+        vec2 starAt = vec2(gHash(cell + 3.7), gHash(cell + 9.1)) * 0.6 + 0.2;
+        float star = step(0.984, starSeed) * smoothstep(0.24, 0.0, length(fract(sp) - starAt))
+            * (0.55 + 0.45 * sin(uTime * (0.8 + starSeed * 3.0) + starSeed * 60.0));
+        color += vec3(0.85, 0.9, 1.0) * star * uStars * 1.3 * smoothstep(0.1, 0.55, vUv.y);
+    }
+    vec2 v = centered * vec2(uAspect, 1.0);
+    float vignette = smoothstep(1.15, 0.35, length(v) * 1.15);
+    color *= mix(1.0, vignette, uVignette);
+    float grain = gHash(vUv * vec2(1733.0, 977.0) + fract(uTime * 7.31)) - 0.5;
+    color += grain * uGrain * (0.25 + dot(color, vec3(0.3333)));
+    fragColor = vec4(srgb(neutral(max(color, 0.0))), 1.0);
 }
 """
 
@@ -218,6 +246,7 @@ internal class MachiAtmosphereFrame(
     val glowColorA: FloatArray,
     val glowB: FloatArray,
     val glowColorB: FloatArray,
+    val stars: Double = 0.0,
 )
 
 private class Target(val fbo: Int, val tex: Int, val w: Int, val h: Int)
@@ -422,6 +451,13 @@ internal class MachiPostChain {
         }
         GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "bloomStrength"), if (bloomOn) bloomStrength.toFloat() else 0f)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "bloomRadius"), 0.62f)
+        bind(6, depthTex); GLES30.glUniform1i(GLES30.glGetUniformLocation(o, "tDepth"), 6)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uAberration"), 0.014f)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uVignette"), 0.55f)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uGrain"), 0.032f)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uStars"), atmosphere.stars.toFloat())
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uTime"), atmosphere.time.toFloat())
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uAspect"), sceneW.toFloat() / max(1, sceneH))
         fullscreen()
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindVertexArray(0)
