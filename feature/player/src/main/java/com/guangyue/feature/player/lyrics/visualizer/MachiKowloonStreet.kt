@@ -428,3 +428,70 @@ internal fun buildMachiSignAtlas(placements: List<MachiSignPlacement>, barSign: 
     entries.forEach { it.paint(cv, it.rect) }
     return MachiSignAtlas(bmp, entries)
 }
+
+/**
+ * 楼顶（blocks.ts）：油毡面、一圈女儿墙，按 0.95 m 格子撒水箱（四脚架 + 圆桶）、铁皮小屋、鱼骨天线、锅盖、冷气机，
+ * 碰到更高的楼、楼顶广告架就不放。随机数自有（kowloon:roof:<seed>），不与 Folia 逐件对齐；锅盖不斜（平碟近似）。
+ */
+internal fun addMachiKowloonRoofs(m: MachiMesh, seed: String) {
+    val rnd = MachiRng(machiHashSeed("kowloon:roof:$seed"))
+    val tar = c("#3a393b"); val slab = c("#4c4a47"); val tank = c("#557282"); val metal = c("#2b2f35")
+    val ac = c("#c6c4bb"); val grille = c("#55595e"); val windowDark = c("#1c222b")
+    val billboard = doubleArrayOf(-0.05 - 0.3, 2.45 + 0.3, 6.6 - 0.5, 7.5 + 0.3, -2.15 - 0.6, -2.15 + 0.6)
+    fun insideBlock(x: Double, y: Double, z: Double) = MachiKowloonLayout.BLOCKS.any { b ->
+        x > b.x0 + 0.01 && x < b.x1 - 0.01 && z > b.z0 + 0.01 && z < b.z1 - 0.01 && y > 0.01 && y < b.height - 0.01
+    }
+    for (b in MachiKowloonLayout.BLOCKS) {
+        val top0 = b.height
+        m.box(b.x0 + 0.06, b.x1 - 0.06, top0, top0 + 0.03, b.z0 + 0.06, b.z1 - 0.06, tar)
+        m.box(b.x0, b.x1, top0, top0 + 0.26, b.z1 - 0.08, b.z1, slab)
+        m.box(b.x0, b.x1, top0, top0 + 0.26, b.z0, b.z0 + 0.08, slab)
+        m.box(b.x0, b.x0 + 0.08, top0, top0 + 0.26, b.z0, b.z1, slab)
+        m.box(b.x1 - 0.08, b.x1, top0, top0 + 0.26, b.z0, b.z1, slab)
+        val top = top0 + 0.03
+        fun fits(x: Double, z: Double, r: Double, h: Double): Boolean = listOf(x - r to z - r, x + r to z - r, x - r to z + r, x + r to z + r).all { (cx, cz) ->
+            if (cx < b.x0 + 0.15 || cx > b.x1 - 0.15 || cz < b.z0 + 0.15 || cz > b.z1 - 0.15) return@all false
+            val y = top + h * 0.5
+            !insideBlock(cx, y, cz) && !(cx in billboard[0]..billboard[1] && y in billboard[2]..billboard[3] && cz in billboard[4]..billboard[5])
+        }
+        var x = b.x0 + 0.6
+        while (x < b.x1 - 0.4) {
+            var z = b.z0 + 0.6
+            while (z < b.z1 - 0.4) {
+                val px = x + (rnd.next() - 0.5) * 0.4; val pz = z + (rnd.next() - 0.5) * 0.4
+                val roll = rnd.next()
+                when {
+                    roll < 0.22 && fits(px, pz, 0.4, 1.0) -> {
+                        for ((dx, dz) in listOf(-0.22 to -0.22, 0.22 to -0.22, -0.22 to 0.22, 0.22 to 0.22)) m.box(px + dx - 0.025, px + dx + 0.025, top, top + 0.36, pz + dz - 0.025, pz + dz + 0.025, metal)
+                        m.prism(px, top + 0.36, pz, 0.33, 0.6, tank, 14)
+                    }
+                    roll < 0.36 && fits(px, pz, 0.55, 1.0) -> {
+                        m.box(px - 0.5, px + 0.5, top, top + 0.85, pz - 0.425, pz + 0.425, c(if (rnd.next() < 0.5) "#857a6b" else "#8d9095"))
+                        m.box(px - 0.56, px + 0.56, top + 0.85, top + 0.9, pz - 0.49, pz + 0.49, tar, bottom = true)
+                        m.box(px + 0.2 - 0.16, px + 0.2 + 0.16, top, top + 0.62, pz + 0.41, pz + 0.45, windowDark)
+                    }
+                    roll < 0.68 && fits(px, pz, 0.32, 1.4) -> {
+                        val height = 0.9 + rnd.next() * 0.6
+                        m.prism(px, top, pz, 0.018, height, metal, 5)
+                        val yaw = rnd.next() * PI
+                        listOf(0.55, 0.75, 0.92).forEachIndexed { i, t ->
+                            val half = (0.62 - i * 0.12) / 2; val y = top + height * t
+                            m.tube(doubleArrayOf(px - cos(yaw) * half, y, pz + sin(yaw) * half), doubleArrayOf(px + cos(yaw) * half, y, pz - sin(yaw) * half), 0.008, metal)
+                        }
+                    }
+                    roll < 0.76 && fits(px, pz, 0.3, 0.8) -> {
+                        m.prism(px, top, pz, 0.025, 0.35, metal, 5)
+                        m.prism(px, top + 0.35, pz, 0.08, 0.1, ac, 12, rt = 0.26)
+                        rnd.next(); rnd.next()
+                    }
+                    roll < 0.86 && fits(px, pz, 0.36, 0.6) -> {
+                        m.box(px - 0.31, px + 0.31, top, top + 0.48, pz - 0.24, pz + 0.24, ac)
+                        m.box(px - 0.2, px + 0.2, top + 0.48, top + 0.52, pz - 0.2, pz + 0.2, grille)
+                    }
+                }
+                z += 0.95
+            }
+            x += 0.95
+        }
+    }
+}
