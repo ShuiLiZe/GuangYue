@@ -264,7 +264,20 @@ fun V0cStage(
         // V1b-2：弹层是半透明毛玻璃，身后必须有一层真实的播放页画面，实拍才看得出「透」。
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
-        if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh") {
+        // 2026-11-12：町景（machi）3D 舞台起步，只在取证页（未进歌词样式列表）。
+        if (style == "machi") {
+            com.guangyue.feature.player.lyrics.visualizer.MachiStagePreview(
+                lines = kernel,
+                timeSeconds = { positionMs / 1000.0 },
+                backgroundColor = Color(0xFF101114),
+                primaryColor = Color(0xFFF2F2F2),
+                secondaryColor = Color(0xFF8FC8F5),
+                accentColor = Color(0xFFB4553C),
+                seed = "probe",
+                songTitle = "晴天",
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh") {
             CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
                 if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh") {
                     LyricFlowScreen(
