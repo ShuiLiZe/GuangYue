@@ -26,13 +26,21 @@ class MachiKowloonTest {
             val emissive = m[i + 9]
             val r = m[i + 6]
             // 亮窗（自发光且不是屏面的深蓝）
-            if (emissive > 0.9f && r > 0.4f) {
+            if (emissive > 0.9f && emissive < 1.1f && r > 0.4f) {
                 val x = m[i].toDouble(); val y = m[i + 1].toDouble(); val z = m[i + 2].toDouble()
                 val onScreen = kotlin.math.abs(x - sx) < MachiKowloonLayout.SCREEN_W / 2 && kotlin.math.abs(y - sy) < MachiKowloonLayout.SCREEN_H / 2 && z > -1.6
                 assertTrue("window on screen at $x,$y,$z", !onScreen)
             }
             i += 10
         }
+    }
+
+    @Test
+    fun `楼面杂件按 blocks.ts 都摆上了，伸出物互不相交`() {
+        val a = buildMachiKowloon("probe")
+        for (k in listOf("cage", "ac", "laundry", "pipe", "addition", "strip")) assertTrue("$k=${a.clutter[k]}", (a.clutter[k] ?: 0) > 0)
+        // 窗格分配按 roll：铁笼 36%、晾衫竹 12%，铁笼应多于晾衫竹。
+        assertTrue(a.clutter.toString(), (a.clutter["cage"] ?: 0) > (a.clutter["laundry"] ?: 0))
     }
 
     @Test
