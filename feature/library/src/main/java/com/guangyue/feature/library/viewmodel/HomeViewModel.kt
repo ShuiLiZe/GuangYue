@@ -57,11 +57,31 @@ class HomeViewModel @Inject constructor(
      * 0.0.19：歌单 / 榜单页「全部下载」与聚焦卡单曲下载。
      * 返回 (新加入数, 已下载或正在下的数)，界面据此给提示。
      */
-    fun downloadTracks(list: List<TrackEntity>, quality: com.guangyue.core.player.Quality): Pair<Int, Int> {
+    fun downloadTracks(
+        list: List<TrackEntity>,
+        quality: com.guangyue.core.player.Quality,
+        pinQuality: Boolean = false,
+    ): Pair<Int, Int> {
         var added = 0
         // 本地扫描来的歌本来就在手机里，不用下。
-        for (t in list) if (t.source != TrackEntity.SOURCE_LOCAL && downloads.enqueue(t, quality)) added++
+        for (t in list) if (t.source != TrackEntity.SOURCE_LOCAL && downloads.enqueue(t, quality, pinQuality)) added++
         return added to (list.size - added)
+    }
+
+    /** 2026-11-12：点一下下载键的默认音质（「下载设置 · 下载音质」）。 */
+    val defaultDownloadQuality: com.guangyue.core.player.Quality get() = downloads.defaultQuality
+
+    /** 2026-11-12：长按下载键弹层的档位——按这首歌所属插件声明的音质列，没声明按 MusicFree 四档。 */
+    fun downloadOptionsFor(t: TrackEntity?): List<com.guangyue.core.player.Quality> {
+        val declared = t?.let { track ->
+            plugins.plugins.value.firstOrNull { it.platform == track.platform || it.id == track.platform }?.supportedQualities
+        }
+        return com.guangyue.core.download.DownloadQualityPick.options(declared)
+    }
+
+    /** 2026-11-12：首页聚焦卡单曲下载——先把砖解析成歌曲（与播放同一条路），再交给 [onReady]。 */
+    fun tracksForDownload(tile: HomeTile, onReady: (List<TrackEntity>) -> Unit) {
+        viewModelScope.launch { onReady(resolveTracks(tile)) }
     }
 
     /** 已安装插件（只统计能当音源用的），供空状态文案判断。 */

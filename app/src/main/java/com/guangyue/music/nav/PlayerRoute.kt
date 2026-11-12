@@ -235,6 +235,7 @@ fun StagePanelHost(
         }
     }
     val declared = item?.origin?.availableQualities.orEmpty()
+    val downloadOptions = remember(item?.key, declared) { com.guangyue.core.download.DownloadQualityPick.options(declared) }
     val qualities = QualityLadder.of(declared).ifEmpty { QualityLadder.default() }.sortedByDescending { it.order }
     val styleName = ctx.getString(
         when (lyricStyle) {
@@ -304,6 +305,26 @@ fun StagePanelHost(
                 val ok = runCatching { downloads.enqueue(downloadRequestOf(current)) }.getOrDefault(false)
                 val text = when {
                     ok -> "已加入下载，进度在「我的 → 下载」"
+                    downloads.isDownloaded(current.key) -> "这首已经下载过了"
+                    else -> "这首已在下载队列里"
+                }
+                android.widget.Toast.makeText(ctx, text, android.widget.Toast.LENGTH_SHORT).show()
+            }
+        },
+        // 2026-11-12：长按下载键 → 选音质（按播放时插件回报的档位列，没回报按 MusicFree 四档）。
+        downloadQualities = downloadOptions,
+        downloadDefault = com.guangyue.core.download.DownloadQualityPick.defaultOf(downloadOptions, downloadManagerOf(ctx).defaultQuality),
+        onDownloadQuality = item?.let { current ->
+            { q: com.guangyue.core.player.Quality ->
+                val downloads = downloadManagerOf(ctx)
+                val base = downloadRequestOf(current)
+                val req = base.copy(
+                    quality = q.wire,
+                    directUrl = com.guangyue.core.download.DownloadQualityPick.directUrlFor(q, current.origin.quality, base.directUrl),
+                )
+                val ok = runCatching { downloads.enqueue(req, pinQuality = true) }.getOrDefault(false)
+                val text = when {
+                    ok -> com.guangyue.core.download.DownloadQualityPick.addedToast(q)
                     downloads.isDownloaded(current.key) -> "这首已经下载过了"
                     else -> "这首已在下载队列里"
                 }

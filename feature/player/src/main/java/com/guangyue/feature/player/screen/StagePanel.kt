@@ -43,6 +43,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -169,10 +171,21 @@ fun StagePanel(
     lyricSourceNote: String = "",
     /** 截图用例直接给 true，跳过入场动画。 */
     skipEnter: Boolean = false,
-    /** 2026-11-08：下载当前歌曲（null = 不显示下载键）。 */
+    /** 2026-11-08：下载当前歌曲（null = 不显示下载键）。点一下 = 按默认音质下载。 */
     onDownload: (() -> Unit)? = null,
+    /** 2026-11-12：长按下载键弹出的档位（从高到低）；空 = 长按不弹。 */
+    downloadQualities: List<Quality> = emptyList(),
+    /** 弹层里标「默认」的那档（= 点一下实际先试的档）。 */
+    downloadDefault: Quality? = null,
+    /** 弹层里选了一档。null = 长按不弹。 */
+    onDownloadQuality: ((Quality) -> Unit)? = null,
+    /** 截图用例：直接打开弹层。 */
+    initialQualityPick: Boolean = false,
 ) {
     val colors = stagePanelColors(dark)
+    var qualityPick by remember { mutableStateOf(initialQualityPick) }
+    val onDownloadLong: (() -> Unit)? =
+        if (onDownload != null && onDownloadQuality != null && downloadQualities.isNotEmpty()) ({ qualityPick = true }) else null
     val visible = remember { MutableTransitionState(skipEnter && open) }
     LaunchedEffect(open) { visible.targetState = open }
 
@@ -250,6 +263,7 @@ fun StagePanel(
                     onOpenLyricStyle = onOpenLyricStyle,
                     onShowCover = { onTab(StagePanelTab.COVER) },
                     onDownload = onDownload,
+                    onDownloadLong = onDownloadLong,
                 )
                 if (!isCover) {
                     Spacer(Modifier.height(12.dp))
@@ -305,6 +319,17 @@ fun StagePanel(
             }
         }
     }
+
+    if (qualityPick && onDownloadQuality != null) {
+        DownloadQualitySheet(
+            dark = dark,
+            accent = accent,
+            options = downloadQualities,
+            defaultQuality = downloadDefault,
+            onPick = { q -> qualityPick = false; onDownloadQuality(q) },
+            onDismiss = { qualityPick = false },
+        )
+    }
 }
 
 // ---------------------------------------------------------------- 歌曲头
@@ -325,6 +350,7 @@ private fun SongHeader(
     onOpenLyricStyle: () -> Unit,
     onShowCover: () -> Unit,
     onDownload: (() -> Unit)? = null,
+    onDownloadLong: (() -> Unit)? = null,
 ) {
     if (big) {
         Column(Modifier.fillMaxWidth()) {
@@ -363,7 +389,7 @@ private fun SongHeader(
                     LikeKey(like = like, colors = colors, onClick = onToggleLike, big = true)
                     PanelKey(GuangYueIcons.ListPlus, "加入歌单", colors, onAddToPlaylist)
                     if (onDownload != null) {
-                        PanelKey(GuangYueIcons.Download, "下载", colors, onDownload)
+                        PanelKey(GuangYueIcons.Download, "下载", colors, onDownload, onDownloadLong)
                     }
                     PanelKey(GuangYueIcons.Sparkles, "歌词样式", colors, onOpenLyricStyle)
                 }
@@ -393,7 +419,7 @@ private fun SongHeader(
                 Text(artist, fontSize = 12.sp, lineHeight = 18.sp, color = colors.t2, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (onDownload != null) {
-                PanelKey(GuangYueIcons.Download, "下载", colors, onDownload)
+                PanelKey(GuangYueIcons.Download, "下载", colors, onDownload, onDownloadLong)
                 Spacer(Modifier.width(6.dp))
             }
             LikeKey(like = like, colors = colors, onClick = onToggleLike, big = false)
@@ -419,13 +445,19 @@ private fun LikeKey(like: LikeState, colors: StagePanelColors, onClick: () -> Un
 }
 
 @Composable
-private fun PanelKey(icon: ImageVector, label: String, colors: StagePanelColors, onClick: () -> Unit) {
+private fun PanelKey(
+    icon: ImageVector,
+    label: String,
+    colors: StagePanelColors,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+) {
     Box(
         Modifier
             .size(36.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(colors.fill)
-            .clickableNoRipple(onClick)
+            .then(if (onLongClick != null) Modifier.tapOrHold(onClick, onLongClick) else Modifier.clickableNoRipple(onClick))
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {

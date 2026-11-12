@@ -188,6 +188,8 @@ fun GuangYueNavHost(
                 listOf("推荐" to vm.recommended(sheets, recent), "榜单" to charts, "最近" to recent).filter { it.second.isNotEmpty() }
             }
             if (wallSections.isNotEmpty()) {
+                val homeCtx = androidx.compose.ui.platform.LocalContext.current
+                var homePick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<com.guangyue.core.data.model.TrackEntity>?>(null) }
                 ShellColumn(
                     content = {
                         com.guangyue.music.ui.home.BravaisWall(
@@ -197,6 +199,16 @@ fun GuangYueNavHost(
                             groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
                             onOpenSearch = { navController.navigate(Routes.SEARCH) },
                             onEnqueueTile = { tile -> vm.playTracksOf(tile) { tracks, _ -> playback.appendTracks(tracks) } },
+                            // 2026-11-12：首页聚焦卡单曲下载（只对歌曲块）：点一下按默认音质，长按选音质。
+                            onDownloadTile = { tile ->
+                                vm.tracksForDownload(tile) { ts ->
+                                    if (ts.isNotEmpty()) {
+                                        val (added, skipped) = vm.downloadTracks(ts, vm.defaultDownloadQuality)
+                                        android.widget.Toast.makeText(homeCtx, downloadToastText(ts, added, skipped), android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            onDownloadTileLong = { tile -> vm.tracksForDownload(tile) { ts -> if (ts.isNotEmpty()) homePick = ts } },
                             isCurrent = wallIsCurrent,
                             isQueued = wallIsQueued,
                             playing = playbackState.isPlaying,
@@ -213,6 +225,7 @@ fun GuangYueNavHost(
                                 }
                             },
                         )
+                        TrackDownloadPick(homePick, vm) { homePick = null }
                     },
                     miniPlayer = miniPlayer,
                     bottomBar = bottomBar,
@@ -312,6 +325,8 @@ fun GuangYueNavHost(
                 }
             }
             val collectionCtx = androidx.compose.ui.platform.LocalContext.current
+            // 2026-11-12：长按下载键 → 选音质弹层。
+            var collectionPick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<com.guangyue.core.data.model.TrackEntity>?>(null) }
             // 0.0.19：歌单 / 榜单「全部下载」与单曲下载，结果用 Toast 告诉用户（和搜索页一致）。
             val downloadSome: (List<com.guangyue.core.data.model.TrackEntity>) -> Unit = { picked ->
                 val (added, skipped) = vm.downloadTracks(picked, playback.defaultQuality)
@@ -332,6 +347,7 @@ fun GuangYueNavHost(
                         onOpenSearch = { navController.navigate(Routes.SEARCH) },
                         onEnqueueTile = { t -> trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> playback.appendTracks(listOf(list[i])) } },
                         onDownloadTile = { t -> trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> downloadSome(listOf(list[i])) } },
+                        onDownloadTileLong = { t -> trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> collectionPick = listOf(list[i]) } },
                         onOpenTile = { t ->
                             val i = trackTiles.indexOf(t)
                             if (i >= 0) {
@@ -387,6 +403,7 @@ fun GuangYueNavHost(
                             fillingMeta = fillingMeta,
                         ),
                     )
+                    TrackDownloadPick(collectionPick, vm) { collectionPick = null }
                 },
                 miniPlayer = miniPlayer,
                 bottomBar = bottomBar,

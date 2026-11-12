@@ -42,6 +42,9 @@ class DownloadManager @Inject constructor(
     val settings: DownloadSettings,
 ) {
 
+    /** 点一下下载键用的音质（「下载设置 · 下载音质」）。 */
+    val defaultQuality: Quality get() = settings.current().quality
+
     /** 进行中/排队任务的实时快照（界面上「下载管理器」直接订阅它）。 */
     val storeRef: DownloadStore get() = store
 
@@ -129,7 +132,7 @@ class DownloadManager @Inject constructor(
     // ------------------------------------------------------------------ 入队
 
     /** 从库内曲目入队（播放器 / 列表菜单用）。 */
-    fun enqueue(track: TrackEntity, quality: Quality = Quality.fromWire(track.quality)): Boolean {
+    fun enqueue(track: TrackEntity, quality: Quality = Quality.fromWire(track.quality), pinQuality: Boolean = false): Boolean {
         val request = DownloadRequest(
             key = track.key,
             title = track.title.ifBlank { "未命名" },
@@ -142,7 +145,7 @@ class DownloadManager @Inject constructor(
             directUrl = track.localUri,
             rawJson = track.rawJson,
         )
-        return enqueue(request)
+        return enqueue(request, pinQuality)
     }
 
     /** 从插件搜索结果入队（搜索页 / 播放页用）。 */
@@ -164,10 +167,12 @@ class DownloadManager @Inject constructor(
     fun enqueueAll(items: List<MusicItem>, quality: Quality = Quality.HIGH): Int =
         items.count { enqueue(it, quality) }
 
-    fun enqueue(raw: DownloadRequest): Boolean {
+    fun enqueue(raw: DownloadRequest, pinQuality: Boolean = false): Boolean {
         // 下载设置为准：不管从哪个入口点下载（搜索 / 播放页 / 网页端），都按「下载设置 · 下载音质」取链。
+        // 2026-11-12：长按下载键在弹层里另选了音质时 [pinQuality] = true，按请求里的那档取链。
         val cfg = settings.current()
-        val request = raw.copy(quality = cfg.quality.wire, withLyric = raw.withLyric && cfg.saveLyric)
+        val quality = if (pinQuality) raw.quality else cfg.quality.wire
+        val request = raw.copy(quality = quality, withLyric = raw.withLyric && cfg.saveLyric)
         if (requests.containsKey(request.key) && store.isActive(request.key)) return false
         library.find(request.key)?.let { done ->
             // 已经下过且文件还在，不重复下；文件被用户删了就清掉记录重新下。

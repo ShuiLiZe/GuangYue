@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.guangyue.core.wall.WallSlot
 import androidx.compose.ui.geometry.Offset
+import com.guangyue.feature.player.screen.tapOrHold
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -117,6 +118,8 @@ fun BravaisWall(
     isQueued: (HomeTile) -> Boolean = { false },
     /** 0.0.19：聚焦卡单曲下载（只对歌曲块显示）。null 时不显示下载键。 */
     onDownloadTile: ((HomeTile) -> Unit)? = null,
+    /** 2026-11-12：长按下载键（选音质）。null 时长按无反应、只有点按。 */
+    onDownloadTileLong: ((HomeTile) -> Unit)? = null,
     /** 集合层初始是列表（true）/ 墙（false）；null = 按曲目数自动选（[CollectionLayout.preferList]）。取证用。 */
     initialListMode: Boolean? = null,
 ) {
@@ -184,6 +187,7 @@ fun BravaisWall(
                     onPlay = onOpenTile,
                     onEnqueue = onEnqueueTile,
                     onDownload = onDownloadTile,
+                    onDownloadLong = onDownloadTileLong,
                 )
                 Box(
                     Modifier
@@ -320,6 +324,7 @@ fun BravaisWall(
                                 onEnterPlayback = onEnterPlayback,
                                 inQueue = isQueued(face),
                                 onDownload = onDownloadTile?.takeIf { face.kind == HomeTileKind.TRACK }?.let { { it(face) } },
+                                onDownloadLong = onDownloadTileLong?.takeIf { face.kind == HomeTileKind.TRACK }?.let { { it(face) } },
                             ) {
                                 if (dragging) return@Poster
                                 if (isOpen) (enter ?: onOpenTile)(face) else expand(base)
@@ -573,6 +578,7 @@ private fun Poster(
     current: Boolean = false, playing: Boolean = false, onToggle: () -> Unit = {}, onEnterPlayback: (() -> Unit)? = null,
     inQueue: Boolean = false,
     onDownload: (() -> Unit)? = null,
+    onDownloadLong: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val stacked = !open && tile.kind == HomeTileKind.PLAYLIST || tile.kind == HomeTileKind.SHEET || tile.kind == HomeTileKind.STATION
@@ -609,7 +615,7 @@ private fun Poster(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            if (open) FocusCopy(tile, onPlay, onEnqueue, onEnter, current, playing, onToggle, onEnterPlayback, inQueue, onDownload)
+            if (open) FocusCopy(tile, onPlay, onEnqueue, onEnter, current, playing, onToggle, onEnterPlayback, inQueue, onDownload, onDownloadLong)
         }
     }
 }
@@ -624,6 +630,7 @@ private fun FocusCopy(
     current: Boolean = false, playing: Boolean = false, onToggle: () -> Unit = {}, onEnterPlayback: (() -> Unit)? = null,
     inQueue: Boolean = false,
     onDownload: (() -> Unit)? = null,
+    onDownloadLong: (() -> Unit)? = null,
 ) {
     var tapped by remember(tile.key) { mutableStateOf(false) }
     val queued = tapped || inQueue
@@ -677,7 +684,8 @@ private fun FocusCopy(
                 if (onDownload != null) {
                     // 0.0.19：单曲下载（Folia 聚焦卡没有；手机上歌单页要能挑着下，放在加入队列旁）。
                     Box(
-                        Modifier.padding(start = 10.dp).size(40.dp).background(Color.White.copy(alpha = 0.18f), CircleShape).clickable(onClick = onDownload),
+                        Modifier.padding(start = 10.dp).size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.18f), CircleShape)
+                            .then(if (onDownloadLong != null) Modifier.tapOrHold(onDownload, onDownloadLong) else Modifier.clickable(onClick = onDownload)),
                         contentAlignment = Alignment.Center,
                     ) { Icon(GuangYueIcons.Download, contentDescription = "下载", tint = Color.White, modifier = Modifier.size(18.dp)) }
                 }
@@ -758,6 +766,7 @@ private fun CollectionTrackList(
     onPlay: (HomeTile) -> Unit,
     onEnqueue: (HomeTile) -> Unit,
     onDownload: ((HomeTile) -> Unit)?,
+    onDownloadLong: ((HomeTile) -> Unit)? = null,
 ) {
     if (tiles.isEmpty()) {
         Box(Modifier.fillMaxSize().padding(top = topPad.dp), contentAlignment = Alignment.Center) {
@@ -804,7 +813,8 @@ private fun CollectionTrackList(
                 ) { Icon(GuangYueIcons.ListPlus, contentDescription = "加入队列", tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(18.dp)) }
                 if (onDownload != null) {
                     Box(
-                        Modifier.size(36.dp).clip(CircleShape).clickable { onDownload(t) },
+                        Modifier.size(36.dp).clip(CircleShape)
+                            .then(if (onDownloadLong != null) Modifier.tapOrHold({ onDownload(t) }, { onDownloadLong(t) }) else Modifier.clickable { onDownload(t) }),
                         contentAlignment = Alignment.Center,
                     ) { Icon(GuangYueIcons.Download, contentDescription = "下载", tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(18.dp)) }
                 }

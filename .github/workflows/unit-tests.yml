@@ -47,6 +47,8 @@ jobs:
         run: ./gradlew :feature:player:testDebugUnitTest --tests '*Machi*' --no-daemon --stacktrace
       - name: 曲库规则单测（core:data：合并 / 本地扫描过滤 / 元数据匹配打分）
         run: ./gradlew :core:data:testDebugUnitTest --no-daemon --stacktrace
+      - name: 下载音质选择单测（core:download，只跑 DownloadQualityPick*）
+        run: ./gradlew :core:download:testDebugUnitTest --tests '*DownloadQualityPick*' --no-daemon --stacktrace
       - name: 集合页布局单测（app，只跑 CollectionLayout*）
         run: ./gradlew :app:testDebugUnitTest --tests '*CollectionLayout*' --no-daemon --stacktrace
       - name: 编译 debug APK
