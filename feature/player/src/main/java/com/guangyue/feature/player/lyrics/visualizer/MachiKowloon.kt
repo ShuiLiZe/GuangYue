@@ -168,10 +168,7 @@ internal fun buildMachiKowloon(seed: String): MachiKowloonModel {
             m.box(b.x0, b.x1, 0.0, hy1, b.z0, hz0, wall)
             m.box(b.x0, hx0, 0.0, hy1, hz0, b.z1, wall)
             m.box(hx1, b.x1, 0.0, hy1, hz0, b.z1, wall)
-            // 酒吧里：地板、后墙暖光（interiorLight 压暗）、天花。
-            m.box(hx0, hx1, 0.0, 0.06, hz0, b.z1, machiRgb(art.getValue("barFloor")))
-            m.quad(doubleArrayOf(hx0, 0.0, hz0 + 0.01), doubleArrayOf(hx1, 0.0, hz0 + 0.01), doubleArrayOf(hx1, hy1, hz0 + 0.01), doubleArrayOf(hx0, hy1, hz0 + 0.01),
-                doubleArrayOf(0.0, 0.0, 1.0), machiRgb("#ffc887"), 0.55f)
+            addMachiKowloonBar(m, seed)
         } else {
             m.box(b.x0, b.x1, 0.0, b.height, b.z0, b.z1, wall)
         }
@@ -389,4 +386,64 @@ private fun facade(m: MachiMesh, f: MachiFace, rnd: MachiRng, ctx: MachiFacadeCt
         }
         y += MachiKowloonLayout.FLOOR_HEIGHT
     }
+}
+
+// ---- 酒吧（B1 一楼）：bar.ts buildKowloonBar 照译。玻璃面（透明）不画，只画框；倒影替身留给湿地反射。 ----
+internal fun addMachiKowloonBar(m: MachiMesh, seed: String) {
+    val rnd = MachiRng(machiHashSeed("kowloon:bar:$seed"))
+    val x0 = -0.1; val x1 = 4.3; val front = -1.5; val glassZ = -1.62; val back = -4.2; val ceiling = 2.95; val d0 = 3.3; val d1 = 4.2
+    val cx0 = 0.2; val cx1 = 3.0; val cz0 = -3.4; val cz1 = -2.85; val ch = 1.05; val floorY = 0.06
+    val frame = machiRgb("#25222a"); val wall = machiRgb("#2d2533"); val chrome = machiRgb("#aab1b9"); val counterTop = machiRgb("#6b4a3a")
+    m.box(x0, x1, 0.0, floorY, back, glassZ, machiRgb("#2a2426"))
+    m.box(x0, x1, ceiling - 0.05, ceiling, back, glassZ, wall, bottom = true)
+    m.box(x0, x0 + 0.04, floorY, ceiling, back, glassZ, wall)
+    m.box(x1 - 0.04, x1, floorY, ceiling, back, glassZ, wall)
+    m.box(x0, x1, floorY, ceiling, back, back + 0.04, wall)
+    m.box(x0 - 0.22, x0 + 0.01, 0.0, ceiling, glassZ - 0.02, front + 0.03, frame)
+    m.box(x1 - 0.01, x1 + 0.22, 0.0, ceiling, glassZ - 0.02, front + 0.03, frame)
+    m.box(x0, d0, 0.0, 0.36, glassZ - 0.06, glassZ + 0.04, frame)
+    m.box(x0, x1, 2.32, 2.4, glassZ - 0.06, glassZ + 0.04, frame, bottom = true)
+    m.box(d0 - 0.1, d1 + 0.1, 0.0, floorY, glassZ, front + 0.3, machiRgb("#4c4a47"))
+    val mullions = max(1, Math.round((d0 - x0) / 1.1).toInt())
+    for (i in 0..mullions) { val x = x0 + (d0 - x0) * i / mullions; m.box(x - 0.03, x + 0.03, 0.36, 2.32, glassZ - 0.04, glassZ + 0.03, frame) }
+    m.box(d0, d0 + 0.07, floorY, 2.32, glassZ - 0.04, glassZ + 0.04, frame)
+    m.box(d1 - 0.07, d1, floorY, 2.32, glassZ - 0.04, glassZ + 0.04, frame)
+    m.box(d0, d1, floorY, floorY + 0.12, glassZ - 0.04, glassZ + 0.04, frame)
+    m.box(d1 - 0.2, d1 - 0.16, 0.9, 1.4, glassZ + 0.03, glassZ + 0.07, chrome)
+    m.box(x1 - 0.2, x1, 0.36, 2.32, glassZ - 0.04, glassZ + 0.04, frame)
+    // 酒架：整面背光（barBacklight，主题强调色的鲜艳版；取证默认主题取偏紫），三层隔板，瓶子。
+    val sx0 = x0 + 0.35; val sx1 = cx1 + 0.15
+    m.box(sx0, sx1, 1.0, 2.55, back + 0.04, back + 0.06, machiRgb("#b46ae0"), 1.2f)
+    val bottleColors = listOf("#c98a3a", "#2f6b45", "#d9e4e8", "#3d6fb6", "#a8323a", "#e0b84f", "#7a4a2a").map { machiRgb(it) }
+    for (level in listOf(1.05, 1.55, 2.05)) {
+        m.box(sx0, sx1, level - 0.03, level, back + 0.06, back + 0.3, counterTop)
+        var x = sx0 + 0.08
+        while (x < sx1 - 0.08) {
+            if (rnd.next() > 0.12) {
+                val z = back + 0.17 + (rnd.next() - 0.5) * 0.06; val h = 0.2 + rnd.next() * 0.14
+                m.prism(x, level, z, 0.04, h, bottleColors[(rnd.next() * bottleColors.size).toInt().coerceAtMost(bottleColors.size - 1)], 6, rt = 0.032)
+            }
+            x += 0.1 + rnd.next() * 0.05
+        }
+    }
+    // 吧台：台身、挑出的台面、台面下青色霓虹灯带、脚踏杆。
+    m.box(cx0, cx1, floorY, ch - 0.05, cz0, cz1, machiRgb("#3b2620"))
+    m.box(cx0 - 0.06, cx1 + 0.06, ch - 0.05, ch, cz0 - 0.04, cz1 + 0.1, counterTop, bottom = true)
+    m.box(cx0, cx1, ch - 0.11, ch - 0.08, cz1 + 0.005, cz1 + 0.03, machiRgb("#3fe8ff"), 1.6f)
+    m.box(cx0 + 0.05, cx1 - 0.05, 0.22, 0.25, cz1 + 0.08, cz1 + 0.11, chrome)
+    for (i in 0 until 5) {
+        val x = cx0 + 0.3 + (cx1 - cx0 - 0.6) * i / 4; val z = cz1 + 0.42
+        m.prism(x, floorY, z, 0.15, 0.03, chrome, 12); m.prism(x, floorY, z, 0.025, 0.7, chrome, 6); m.prism(x, 0.74, z, 0.17, 0.08, machiRgb("#c2384a"), 14)
+    }
+    // 吊灯：线 + 发光灯罩（pendant，暖光 2.0）。
+    for (t in listOf(0.25, 0.5, 0.75)) {
+        val x = cx0 + (cx1 - cx0) * t; val z = (cz0 + cz1) / 2 + 0.25
+        m.prism(x, 2.25, z, 0.008, ceiling - 2.25, machiRgb("#11141a"), 4)
+        m.prism(x, 2.11, z, 0.09, 0.18, machiRgb("#ffc887"), 10, rt = 0.06, emissive = 2f)
+    }
+    // 点唱机：右后角，机身、深色面板、拱顶的灯（jukebox 琥珀 1.5；随音乐明暗未接）。
+    val jx = (cx1 + x1) / 2 + 0.15; val jz = back + 0.32
+    m.box(jx - 0.32, jx + 0.32, floorY, 1.05, jz - 0.22, jz + 0.22, machiRgb("#8a2f3c"))
+    m.box(jx - 0.22, jx + 0.22, 0.55, 0.95, jz + 0.2, jz + 0.235, machiRgb("#1c222b"))
+    m.box(jx - 0.3, jx + 0.3, 1.05, 1.3, jz - 0.22, jz + 0.22, machiRgb("#ffb547"), 1.5f)
 }
