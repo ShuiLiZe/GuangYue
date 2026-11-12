@@ -43,7 +43,8 @@ private val ROW_PENALTY = doubleArrayOf(1.0, 0.94, 0.84)
 
 private val CJK = Regex("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]")
 private val STICKY_PUNCTUATION = Regex("^[，。、！？；：,.!?;:」』）)\\]】〉》…~～ー]+$")
-private val SPACE = Regex("(?U)^\\s+$")
+/** JS /^\s+$/u（Android ICU 不认 (?U)，开机就抛 PatternSyntaxException；改成逐字判空白）。 */
+private fun isMachiSpace(text: String) = text.isNotEmpty() && text.all { it.isWhitespace() || it == '\uFEFF' }
 
 private class MbGlyph(val text: String, val offset: Int, val startTime: Double, val endTime: Double)
 private class MbToken(val glyphs: MutableList<MbGlyph> = ArrayList())
@@ -58,7 +59,7 @@ private fun tokenize(line: Line): List<MbToken> {
         if (entry == null) continue
         val glyph = MbGlyph(entry.char, offset, entry.startTime, entry.endTime)
         offset += entry.char.length
-        val isSpace = SPACE.matches(entry.char)
+        val isSpace = isMachiSpace(entry.char)
         val isCjk = CJK.containsMatchIn(entry.char)
         if (STICKY_PUNCTUATION.matches(entry.char) && tokens.isNotEmpty() && current == null) {
             tokens.last().glyphs += glyph
