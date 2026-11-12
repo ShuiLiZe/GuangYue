@@ -109,7 +109,7 @@ internal class MachiMesh {
 }
 
 /** 城寨白模的几何与统计（单测用）。 */
-internal class MachiKowloonModel(val mesh: FloatArray, val litWindows: Int, val darkWindows: Int)
+internal class MachiKowloonModel(val mesh: FloatArray, val litWindows: Int, val darkWindows: Int, val signs: List<MachiSignPlacement> = emptyList())
 
 private class MachiFace(val block: MachiKowloonBlock, val ox: Double, val oz: Double, val ax: Double, val az: Double, val nx: Double, val nz: Double, val width: Double)
 
@@ -129,7 +129,9 @@ private val AVOID = listOf(
         MachiKowloonLayout.SCREEN_Y - MachiKowloonLayout.SCREEN_H / 2 - 0.5, MachiKowloonLayout.SCREEN_Y + MachiKowloonLayout.SCREEN_H / 2 + 0.15, -2.0, 0.5),
 )
 
-private fun inAvoid(x: Double, y: Double, z: Double) = AVOID.any { a -> x in a[0]..a[1] && y in a[2]..a[3] && z in a[4]..a[5] }
+private val AVOID_ALL by lazy { AVOID + MachiKowloonStreet.windowAvoid() }
+
+private fun inAvoid(x: Double, y: Double, z: Double) = AVOID_ALL.any { a -> x in a[0]..a[1] && y in a[2]..a[3] && z in a[4]..a[5] }
 
 /** 种子 → 0..1 序列（mulberry32）。 */
 internal class MachiRng(seed: Long) {
@@ -214,7 +216,9 @@ internal fun buildMachiKowloon(seed: String): MachiKowloonModel {
     // 门头店招灯箱。
     val gx = MachiKowloonLayout.SIGN_X; val gy = MachiKowloonLayout.SIGN_Y; val gz = MachiKowloonLayout.SIGN_Z
     m.box(gx - MachiKowloonLayout.SIGN_W / 2, gx + MachiKowloonLayout.SIGN_W / 2, gy - MachiKowloonLayout.SIGN_H / 2, gy + MachiKowloonLayout.SIGN_H / 2, gz - 0.12, gz, machiRgb(art.getValue("signBox")))
-    return MachiKowloonModel(m.toArray(), lit, dark)
+    // 街面道具：店招盒子、楼顶广告架、大排档、电线杆（MachiKowloonStreet.kt）。
+    val signs = addMachiKowloonStreet(m)
+    return MachiKowloonModel(m.toArray(), lit, dark, signs)
 }
 
 private fun pickWeighted(roll: Double): Int {
