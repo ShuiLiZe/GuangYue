@@ -284,6 +284,9 @@ internal fun TemperaStage(
     // 场景层：槽 0 = 当前段，槽 1 = 预卷的下一段（Folia scene cache 里同时上屏的最多两个）。
     val sceneLayers = listOf(rememberGraphicsLayer(), rememberGraphicsLayer())
     val postSlots = remember { listOf(TemperaPostSlot(), TemperaPostSlot()) }
+    // 片尾海报单独一层：API 33+ 标题也走着色器反色（只反色，不叠畸变 / 颗粒 / 暗角，那些已在场景层上）。
+    val creditsLayer = rememberGraphicsLayer()
+    val creditsSlot = remember { TemperaPostSlot() }
     // 片尾海报：按尺寸 / 字号 / 歌曲信息建一次（Folia drawCredits 在 resize、换歌时重建）。
     val creditsCache = remember(songTitle, songArtist, songAlbum, lyricsFontScale, style) { arrayOfNulls<TpCreditsView>(1) }
 
@@ -435,7 +438,20 @@ internal fun TemperaStage(
             drawRect(androidx.compose.ui.graphics.Brush.radialGradient(*(listOf(0f to Color.Transparent) + stops).toTypedArray(), center = Offset(size.width / 2, size.height / 2), radius = r))
         }
         if (credits != null && creditsFrame.active && creditsFrame.posterAlpha > 0.001) {
-            drawCredits(credits, t - finalEndTime, creditsFrame, root, w, h, palette, paperL, inkL, inversionPaint)
+            creditsLayer.renderEffect = if (creditsSlot.inverts) creditsSlot.effect(
+                size.width, size.height, 0.0, 0.0, post = false,
+                ink = palette.ink.argb() and 0xFFFFFF, paper = palette.paper.argb() and 0xFFFFFF,
+            ) else null
+            val creditsMaskY = if (creditsLayer.renderEffect != null) size.height else null
+            if (creditsMaskY != null) {
+                creditsLayer.alpha = 1f
+                creditsLayer.record(Density(density.density, density.fontScale), layoutDirection, IntSize(size.width.roundToInt(), (size.height * 2).roundToInt())) {
+                    drawCredits(credits, t - finalEndTime, creditsFrame, root, w, h, palette, paperL, inkL, inversionPaint, creditsMaskY)
+                }
+                drawLayer(creditsLayer)
+            } else {
+                drawCredits(credits, t - finalEndTime, creditsFrame, root, w, h, palette, paperL, inkL, inversionPaint)
+            }
         }
         wipe?.let { (travel, angle) ->
             val span = hypot(w, h)
@@ -620,6 +636,8 @@ private fun DrawScope.drawCredits(
     paperL: Double,
     inkL: Double,
     inversionPaint: Paint,
+    /** 非 null：标题只按墨色画进 y + maskY 的蒙版区，反色交给着色器（同 drawShot）；底裁在上半。 */
+    maskY: Float? = null,
 ) {
     val poster = view.poster
     poster.updateTime(elapsed)
@@ -631,14 +649,14 @@ private fun DrawScope.drawCredits(
         val alpha = (rn.styleAlpha * itemAlpha * palette.alphaOf(rn.node.tone)).coerceIn(0.0, 1.0)
         val color = Color(rgb.argb())
         val matrix = m.toMatrix()
-        withTransform({ transform(matrix) }) {
+        clipRect(0f, 0f, size.width, maskY ?: size.height) { withTransform({ transform(matrix) }) {
             when {
                 rn.strokeWidth > 0f -> drawPath(rn.path, color, alpha = (alpha * containerAlpha).toFloat(), style = Stroke(rn.strokeWidth))
                 else -> drawPath(rn.path, color, alpha = (alpha * containerAlpha).toFloat(), style = Fill)
             }
-        }
-        // 反色判定同 drawShot：只看实心块，按块在容器里的透明度算（标题滤镜读的是容器内部的底）。
-        if (rn.solid) {
+        } }
+        // 反色判定同 drawShot：只看实心块，按块在容器里的透明度算（标题滤镜读的是容器内部的底）。着色器路径不需要。
+        if (rn.solid && maskY == null) {
             val lum = paperL + (rgb.luminance - paperL) * alpha
             val isDark = abs(lum - inkL) < abs(lum - paperL)
             if (alpha >= 0.5 || isDark) {
@@ -654,8 +672,16 @@ private fun DrawScope.drawCredits(
         val m = containerM * TpAffine.pixi(item.x, item.y, 0.0, item.scale, item.scale, item.pivotX, item.pivotY)
         val rn = view.nodes[i]
         if (rn != null) { paint(rn, m, item.alpha); return@forEachIndexed }
-        // 标题层：墨色字，偏墨区域 SrcIn 换纸色。
+        // 标题层：墨色字，偏墨区域 SrcIn 换纸色；API 33+ 画进下半蒙版，由着色器按真实底色反色。
         val ink = Color(palette.ink.argb())
+        if (maskY != null) {
+            withTransform({ clipRect(0f, maskY, size.width, maskY * 2); translate(0f, maskY); transform(m.toMatrix()) }) {
+                poster.lines.forEachIndexed { k, line ->
+                    drawGlyph(view.titleLayouts[k], ink, line.alpha * item.alpha * containerAlpha, 0.0, line.offsetY, 0.0, 1.0, 1.0, density)
+                }
+            }
+            return@forEachIndexed
+        }
         drawIntoCanvas { canvas ->
             canvas.saveLayer(Rect(0f, 0f, size.width, size.height), inversionPaint)
             withTransform({ transform(m.toMatrix()) }) {
