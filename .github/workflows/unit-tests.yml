@@ -23,6 +23,13 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x ./gradlew && echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+      - name: 依赖源核验（CI 官方仓库优先，只统计下载域名，不影响结果）
+        continue-on-error: true
+        shell: bash
+        run: |
+          ./gradlew :app:dependencies --configuration debugRuntimeClasspath --info --no-daemon > /tmp/deps.txt 2>&1 || true
+          grep -oE "https://(dl\.google\.com|repo\.maven\.apache\.org|repo1\.maven\.org|plugins\.gradle\.org|plugins-artifacts\.gradle\.org|maven\.aliyun\.com)" /tmp/deps.txt | sort | uniq -c | sed 's/^/REPOHOST /' || true
+          grep -E "广乐 CI" /tmp/deps.txt | head -2 || true
       - name: core:lyrics 单测
         run: ./gradlew :core:lyrics:test --no-daemon --stacktrace
       - name: 雾笺纯逻辑单测（feature:player，只跑 Nebbia*）

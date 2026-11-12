@@ -1,13 +1,26 @@
 pluginManagement {
     // 仓库顺序保持原样：本地离线缓存按此顺序建立键，改动顺序会让缓存全部失效
+    // 只有 GitHub Actions（环境变量 GITHUB_ACTIONS=true）里改成官方仓库优先、阿里云兜底，
+    // 避开镜像 502；本地没有这个变量，走 else 分支，顺序与原来一字不差。
+    val officialFirst = System.getenv("GITHUB_ACTIONS") == "true"
     repositories {
-        maven(url = "https://maven.aliyun.com/repository/gradle-plugin")
-        maven(url = "https://maven.aliyun.com/repository/google")
-        maven(url = "https://maven.aliyun.com/repository/central")
-        maven(url = "https://maven.aliyun.com/repository/public")
-        gradlePluginPortal()
-        google()
-        mavenCentral()
+        if (officialFirst) {
+            gradlePluginPortal()
+            google()
+            mavenCentral()
+            maven(url = "https://maven.aliyun.com/repository/gradle-plugin")
+            maven(url = "https://maven.aliyun.com/repository/google")
+            maven(url = "https://maven.aliyun.com/repository/central")
+            maven(url = "https://maven.aliyun.com/repository/public")
+        } else {
+            maven(url = "https://maven.aliyun.com/repository/gradle-plugin")
+            maven(url = "https://maven.aliyun.com/repository/google")
+            maven(url = "https://maven.aliyun.com/repository/central")
+            maven(url = "https://maven.aliyun.com/repository/public")
+            gradlePluginPortal()
+            google()
+            mavenCentral()
+        }
     }
 
     /**
@@ -46,14 +59,25 @@ pluginManagement {
 }
 dependencyResolutionManagement {
     repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
+    // 同上：CI 官方优先、阿里云兜底；本地顺序不变。
+    val officialFirst = System.getenv("GITHUB_ACTIONS") == "true"
     repositories {
-        maven(url = "https://maven.aliyun.com/repository/google")
-        maven(url = "https://maven.aliyun.com/repository/central")
-        maven(url = "https://maven.aliyun.com/repository/public")
-        google()
-        mavenCentral()
+        if (officialFirst) {
+            google()
+            mavenCentral()
+            maven(url = "https://maven.aliyun.com/repository/google")
+            maven(url = "https://maven.aliyun.com/repository/central")
+            maven(url = "https://maven.aliyun.com/repository/public")
+        } else {
+            maven(url = "https://maven.aliyun.com/repository/google")
+            maven(url = "https://maven.aliyun.com/repository/central")
+            maven(url = "https://maven.aliyun.com/repository/public")
+            google()
+            mavenCentral()
+        }
     }
 }
+if (System.getenv("GITHUB_ACTIONS") == "true") println("广乐 CI：依赖仓库官方优先（google / mavenCentral / gradlePluginPortal），阿里云兜底")
 rootProject.name = "GuangYue"
 
 include(":app")
