@@ -186,6 +186,9 @@ internal fun addMachiKowloonStreet(m: MachiMesh): List<MachiSignPlacement> {
         m.box(hx - 0.13, hx + 0.13, hy, hy + 0.1, hz - 0.26, hz + 0.26, c(art.getValue("darkMetal")))
         m.box(hx - 0.09, hx + 0.09, hy - 0.02, hy, hz - 0.2, hz + 0.2, c("#e2f2ff"), 1f, bottom = true)
     }
+    // 全息投影机（street.ts buildProps：holoBase 方盒 + holoLens 发光圆片）
+    m.box(0.9 - 0.23, 0.9 + 0.23, 0.0, 0.24, 2.3 - 0.23, 2.3 + 0.23, c("#2b2f36"))
+    m.prism(0.9, 0.24, 2.3, 0.13, 0.03, c("#62f2ff"), 14, emissive = 1f)
     return placements
 }
 

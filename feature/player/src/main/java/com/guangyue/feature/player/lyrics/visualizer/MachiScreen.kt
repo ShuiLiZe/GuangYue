@@ -104,6 +104,105 @@ internal fun paintMachiLedStrip(bitmap: Bitmap, typeface: Typeface, text: String
     return used
 }
 
+
+/** 全息面板写什么（hologram.ts resolveKowloonHologramText）。 */
+internal fun resolveKowloonHologramText(target: MachiBoardTarget, lines: List<Line>, title: String, artist: String): Pair<String, String> {
+    val t = title.ifEmpty { "KOWLOON" }
+    if (!target.isCard) {
+        val next = lines.drop(target.index + 1).firstOrNull { it.fullText.trim().isNotEmpty() }
+        if (next != null) return "NEXT" to next.fullText.trim()
+        val tr = lines.getOrNull(target.index)?.translation?.trim().orEmpty()
+        if (tr.isNotEmpty()) return "TRANSLATION" to tr
+    }
+    return "NOW PLAYING" to (if (artist.isNotEmpty()) "$t — $artist" else t)
+}
+
+/** signRaster.ts wrapText：中日韩逐字、拉丁按词，最多 maxLines 行，超出末行加省略号。 */
+internal fun machiWrapText(paint: Paint, text: String, maxWidth: Float, maxLines: Int): List<String> {
+    val units = Regex("[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]|[^\\s\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]+\\s*|\\s+").findAll(text).map { it.value }.toList()
+    val lines = ArrayList<String>()
+    var current = ""
+    for (unit in units) {
+        val next = current + unit
+        if (current.isNotEmpty() && paint.measureText(next.trimEnd()) > maxWidth) { lines += current.trimEnd(); current = unit.trimStart() } else current = next
+    }
+    if (current.isNotBlank()) lines += current.trimEnd()
+    if (lines.size > maxLines) {
+        val kept = lines.take(maxLines).toMutableList()
+        var last = kept[maxLines - 1]
+        while (last.length > 1 && paint.measureText("$last…") > maxWidth) last = last.dropLast(1)
+        kept[maxLines - 1] = "$last…"
+        return kept
+    }
+    return lines
+}
+
+/** hologram.ts paint：黑底白字，左上小标签，下面一到两行。 */
+internal fun paintKowloonHologram(bitmap: Bitmap, typeface: Typeface, label: String, text: String) {
+    val cv = Canvas(bitmap)
+    val w = bitmap.width.toFloat(); val h = bitmap.height.toFloat()
+    cv.drawColor(android.graphics.Color.BLACK)
+    val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+    p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD); p.textSize = h * 0.1f; p.alpha = (0.75 * 255).toInt()
+    p.textAlign = Paint.Align.LEFT
+    fun mid() = p.fontMetrics.let { -(it.ascent + it.descent) / 2 }
+    cv.drawText("▸ $label", w * 0.05f, h * 0.14f + mid(), p)
+    p.alpha = 255; p.typeface = typeface; p.textAlign = Paint.Align.CENTER
+    val maxWidth = w * 0.88f
+    var px = h * 0.3f
+    p.textSize = px
+    var rows = machiWrapText(p, text, maxWidth, 2)
+    if (rows.size > 1) { px = h * 0.28f; p.textSize = px; rows = machiWrapText(p, text, maxWidth, 2) }
+    if (rows.size == 1) px = fitFont(p, rows[0], maxWidth, px)
+    val center = h * 0.58f
+    rows.forEachIndexed { i, row -> cv.drawText(row, w / 2, center + (i - (rows.size - 1) / 2f) * px * 1.18f + mid(), p) }
+}
+
+private const val HOLO_FS = """#version 300 es
+precision highp float;
+uniform sampler2D uMap;
+uniform vec3 uColor;
+uniform float uTime;
+uniform float uLevel;
+uniform float uGlitch;
+uniform float uAspect;
+in vec2 vUv;
+out vec4 fragColor;
+float hHash(float n) { return fract(sin(n * 91.7) * 43758.5453); }
+void main() {
+    vec2 uv = vUv;
+    float band = floor(uv.y * 26.0);
+    float tear = hHash(band + floor(uTime * 24.0) * 3.1);
+    uv.x += (tear - 0.5) * 0.06 * uGlitch * step(0.55, tear);
+    float text = texture(uMap, vec2(uv.x, 1.0 - uv.y)).r;
+    float scan = 0.82 + 0.18 * sin(vUv.y * 190.0 - uTime * 8.0);
+    float sweepAt = (fract(vUv.y - uTime * 0.22) - 0.5) * 7.0;
+    float sweep = exp(-sweepAt * sweepAt) * 0.35;
+    vec2 edge = min(vUv, 1.0 - vUv) * vec2(uAspect, 1.0);
+    float frame = 1.0 - smoothstep(0.006, 0.016, min(edge.x, edge.y));
+    float corner = step(min(edge.x, edge.y), 0.035) * step(max(edge.x, edge.y), 0.12);
+    float fill = 0.07 + 0.06 * (1.0 - vUv.y);
+    float flicker = 0.9 + 0.1 * hHash(floor(uTime * 14.0));
+    float intensity = (text * 1.35 + frame * 0.5 + corner * 0.6 + fill) * scan * flicker + sweep * (0.15 + text * 0.4);
+    fragColor = vec4(uColor * intensity * uLevel * (1.0 - 0.4 * uGlitch), 1.0);
+}
+"""
+
+private const val BEAM_FS = """#version 300 es
+precision highp float;
+uniform vec3 uColor;
+uniform float uLevel;
+uniform float uTime;
+in vec2 vUv;
+out vec4 fragColor;
+void main() {
+    float across = max(0.0, 1.0 - abs(vUv.x - 0.5) * 2.0);
+    float streak = 0.75 + 0.25 * sin(vUv.x * 40.0 + uTime * 1.3) * sin(vUv.y * 9.0 - uTime * 3.0);
+    float alpha = pow(across, 1.5) * (0.35 + 0.65 * (1.0 - vUv.y)) * streak;
+    fragColor = vec4(uColor * alpha * 0.3 * uLevel, 1.0);
+}
+"""
+
 private const val SIGN_VS = """#version 300 es
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec2 aUv;
@@ -247,7 +346,7 @@ private fun planeZ(x: Double, y: Double, z: Double, w: Double, h: Double): Float
 }
 
 /** 帧输入：歌曲时间、氛围时间、副歌权重目标、音频。 */
-internal class MachiSignFrame(val songTime: Double, val ambientTime: Double, val delta: Double, val chorus: Double, val audio: Double, val artificial: Double, val flicker: Double)
+internal class MachiSignFrame(val songTime: Double, val ambientTime: Double, val delta: Double, val chorus: Double, val audio: Double, val artificial: Double, val flicker: Double, val daylight: Double = 0.0)
 
 /**
  * 城寨的三块会发光的面：歌词大屏（逐字点亮 + 换行信号切换）、屏下 LED 跑马灯、门头霓虹店招。只在 GL 线程上用。
@@ -259,6 +358,15 @@ internal class MachiKowloonSigns(
     private val seed: String,
     private val placements: List<MachiSignPlacement> = emptyList(),
 ) {
+    private var holoProgram = 0
+    private var beamProgram = 0
+    private var holoTex = 0
+    private val holoBitmap = Bitmap.createBitmap(1024, 376, Bitmap.Config.ARGB_8888)
+    private var holoKey = ""
+    private var holoPending: Pair<String, String>? = null
+    private var holoSwitch = HOLO_SWITCH
+    private var holoStart = 0
+    private val holoColor = machiLinear(mcMixHex("#62f2ff", palette.led, 0.3))
     private var atlasCounts = IntArray(3)
     private var atlasStarts = IntArray(3)
     private val typeface = machiTypeface(700)
@@ -293,8 +401,13 @@ internal class MachiKowloonSigns(
         screenProgram = link(SIGN_VS, SCREEN_FS)
         ledProgram = link(SIGN_VS, LED_FS)
         neonProgram = link(SIGN_VS, NEON_FS)
-        val texIds = IntArray(4)
-        GLES30.glGenTextures(4, texIds, 0)
+        holoProgram = link(SIGN_VS, HOLO_FS)
+        beamProgram = link(SIGN_VS, BEAM_FS)
+        val texIds = IntArray(5)
+        GLES30.glGenTextures(5, texIds, 0)
+        holoTex = texIds[4]
+        holoBitmap.eraseColor(android.graphics.Color.BLACK)
+        upload(holoTex, holoBitmap)
         slots = Array(2) { Slot(texIds[it], Bitmap.createBitmap(SCREEN_TEXTURE_WIDTH, half * 2, Bitmap.Config.ARGB_8888)) }
         ledTex = texIds[2]; neonTex = texIds[3]
         // 店招图集（门头 + 伸出楼面的 8 块 + 楼顶「九龍城寨」+ 大排档），按灯管组排好。
@@ -304,7 +417,8 @@ internal class MachiKowloonSigns(
         atlas.bitmap.recycle()
         atlasStarts = IntArray(3) { 12 + atlas.groupStart[it] }; atlasCounts = atlas.groupCount.copyOf()
         val mesh = planeZ(MachiKowloonLayout.SCREEN_X, MachiKowloonLayout.SCREEN_Y, MachiKowloonLayout.SCREEN_Z + 0.006, MachiKowloonLayout.SCREEN_W, MachiKowloonLayout.SCREEN_H) +
-            planeZ(TICKER_X, TICKER_Y, TICKER_Z, TICKER_W, TICKER_H) + atlas.mesh
+            planeZ(TICKER_X, TICKER_Y, TICKER_Z, TICKER_W, TICKER_H) + atlas.mesh + hologramMesh()
+        holoStart = 12 + atlas.mesh.size / 5
         val ids = IntArray(1); GLES30.glGenVertexArrays(1, ids, 0); vao = ids[0]
         val bufs = IntArray(1); GLES30.glGenBuffers(1, bufs, 0)
         GLES30.glBindVertexArray(vao)
@@ -349,6 +463,14 @@ internal class MachiKowloonSigns(
         val slot = prepare(target, lines)
         if (current == null) { current = slot; switchElapsed = SWITCH_SECONDS; pending = null }
         else if (slot !== current) { pending = slot; switchElapsed = 0.0 }
+        val holo = resolveKowloonHologramText(target, lines, title, artist)
+        val hk = "${holo.first}|${holo.second}"
+        if (hk != holoKey) {
+            val first = holoKey.isEmpty()
+            holoKey = hk
+            if (first) { paintKowloonHologram(holoBitmap, typeface, holo.first, holo.second); upload(holoTex, holoBitmap); holoSwitch = HOLO_SWITCH }
+            else { holoPending = holo; holoSwitch = 0.0 }
+        }
         val text = resolveKowloonTickerText(target, lines, title, artist)
         if (text != ledText) {
             ledText = text
@@ -433,12 +555,62 @@ internal class MachiKowloonSigns(
             GLES30.glUniform1f(n("uLevel"), levels[g].toFloat())
             GLES30.glDrawArrays(GLES30.GL_TRIANGLES, atlasStarts[g], atlasCounts[g])
         }
+        // 全息投影（hologram.ts）：加色、不写深度；先光束后面板。
+        var holoGlitch = 0.0
+        if (holoSwitch < HOLO_SWITCH) {
+            holoSwitch += max(frame.delta, 1.0 / 120)
+            val t = min(1.0, holoSwitch / HOLO_SWITCH)
+            if (t >= 0.4) holoPending?.let { paintKowloonHologram(holoBitmap, typeface, it.first, it.second); upload(holoTex, holoBitmap); holoPending = null }
+            holoGlitch = if (t >= 1) 0.0 else sin(PI * t)
+        }
+        val holoLevel = (0.3 + 0.7 * (1 - frame.daylight)) * (0.9 + 0.1 * frame.flicker) * (1 + 0.15 * chorusGlow)
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE)
+        GLES30.glDepthMask(false)
+        GLES30.glUseProgram(beamProgram)
+        GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(beamProgram, "uVP"), 1, false, vp, 0)
+        GLES30.glUniform3fv(GLES30.glGetUniformLocation(beamProgram, "uColor"), 1, holoColor, 0)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(beamProgram, "uLevel"), holoLevel.toFloat())
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(beamProgram, "uTime"), frame.ambientTime.toFloat())
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, holoStart + 6, 6)
+        GLES30.glUseProgram(holoProgram)
+        fun hu(n: String) = GLES30.glGetUniformLocation(holoProgram, n)
+        GLES30.glUniformMatrix4fv(hu("uVP"), 1, false, vp, 0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, holoTex)
+        GLES30.glUniform1i(hu("uMap"), 0)
+        GLES30.glUniform3fv(hu("uColor"), 1, holoColor, 0)
+        GLES30.glUniform1f(hu("uTime"), frame.ambientTime.toFloat())
+        GLES30.glUniform1f(hu("uLevel"), holoLevel.toFloat())
+        GLES30.glUniform1f(hu("uGlitch"), holoGlitch.toFloat())
+        GLES30.glUniform1f(hu("uAspect"), (HOLO_W / HOLO_H).toFloat())
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, holoStart, 6)
+        GLES30.glDepthMask(true)
+        GLES30.glDisable(GLES30.GL_BLEND)
         GLES30.glBindVertexArray(0)
     }
 
     private fun linear(hex: String, k: Double) = machiLinear(hex, k)
 
+    /** 面板（绕 y 转 30°）+ 光束梯形（镜头 → 面板下沿），pos3 + uv2。 */
+    private fun hologramMesh(): FloatArray {
+        val ry = 30 * PI / 180; val ax = kotlin.math.cos(ry); val az = -sin(ry)
+        val out = ArrayList<Float>()
+        fun pt(cx: Double, cy: Double, cz: Double, sx: Double, sy: Double, u: Float, v: Float) {
+            out += (cx + ax * sx).toFloat(); out += (cy + sy).toFloat(); out += (cz + az * sx).toFloat(); out += u; out += v
+        }
+        val hw = HOLO_W / 2; val hh = HOLO_H / 2
+        pt(HOLO_X, HOLO_Y, HOLO_Z, -hw, -hh, 0f, 0f); pt(HOLO_X, HOLO_Y, HOLO_Z, hw, -hh, 1f, 0f); pt(HOLO_X, HOLO_Y, HOLO_Z, hw, hh, 1f, 1f)
+        pt(HOLO_X, HOLO_Y, HOLO_Z, -hw, -hh, 0f, 0f); pt(HOLO_X, HOLO_Y, HOLO_Z, hw, hh, 1f, 1f); pt(HOLO_X, HOLO_Y, HOLO_Z, -hw, hh, 0f, 1f)
+        val rise = HOLO_Y - hh - 0.27; val lens = 0.08
+        pt(HOLO_X, 0.27, HOLO_Z, -lens, 0.0, 0f, 0f); pt(HOLO_X, 0.27, HOLO_Z, lens, 0.0, 1f, 0f); pt(HOLO_X, 0.27, HOLO_Z, hw, rise, 1f, 1f)
+        pt(HOLO_X, 0.27, HOLO_Z, -lens, 0.0, 0f, 0f); pt(HOLO_X, 0.27, HOLO_Z, hw, rise, 1f, 1f); pt(HOLO_X, 0.27, HOLO_Z, -hw, rise, 0f, 1f)
+        return out.toFloatArray()
+    }
+
     companion object {
+        // layout.ts HOLOGRAM
+        const val HOLO_X = 0.9; const val HOLO_Z = 2.3; const val HOLO_Y = 3.0; const val HOLO_W = 3.0; const val HOLO_H = 1.1
+        const val HOLO_SWITCH = 0.35
         // layout.ts TICKER
         const val TICKER_X = 2.1; const val TICKER_Y = 3.09; const val TICKER_Z = -1.41; const val TICKER_W = 4.2; const val TICKER_H = 0.17
     }
