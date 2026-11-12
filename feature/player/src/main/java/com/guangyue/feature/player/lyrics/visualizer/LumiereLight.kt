@@ -377,6 +377,10 @@ internal fun DrawScope.drawLumiereFallbackLight(input: LumiereFieldInput) {
 internal fun lumiereSupportsShader() = Build.VERSION.SDK_INT >= 33
 
 
+/** 着色器的丁达尔项（lightFieldShader.ts main：tyndall = uFogA.y + (1 - uFogA.y) × density × uFogA.x）。 */
+internal fun lumiereTyndall(fog: LumiereFog, density: Double, fogScale: Double = 1.0): Double =
+    fog.tyndallBase + (1 - fog.tyndallBase) * density * fog.density * fogScale
+
 /** 细光路判定（与着色器 glowMask 的 thin 一致）：光学追迹类的窄光线。 */
 internal fun lumiereIsThinBeam(b: LumiereResolvedBeam) = b.halfWidth <= 0.0065 && b.tanSpread <= 0.006
 
@@ -389,15 +393,24 @@ private val beamCorePaint = android.graphics.Paint(android.graphics.Paint.ANTI_A
  * 广乐光场在 2 dp 一格的离屏层里算（防模拟器 ANR），细芯被放大成一条宽发光带。这里在光场之上按光束几何补画矢量细芯：
  * 宽 1.3 dp 的近白芯 + 3.6 dp 的半透明内晕，沿光束按 falloff（exp(-along/length)）与射程（reach）分 8 段递减。
  * 只画细光路（lumiereIsThinBeam）；坐标是舞台 dp（与光场 fragCoord 一致）。
+ * 2026-11-12：芯也照光场乘丁达尔项（tyndall = base + (1 - base) × 烟密度 × density，同着色器 `light *= tyndall`），
+ * 烟浓处亮、烟薄处暗，芯随烟雾起伏；[tyndallAt] 取舞台归一坐标（÷ 高）。段数 8 → 16，起伏才看得出。
  */
-internal fun drawLumiereBeamCores(nc: android.graphics.Canvas, beams: List<LumiereResolvedBeam>, width: Double, height: Double, alpha: Float) {
+internal fun drawLumiereBeamCores(
+    nc: android.graphics.Canvas,
+    beams: List<LumiereResolvedBeam>,
+    width: Double,
+    height: Double,
+    alpha: Float,
+    tyndallAt: ((Double, Double) -> Double)? = null,
+) {
     if (alpha <= 0.003f) return
     val p = beamCorePaint
     for (b in beams) {
         if (!lumiereIsThinBeam(b) || b.intensity <= 0.01) continue
         // 射程：有 reach 用 reach；否则画到出画（按画面对角线封顶）。
         val maxLen = if (b.reach > 0) b.reach else hypot(width / height, 1.0) * 1.2
-        val steps = 8
+        val steps = if (tyndallAt != null) 16 else 8
         val ox = b.ox * height; val oy = b.oy * height
         val peak = maxOf(b.r, b.g, b.b, 1e-4)
         fun ch(v: Double, k: Double) = ((v / peak + (1 - v / peak) * k).coerceIn(0.0, 1.0) * 255).toInt()
@@ -408,7 +421,8 @@ internal fun drawLumiereBeamCores(nc: android.graphics.Canvas, beams: List<Lumie
             val mid = (a0 + a1) / 2
             val start = lumiereSmooth(mid / (b.halfWidth * 2 + 0.01))
             val reachFade = if (b.reach > 0) 1 - lumiereSmooth((mid - (b.reach - max(0.04, b.halfWidth * 2.5))) / max(0.04, b.halfWidth * 2.5)) else 1.0
-            val v = b.intensity * peak * exp(-mid / max(b.length, 0.001)) * start * reachFade
+            val tyndall = tyndallAt?.invoke(b.ox + b.dx * mid, b.oy + b.dy * mid) ?: 1.0
+            val v = b.intensity * peak * exp(-mid / max(b.length, 0.001)) * start * reachFade * tyndall
             val mapped = (1 - exp(-v * 1.6)) * alpha
             if (mapped <= 0.004) continue
             val x0 = (ox + b.dx * a0 * height).toFloat(); val y0 = (oy + b.dy * a0 * height).toFloat()

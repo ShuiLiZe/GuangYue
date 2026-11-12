@@ -346,7 +346,11 @@ private fun DrawScope.drawUnit(
             shader.setLumiereField(input, fogField)
             fieldCache.draw(nc, shader, time, model.width.toFloat(), model.height.toFloat(), overscan)
             // 主光路细亮线（LumiereLight.kt drawLumiereBeamCores）：光场是 2 dp 一格算的，细光线的芯在这里按设备像素补画。
-            drawLumiereBeamCores(nc, light.beams, model.width, model.height, 1f)
+            // 芯随烟雾起伏：同一份烟密度公式（lumiereFogAt，5 倍频）乘丁达尔项。
+            val fog = light.rig.fog
+            drawLumiereBeamCores(nc, light.beams, model.width, model.height, 1f) { x, y ->
+                lumiereTyndall(fog, lumiereFogAt(x, y, time, fog, 5), input.fogScale)
+            }
         }
         nc.restoreToCount(saved)
     }
