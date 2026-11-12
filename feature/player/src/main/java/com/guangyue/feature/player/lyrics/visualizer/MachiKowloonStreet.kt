@@ -2,7 +2,7 @@
 // buildStall / buildPole）、layout.ts（HANGING_SIGNS、ROOF_BILLBOARD、STALL、STALL_TABLE、POLE）、
 // kowloonSigns.ts（店名池、霓虹 / 灯箱配色、按行装箱的图集、稳定 + 两组坏灯管）、kowloonSignPaint.ts（paintKowloonSign、
 // paintKowloonBarSign、drawCocktail、writeText、resolveKowloonVerticalText）。
-// 圆柱 / 斜杆用少段数的棱柱（toon + 墨线下看不出差别）；镬、汤锅、电线（buildCables）、贩卖机与杂物（buildProps）、明渠/沙井已补；铺面卷闸（buildShopfronts）未做。
+// 圆柱 / 斜杆用少段数的棱柱（toon + 墨线下看不出差别）；镬、汤锅、电线（buildCables）、贩卖机与杂物（buildProps）、明渠/沙井已补；铺面（buildShopfronts：卷闸/冰室/药房/暗门/暗巷口日光灯/楼脚电线电表）已补。
 // 随机数用自有 mulberry32（kowloon:signs:<seed>），店名与 Folia 同池同规则，不逐块对齐。
 package com.guangyue.feature.player.lyrics.visualizer
 
@@ -187,6 +187,7 @@ internal fun addMachiKowloonStreet(m: MachiMesh, seed: String = ""): List<MachiS
         m.box(hx - 0.09, hx + 0.09, hy - 0.02, hy, hz - 0.2, hz + 0.2, c("#e2f2ff"), 1f, bottom = true)
     }
     val rnd = MachiRng(machiHashSeed("kowloon:street:$seed"))
+    addMachiKowloonShopfronts(m)
     // buildGround：左排楼脚的明渠 + 路缘、沙井盖。
     for (b in MachiKowloonLayout.BLOCKS.filter { it.name.startsWith("L") }) {
         val z0 = max(b.z0, -1.8); if (b.z1 <= z0) continue
@@ -560,4 +561,72 @@ internal fun addMachiKowloonRoofs(m: MachiMesh, seed: String) {
             x += 0.95
         }
     }
+}
+
+/** street.ts buildShopfronts 照译：各家铺面贴在楼面上的卷闸、玻璃、灯箱。 */
+internal fun addMachiKowloonShopfronts(m: MachiMesh) {
+    val shutter = c("#8d9095"); val shutterDark = c("#62656a"); val frame = c("#383c43"); val dark = c("#1c222b")
+    fun face(name: String): Double { val b = MachiKowloonLayout.BLOCKS.first { it.name == name }; return if (name.startsWith("L")) b.x1 else b.z1 }
+    fun shutterX(x0: Double, x1: Double, z: Double, top: Double, open: Double = 0.0) {
+        m.box(x0 - 0.05, x1 + 0.05, top, top + 0.28, z, z + 0.2, shutterDark, bottom = true)
+        var y = open
+        while (y < top - 0.05) { m.box(x0, x1, y, min(top, y + 0.15), z, z + 0.04, if (y % 0.32 < 0.16) shutter else shutterDark); y += 0.16 }
+    }
+    fun shutterZ(z0: Double, z1: Double, x: Double, top: Double, open: Double = 0.0) {
+        m.box(x, x + 0.2, top, top + 0.28, z0 - 0.05, z1 + 0.05, shutterDark, bottom = true)
+        var y = open
+        while (y < top - 0.05) { m.box(x, x + 0.04, y, min(top, y + 0.15), z0, z1, if (y % 0.32 < 0.16) shutter else shutterDark); y += 0.16 }
+    }
+    fun doorZ(z0: Double, z1: Double, x: Double, top: Double = 2.3) {
+        m.box(x, x + 0.03, 0.0, top, z0, z1, dark)
+        m.box(x, x + 0.08, 0.0, top + 0.1, z0 - 0.07, z0, frame)
+        m.box(x, x + 0.08, 0.0, top + 0.1, z1, z1 + 0.07, frame)
+        m.box(x, x + 0.08, top, top + 0.12, z0 - 0.07, z1 + 0.07, frame)
+    }
+    fun windowZ(z0: Double, z1: Double, x: Double, glow: FloatArray, level: Float) {
+        m.box(x, x + 0.02, 0.45, 2.3, z0, z1, glow, level)
+        val count = max(1, Math.round((z1 - z0) / 0.65).toInt())
+        for (i in 0..count) { val z = z0 + (z1 - z0) * i / count; m.box(x, x + 0.07, 0.45, 2.3, z - 0.03, z + 0.03, frame) }
+        m.box(x, x + 0.08, 0.0, 0.45, z0 - 0.03, z1 + 0.03, frame)
+        m.box(x, x + 0.08, 2.3, 2.42, z0 - 0.03, z1 + 0.03, frame, bottom = true)
+    }
+    // B0：落了的卷闸。B0b：亮着的冰室（cafe 暖光 0.8、竖框、两张卡座剪影）。
+    shutterX(-2.9, -1.7, face("B0"), 2.45)
+    val cafe = face("B0b")
+    m.box(-1.5, -0.42, 0.4, 2.4, cafe, cafe + 0.02, c("#ffd2a0"), 0.8f)
+    m.box(-1.56, -0.36, 0.0, 0.4, cafe, cafe + 0.08, frame)
+    m.box(-1.56, -0.36, 2.4, 2.55, cafe, cafe + 0.08, frame, bottom = true)
+    for (x in listOf(-1.53, -0.96, -0.39)) m.box(x - 0.03, x + 0.03, 0.4, 2.4, cafe, cafe + 0.07, frame)
+    m.box(-1.42, -1.04, 0.4, 0.95, cafe + 0.02, cafe + 0.035, dark)
+    m.box(-0.88, -0.5, 0.4, 0.95, cafe + 0.02, cafe + 0.035, dark)
+    // L1 楼梯口与信箱；L2 药房；L3 卷闸半开透暖光；L4 暗门 + 面档小窗；L5 暗门。
+    val l1 = face("L1")
+    doorZ(-1.55, -0.85, l1)
+    m.box(l1, l1 + 0.1, 1.1, 1.6, -0.65, -0.32, c("#7a4a33"))
+    windowZ(0.0, 1.15, face("L2"), c("#c9ffe0"), 0.72f)
+    val l3 = face("L3")
+    m.box(l3, l3 + 0.02, 0.02, 0.95, 1.45, 2.75, c("#ffc887"), 0.9f)
+    shutterZ(1.45, 2.75, l3, 2.5, 0.95)
+    val l4 = face("L4")
+    doorZ(3.05, 3.7, l4)
+    windowZ(3.9, 4.4, l4, c("#d6ecff"), 0.72f)
+    doorZ(4.8, 5.5, face("L5"), 2.2)
+    // B2：暗巷口，门洞上一根日光灯管（tube 1.5）。
+    val b2 = face("B2")
+    m.box(5.3, 5.95, 0.0, 2.4, b2, b2 + 0.03, dark)
+    m.box(5.22, 5.3, 0.0, 2.5, b2, b2 + 0.08, frame)
+    m.box(5.35, 5.9, 2.55, 2.59, b2, b2 + 0.06, c("#c8f4ff"), 1.5f, bottom = true)
+    // 楼脚一道道下垂的电线（每 0.7 m 一段）、电表箱。
+    val wire = c("#11141a")
+    for (b in MachiKowloonLayout.BLOCKS.filter { it.name.startsWith("L") && it.z1 > -1.8 }) {
+        var z = b.z0 + 0.1
+        while (z < b.z1 - 0.3) {
+            val a = doubleArrayOf(b.x1 + 0.05, 2.8, z); val e = doubleArrayOf(b.x1 + 0.05, 2.8, min(b.z1 - 0.05, z + 0.7))
+            var prev = a
+            for (i in 1..8) { val t = i / 8.0; val q = doubleArrayOf(a[0], 2.8 - 0.06 * 4 * t * (1 - t), a[2] + (e[2] - a[2]) * t); m.tube(prev, q, 0.018, wire); prev = q }
+            z += 0.7
+        }
+    }
+    m.box(l1, l1 + 0.12, 1.6, 2.1, -0.3, -0.18, c("#c6c4bb"))
+    m.box(-2.95, -2.6, 2.55, 2.85, face("B0"), face("B0") + 0.12, c("#c6c4bb"))
 }
