@@ -1,0 +1,440 @@
+// 町景后处理链：逐函数对译 Folia v0.7.25 machi/engine/fx/post.ts + postPasses.ts（MachiAtmospherePass）
+// + three 0.185 UnrealBloomPass（strength = look.bloom，radius 0.62，threshold 0.86，5 级 mip，核 6/10/14/18/22、σ = 核/3）
+// + OutputPass（NeutralToneMapping、sRGB）。
+//   场景（线性 HDR，RGBA16F；设备不支持浮点颜色附件时退 RGBA8）+ 深度贴图 → 氛围（深度拉普拉斯墨线、贴地薄雾与两处灯的
+//   雾中散射、天空的云）→ 亮部提取（半分辨率）→ 5 级逐级降采样的可分离高斯 → 合成时把 5 级按 lerpBloomFactor 加回去
+//   → 色调映射 + sRGB 上屏。Folia 的 bloom 是先合成进半分辨率再加色叠回，这里在最后一道里直接相加，结果相同、少两遍。
+// 模拟器（swiftshader）省力：场景目标长边封顶 1600 px（Folia 的画质分档也按 DPR 降），bloom 从半分辨率起。
+// 还没做：横向光条（MachiStreakPass）、镜头 pass（景深 / 色差 / 暗角 / 颗粒 / 星星，MachiLens 纯函数已在）、抗锯齿。
+package com.guangyue.feature.player.lyrics.visualizer
+
+import android.opengl.GLES30
+import kotlin.math.exp
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
+
+private const val FS_VS = """#version 300 es
+out vec2 vUv;
+void main() {
+    vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+    vUv = p;
+    gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}
+"""
+
+private const val NOISE_GLSL = """
+float pHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float pNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(pHash(i), pHash(i + vec2(1.0, 0.0)), u.x), mix(pHash(i + vec2(0.0, 1.0)), pHash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float pFbm(vec2 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    for (int i = 0; i < 4; i++) {
+        value += amplitude * pNoise(p);
+        p = p * 2.03 + vec2(17.1, 9.2);
+        amplitude *= 0.5;
+    }
+    return value;
+}
+"""
+
+private const val ATMOSPHERE_FS = """#version 300 es
+precision highp float;
+uniform sampler2D tDiffuse;
+uniform highp sampler2D tDepth;
+uniform vec2 uTexel;
+uniform float uInkScale;
+uniform float uDepthRange;
+uniform float uThreshold;
+uniform vec3 uInk;
+uniform float uInkStrength;
+uniform mat4 uInvVP;
+uniform float uTime;
+uniform vec3 uMistColor;
+uniform float uMistAmount;
+uniform float uMistHeight;
+uniform vec2 uWind;
+uniform vec4 uGlowA;
+uniform vec3 uGlowColorA;
+uniform vec4 uGlowB;
+uniform vec3 uGlowColorB;
+uniform vec3 uCloudColor;
+uniform float uCloudAmount;
+uniform float uHaze;
+uniform vec2 uHazeRange;
+uniform float uLightning;
+uniform vec3 uLightningColor;
+uniform float uAspect;
+in vec2 vUv;
+out vec4 fragColor;
+""" + NOISE_GLSL + """
+float depthAt(vec2 uv) { return texture(tDepth, uv).x * uDepthRange; }
+void main() {
+    vec4 color = texture(tDiffuse, vUv);
+    float raw = texture(tDepth, vUv).x;
+    float d = raw * uDepthRange;
+    bool sky = raw > 0.9999;
+    vec2 inkStep = uTexel * uInkScale;
+    float l = depthAt(vUv - vec2(inkStep.x, 0.0));
+    float r = depthAt(vUv + vec2(inkStep.x, 0.0));
+    float u = depthAt(vUv + vec2(0.0, inkStep.y));
+    float b = depthAt(vUv - vec2(0.0, inkStep.y));
+    float lu = depthAt(vUv + vec2(-inkStep.x, inkStep.y));
+    float rb = depthAt(vUv + vec2(inkStep.x, -inkStep.y));
+    float ru = depthAt(vUv + inkStep);
+    float lb = depthAt(vUv - inkStep);
+    float laplace = abs(l + r - 2.0 * d) + abs(u + b - 2.0 * d) + 0.5 * (abs(lu + rb - 2.0 * d) + abs(ru + lb - 2.0 * d));
+    float line = smoothstep(uThreshold, uThreshold * 2.6, laplace) * (sky ? 0.0 : 1.0);
+    vec3 rgb = mix(color.rgb, uInk, line * uInkStrength);
+    if (sky) {
+        vec2 p = vec2(vUv.x * uAspect, vUv.y) * 2.4 + vec2(uTime * 0.012, 0.0);
+        float cloud = smoothstep(mix(0.62, 0.38, uCloudAmount), 0.85, pFbm(p)) * smoothstep(0.0, 0.55, vUv.y) * (0.35 + 0.65 * uCloudAmount);
+        float wisp = smoothstep(0.55, 0.9, pFbm(p * 2.3 + vec2(uTime * 0.02, 3.1))) * (0.5 + 0.5 * uCloudAmount);
+        rgb += uCloudColor * (cloud * 0.55 + wisp * 0.18);
+        rgb += uLightningColor * uLightning * (0.18 + 1.1 * cloud + 0.4 * wisp);
+        rgb = mix(rgb, uMistColor, uHaze * 0.7);
+    } else {
+        vec4 w4 = uInvVP * vec4(vUv * 2.0 - 1.0, raw * 2.0 - 1.0, 1.0);
+        vec3 world = w4.xyz / w4.w;
+        float height = max(world.y, 0.0);
+        float drift = pFbm(world.xz * 0.32 + uWind * uTime) * 0.65 + pFbm(world.xz * 0.9 - uWind * uTime * 1.7) * 0.35;
+        float density = uMistAmount * exp(-height / uMistHeight) * (0.35 + 0.9 * drift);
+        vec2 da = world.xz - uGlowA.xz;
+        vec2 db = world.xz - uGlowB.xz;
+        vec3 lit = uMistColor
+            + uGlowColorA * exp(-dot(da, da) / (uGlowA.w * uGlowA.w)) * exp(-height / 2.2)
+            + uGlowColorB * exp(-dot(db, db) / (uGlowB.w * uGlowB.w)) * exp(-height / 3.0);
+        rgb = mix(rgb, lit, clamp(density, 0.0, 0.85));
+        rgb = mix(rgb, uMistColor, uHaze * (0.3 + 0.7 * smoothstep(uHazeRange.x, uHazeRange.y, d)));
+        rgb += rgb * uLightning * 0.18;
+    }
+    fragColor = vec4(rgb, color.a);
+}
+"""
+
+// LuminosityHighPassShader（defaultColor 0、smoothWidth 0.01）。
+private const val BRIGHT_FS = """#version 300 es
+precision highp float;
+uniform sampler2D tDiffuse;
+uniform float uThreshold;
+in vec2 vUv;
+out vec4 fragColor;
+void main() {
+    vec4 texel = texture(tDiffuse, vUv);
+    float v = dot(texel.rgb, vec3(0.299, 0.587, 0.114));
+    float alpha = smoothstep(uThreshold, uThreshold + 0.01, v);
+    fragColor = mix(vec4(0.0), texel, alpha);
+}
+"""
+
+private const val BLUR_FS = """#version 300 es
+precision highp float;
+uniform sampler2D colorTexture;
+uniform vec2 invSize;
+uniform vec2 direction;
+uniform int uRadius;
+uniform float gaussianCoefficients[22];
+in vec2 vUv;
+out vec4 fragColor;
+void main() {
+    float weightSum = gaussianCoefficients[0];
+    vec3 diffuseSum = texture(colorTexture, vUv).rgb * weightSum;
+    for (int i = 1; i < 22; i++) {
+        if (i >= uRadius) break;
+        float x = float(i);
+        float w = gaussianCoefficients[i];
+        vec2 uvOffset = direction * invSize * x;
+        diffuseSum += (texture(colorTexture, vUv + uvOffset).rgb + texture(colorTexture, vUv - uvOffset).rgb) * w;
+    }
+    fragColor = vec4(diffuseSum, 1.0);
+}
+"""
+
+// UnrealBloomPass 合成（加色叠回）+ OutputPass（NeutralToneMapping、sRGB）。
+private const val OUTPUT_FS = """#version 300 es
+precision highp float;
+uniform sampler2D tScene;
+uniform sampler2D blur1;
+uniform sampler2D blur2;
+uniform sampler2D blur3;
+uniform sampler2D blur4;
+uniform sampler2D blur5;
+uniform float bloomStrength;
+uniform float bloomRadius;
+in vec2 vUv;
+out vec4 fragColor;
+float lerpBloomFactor(float factor) { return mix(factor, 1.2 - factor, bloomRadius); }
+vec3 neutral(vec3 color) {
+    const float startCompression = 0.8 - 0.04;
+    const float desaturation = 0.15;
+    float x = min(color.r, min(color.g, color.b));
+    float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+    color -= offset;
+    float peak = max(color.r, max(color.g, color.b));
+    if (peak < startCompression) return color;
+    float d = 1.0 - startCompression;
+    float newPeak = 1.0 - d * d / (peak + d - startCompression);
+    color *= newPeak / peak;
+    float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
+    return mix(color, vec3(newPeak), g);
+}
+vec3 srgb(vec3 c) {
+    c = clamp(c, 0.0, 1.0);
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+}
+void main() {
+    vec3 color = texture(tScene, vUv).rgb;
+    if (bloomStrength > 0.0) {
+        color += 3.0 * bloomStrength * (
+            lerpBloomFactor(1.0) * texture(blur1, vUv).rgb +
+            lerpBloomFactor(0.8) * texture(blur2, vUv).rgb +
+            lerpBloomFactor(0.6) * texture(blur3, vUv).rgb +
+            lerpBloomFactor(0.4) * texture(blur4, vUv).rgb +
+            lerpBloomFactor(0.2) * texture(blur5, vUv).rgb);
+    }
+    fragColor = vec4(srgb(neutral(color)), 1.0);
+}
+"""
+
+private const val KERNELS = 5
+private val KERNEL_SIZES = intArrayOf(6, 10, 14, 18, 22)
+private const val SCENE_MAX_SIDE = 1600
+
+/** 氛围 pass 每帧的量（post.ts MachiAtmosphereFrame）。颜色都是线性。 */
+internal class MachiAtmosphereFrame(
+    val time: Double,
+    val mistColor: FloatArray,
+    val mistAmount: Double,
+    val cloudColor: FloatArray,
+    val cloudAmount: Double,
+    val haze: Double,
+    val lightning: Double,
+    val glowA: FloatArray,
+    val glowColorA: FloatArray,
+    val glowB: FloatArray,
+    val glowColorB: FloatArray,
+)
+
+private class Target(val fbo: Int, val tex: Int, val w: Int, val h: Int)
+
+internal class MachiPostChain {
+    private var atmosphereProgram = 0
+    private var brightProgram = 0
+    private var blurProgram = 0
+    private var outputProgram = 0
+    private var emptyVao = 0
+    private var sceneFbo = 0
+    private var sceneTex = 0
+    private var depthTex = 0
+    private var atmo: Target? = null
+    private var bright: Target? = null
+    private val horizontal = arrayOfNulls<Target>(KERNELS)
+    private val vertical = arrayOfNulls<Target>(KERNELS)
+    private var floatColor = false
+    var sceneW = 0; private set
+    var sceneH = 0; private set
+    private var screenW = 0
+    private var screenH = 0
+    private val coefficients = Array(KERNELS) { i ->
+        val radius = KERNEL_SIZES[i]
+        val sigma = radius / 3.0
+        FloatArray(22) { k -> if (k < radius) (0.39894 * exp(-0.5 * k * k / (sigma * sigma)) / sigma).toFloat() else 0f }
+    }
+
+    fun init(link: (String, String) -> Int) {
+        atmosphereProgram = link(FS_VS, ATMOSPHERE_FS)
+        brightProgram = link(FS_VS, BRIGHT_FS)
+        blurProgram = link(FS_VS, BLUR_FS)
+        outputProgram = link(FS_VS, OUTPUT_FS)
+        val ids = IntArray(1); GLES30.glGenVertexArrays(1, ids, 0); emptyVao = ids[0]
+        val ext = GLES30.glGetString(GLES30.GL_EXTENSIONS) ?: ""
+        floatColor = ext.contains("GL_EXT_color_buffer_float") || ext.contains("GL_EXT_color_buffer_half_float")
+    }
+
+    private fun colorTexture(w: Int, h: Int): Int {
+        val t = IntArray(1); GLES30.glGenTextures(1, t, 0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, t[0])
+        if (floatColor) GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA16F, w, h, 0, GLES30.GL_RGBA, GLES30.GL_HALF_FLOAT, null)
+        else GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, w, h, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        return t[0]
+    }
+
+    private fun target(w: Int, h: Int): Target {
+        val tex = colorTexture(w, h)
+        val f = IntArray(1); GLES30.glGenFramebuffers(1, f, 0)
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, f[0])
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, tex, 0)
+        return Target(f[0], tex, w, h)
+    }
+
+    private fun release() {
+        val texs = ArrayList<Int>(); val fbos = ArrayList<Int>()
+        if (sceneFbo != 0) { fbos += sceneFbo; texs += sceneTex; texs += depthTex }
+        (listOf(atmo, bright) + horizontal + vertical).filterNotNull().forEach { fbos += it.fbo; texs += it.tex }
+        if (texs.isNotEmpty()) GLES30.glDeleteTextures(texs.size, texs.toIntArray(), 0)
+        if (fbos.isNotEmpty()) GLES30.glDeleteFramebuffers(fbos.size, fbos.toIntArray(), 0)
+        sceneFbo = 0; atmo = null; bright = null
+        horizontal.fill(null); vertical.fill(null)
+    }
+
+    fun resize(width: Int, height: Int) {
+        release()
+        screenW = width; screenH = height
+        val k = min(1.0, SCENE_MAX_SIDE.toDouble() / max(width, height))
+        sceneW = max(1, (width * k).roundToInt()); sceneH = max(1, (height * k).roundToInt())
+        sceneTex = colorTexture(sceneW, sceneH)
+        val d = IntArray(1); GLES30.glGenTextures(1, d, 0); depthTex = d[0]
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, depthTex)
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_DEPTH_COMPONENT24, sceneW, sceneH, 0, GLES30.GL_DEPTH_COMPONENT, GLES30.GL_UNSIGNED_INT, null)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_NEAREST)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_NEAREST)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        val f = IntArray(1); GLES30.glGenFramebuffers(1, f, 0); sceneFbo = f[0]
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, sceneFbo)
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, sceneTex, 0)
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_DEPTH_ATTACHMENT, GLES30.GL_TEXTURE_2D, depthTex, 0)
+        if (GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) != GLES30.GL_FRAMEBUFFER_COMPLETE && floatColor) {
+            android.util.Log.w("MachiPost", "RGBA16F 场景目标不完整，退 RGBA8")
+            floatColor = false
+            resize(width, height)
+            return
+        }
+        atmo = target(sceneW, sceneH)
+        var rx = (sceneW / 2.0).roundToInt(); var ry = (sceneH / 2.0).roundToInt()
+        bright = target(max(1, rx), max(1, ry))
+        for (i in 0 until KERNELS) {
+            horizontal[i] = target(max(1, rx), max(1, ry))
+            vertical[i] = target(max(1, rx), max(1, ry))
+            rx = (rx / 2.0).roundToInt(); ry = (ry / 2.0).roundToInt()
+        }
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+    }
+
+    /** 场景画进这里（调用方清屏、画天空 / 楼 / 招牌）。 */
+    fun beginScene() {
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, sceneFbo)
+        GLES30.glViewport(0, 0, sceneW, sceneH)
+    }
+
+    private fun fullscreen() {
+        GLES30.glBindVertexArray(emptyVao)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
+    }
+
+    private fun bind(unit: Int, tex: Int) {
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + unit)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex)
+    }
+
+    /**
+     * 后处理并上屏。pixelWorldSize：一个场景像素代表的世界尺寸；centerDistance：镜头到目标点（雾的远近）；
+     * depthRange = far − near；invVP：视图投影矩阵的逆（列主序）。
+     */
+    fun finish(
+        pixelWorldSize: Double, centerDistance: Double, near: Double, depthRange: Double, invVP: FloatArray,
+        atmosphere: MachiAtmosphereFrame, bloomStrength: Double,
+    ) {
+        val a = atmo ?: return
+        GLES30.glDisable(GLES30.GL_DEPTH_TEST)
+        GLES30.glDisable(GLES30.GL_BLEND)
+        // 1. 氛围
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, a.fbo)
+        GLES30.glViewport(0, 0, a.w, a.h)
+        val p = atmosphereProgram
+        GLES30.glUseProgram(p)
+        fun u(n: String) = GLES30.glGetUniformLocation(p, n)
+        bind(0, sceneTex); GLES30.glUniform1i(u("tDiffuse"), 0)
+        bind(1, depthTex); GLES30.glUniform1i(u("tDepth"), 1)
+        GLES30.glUniform2f(u("uTexel"), 1f / sceneW, 1f / sceneH)
+        GLES30.glUniform1f(u("uInkScale"), 1f)
+        GLES30.glUniform1f(u("uDepthRange"), depthRange.toFloat())
+        GLES30.glUniform1f(u("uThreshold"), max(0.004, pixelWorldSize * 0.7).toFloat())
+        GLES30.glUniform3fv(u("uInk"), 1, srgbHexToLinear(0x0b0f1a), 0)
+        GLES30.glUniform1f(u("uInkStrength"), 0.82f)
+        GLES30.glUniformMatrix4fv(u("uInvVP"), 1, false, invVP, 0)
+        GLES30.glUniform1f(u("uTime"), atmosphere.time.toFloat())
+        GLES30.glUniform3fv(u("uMistColor"), 1, atmosphere.mistColor, 0)
+        GLES30.glUniform1f(u("uMistAmount"), atmosphere.mistAmount.toFloat())
+        GLES30.glUniform1f(u("uMistHeight"), 0.55f)
+        GLES30.glUniform2f(u("uWind"), 0.05f, 0.02f)
+        GLES30.glUniform4fv(u("uGlowA"), 1, atmosphere.glowA, 0)
+        GLES30.glUniform3fv(u("uGlowColorA"), 1, atmosphere.glowColorA, 0)
+        GLES30.glUniform4fv(u("uGlowB"), 1, atmosphere.glowB, 0)
+        GLES30.glUniform3fv(u("uGlowColorB"), 1, atmosphere.glowColorB, 0)
+        GLES30.glUniform3fv(u("uCloudColor"), 1, atmosphere.cloudColor, 0)
+        GLES30.glUniform1f(u("uCloudAmount"), atmosphere.cloudAmount.toFloat())
+        GLES30.glUniform1f(u("uHaze"), atmosphere.haze.toFloat())
+        GLES30.glUniform2f(u("uHazeRange"), (centerDistance - near - 8).toFloat(), (centerDistance - near + 14).toFloat())
+        GLES30.glUniform1f(u("uLightning"), atmosphere.lightning.toFloat())
+        GLES30.glUniform3fv(u("uLightningColor"), 1, srgbHexToLinear(0xc9d8ff), 0)
+        GLES30.glUniform1f(u("uAspect"), sceneW.toFloat() / max(1, sceneH))
+        fullscreen()
+        // 2. bloom：亮部 → 5 级可分离高斯
+        val bloomOn = bloomStrength > 0.005
+        if (bloomOn) {
+            val br = bright!!
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, br.fbo)
+            GLES30.glViewport(0, 0, br.w, br.h)
+            GLES30.glUseProgram(brightProgram)
+            bind(0, a.tex)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(brightProgram, "tDiffuse"), 0)
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(brightProgram, "uThreshold"), 0.86f)
+            fullscreen()
+            GLES30.glUseProgram(blurProgram)
+            val uTex = GLES30.glGetUniformLocation(blurProgram, "colorTexture")
+            val uInv = GLES30.glGetUniformLocation(blurProgram, "invSize")
+            val uDir = GLES30.glGetUniformLocation(blurProgram, "direction")
+            val uRad = GLES30.glGetUniformLocation(blurProgram, "uRadius")
+            val uCoef = GLES30.glGetUniformLocation(blurProgram, "gaussianCoefficients")
+            GLES30.glUniform1i(uTex, 0)
+            var input = br.tex
+            for (i in 0 until KERNELS) {
+                val h = horizontal[i]!!; val v = vertical[i]!!
+                GLES30.glUniform1i(uRad, KERNEL_SIZES[i])
+                GLES30.glUniform1fv(uCoef, 22, coefficients[i], 0)
+                GLES30.glUniform2f(uInv, 1f / h.w, 1f / h.h)
+                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, h.fbo); GLES30.glViewport(0, 0, h.w, h.h)
+                bind(0, input); GLES30.glUniform2f(uDir, 1f, 0f); fullscreen()
+                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, v.fbo)
+                bind(0, h.tex); GLES30.glUniform2f(uDir, 0f, 1f); fullscreen()
+                input = v.tex
+            }
+        }
+        // 3. 合成 + 色调映射上屏
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        GLES30.glViewport(0, 0, screenW, screenH)
+        val o = outputProgram
+        GLES30.glUseProgram(o)
+        bind(0, a.tex); GLES30.glUniform1i(GLES30.glGetUniformLocation(o, "tScene"), 0)
+        for (i in 0 until KERNELS) {
+            bind(1 + i, vertical[i]!!.tex)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(o, "blur${i + 1}"), 1 + i)
+        }
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "bloomStrength"), if (bloomOn) bloomStrength.toFloat() else 0f)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "bloomRadius"), 0.62f)
+        fullscreen()
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindVertexArray(0)
+        GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+    }
+}
+
+/** three Color.setHex（sRGB → 线性，按 sRGB 传递函数）。 */
+internal fun srgbHexToLinear(rgb: Int): FloatArray = FloatArray(3) { i ->
+    val c = ((rgb shr (16 - 8 * i)) and 0xff) / 255.0
+    (if (c < 0.04045) c * 0.0773993808 else Math.pow(c * 0.9478672986 + 0.0521327014, 2.4)).toFloat()
+}
+
+/** 十六进制颜色串 → 线性（同上）。 */
+internal fun machiLinear(hex: String, k: Double = 1.0): FloatArray =
+    srgbHexToLinear(Integer.parseInt(hex.removePrefix("#").take(6), 16)).let { c -> FloatArray(3) { i -> (c[i] * k).toFloat() } }

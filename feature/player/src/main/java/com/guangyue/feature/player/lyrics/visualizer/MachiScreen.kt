@@ -1,9 +1,9 @@
 // 町景的歌词大屏、LED 跑马灯、门头霓虹店招：逐函数对译 Folia v0.7.25
 //   machi/engine/lyricScreen.ts（MachiLyricScreen）、engine/ledStrip.ts（MachiLedStrip）、engine/signRaster.ts
 //   （paintMachiBoard / paintMachiLedStrip / strokeNeonText / fitFont）、scenes/kowloon/kowloonSigns.ts
-//   （resolveKowloonTickerText、曲名卡两行）、kowloonSignPaint.ts（paintKowloonBarSign）。
+//   （resolveKowloonTickerText、曲名卡两行、店招三组灯管亮度）；店招图集在 MachiKowloonStreet.kt。
 // 牌面先画进 android.graphics.Bitmap（上半张未唱、下半张唱到），GL 线程上 texImage2D；着色器照抄
-// （three 的 sRGB 贴图 → 线性、NeutralToneMapping、再回 sRGB；Bitmap 是预乘 alpha，取样后先除回）。
+// （three 的 sRGB 贴图 → 线性；画进场景目标时输出线性，色调映射在后处理最后一道；Bitmap 是预乘 alpha，取样后先除回）。
 // 和 Folia 的差别：贴图槽只留「当前 + 换行中」两张（Folia 池子 3 张，第三张是预热下一行，这里换行时现画）；
 // 跑马灯字条 2048×48（Folia 4096×96，滚动速度按像素减半，看上去一样快）；大屏闪拍（智能动感）未接，uSwell 恒 0。
 package com.guangyue.feature.player.lyrics.visualizer
@@ -104,54 +104,6 @@ internal fun paintMachiLedStrip(bitmap: Bitmap, typeface: Typeface, text: String
     return used
 }
 
-/** strokeNeonText：外圈同色光晕描边 + 近白芯（Canvas 2D shadowBlur ≈ setShadowLayer 半径 blur/2）。 */
-private fun strokeNeonText(canvas: Canvas, paint: Paint, text: String, x: Float, y: Float, color: Int, glow: Float) {
-    paint.style = Paint.Style.STROKE
-    paint.strokeJoin = Paint.Join.ROUND
-    paint.setShadowLayer(glow / 2, 0f, 0f, color)
-    paint.color = color
-    paint.strokeWidth = glow * 0.45f
-    canvas.drawText(text, x, y, paint)
-    paint.setShadowLayer(glow * 0.2f, 0f, 0f, color)
-    paint.color = android.graphics.Color.WHITE
-    paint.strokeWidth = glow * 0.14f
-    canvas.drawText(text, x, y, paint)
-    paint.clearShadowLayer()
-    paint.style = Paint.Style.FILL
-}
-
-/** paintKowloonBarSign 的近似：深底、左边鸡尾酒杯线稿、中间曲名霓虹、右边竖排「酒吧」。 */
-internal fun paintKowloonBarSign(bitmap: Bitmap, typeface: Typeface, title: String, neon: String) {
-    val canvas = Canvas(bitmap)
-    val width = bitmap.width.toFloat(); val height = bitmap.height.toFloat()
-    canvas.drawColor(0xFF120a14.toInt())
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.typeface = typeface; textAlign = Paint.Align.CENTER }
-    // 鸡尾酒杯（drawCocktail）：倒三角杯身 + 杯脚 + 底座，青色霓虹线。
-    val glass = 0xFF3fe8ff.toInt()
-    val cx = height * 0.6f; val cy = height * 0.5f; val s = height * 0.8f
-    val path = android.graphics.Path().apply {
-        moveTo(cx - s * 0.36f, cy - s * 0.32f); lineTo(cx + s * 0.36f, cy - s * 0.32f); lineTo(cx, cy + s * 0.08f); close()
-        moveTo(cx, cy + s * 0.08f); lineTo(cx, cy + s * 0.36f)
-        moveTo(cx - s * 0.2f, cy + s * 0.38f); lineTo(cx + s * 0.2f, cy + s * 0.38f)
-    }
-    paint.style = Paint.Style.STROKE; paint.strokeWidth = height * 0.05f; paint.color = glass
-    paint.setShadowLayer(height * 0.08f, 0f, 0f, glass)
-    canvas.drawPath(path, paint)
-    paint.clearShadowLayer(); paint.style = Paint.Style.FILL
-    val markWidth = height * 0.7f
-    val markX = width - markWidth * 0.75f
-    val mark = 0xFFff4fb0.toInt()
-    val markPx = height * 0.36f
-    paint.textSize = markPx
-    fun mid() = paint.fontMetrics.let { -(it.ascent + it.descent) / 2 }
-    strokeNeonText(canvas, paint, "酒", markX, height * 0.29f + mid(), mark, markPx * 0.18f)
-    strokeNeonText(canvas, paint, "吧", markX, height * 0.71f + mid(), mark, markPx * 0.18f)
-    val left = height * 1.15f
-    val right = markX - markWidth * 0.55f
-    val px = fitFont(paint, title, right - left, height * 0.6f)
-    strokeNeonText(canvas, paint, title, (left + right) / 2, height * 0.54f + mid(), hexInt(neon), px * 0.18f)
-}
-
 private const val SIGN_VS = """#version 300 es
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec2 aUv;
@@ -238,7 +190,7 @@ void main() {
     float fresnel = pow(1.0 - clamp(uViewZ, 0.0, 1.0), 3.0);
     float glare = smoothstep(0.22, 0.0, abs(vUv.x * 0.7 + vUv.y * 0.9 - 1.05));
     color += uSheen * (0.035 + 0.22 * fresnel + 0.05 * glare);
-    fragColor = vec4(toSrgb(neutral(color)), 1.0);
+    fragColor = vec4(color, 1.0);
 }
 """
 
@@ -266,7 +218,7 @@ void main() {
     float dotMask = 1.0 - smoothstep(0.28, 0.42, length(f));
     vec3 off = vec3(0.025, 0.022, 0.03);
     vec3 color = mix(off, mix(uLed * 0.08, uLed * 2.2, a) * uBright, dotMask);
-    fragColor = vec4(toSrgb(neutral(color)), 1.0);
+    fragColor = vec4(color, 1.0);
 }
 """
 
@@ -280,7 +232,7 @@ out vec4 fragColor;
 """ + COMMON + """
 void main() {
     vec4 c = texture(uMap, vec2(vUv.x, 1.0 - vUv.y));
-    fragColor = vec4(toSrgb(neutral(toLinear(c.rgb) * uLevel)), 1.0);
+    fragColor = vec4(toLinear(c.rgb / max(c.a, 1e-4)) * uLevel, 1.0);
 }
 """
 
@@ -305,7 +257,10 @@ internal class MachiKowloonSigns(
     private val title: String,
     private val artist: String,
     private val seed: String,
+    private val placements: List<MachiSignPlacement> = emptyList(),
 ) {
+    private var atlasCounts = IntArray(3)
+    private var atlasStarts = IntArray(3)
     private val typeface = machiTypeface(700)
     private val measure = MachiTextMeasure(typeface)
     private val half = (SCREEN_TEXTURE_WIDTH * (MachiKowloonLayout.SCREEN_H / MachiKowloonLayout.SCREEN_W)).roundToInt()
@@ -342,14 +297,14 @@ internal class MachiKowloonSigns(
         GLES30.glGenTextures(4, texIds, 0)
         slots = Array(2) { Slot(texIds[it], Bitmap.createBitmap(SCREEN_TEXTURE_WIDTH, half * 2, Bitmap.Config.ARGB_8888)) }
         ledTex = texIds[2]; neonTex = texIds[3]
-        // 门头店招：图集里 fine 密度 300 px/m。
-        val signBmp = Bitmap.createBitmap((MachiKowloonLayout.SIGN_W * 300).roundToInt(), (MachiKowloonLayout.SIGN_H * 300).roundToInt(), Bitmap.Config.ARGB_8888)
-        paintKowloonBarSign(signBmp, machiTypeface(800), title.ifEmpty { "KOWLOON" }, palette.neon)
-        upload(neonTex, signBmp, mip = true)
-        signBmp.recycle()
+        // 店招图集（门头 + 伸出楼面的 8 块 + 楼顶「九龍城寨」+ 大排档），按灯管组排好。
+        val bar = MachiSignPlacement(MachiKowloonLayout.SIGN_X, MachiKowloonLayout.SIGN_Y, MachiKowloonLayout.SIGN_Z + 0.006, 0.0, MachiKowloonLayout.SIGN_W, MachiKowloonLayout.SIGN_H, false, "bar")
+        val atlas = buildMachiSignAtlas(placements, bar, seed, title, artist, palette.neon, palette.brand.firstOrNull() ?: palette.neon)
+        upload(neonTex, atlas.bitmap, mip = true)
+        atlas.bitmap.recycle()
+        atlasStarts = IntArray(3) { 12 + atlas.groupStart[it] }; atlasCounts = atlas.groupCount.copyOf()
         val mesh = planeZ(MachiKowloonLayout.SCREEN_X, MachiKowloonLayout.SCREEN_Y, MachiKowloonLayout.SCREEN_Z + 0.006, MachiKowloonLayout.SCREEN_W, MachiKowloonLayout.SCREEN_H) +
-            planeZ(TICKER_X, TICKER_Y, TICKER_Z, TICKER_W, TICKER_H) +
-            planeZ(MachiKowloonLayout.SIGN_X, MachiKowloonLayout.SIGN_Y, MachiKowloonLayout.SIGN_Z + 0.006, MachiKowloonLayout.SIGN_W, MachiKowloonLayout.SIGN_H)
+            planeZ(TICKER_X, TICKER_Y, TICKER_Z, TICKER_W, TICKER_H) + atlas.mesh
         val ids = IntArray(1); GLES30.glGenVertexArrays(1, ids, 0); vao = ids[0]
         val bufs = IntArray(1); GLES30.glGenBuffers(1, bufs, 0)
         GLES30.glBindVertexArray(vao)
@@ -461,19 +416,27 @@ internal class MachiKowloonSigns(
         GLES30.glUniform1f(l("uAspect"), tickerAspect)
         GLES30.glUniform1f(l("uBright"), (0.9 + 0.2 * frame.audio).toFloat())
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 6, 6)
-        // 门头霓虹（稳定组：neon = artificial^1.4 × (1 + 0.1 chorus)，× (0.93 + 0.07 flicker)）
+        // 店招（kowloonSigns.ts update）：霓虹白天也亮着；稳定组 × (0.93 + 0.07 flicker)，两组坏灯管时不时闪一阵、灭一下。
         GLES30.glUseProgram(neonProgram)
         fun n(s: String) = GLES30.glGetUniformLocation(neonProgram, s)
         GLES30.glUniformMatrix4fv(n("uVP"), 1, false, vp, 0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, neonTex)
         GLES30.glUniform1i(n("uMap"), 0)
         val neon = frame.artificial.pow(1.4) * (1 + 0.1 * chorusGlow)
-        GLES30.glUniform1f(n("uLevel"), (neon * (0.93 + 0.07 * frame.flicker)).toFloat())
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 12, 6)
+        fun broken(salt: String, offset: Double): Double {
+            val f = resolveMachiFlicker(frame.ambientTime + offset, "$seed:$salt", 1.8)
+            return neon * (if (f < 1) 0.12 + 0.3 * (f - 0.5) else 1.0)
+        }
+        val levels = doubleArrayOf(neon * (0.93 + 0.07 * frame.flicker), broken("neonA", 1.3), broken("neonB", 3.7))
+        for (g in 0..2) {
+            if (atlasCounts[g] == 0) continue
+            GLES30.glUniform1f(n("uLevel"), levels[g].toFloat())
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, atlasStarts[g], atlasCounts[g])
+        }
         GLES30.glBindVertexArray(0)
     }
 
-    private fun linear(hex: String, k: Double) = machiRgb(hex).let { c -> FloatArray(3) { i -> (c[i].toDouble().pow(2.2) * k).toFloat() } }
+    private fun linear(hex: String, k: Double) = machiLinear(hex, k)
 
     companion object {
         // layout.ts TICKER

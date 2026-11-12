@@ -1,10 +1,11 @@
 // 町景（Folia machi）舞台起步：OpenGL ES 3 自写最小子集（GLSurfaceView），先接「城寨酒吧」白模。
 //   · 镜头：MachiCamera.kt（camera.ts 默认构图 + 运镜，正交斜俯视）。运镜按歌曲时间走（氛围时钟未接，暂停时也停）。
 //   · 光照：skyLights.ts 夜里的半球光（hemiSky / hemiGround × 2.1）+ 月光（方向 (-6.5, 14, -5)、× 1.35），
-//     与 three 一样按线性空间 Lambert（÷π）算，再过 NeutralToneMapping（Khronos PBR Neutral）转 sRGB；亮窗 / 屏面 / 酒吧后墙自发光 × artificial。
-//     贴地薄雾按 environment look 的 mist 向 fog 色混。天空 = palette.skyTop → skyBottom 竖向渐变。
+//     与 three 一样按线性空间 Lambert（÷π）算；亮窗 / 屏面 / 酒吧后墙自发光 × artificial。天空 = palette.skyTop → skyBottom 竖向渐变。
 //   · 歌词大屏（逐字点亮 + 换行信号切换）、屏下 LED 跑马灯、门头霓虹店招在 GL 里画（MachiScreen.kt，对译 lyricScreen.ts / ledStrip.ts）。
-// 还没做：toon 渐变阶、阴影、bloom / 镜头 pass（MachiLens 已有纯函数）、天气、招牌、道具、另两个场景（便利店 / 车站）。
+//   · toon：直射月光走 4 阶渐变（materials.ts createToonGradient）；场景画进线性 HDR 目标，后处理（MachiPost.kt）
+//     做墨线 / 贴地薄雾 / 云 / bloom，最后色调映射上屏（同 three：渲染到目标时材质不做色调映射，OutputPass 做）。
+// 还没做：阴影、光条与镜头 pass（MachiLens 已有纯函数）、天气、招牌、道具、另两个场景（便利店 / 车站）。
 // 只给取证页用（MachiStagePreview），未进歌词样式列表。
 package com.guangyue.feature.player.lyrics.visualizer
 
@@ -52,38 +53,23 @@ uniform vec3 uSunDir;
 uniform vec3 uSun;
 uniform vec3 uHemiSky;
 uniform vec3 uHemiGround;
-uniform vec3 uFog;
-uniform float uMist;
 uniform float uArtificial;
 out vec4 fragColor;
-vec3 toLinear(vec3 c) { return pow(c, vec3(2.2)); }
-vec3 toSrgb(vec3 c) { return pow(max(c, 0.0), vec3(1.0 / 2.2)); }
-// three NeutralToneMapping（Khronos PBR Neutral）。
-vec3 neutral(vec3 color) {
-    const float startCompression = 0.8 - 0.04;
-    const float desaturation = 0.15;
-    float x = min(color.r, min(color.g, color.b));
-    float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
-    color -= offset;
-    float peak = max(color.r, max(color.g, color.b));
-    if (peak < startCompression) return color;
-    float d = 1.0 - startCompression;
-    float newPeak = 1.0 - d * d / (peak + d - startCompression);
-    color *= newPeak / peak;
-    float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
-    return mix(color, vec3(newPeak), g);
+vec3 toLinear(vec3 c) { return mix(c * 0.0773993808, pow(c * 0.9478672986 + 0.0521327014, vec3(2.4)), step(0.04045, c)); }
+// MeshToonMaterial：直射光走 4 阶渐变图（86/146/206/255，最近邻），半球光照常；线性输出（色调映射在后处理最后一道）。
+float toonStep(float dotNL) {
+    float coord = clamp(dotNL * 0.5 + 0.5, 0.0, 0.9999);
+    int i = int(floor(coord * 4.0));
+    return i == 0 ? 86.0 / 255.0 : (i == 1 ? 146.0 / 255.0 : (i == 2 ? 206.0 / 255.0 : 1.0));
 }
 void main() {
     vec3 n = normalize(vNor);
     vec3 albedo = toLinear(vCol);
     float w = 0.5 * n.y + 0.5;
-    vec3 irradiance = mix(uHemiGround, uHemiSky, w) + uSun * max(dot(n, uSunDir), 0.0);
+    vec3 irradiance = mix(uHemiGround, uHemiSky, w) + uSun * toonStep(dot(n, uSunDir));
     vec3 lit = albedo * irradiance / 3.14159265;
     vec3 glow = albedo * uArtificial;
-    vec3 c = mix(lit, glow, vEmi);
-    float mist = uMist * (1.0 - smoothstep(0.0, 2.6, vY)) * (1.0 - vEmi);
-    c = mix(c, toLinear(uFog) * 0.35, clamp(mist, 0.0, 1.0));
-    fragColor = vec4(toSrgb(neutral(c)), 1.0);
+    fragColor = vec4(mix(lit, glow, vEmi), 1.0);
 }
 """
 
@@ -94,12 +80,14 @@ void main() { gl_Position = vec4(aPos, 0.999, 1.0); vT = aPos.y * 0.5 + 0.5; }
 """
 
 private const val MACHI_SKY_FS = """#version 300 es
-precision mediump float;
+precision highp float;
 in float vT;
 uniform vec3 uTop;
 uniform vec3 uBottom;
 out vec4 fragColor;
-void main() { fragColor = vec4(mix(uBottom, uTop, smoothstep(0.0, 1.0, vT)), 1.0); }
+// sky.ts：sRGB 的竖向线性渐变（canvas 渐变在 sRGB 里插值），贴图按 sRGB 解码成线性。
+vec3 toLinear(vec3 c) { return mix(c * 0.0773993808, pow(c * 0.9478672986 + 0.0521327014, vec3(2.4)), step(0.04045, c)); }
+void main() { fragColor = vec4(toLinear(mix(uBottom, uTop, vT)), 1.0); }
 """
 
 /** 夜景的光照参数（skyLights.ts + environment.ts 夜 / 晴）。 */
@@ -109,9 +97,7 @@ internal class MachiNightLight(val palette: MachiPalette) {
         val l = sqrt(6.5 * 6.5 + 14.0 * 14.0 + 5.0 * 5.0)
         floatArrayOf((-6.5 / l).toFloat(), (14 / l).toFloat(), (-5 / l).toFloat())
     }
-    private fun lin(hex: String, k: Double): FloatArray = machiRgb(hex).let { c ->
-        FloatArray(3) { i -> (Math.pow(c[i].toDouble(), 2.2) * k).toFloat() }
-    }
+    private fun lin(hex: String, k: Double): FloatArray = machiLinear(hex, k)
     val sun = lin(palette.moon, look.sunIntensity)
     val hemiSky = lin(palette.hemiSky, look.hemiIntensity)
     val hemiGround = lin(palette.hemiGround, look.hemiIntensity)
@@ -128,6 +114,10 @@ private class MachiRenderer(
 ) : GLSurfaceView.Renderer {
     private var lastNanos = 0L
     private var ambient = 0.0
+    private val post = MachiPostChain()
+    private val invVP = FloatArray(16)
+    private val glowColorA = machiLinear("#ff4fb0")
+    private val glowColorB = machiLinear(mcMixHex("#ff9fd0", light.palette.interiorLight, 0.45))
     private var program = 0
     private var skyProgram = 0
     private var vao = 0
@@ -184,14 +174,17 @@ private class MachiRenderer(
         GLES30.glBindVertexArray(0)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         signs.init(::link)
+        post.init(::link)
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
         GLES30.glViewport(0, 0, width, height)
         aspectW = width.toDouble(); aspectH = height.toDouble()
+        post.resize(width, height)
     }
 
     override fun onDrawFrame(gl: GL10?) {
+        post.beginScene()
         GLES30.glClearColor(0f, 0f, 0f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         val p = light.palette
@@ -212,8 +205,6 @@ private class MachiRenderer(
         GLES30.glUniform3fv(GLES30.glGetUniformLocation(program, "uSun"), 1, light.sun, 0)
         GLES30.glUniform3fv(GLES30.glGetUniformLocation(program, "uHemiSky"), 1, light.hemiSky, 0)
         GLES30.glUniform3fv(GLES30.glGetUniformLocation(program, "uHemiGround"), 1, light.hemiGround, 0)
-        GLES30.glUniform3fv(GLES30.glGetUniformLocation(program, "uFog"), 1, machiRgb(p.fog), 0)
-        GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uMist"), light.look.mist.toFloat())
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uArtificial"), light.look.artificial.toFloat())
         GLES30.glBindVertexArray(vao)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, count)
@@ -230,6 +221,32 @@ private class MachiRenderer(
         signs.draw(
             pose.viewProjection(), view.z.toFloat(),
             MachiSignFrame(t, ambient, delta, resolveMachiChorus(lines, target), 0.0, light.look.artificial, resolveMachiFlicker(ambient, seed)),
+        )
+        // 后处理（MachiPost.kt）：墨线 / 薄雾 / 云 → bloom → 色调映射。夜里：mist 色 = skyBottom × 1.35，
+        // 云色 = lerp(skyBottom, moon, 0.25) × 0.7；雾里的两处灯（kowloonScene glowA / glowB）。
+        android.opengl.Matrix.invertM(invVP, 0, pose.viewProjection(), 0)
+        val look = light.look
+        val skyBottom = machiLinear(p.skyBottom)
+        val moon = machiLinear(p.moon)
+        val neon = 1.0 * (0.85 + 0.15 * resolveMachiFlicker(ambient, seed))
+        post.finish(
+            pixelWorldSize = (pose.top - pose.bottom) / pose.zoom / post.sceneH,
+            centerDistance = kotlin.math.sqrt((pose.position - pose.target).dot(pose.position - pose.target)),
+            near = 0.1, depthRange = 200.0 - 0.1, invVP = invVP,
+            atmosphere = MachiAtmosphereFrame(
+                time = ambient,
+                mistColor = FloatArray(3) { skyBottom[it] * 1.35f },
+                mistAmount = look.mist,
+                cloudColor = FloatArray(3) { ((skyBottom[it] + (moon[it] - skyBottom[it]) * 0.25f) * 0.7f) },
+                cloudAmount = look.clouds,
+                haze = look.haze,
+                lightning = 0.0,
+                glowA = floatArrayOf(-2.0f, 0f, 1.0f, 3.4f),
+                glowColorA = FloatArray(3) { (glowColorA[it] * 0.42 * neon).toFloat() },
+                glowB = floatArrayOf(MachiKowloonLayout.SCREEN_X.toFloat(), 0f, (-1.5 + 0.8).toFloat(), 3.0f),
+                glowColorB = FloatArray(3) { (glowColorB[it] * 0.36 * look.artificial).toFloat() },
+            ),
+            bloomStrength = look.bloom,
         )
     }
 }
@@ -258,7 +275,7 @@ fun MachiStagePreview(
     val light = remember(palette) { MachiNightLight(palette) }
     val model = remember(seed) { buildMachiKowloon(seed) }
     val rig = remember { MachiCameraRig(machiKowloonFramingPoints(), MachiKowloonLayout.VIEW) }
-    val signs = remember(palette, songTitle, artist, seed) { MachiKowloonSigns(palette, songTitle, artist, seed) }
+    val signs = remember(palette, songTitle, artist, seed, model) { MachiKowloonSigns(palette, songTitle, artist, seed, model.signs) }
     Box(modifier) {
         AndroidView(
             factory = { ctx ->
