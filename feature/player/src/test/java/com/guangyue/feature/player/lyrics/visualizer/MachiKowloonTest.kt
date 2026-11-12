@@ -36,7 +36,7 @@ class MachiKowloonTest {
     }
 
     @Test
-    fun `楼面杂件按 blocks.ts 都摆上了，伸出物互不相交`() {
+    fun `楼面杂件按 blocks 规则都摆上了，伸出物互不相交`() {
         val a = buildMachiKowloon("probe")
         for (k in listOf("cage", "ac", "laundry", "pipe", "addition", "strip")) assertTrue("$k=${a.clutter[k]}", (a.clutter[k] ?: 0) > 0)
         // 窗格分配按 roll：铁笼 36%、晾衫竹 12%，铁笼应多于晾衫竹。

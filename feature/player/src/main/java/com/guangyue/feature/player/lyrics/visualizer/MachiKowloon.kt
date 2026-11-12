@@ -187,7 +187,7 @@ internal fun buildMachiKowloon(seed: String): MachiKowloonModel {
     val gx = MachiKowloonLayout.SIGN_X; val gy = MachiKowloonLayout.SIGN_Y; val gz = MachiKowloonLayout.SIGN_Z
     m.box(gx - MachiKowloonLayout.SIGN_W / 2, gx + MachiKowloonLayout.SIGN_W / 2, gy - MachiKowloonLayout.SIGN_H / 2, gy + MachiKowloonLayout.SIGN_H / 2, gz - 0.12, gz, machiRgb(art.getValue("signBox")))
     // 街面道具：店招盒子、楼顶广告架、大排档、电线杆（MachiKowloonStreet.kt）。
-    val signs = addMachiKowloonStreet(m)
+    val signs = addMachiKowloonStreet(m, seed)
     addMachiKowloonRoofs(m, seed)
     return MachiKowloonModel(m.toArray(), ctx.lit, ctx.dark, signs, ctx.clutter)
 }

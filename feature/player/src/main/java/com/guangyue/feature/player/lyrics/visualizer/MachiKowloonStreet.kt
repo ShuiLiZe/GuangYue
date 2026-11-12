@@ -2,7 +2,7 @@
 // buildStall / buildPole）、layout.ts（HANGING_SIGNS、ROOF_BILLBOARD、STALL、STALL_TABLE、POLE）、
 // kowloonSigns.ts（店名池、霓虹 / 灯箱配色、按行装箱的图集、稳定 + 两组坏灯管）、kowloonSignPaint.ts（paintKowloonSign、
 // paintKowloonBarSign、drawCocktail、writeText、resolveKowloonVerticalText）。
-// 圆柱 / 斜杆用少段数的棱柱（toon + 墨线下看不出差别）；镬、汤锅、电线（buildCables）、杂物、贩卖机还没做。
+// 圆柱 / 斜杆用少段数的棱柱（toon + 墨线下看不出差别）；镬、汤锅、电线（buildCables）、贩卖机与杂物（buildProps）、明渠/沙井已补；铺面卷闸（buildShopfronts）未做。
 // 随机数用自有 mulberry32（kowloon:signs:<seed>），店名与 Folia 同池同规则，不逐块对齐。
 package com.guangyue.feature.player.lyrics.visualizer
 
@@ -96,7 +96,7 @@ internal fun MachiMesh.tube(a: DoubleArray, b: DoubleArray, r: Double, color: Fl
 }
 
 /** 街面道具进同一张网格；返回各块招牌面的位置（顺序同 Folia：店招 ×8、楼顶广告架、大排档）。 */
-internal fun addMachiKowloonStreet(m: MachiMesh): List<MachiSignPlacement> {
+internal fun addMachiKowloonStreet(m: MachiMesh, seed: String = ""): List<MachiSignPlacement> {
     val art = MachiKowloonStreet.ART
     val placements = ArrayList<MachiSignPlacement>()
     // buildHangingSigns
@@ -185,6 +185,72 @@ internal fun addMachiKowloonStreet(m: MachiMesh): List<MachiSignPlacement> {
         m.tube(doubleArrayOf(x, MachiKowloonStreet.POLE_LAMP_Y - 0.15, z + 0.1), doubleArrayOf(hx, hy + 0.08, hz - 0.2), 0.03, steel)
         m.box(hx - 0.13, hx + 0.13, hy, hy + 0.1, hz - 0.26, hz + 0.26, c(art.getValue("darkMetal")))
         m.box(hx - 0.09, hx + 0.09, hy - 0.02, hy, hz - 0.2, hz + 0.2, c("#e2f2ff"), 1f, bottom = true)
+    }
+    val rnd = MachiRng(machiHashSeed("kowloon:street:$seed"))
+    // buildGround：左排楼脚的明渠 + 路缘、沙井盖。
+    for (b in MachiKowloonLayout.BLOCKS.filter { it.name.startsWith("L") }) {
+        val z0 = max(b.z0, -1.8); if (b.z1 <= z0) continue
+        m.box(b.x1, b.x1 + 0.22, 0.0, MachiKowloonLayout.LEVEL_GROUND + 0.004, z0, b.z1, c("#1d2026"))
+        m.box(b.x1 + 0.22, b.x1 + 0.28, 0.0, MachiKowloonLayout.LEVEL_GROUND + 0.05, z0, b.z1, c("#5f6878"))
+    }
+    m.prism(1.6, MachiKowloonLayout.LEVEL_GROUND, 4.1, 0.32, 0.02, c(art.getValue("darkMetal")), 20)
+    // buildCables：杆横担 → 后排楼顶 / B2 楼顶 / 左排楼高处；左排楼面 ↔ 后排楼面在巷子那角交错 11 根（sagWire 16 段抛物下垂）。
+    run {
+        val wire = c(art.getValue("wire"))
+        fun sag(a: DoubleArray, b: DoubleArray, sagM: Double, r: Double) {
+            var prev = a
+            for (i in 1..16) {
+                val t = i / 16.0
+                val q = doubleArrayOf(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - sagM * 4 * t * (1 - t), a[2] + (b[2] - a[2]) * t)
+                m.tube(prev, q, r, wire); prev = q
+            }
+        }
+        val x = MachiKowloonStreet.POLE_X; val z = MachiKowloonStreet.POLE_Z; val h = MachiKowloonStreet.POLE_H
+        val anchors = listOf(h - 0.35, h - 0.8).flatMap { y -> listOf(-0.55, -0.2, 0.2, 0.55).map { dz -> doubleArrayOf(x, y + 0.12, z + dz) } }
+        val bl = MachiKowloonLayout.BLOCKS
+        val b1 = bl.first { it.name == "B1" }; val b2 = bl.first { it.name == "B2" }; val l1 = bl.first { it.name == "L1" }
+        anchors.take(4).forEachIndexed { i, a ->
+            val to = if (i < 2) doubleArrayOf(3.4 + i * 0.5, b1.height + 0.2, b1.z1 - 0.3 - i * 0.4) else doubleArrayOf(b2.x0 + 0.4 + i * 0.2, b2.height + 0.15, b2.z1 - 0.2)
+            sag(a, to, 0.15 + rnd.next() * 0.15, 0.013)
+        }
+        anchors.drop(4).forEachIndexed { i, a -> sag(a, doubleArrayOf(l1.x1, l1.height - 0.25 - i * 0.12, l1.z0 + 0.4 + i * 0.25), 0.3 + rnd.next() * 0.2, 0.013) }
+        fun leftFaceAt(zz: Double) = bl.firstOrNull { it.name.startsWith("L") && zz >= it.z0 && zz < it.z1 }?.x1 ?: -3.4
+        repeat(11) {
+            val zz = -1.6 + rnd.next() * 4.4
+            val from = doubleArrayOf(leftFaceAt(zz), 3.3 + rnd.next() * 2.8, zz)
+            val toX = -2.9 + rnd.next() * 2.5
+            val to = doubleArrayOf(toX, 3.3 + rnd.next() * 2.7, if (toX < -1.6) -1.8 else -2.05)
+            sag(from, to, 0.12 + rnd.next() * 0.35, 0.011)
+        }
+    }
+    // buildProps：贩卖机（发光正面）、木箱一摞、垃圾袋、石油气罐、两架电单车、手推车、蓝胶箱。
+    run {
+        val vx = 4.95; val vz = -1.95
+        m.box(vx - 0.34, vx + 0.34, 0.0, 1.8, vz - 0.32, vz + 0.28, c("#2f5f9e"))
+        m.box(vx - 0.27, vx + 0.27, 0.75, 1.65, vz + 0.28, vz + 0.3, c("#d4ebff"), 0.75f)
+        m.box(vx - 0.24, vx + 0.24, 0.18, 0.4, vz + 0.28, vz + 0.31, c("#1c222b"))
+        val crate = c("#8a6a45")
+        for ((cx, cz, cy) in listOf(Triple(-3.45, 5.75, 0.0), Triple(-3.45, 5.75, 0.36), Triple(-3.0, 5.6, 0.0))) m.box(cx - 0.25, cx + 0.25, cy, cy + 0.36, cz - 0.21, cz + 0.21, crate)
+        for (i in 0 until 4) {
+            val sy = 0.75 + rnd.next() * 0.2; val bx = -3.05 + rnd.next() * 0.25; val bz = -0.75 + i * 0.24 + rnd.next() * 0.1
+            m.prism(bx, 0.16 - 0.22 * sy, bz, 0.2, 0.44 * sy, c("#22282a"), 8, rt = 0.12)
+        }
+        for (cz in listOf(4.25, 3.95)) m.prism(-3.1, MachiKowloonLayout.LEVEL_GROUND, cz, 0.13, 0.62, c("#c9452f"), 10)
+        // 电单车：车头朝 +x 再转约 90°（这里取正 90°，车头朝 -z；Folia 另加 ±0.15 rad 随机偏）。
+        for ((sx, sz, col) in listOf(Triple(-2.75, 4.75, "#c43c3c"), Triple(-2.75, 5.35, "#e3dfd2"))) {
+            rnd.next()
+            fun sb(x0: Double, x1: Double, y0: Double, y1: Double, z0: Double, z1: Double, k: FloatArray) = m.box(sx + z0, sx + z1, y0, y1, sz - x1, sz - x0, k)
+            val body = c(col); val dark = c("#1c1f26")
+            sb(-0.42, 0.05, 0.22, 0.55, -0.16, 0.16, body); sb(0.05, 0.42, 0.18, 0.26, -0.13, 0.13, body); sb(0.38, 0.48, 0.2, 0.85, -0.17, 0.17, body)
+            sb(-0.4, 0.02, 0.55, 0.64, -0.13, 0.13, dark); sb(0.45, 0.5, 0.85, 0.9, -0.24, 0.24, c(art.getValue("chrome")))
+            for (wx in listOf(-0.38, 0.5)) sb(wx - 0.16, wx + 0.16, 0.0, 0.32, -0.04, 0.04, dark)
+        }
+        m.box(2.75, 3.75, 0.55, 0.61, 3.25, 3.85, crate)
+        m.box(2.75, 3.75, 0.61, 0.79, 3.25, 3.29, crate); m.box(2.75, 3.75, 0.61, 0.79, 3.81, 3.85, crate)
+        m.tube(doubleArrayOf(2.75, 0.62, 3.3), doubleArrayOf(2.35, 0.8, 3.3), 0.025, crate); m.tube(doubleArrayOf(2.75, 0.62, 3.8), doubleArrayOf(2.35, 0.8, 3.8), 0.025, crate)
+        for (wz in listOf(3.22, 3.88)) m.box(3.23, 3.67, 0.02, 0.46, wz - 0.025, wz + 0.025, c("#1c1f26"))
+        m.box(2.83, 2.87, 0.24, 0.56, 3.53, 3.57, crate)
+        for ((cx, cz, cy) in listOf(Triple(5.55, 2.8, 0.0), Triple(5.55, 2.8, 0.3), Triple(5.15, 2.75, 0.0))) m.box(cx - 0.21, cx + 0.21, cy, cy + 0.3, cz - 0.16, cz + 0.16, c("#2f6fb0"))
     }
     // 全息投影机（street.ts buildProps：holoBase 方盒 + holoLens 发光圆片）
     m.box(0.9 - 0.23, 0.9 + 0.23, 0.0, 0.24, 2.3 - 0.23, 2.3 + 0.23, c("#2b2f36"))
