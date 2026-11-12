@@ -3,27 +3,19 @@
 //   · 光照：skyLights.ts 夜里的半球光（hemiSky / hemiGround × 2.1）+ 月光（方向 (-6.5, 14, -5)、× 1.35），
 //     与 three 一样按线性空间 Lambert（÷π）算，再过 NeutralToneMapping（Khronos PBR Neutral）转 sRGB；亮窗 / 屏面 / 酒吧后墙自发光 × artificial。
 //     贴地薄雾按 environment look 的 mist 向 fog 色混。天空 = palette.skyTop → skyBottom 竖向渐变。
-//   · 歌词大屏与门头店招的字不进 GL：正交投影下平面矩形投到屏幕上是平行四边形，用同一帧镜头算出四角，
-//     Compose 画布按仿射把字贴上去（牌面行由 director.ts 的 resolveMachiBoardTarget 决定；逐字翻牌、跑马灯、全息未接）。
+//   · 歌词大屏（逐字点亮 + 换行信号切换）、屏下 LED 跑马灯、门头霓虹店招在 GL 里画（MachiScreen.kt，对译 lyricScreen.ts / ledStrip.ts）。
 // 还没做：toon 渐变阶、阴影、bloom / 镜头 pass（MachiLens 已有纯函数）、天气、招牌、道具、另两个场景（便利店 / 车站）。
 // 只给取证页用（MachiStagePreview），未进歌词样式列表。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import com.guangyue.core.lyrics.Line
@@ -31,6 +23,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
+import kotlin.math.min
 import kotlin.math.sqrt
 
 private const val MACHI_VS = """#version 300 es
@@ -129,7 +122,12 @@ private class MachiRenderer(
     private val light: MachiNightLight,
     private val rig: MachiCameraRig,
     private val timeSeconds: () -> Double,
+    private val lines: List<Line>,
+    private val signs: MachiKowloonSigns,
+    private val seed: String,
 ) : GLSurfaceView.Renderer {
+    private var lastNanos = 0L
+    private var ambient = 0.0
     private var program = 0
     private var skyProgram = 0
     private var vao = 0
@@ -185,6 +183,7 @@ private class MachiRenderer(
         GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 8, 0)
         GLES30.glBindVertexArray(0)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+        signs.init(::link)
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -219,6 +218,19 @@ private class MachiRenderer(
         GLES30.glBindVertexArray(vao)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, count)
         GLES30.glBindVertexArray(0)
+        // 歌词大屏 / 跑马灯 / 门头霓虹（MachiScreen.kt）
+        val now = System.nanoTime()
+        val delta = if (lastNanos == 0L) 1.0 / 60 else min(0.1, (now - lastNanos) / 1e9)
+        lastNanos = now
+        ambient += delta
+        val t = timeSeconds()
+        val target = resolveMachiBoardTarget(lines, t)
+        signs.show(target, lines)
+        val view = (pose.position - pose.target).normalized()
+        signs.draw(
+            pose.viewProjection(), view.z.toFloat(),
+            MachiSignFrame(t, ambient, delta, resolveMachiChorus(lines, target), 0.0, light.look.artificial, resolveMachiFlicker(ambient, seed)),
+        )
     }
 }
 
@@ -238,6 +250,7 @@ fun MachiStagePreview(
     modifier: Modifier = Modifier,
     seed: String = "machi",
     songTitle: String = "",
+    artist: String = "",
 ) {
     val palette = remember(backgroundColor, primaryColor, secondaryColor, accentColor, seed) {
         resolveMachiPalette(MachiTheme(backgroundColor.machiHex(), primaryColor.machiHex(), secondaryColor.machiHex(), accentColor.machiHex()), seed)
@@ -245,73 +258,19 @@ fun MachiStagePreview(
     val light = remember(palette) { MachiNightLight(palette) }
     val model = remember(seed) { buildMachiKowloon(seed) }
     val rig = remember { MachiCameraRig(machiKowloonFramingPoints(), MachiKowloonLayout.VIEW) }
-    var frame by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(Unit) { while (true) withFrameNanos { frame = it } }
+    val signs = remember(palette, songTitle, artist, seed) { MachiKowloonSigns(palette, songTitle, artist, seed) }
     Box(modifier) {
         AndroidView(
             factory = { ctx ->
                 GLSurfaceView(ctx).apply {
                     setEGLContextClientVersion(3)
-                    setRenderer(MachiRenderer(model.mesh, light, rig, timeSeconds))
+                    setRenderer(MachiRenderer(model.mesh, light, rig, timeSeconds, lines, signs, seed))
                     renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                 }
             },
             modifier = Modifier.fillMaxSize(),
             onRelease = { it.onPause() },
         )
-        Canvas(Modifier.fillMaxSize()) {
-            if (frame < 0L) return@Canvas
-            val t = timeSeconds()
-            val pose = synchronized(rig) { rig.setAspect(size.width.toDouble(), size.height.toDouble()); rig.pose(t, 1.0) }
-            fun toPx(v: MachiVec3): FloatArray {
-                val n = pose.project(v)
-                return floatArrayOf(((n[0] + 1) / 2 * size.width).toFloat(), ((1 - n[1]) / 2 * size.height).toFloat())
-            }
-            val target = resolveMachiBoardTarget(lines, t)
-            val boardText = if (target.isCard) songTitle else lines.getOrNull(target.index)?.fullText.orEmpty()
-            drawIntoQuad(machiKowloonScreenCorners().map(::toPx), MachiKowloonLayout.SCREEN_W, MachiKowloonLayout.SCREEN_H, boardText, machiRgbColor(palette.boardLit), 0.34)
-            if (songTitle.isNotBlank()) {
-                drawIntoQuad(machiKowloonSignCorners().map(::toPx), MachiKowloonLayout.SIGN_W, MachiKowloonLayout.SIGN_H, songTitle, machiRgbColor(palette.neon), 0.62)
-            }
-        }
     }
 }
 
-private fun machiRgbColor(hex: String): Int = machiRgb(hex).let { c ->
-    (0xFF shl 24) or ((c[0] * 255).toInt() shl 16) or ((c[1] * 255).toInt() shl 8) or (c[2] * 255).toInt()
-}
-
-private val machiTextPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-    textAlign = android.graphics.Paint.Align.CENTER
-    typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-}
-
-/**
- * 把一行字贴到投影后的四边形里（左下、右下、右上、左上，屏幕 px）：局部坐标按米，
- * 字高 = 板高 × [heightShare]，太长就按板宽缩，居中；三点定仿射（正交投影下平面矩形投出来就是平行四边形）。
- */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawIntoQuad(
-    corners: List<FloatArray>, widthM: Double, heightM: Double, text: String, color: Int, heightShare: Double,
-) {
-    if (text.isBlank()) return
-    val scale = 100f // 局部 1 m = 100 单位，免得字号太小被取整
-    val w = (widthM * scale).toFloat(); val h = (heightM * scale).toFloat()
-    val src = floatArrayOf(0f, 0f, w, 0f, 0f, h)
-    val tl = corners[3]; val tr = corners[2]; val bl = corners[0]
-    val dst = floatArrayOf(tl[0], tl[1], tr[0], tr[1], bl[0], bl[1])
-    val m = android.graphics.Matrix()
-    if (!m.setPolyToPoly(src, 0, dst, 0, 3)) return
-    val paint = machiTextPaint
-    paint.color = color
-    paint.textSize = (h * heightShare).toFloat()
-    val width = paint.measureText(text)
-    val maxW = w * 0.92f
-    if (width > maxW) paint.textSize *= maxW / width
-    val nc = drawContext.canvas.nativeCanvas
-    nc.save()
-    nc.concat(m)
-    nc.clipRect(0f, 0f, w, h)
-    val fm = paint.fontMetrics
-    nc.drawText(text, w / 2, h / 2 - (fm.ascent + fm.descent) / 2, paint)
-    nc.restore()
-}
