@@ -6,7 +6,7 @@
 //   · toon：直射月光走 4 阶渐变（materials.ts createToonGradient）；场景画进线性 HDR 目标，后处理（MachiPost.kt）
 //     做墨线 / 贴地薄雾 / 云 / bloom，最后色调映射上屏（同 three：渲染到目标时材质不做色调映射，OutputPass 做）。
 //   · 湿路面倒影与光柱：MachiWet.kt（reflection.ts / ground.ts / lightCones.ts）；雨丝 / 水花 / 滴水：MachiWeather.kt（weather.ts，雪未做）。
-// 还没做：阴影、天气粒子、另两个场景（便利店 / 车站）。
+// 还没做：阴影、景深散景、另两个场景（便利店 / 车站）。
 // 只给取证页用（MachiStagePreview），未进歌词样式列表。
 package com.guangyue.feature.player.lyrics.visualizer
 
@@ -348,6 +348,7 @@ private class MachiRenderer(
                 stars = look.stars,
             ),
             bloomStrength = look.bloom,
+            streakStrength = look.streaks,
         )
     }
 }

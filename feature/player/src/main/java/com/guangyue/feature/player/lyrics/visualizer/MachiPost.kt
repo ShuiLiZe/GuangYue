@@ -173,6 +173,8 @@ uniform float uGrain;
 uniform float uStars;
 uniform float uTime;
 uniform float uAspect;
+uniform sampler2D tStreak;
+uniform float uStreak;
 in vec2 vUv;
 out vec4 fragColor;
 float lerpBloomFactor(float factor) { return mix(factor, 1.2 - factor, bloomRadius); }
@@ -209,6 +211,8 @@ void main() {
             lerpBloomFactor(0.4) * texture(blur4, vUv).rgb +
             lerpBloomFactor(0.2) * texture(blur5, vUv).rgb);
     }
+    // 横向镜头光条（postPasses.ts MachiStreakPass）：tint (0.62, 0.74, 1.0) × strength。
+    if (uStreak > 0.0) color += texture(tStreak, vUv).rgb * vec3(0.62, 0.74, 1.0) * uStreak;
     // 晴夜的星星、暗角、颗粒（lensPass.ts；景深散景还没做）。
     float depth01 = texture(tDepth, vUv).x;
     if (uStars > 0.001 && depth01 > 0.9999) {
@@ -226,6 +230,43 @@ void main() {
     float grain = gHash(vUv * vec2(1733.0, 977.0) + fract(uTime * 7.31)) - 0.5;
     color += grain * uGrain * (0.25 + dot(color, vec3(0.3333)));
     fragColor = vec4(srgb(neutral(max(color, 0.0))), 1.0);
+}
+"""
+
+// postPasses.ts BRIGHT_FRAGMENT / STREAK_BLUR_FRAGMENT（光条：亮处四点均值、阈值 1.1，再横向三次 1/4/14 像素步长模糊）。
+private const val STREAK_BRIGHT_FS = """#version 300 es
+precision highp float;
+uniform sampler2D tDiffuse;
+uniform vec2 uTexel;
+uniform float uThreshold;
+in vec2 vUv;
+out vec4 fragColor;
+void main() {
+    vec3 c = texture(tDiffuse, vUv + uTexel * vec2(-1.0, -1.0)).rgb
+        + texture(tDiffuse, vUv + uTexel * vec2(1.0, -1.0)).rgb
+        + texture(tDiffuse, vUv + uTexel * vec2(-1.0, 1.0)).rgb
+        + texture(tDiffuse, vUv + uTexel * vec2(1.0, 1.0)).rgb;
+    c *= 0.25;
+    float luminance = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    fragColor = vec4(c * smoothstep(uThreshold, uThreshold + 0.5, luminance), 1.0);
+}
+"""
+
+private const val STREAK_BLUR_FS = """#version 300 es
+precision highp float;
+uniform sampler2D tDiffuse;
+uniform vec2 uStep;
+in vec2 vUv;
+out vec4 fragColor;
+void main() {
+    vec3 sum = texture(tDiffuse, vUv).rgb * 0.2;
+    float weights[4];
+    weights[0] = 0.17; weights[1] = 0.13; weights[2] = 0.08; weights[3] = 0.04;
+    for (int i = 0; i < 4; i++) {
+        vec2 offset = uStep * float(i + 1);
+        sum += (texture(tDiffuse, vUv + offset).rgb + texture(tDiffuse, vUv - offset).rgb) * weights[i];
+    }
+    fragColor = vec4(sum, 1.0);
 }
 """
 
@@ -256,6 +297,11 @@ internal class MachiPostChain {
     private var brightProgram = 0
     private var blurProgram = 0
     private var outputProgram = 0
+    private var streakBrightProgram = 0
+    private var streakBlurProgram = 0
+    private var streakA: Target? = null
+    private var streakB: Target? = null
+    private var streakResult = 0
     private var emptyVao = 0
     private var sceneFbo = 0
     private var sceneTex = 0
@@ -280,6 +326,8 @@ internal class MachiPostChain {
         brightProgram = link(FS_VS, BRIGHT_FS)
         blurProgram = link(FS_VS, BLUR_FS)
         outputProgram = link(FS_VS, OUTPUT_FS)
+        streakBrightProgram = link(FS_VS, STREAK_BRIGHT_FS)
+        streakBlurProgram = link(FS_VS, STREAK_BLUR_FS)
         val ids = IntArray(1); GLES30.glGenVertexArrays(1, ids, 0); emptyVao = ids[0]
         val ext = GLES30.glGetString(GLES30.GL_EXTENSIONS) ?: ""
         floatColor = ext.contains("GL_EXT_color_buffer_float") || ext.contains("GL_EXT_color_buffer_half_float")
@@ -308,10 +356,10 @@ internal class MachiPostChain {
     private fun release() {
         val texs = ArrayList<Int>(); val fbos = ArrayList<Int>()
         if (sceneFbo != 0) { fbos += sceneFbo; texs += sceneTex; texs += depthTex }
-        (listOf(atmo, bright) + horizontal + vertical).filterNotNull().forEach { fbos += it.fbo; texs += it.tex }
+        (listOf(atmo, bright, streakA, streakB) + horizontal + vertical).filterNotNull().forEach { fbos += it.fbo; texs += it.tex }
         if (texs.isNotEmpty()) GLES30.glDeleteTextures(texs.size, texs.toIntArray(), 0)
         if (fbos.isNotEmpty()) GLES30.glDeleteFramebuffers(fbos.size, fbos.toIntArray(), 0)
-        sceneFbo = 0; atmo = null; bright = null
+        sceneFbo = 0; atmo = null; bright = null; streakA = null; streakB = null
         horizontal.fill(null); vertical.fill(null)
     }
 
@@ -339,6 +387,8 @@ internal class MachiPostChain {
             return
         }
         atmo = target(sceneW, sceneH)
+        val qw = max(1, (sceneW / 4.0).roundToInt()); val qh = max(1, (sceneH / 4.0).roundToInt())
+        streakA = target(qw, qh); streakB = target(qw, qh)
         var rx = (sceneW / 2.0).roundToInt(); var ry = (sceneH / 2.0).roundToInt()
         bright = target(max(1, rx), max(1, ry))
         for (i in 0 until KERNELS) {
@@ -371,7 +421,7 @@ internal class MachiPostChain {
      */
     fun finish(
         pixelWorldSize: Double, centerDistance: Double, near: Double, depthRange: Double, invVP: FloatArray,
-        atmosphere: MachiAtmosphereFrame, bloomStrength: Double,
+        atmosphere: MachiAtmosphereFrame, bloomStrength: Double, streakStrength: Double = 0.0,
     ) {
         val a = atmo ?: return
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
@@ -439,6 +489,30 @@ internal class MachiPostChain {
                 input = v.tex
             }
         }
+        // 2b. 光条（MachiStreakPass）：Folia 取 bloom 叠回后的画面找亮处，这里取氛围输出（bloom 在最后一道才加），阈值附近略少一点。
+        val streakOn = streakStrength > 0.005
+        if (streakOn) {
+            val sa = streakA!!; val sb = streakB!!
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, sa.fbo); GLES30.glViewport(0, 0, sa.w, sa.h)
+            GLES30.glUseProgram(streakBrightProgram)
+            bind(0, a.tex)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(streakBrightProgram, "tDiffuse"), 0)
+            GLES30.glUniform2f(GLES30.glGetUniformLocation(streakBrightProgram, "uTexel"), 1f / sceneW, 1f / sceneH)
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(streakBrightProgram, "uThreshold"), 1.1f)
+            fullscreen()
+            GLES30.glUseProgram(streakBlurProgram)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(streakBlurProgram, "tDiffuse"), 0)
+            val uStep = GLES30.glGetUniformLocation(streakBlurProgram, "uStep")
+            var src = sa; var dst = sb
+            for (spread in intArrayOf(1, 4, 14)) {
+                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, dst.fbo)
+                bind(0, src.tex)
+                GLES30.glUniform2f(uStep, spread.toFloat() / sa.w, 0f)
+                fullscreen()
+                val t = src; src = dst; dst = t
+            }
+            streakResult = src.tex
+        }
         // 3. 合成 + 色调映射上屏
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         GLES30.glViewport(0, 0, screenW, screenH)
@@ -458,6 +532,8 @@ internal class MachiPostChain {
         GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uStars"), atmosphere.stars.toFloat())
         GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uTime"), atmosphere.time.toFloat())
         GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uAspect"), sceneW.toFloat() / max(1, sceneH))
+        bind(7, if (streakOn) streakResult else a.tex); GLES30.glUniform1i(GLES30.glGetUniformLocation(o, "tStreak"), 7)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uStreak"), if (streakOn) streakStrength.toFloat() else 0f)
         fullscreen()
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindVertexArray(0)
