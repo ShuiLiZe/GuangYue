@@ -10,7 +10,7 @@
 //   sonnetFrameOverlay.ts（画面四角的固定标记）
 // 偏离：Folia 里 Math.random 的地方（圆的起笔方向、引导线碎片）改用种子随机，同一首歌每次一样；
 // 几何变体 0–35 已移植（18–23 sonnetAdditionalShotMg.ts，24–35 sonnetThemedShotMg.ts 的花 / 植物 / 建筑 / 地景）；
-// 36–99（开口框 sonnetOpenFrameShotMg.ts、天体 / 海洋 / 音乐 / 工艺 / 动态）还没移植，暂按 variant % 36 退回。
+// 36–99（开口框 sonnetOpenFrameShotMg.ts、天体 / 海洋 / 音乐 / 工艺 / 动态）见 SonnetMgExtended.kt（2026-11-14）。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.graphics.Canvas
@@ -47,7 +47,7 @@ private fun Path.sonnetArc(cx: Double, cy: Double, r: Double, startRad: Double, 
 // ───────────────────────────── AnimatedGraphics ─────────────────────────────
 
 /** sonnetAnimatedGraphics.ts：记录 moveTo / lineTo / 曲线 / 弧 / 矩形 + stroke / fill，按进度逐笔描出。 */
-internal class SonnetAnimGraphics(seed: Long) {
+internal class SonnetAnimGraphics(seed: Long) : SonnetMgPen {
     private class El(val type: Int, val v: DoubleArray, val len: Double = 0.0)
     private class Cmd(val stroke: Boolean, val path: List<El>, val length: Double, val color: Int, val width: Double, val alpha: Double) {
         var delay = 0.0
@@ -64,26 +64,26 @@ internal class SonnetAnimGraphics(seed: Long) {
     var rotation = 0.0
     val isEmpty get() = commands.isEmpty()
 
-    fun moveTo(x: Double, y: Double): SonnetAnimGraphics {
+    override fun moveTo(x: Double, y: Double): SonnetAnimGraphics {
         current.add(El(MOVE, doubleArrayOf(x, y))); lastX = x; lastY = y; return this
     }
 
-    fun lineTo(x: Double, y: Double): SonnetAnimGraphics {
+    override fun lineTo(x: Double, y: Double): SonnetAnimGraphics {
         val len = hypot(x - lastX, y - lastY)
         current.add(El(LINE, doubleArrayOf(x, y, lastX, lastY), len)); currentLength += len; lastX = x; lastY = y; return this
     }
 
-    fun quadraticCurveTo(cx: Double, cy: Double, tx: Double, ty: Double): SonnetAnimGraphics {
+    override fun quadraticCurveTo(cx: Double, cy: Double, tx: Double, ty: Double): SonnetAnimGraphics {
         val len = hypot(cx - lastX, cy - lastY) + hypot(tx - cx, ty - cy)
         current.add(El(QUAD, doubleArrayOf(cx, cy, tx, ty, lastX, lastY), len)); currentLength += len; lastX = tx; lastY = ty; return this
     }
 
-    fun bezierCurveTo(c1x: Double, c1y: Double, c2x: Double, c2y: Double, tx: Double, ty: Double): SonnetAnimGraphics {
+    override fun bezierCurveTo(c1x: Double, c1y: Double, c2x: Double, c2y: Double, tx: Double, ty: Double): SonnetAnimGraphics {
         val len = hypot(c1x - lastX, c1y - lastY) + hypot(c2x - c1x, c2y - c1y) + hypot(tx - c2x, ty - c2y)
         current.add(El(BEZ, doubleArrayOf(c1x, c1y, c2x, c2y, tx, ty, lastX, lastY), len)); currentLength += len; lastX = tx; lastY = ty; return this
     }
 
-    fun arc(cx: Double, cy: Double, r: Double, start: Double, end: Double, anticlockwise: Boolean = false): SonnetAnimGraphics {
+    override fun arc(cx: Double, cy: Double, r: Double, start: Double, end: Double, anticlockwise: Boolean): SonnetAnimGraphics {
         var diff = end - start
         if (anticlockwise && diff > 0) diff -= PI * 2 else if (!anticlockwise && diff < 0) diff += PI * 2
         val len = abs(diff) * r
@@ -92,7 +92,7 @@ internal class SonnetAnimGraphics(seed: Long) {
         return this
     }
 
-    fun circle(x: Double, y: Double, r: Double): SonnetAnimGraphics {
+    override fun circle(x: Double, y: Double, r: Double): SonnetAnimGraphics {
         val start = rng.next() * PI * 2
         val anticlockwise = rng.next() > 0.5
         val diff = if (anticlockwise) -PI * 2 else PI * 2
@@ -102,7 +102,7 @@ internal class SonnetAnimGraphics(seed: Long) {
         return this
     }
 
-    fun rect(x: Double, y: Double, w: Double, h: Double): SonnetAnimGraphics {
+    override fun rect(x: Double, y: Double, w: Double, h: Double): SonnetAnimGraphics {
         current.add(El(RECT, doubleArrayOf(x, y, w, h)))
         moveTo(x, y).lineTo(x + w, y).lineTo(x + w, y + h).lineTo(x, y + h).lineTo(x, y)
         return this
@@ -115,7 +115,7 @@ internal class SonnetAnimGraphics(seed: Long) {
         return lineTo(points[0], points[1])
     }
 
-    fun stroke(color: Int, width: Double, alpha: Double): SonnetAnimGraphics {
+    override fun stroke(color: Int, width: Double, alpha: Double): SonnetAnimGraphics {
         if (current.isNotEmpty()) {
             commands.add(Cmd(true, current, currentLength, color, width, alpha))
             current = ArrayList(); currentLength = 0.0
@@ -123,7 +123,7 @@ internal class SonnetAnimGraphics(seed: Long) {
         return this
     }
 
-    fun fill(color: Int, alpha: Double): SonnetAnimGraphics {
+    override fun fill(color: Int, alpha: Double): SonnetAnimGraphics {
         if (current.isNotEmpty()) {
             commands.add(Cmd(false, current, currentLength, color, 0.0, alpha))
             current = ArrayList(); currentLength = 0.0
@@ -327,8 +327,6 @@ internal fun sonnetBackgroundMgVariant(seed: Long) = (sonnetMix(seed, 0x9e3779b9
 internal fun sonnetFixedGeoVariant(seed: Long) = (sonnetMix(seed, 0x85ebca6bL.toInt()) % 8).toInt()
 internal fun sonnetBackgroundDecorVariant(seed: Long) = (sonnetMix(seed, 0xc2b2ae35L.toInt()) % 6).toInt()
 
-/** 已移植的几何变体：0–35。其余（36–47 开口框、48–99 扩展主题）按 % 36 退回（见文件头）。 */
-internal fun sonnetPortedGeoVariant(variant: Long): Long = if (variant <= 35) variant else variant % 36
 
 private fun drawGeo(geo: SonnetAnimGraphics, variant: Long, seed: Long, width: Double, height: Double, radius: Double, primary: Int, secondary: Int) {
     val g = geo
@@ -1309,8 +1307,11 @@ internal fun buildSonnetShotMg(kind: SonnetShotKind, width: Double, height: Doub
     if (kind == SonnetShotKind.TYPE_IMPACT || kind == SonnetShotKind.FRAGMENT_COLLAGE) {
         val g = SonnetAnimGraphics(seed * 5 + 2)
         val original = sonnetGeoVariant(seed)
-        val variant = sonnetPortedGeoVariant(original)
-        drawGeo(g, variant, seed, width, height, radius, primary, secondary)
+        val variant = original
+        // 36–99：SonnetMgExtended.kt（开口框 / 天体 / 海洋 / 音乐 / 工艺 / 动态）；0–35 在 drawGeo。
+        if (!drawSonnetMg36to99(g, variant.toInt(), radius, width, height, seed, primary, secondary)) {
+            drawGeo(g, variant, seed, width, height, radius, primary, secondary)
+        }
         val keepsUpright = variant in listOf(6L, 8L, 9L, 14L, 15L, 16L, 17L, 20L, 22L, 23L) || variant >= 24
         if (!keepsUpright) g.rotation = ((seed * 13) % 360) * (PI / 180)
         else if (variant == 8L) g.rotation = geoSubVariant(seed, 4) * (PI / 2)
