@@ -55,6 +55,8 @@ enum class LyricStyle(val id: String) {
     TEMPERA("tempera"),
     /** 「绘光」：Folia lumiere（P9：暗场里十族光位——天光 / 窗隙 / 棱镜 / 焦散 / 光路 / 衍射 / 叶脉 / 星象 / 追光 / 萤尘——按镜头轮换、交叉淡化，段首星空点亮；字在文字区横排或竖排，唱到点亮带光晕与十字爆闪，换句崩解上漂；手机不做 Pixi runtime / 100 种光位 / bloom）。无参数。 */
     LUMIERE("lumiere"),
+    /** 「町景」：Folia machi（3D 等距夜景：九龙城寨街口，歌词打在楼面大屏上，雨雪雾与湿地倒影、bloom / 光条 / 景深 / FXAA；手机先只做城寨一景，便利店、车站未做）。暂无参数面板。 */
+    MACHI("machi"),
     ;
 
     companion object {

@@ -7,7 +7,7 @@
 //     做墨线 / 贴地薄雾 / 云 / bloom，最后色调映射上屏（同 three：渲染到目标时材质不做色调映射，OutputPass 做）。
 //   · 湿路面倒影与光柱：MachiWet.kt（reflection.ts / ground.ts / lightCones.ts）；雨丝 / 水花 / 滴水：MachiWeather.kt（weather.ts，雪未做）。
 // 还没做：阴影、景深散景、另两个场景（便利店 / 车站）。
-// 只给取证页用（MachiStagePreview），未进歌词样式列表。
+// 取证页（V0cStageHarness）与歌词样式「町景」（LyricFlowScreen）共用 MachiStagePreview。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.opengl.GLES30
@@ -430,6 +430,8 @@ fun MachiStagePreview(
     val rig = remember { MachiCameraRig(machiKowloonFramingPoints(), MachiKowloonLayout.VIEW) }
     val signs = remember(palette, songTitle, artist, seed, model) { MachiKowloonSigns(palette, songTitle, artist, seed, model.signs) }
     Box(modifier) {
+      // 换歌（seed）、换主题（palette → light / signs）时整块 GLSurfaceView 重建：factory 只跑一次，渲染器拿的是建时的模型。
+      androidx.compose.runtime.key(model, light, signs, lines, restCamera) {
         AndroidView(
             factory = { ctx ->
                 GLSurfaceView(ctx).apply {
@@ -441,6 +443,7 @@ fun MachiStagePreview(
             modifier = Modifier.fillMaxSize(),
             onRelease = { it.onPause() },
         )
+      }
     }
 }
 

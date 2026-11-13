@@ -673,6 +673,7 @@ fun GuangYueNavHost(
                             com.guangyue.feature.player.lyrics.LyricStyle.HANABI -> R.string.lyrics_style_hanabi
                             com.guangyue.feature.player.lyrics.LyricStyle.TEMPERA -> R.string.lyrics_style_tempera
                             com.guangyue.feature.player.lyrics.LyricStyle.LUMIERE -> R.string.lyrics_style_lumiere
+                            com.guangyue.feature.player.lyrics.LyricStyle.MACHI -> R.string.lyrics_style_machi
                             com.guangyue.feature.player.lyrics.LyricStyle.TILT -> R.string.lyrics_style_tilt
                             com.guangyue.feature.player.lyrics.LyricStyle.CLADDAGH -> R.string.lyrics_style_claddagh
                         },
@@ -936,6 +937,7 @@ internal fun lyricStyleStrings(): LyricStyleStrings {
         hanabi = R.string.lyrics_style_hanabi,
         tempera = R.string.lyrics_style_tempera,
         lumiere = R.string.lyrics_style_lumiere,
+        machi = R.string.lyrics_style_machi,
         tilt = R.string.lyrics_style_tilt,
         claddagh = R.string.lyrics_style_claddagh,
         claddaghFocusScaleRatio = R.string.lyrics_style_cl_focus,
