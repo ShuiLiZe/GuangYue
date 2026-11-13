@@ -170,6 +170,14 @@ internal class MachiStationModel(
     val pylonFaces: List<DoubleArray>,
     /** 旅馆立牌 tall / name / vacancy 三块：x, y, z, rotY, w, h。 */
     val motelFaces: List<DoubleArray>,
+    /** 车下软影（停着的车、アドトラック），顶点色 = 0.5 × 柔边。 */
+    val shadows: FloatArray = FloatArray(0),
+    /** 会打双闪那辆的四个小灯：亮（2.4）/ 灭（0.144）。 */
+    val hazardOn: FloatArray = FloatArray(0),
+    val hazardOff: FloatArray = FloatArray(0),
+    /** 箭头走马灯泡：按 index mod 4 分四组，每组 [亮 1.9, 暗 0.18]。 */
+    val bulbs: List<FloatArray> = emptyList(),
+    val bulbCount: Int = 0,
 )
 
 /** stationScene：加油区前沿三面旗（セルフ、洗車、灯油）。 */
@@ -315,6 +323,8 @@ internal fun buildMachiStation(palette: MachiPalette, seed: String): MachiStatio
 
     // ---- 汽车旅馆高立牌（朝默认镜头，转方位角） ----
     val motelFaces = ArrayList<DoubleArray>()
+    val bulbMeshes = List(8) { MachiMesh() }
+    var bulbCount = 0
     run {
         val rot = S.VIEW.azimuth
         val f = world.child(S.MO_X, 0.0, S.MO_Z, ry = rot)
@@ -336,6 +346,20 @@ internal fun buildMachiStation(palette: MachiPalette, seed: String): MachiStatio
         val tri = listOf(v3s(ax + 0.18, neck, 0.06), v3s(ax + 0.65, tip, 0.06), v3s(ax + 1.12, neck, 0.06))
         f.polygon(tri, brand0)
         f.child(0.0, 0.0, -0.12, ry = 0.0).polygon(tri.reversed(), brand0)
+        // 箭头轮廓上的走马灯泡（structures.ts：沿轮廓每 0.16 一颗，z 0.075；stationSigns：球 r 0.04，streetLight × mix(0.18, 1.9, on)）。
+        val outline = listOf(ax to top, ax + 0.85 to top, ax + 0.85 to neck, ax + 1.12 to neck, ax + 0.65 to tip, ax + 0.18 to neck, ax + 0.45 to neck, ax + 0.45 to top - 0.4, ax to top - 0.4, ax to top)
+        val street = machiRgb(palette.streetLight)
+        for (k in 0 until outline.size - 1) {
+            val (x0, y0) = outline[k]; val (x1, y1) = outline[k + 1]
+            val steps = kotlin.math.max(1, kotlin.math.round(kotlin.math.hypot(x1 - x0, y1 - y0) / 0.16).toInt())
+            for (s in 0 until steps) {
+                val p = f.pt(x0 + (x1 - x0) * s / steps, y0 + (y1 - y0) * s / steps, 0.075)
+                val g = bulbCount % 4
+                bulbMeshes[g * 2].machiSphere(p, 0.04, street, 1.9f)
+                bulbMeshes[g * 2 + 1].machiSphere(p, 0.04, street, 0.18f)
+                bulbCount++
+            }
+        }
         fun face(x: Double, y: Double, w: Double, hh: Double, d: Double) { val p = f.pt(x, y, d); motelFaces += doubleArrayOf(p[0], p[1], p[2], rot, w, hh) }
         face(tx, ty0 + th / 2, tw - 0.12, th - 0.12, 0.135)
         face(nx, ny0 + nh / 2, nw - 0.1, nh - 0.1, 0.135)
@@ -370,7 +394,8 @@ internal fun buildMachiStation(palette: MachiPalette, seed: String): MachiStatio
 
     // ---- 停着的车 ----
     val andons = ArrayList<DoubleArray>()
-    fun parkedCar(f: MachiFrame, kind: String, body: FloatArray) {
+    val shadowMesh = MachiMesh(); val hazOn = MachiMesh(); val hazOff = MachiMesh()
+    fun parkedCar(f: MachiFrame, kind: String, body: FloatArray, hazard: Boolean = false) {
         val length = if (kind == "kei") 3.0 else S.CAR_L
         val width = if (kind == "kei") 1.36 else S.CAR_W
         val half = length / 2
@@ -406,9 +431,15 @@ internal fun buildMachiStation(palette: MachiPalette, seed: String): MachiStatio
         for (side in intArrayOf(-1, 1)) {
             f.boxAt(0.3, 0.1, 0.04, side * (width / 2 - 0.26), 0.58, half + 0.005, machiRgb(palette.streetLight), 2.2f)
             f.boxAt(0.26, 0.1, 0.04, side * (width / 2 - 0.22), 0.62, -half - 0.005, machiRgb(palette.stopRed), 1.6f)
-            // 双闪小灯（hazardIdle：marker × 0.12；会闪的那辆后接）。
-            f.boxAt(0.1, 0.06, 0.03, side * (width / 2 - 0.06), 0.5, half + 0.012, marker, 0.12f)
-            f.boxAt(0.1, 0.06, 0.03, side * (width / 2 - 0.06), 0.5, -half - 0.012, marker, 0.12f)
+            // 双闪小灯：不闪的车 hazardIdle（marker × 0.12）；会闪那辆单独两份（亮 hazard 2.4、灭 2.4 × 0.06），按 hazardOn 换着画。
+            if (!hazard) {
+                f.boxAt(0.1, 0.06, 0.03, side * (width / 2 - 0.06), 0.5, half + 0.012, marker, 0.12f)
+                f.boxAt(0.1, 0.06, 0.03, side * (width / 2 - 0.06), 0.5, -half - 0.012, marker, 0.12f)
+            } else for ((mesh, e) in listOf(hazOn to 2.4f, hazOff to 0.144f)) {
+                val hf = MachiFrame(mesh, f.o, f.r)
+                hf.boxAt(0.1, 0.06, 0.03, side * (width / 2 - 0.06), 0.5, half + 0.012, marker, e)
+                hf.boxAt(0.1, 0.06, 0.03, side * (width / 2 - 0.06), 0.5, -half - 0.012, marker, e)
+            }
             if (kind != "kei") f.boxAt(0.14, 0.08, 0.06, side * (width / 2 + 0.05), 0.92, half * 0.36, body)
         }
         val axle = half - (if (kind == "kei") 0.5 else 0.62)
@@ -417,11 +448,13 @@ internal fun buildMachiStation(palette: MachiPalette, seed: String): MachiStatio
             val x = side * (width / 2 - 0.085)
             f.tube(v3s(x - 0.1, r, z), v3s(x + 0.1, r, z), r, rubber, 14)
         }
+        // 车下软影（PlaneGeometry(width + 0.5, length + 0.5)，y 0.004，opacity 0.5）。
+        shadowMesh.machiSoftEllipse(0.0, 0.004, 0.0, width + 0.5, length + 0.5, 0.5, false) { f.pt(it) }
         count(kind)
     }
     v.stalls.forEachIndexed { i, kind ->
         if (kind == "empty") return@forEachIndexed
-        parkedCar(world.child(S.STALL_X[i], S.ROAD_Y, S.STALL_Z + 0.15), kind, if (kind == "taxi") colors.getValue("taxiBody") else colors.getValue("car$i"))
+        parkedCar(world.child(S.STALL_X[i], S.ROAD_Y, S.STALL_Z + 0.15), kind, if (kind == "taxi") colors.getValue("taxiBody") else colors.getValue("car$i"), i == v.hazardStall)
     }
     if (v.pumpCar) parkedCar(world.child(S.PUMP_CAR[0], S.APRON_Y, S.PUMP_CAR[1], ry = PI / 2), "sedan", colors.getValue("carPump"))
     if (v.keiTruck) parkedCar(world.child(S.KEI_TRUCK[0], S.ROAD_Y, S.KEI_TRUCK[1], ry = -PI / 2), "kei", colors.getValue("carKei"))
@@ -461,11 +494,13 @@ internal fun buildMachiStation(palette: MachiPalette, seed: String): MachiStatio
             val z = zc + side * wz
             m.ktube(v3s(x, 0.45, z - 0.16), v3s(x, 0.45, z + 0.16), 0.45, rubber, segments = 14)
         }
+        shadowMesh.machiSoftEllipse((S.T_FRONT + S.T_REAR) / 2, 0.004, zc, S.T_FRONT - S.T_REAR + 0.6, width + 0.6, 0.5, false)
         count("truck")
     }
     // のぼり旗的杆、横杆、底座（布面单独画）。
     m.addMachiNoboriPoles(MACHI_STATION_NOBORI, palette)
-    return MachiStationModel(m.toArray(), stats, andons, canopySigns, pylonFaces, motelFaces)
+    return MachiStationModel(m.toArray(), stats, andons, canopySigns, pylonFaces, motelFaces,
+        shadowMesh.toArray(), hazOn.toArray(), hazOff.toArray(), bulbMeshes.map { it.toArray() }, bulbCount)
 }
 
 // ---- stationLights.ts：罩棚两盏聚光、场地灯一盏聚光、旅馆霓虹一盏点光、货车屏一盏点光；地上三块加色光斑。 ----

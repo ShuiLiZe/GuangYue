@@ -56,10 +56,54 @@ internal fun machiSetModel(out: FloatArray, r: DoubleArray, o: DoubleArray) {
     out[12] = o[0].toFloat(); out[13] = o[1].toFloat(); out[14] = o[2].toFloat(); out[15] = 1f
 }
 
+/** 小球（UV 球，seg × rings）。 */
+internal fun MachiMesh.machiSphere(c: DoubleArray, r: Double, color: FloatArray, emissive: Float = 0f, seg: Int = 8, rings: Int = 6) {
+    fun pt(i: Int, j: Int): DoubleArray {
+        val th = 2 * PI * i / seg; val ph = PI * j / rings
+        return doubleArrayOf(sin(ph) * cos(th), cos(ph), sin(ph) * sin(th))
+    }
+    for (i in 0 until seg) for (j in 0 until rings) {
+        val n = listOf(pt(i, j), pt(i, j + 1), pt(i + 1, j + 1), pt(i + 1, j))
+        val mid = doubleArrayOf(n.sumOf { it[0] } / 4, n.sumOf { it[1] } / 4, n.sumOf { it[2] } / 4)
+        val ps = n.map { doubleArrayOf(c[0] + it[0] * r, c[1] + it[1] * r, c[2] + it[2] * r) }
+        quad(ps[0], ps[3], ps[2], ps[1], mid, color, emissive)
+    }
+}
+
 // ---- 风扇 ----
 
 /** 一台外机的风扇：叶片网格（风扇本地坐标）、风扇坐标系原点与朝向（MachiFrame.o / r）。 */
 internal class MachiFanSpec(val mesh: FloatArray, val o: DoubleArray, val r: DoubleArray)
+
+/** 车站双闪（stationScene hazardOn）：每 18 s 一个窗口，按哈希决定打不打（打的话闪 6 s，每 1/2.8 s 翻一次）。 */
+internal fun resolveMachiHazardOn(time: Double, seed: String): Boolean {
+    val window = 18.0
+    val index = floor(time / window).toInt()
+    val key = machiHashSeed("hazard:$seed")
+    if (machiHash01(key, index, 0x21) > 0.5) return false
+    val local = time - index * window - machiHash01(key, index, 0x42) * 10
+    if (local < 0 || local > 6) return false
+    return floor(local * 2.8).toInt() % 2 == 0
+}
+
+/** 车站：车下软影（静态，一直在）、会打双闪那辆的小灯（亮 2.4 / 灭 0.06 × 2.4）、旅馆箭头走马灯（每四个一组，亮位沿箭头走）。 */
+internal class MachiStationActors(shadows: FloatArray, hazardOn: FloatArray, hazardOff: FloatArray, bulbs: List<FloatArray>) : MachiActor {
+    private val shadow = MachiDynPart(shadows, MachiDynPart.SHADOW)
+    private val on = MachiDynPart(hazardOn)
+    private val off = MachiDynPart(hazardOff)
+    private val bulbParts = bulbs.map { MachiDynPart(it) }
+    override val parts = listOf(shadow, on, off) + bulbParts
+    override fun update(frame: MachiActorFrame) {
+        val h = resolveMachiHazardOn(frame.ambient, frame.seed)
+        on.visible = h; off.visible = !h
+        // stationSigns BULB_VERTEX：on = step(0.5, fract((index − 6t) / 4))；按 index mod 4 分四组，每组一份亮、一份暗。
+        for (k in 0 until bulbParts.size / 2) {
+            val x = (k - frame.ambient * 6.0) / 4.0
+            val lit = x - floor(x) >= 0.5
+            bulbParts[k * 2].visible = lit; bulbParts[k * 2 + 1].visible = !lit
+        }
+    }
+}
 
 internal class MachiFans(private val fans: List<MachiFanSpec>, private val fanSpeed: Double) : MachiActor {
     override val parts = fans.map { MachiDynPart(it.mesh) }
@@ -105,7 +149,7 @@ internal const val MACHI_TRAFFIC_CHANCE = 0.6
 internal val MACHI_TRAFFIC_COLORS = listOf("#e8eaee", "#aeb5bf", "#25292f", "#22385f", "#b8322e", "#f0c23a")
 
 /** 软椭圆（traffic.ts createSoftEllipseTexture）烘成 16×16 网格的顶点色：forward 时靠 −u 一侧更亮。 */
-internal fun MachiMesh.machiSoftEllipse(cx: Double, y: Double, cz: Double, w: Double, d: Double, level: Double, forward: Boolean) {
+internal fun MachiMesh.machiSoftEllipse(cx: Double, y: Double, cz: Double, w: Double, d: Double, level: Double, forward: Boolean, xf: ((DoubleArray) -> DoubleArray)? = null) {
     val n = 16
     fun v(u: Double, t: Double): FloatArray {
         val dd = sqrt(u * u + t * t)
@@ -116,7 +160,7 @@ internal fun MachiMesh.machiSoftEllipse(cx: Double, y: Double, cz: Double, w: Do
     val up = doubleArrayOf(0.0, 1.0, 0.0)
     for (i in 0 until n) for (j in 0 until n) {
         val u0 = -1 + 2.0 * i / n; val u1 = -1 + 2.0 * (i + 1) / n; val t0 = -1 + 2.0 * j / n; val t1 = -1 + 2.0 * (j + 1) / n
-        fun p(u: Double, t: Double) = doubleArrayOf(cx + u * w / 2, y, cz + t * d / 2)
+        fun p(u: Double, t: Double) = doubleArrayOf(cx + u * w / 2, y, cz + t * d / 2).let { xf?.invoke(it) ?: it }
         quadColors(p(u0, t1), p(u1, t1), p(u1, t0), p(u0, t0), up, v(u0, t1), v(u1, t1), v(u1, t0), v(u0, t0))
     }
 }

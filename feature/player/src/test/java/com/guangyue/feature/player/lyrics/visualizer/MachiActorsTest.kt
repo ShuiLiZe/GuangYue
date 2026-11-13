@@ -48,4 +48,25 @@ class MachiActorsTest {
         assertEquals(0f, m[0], 1e-6f); assertEquals(-1f, m[2], 1e-6f)
         assertEquals(1f, m[12]); assertEquals(2f, m[13]); assertEquals(3f, m[14]); assertEquals(1f, m[15])
     }
+
+    /** 金样：Folia stationScene hazardOn（seed probe-0，每 0.37 s 取一次），node 跑出来的。 */
+    @Test
+    fun hazardBlinkMatchesFolia() {
+        val golden = "0000000000000000101010100101010100000000000000000010101010101010101000000000000000000000000000000000001010101010101010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010101010101010101000000000000000000000000000000000000000000000000000000000000000000010100101010101010000000000000000000000000000000000"
+        val got = (0 until golden.length).joinToString("") { if (resolveMachiHazardOn(it * 0.37, "probe-0")) "1" else "0" }
+        assertEquals(golden, got)
+    }
+
+    @Test
+    fun stationShadowsBulbsAndHazard() {
+        val palette = resolveMachiPalette(MachiTheme("#09090b", "#f4f4f5", "#71717a", "#f4f4f5"), "probe-0")
+        val model = buildMachiStation(palette, "probe-0")
+        // 箭头轮廓 9 段，每 0.16 一颗：5 + 12 + 2 + 3 + 3 + 2 + 9 + 3 + 3 = 42。
+        assertEquals(42, model.bulbCount)
+        assertEquals(8, model.bulbs.size)
+        assertTrue(model.shadows.isNotEmpty() && model.shadows.size % 10 == 0)
+        val v = resolveMachiStationVariation("probe-0")
+        assertEquals(v.hazardStall >= 0, model.hazardOn.isNotEmpty())
+        assertEquals(model.hazardOn.size, model.hazardOff.size)
+    }
 }

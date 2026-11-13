@@ -308,6 +308,8 @@ internal class MachiSceneSetup(
     val nobori: MachiNobori? = null,
     val steam: MachiSteam? = null,
     val windYaw: Double = 0.0,
+    /** 贴图牌面（便利店玻璃海报、窗内霓虹、屋顶 logo、A 字立牌，MachiKonbiniDecor.kt）。 */
+    val decals: MachiDecals? = null,
 )
 
 internal fun machiKowloonSetup(palette: MachiPalette, seed: String, title: String, artist: String): MachiSceneSetup {
@@ -341,10 +343,12 @@ internal fun machiKonbiniSetup(palette: MachiPalette, seed: String, title: Strin
         // konbiniScene setContent：曲名（无则专辑 / 町景）、主题名或 新発売（带图标）、おでん。
         nobori = MachiNobori(MACHI_KONBINI_NOBORI, listOf(
             MachiNoboriFace(palette.brand[0], "#ffffff", title.ifEmpty { "町景" }),
-            MachiNoboriFace(palette.brand[2], "#ffffff", "新発売", "♪"),
+            // 图标 = 主题图标 icons[0]；主题没给图标时没有（兜底图标只给招牌用）。
+            MachiNoboriFace(palette.brand[2], "#ffffff", "新発売"),
             MachiNoboriFace(palette.brand[1], palette.signText, "おでん"),
         )),
         steam = MachiSteam(MACHI_KONBINI_STEAM), windYaw = w.second.windYaw,
+        decals = machiKonbiniDecals(palette, title, artist, model.propFaces?.aFrame?.firstOrNull()),
     )
 }
 
@@ -381,10 +385,13 @@ internal fun machiStationSetup(palette: MachiPalette, seed: String, title: Strin
         mirrorY = MachiStationLayout.REFLECT_Y, wetY = MachiStationLayout.ROAD_Y + 0.002, wetBias = 0.0,
         wetY2 = MachiStationLayout.APRON_Y + 0.002, wetBias2 = 0.08,
         lights = machiStationLights(palette), pools = buildMachiStationPools(palette),
-        actors = listOf(MachiTraffic(MACHI_STATION_LANES, MachiStationLayout.ROAD_Y, palette, 6.0)),
+        actors = listOf(
+            MachiTraffic(MACHI_STATION_LANES, MachiStationLayout.ROAD_Y, palette, 6.0),
+            MachiStationActors(model.shadows, model.hazardOn, model.hazardOff, model.bulbs),
+        ),
         nobori = MachiNobori(MACHI_STATION_NOBORI, listOf(
             MachiNoboriFace(palette.brand[0], "#ffffff", "セルフ"),
-            MachiNoboriFace(palette.brand[2], "#ffffff", "洗車", "♪"),
+            MachiNoboriFace(palette.brand[2], "#ffffff", "洗車"),
             MachiNoboriFace(palette.brand[1], palette.signText, "灯油"),
         )),
         steam = MachiSteam(MACHI_STATION_STEAM), windYaw = w.second.windYaw,
@@ -596,6 +603,7 @@ private class MachiRenderer(
         setup.actors.forEach { a -> a.parts.forEach { p -> if (p.mesh.isNotEmpty()) { p.vao = vaoOf(p.mesh); p.count = p.mesh.size / 10 } } }
         setup.nobori?.init(::link)
         setup.steam?.init(::link)
+        setup.decals?.init(::link)
         signs?.init(::link)
         cones?.init(::link)
         weather.init(::link)
@@ -804,6 +812,11 @@ private class MachiRenderer(
         drawActorOverlays(vp)
         // のぼり旗（nobori.ts）：wind = 0.35 + 0.65 × min(1, rain)。
         setup.nobori?.draw(vp, ambient, 0.35 + 0.65 * kotlin.math.min(1.0, resolveMachiRainAmount(light.state.rain)), light)
+        // 便利店贴图牌面：窗内霓虹 × (0.85 + 0.15 sin(2.2 ambient) + 0.4 chorus)（konbiniSigns update）。
+        setup.decals?.let { d ->
+            if (konbini) d.gain[2] = 0.85 + 0.15 * kotlin.math.sin(ambient * 2.2) + 0.4 * resolveMachiChorus(lines, target)
+            d.draw(vp, light)
+        }
         if (glassCount > 0) drawMesh(vp, reflectPass = false, wet = false, glass = true)
         // 光柱（lightCones.ts）：level = 0.55 × lamp × (1 − 0.6 daylight)，lamp = streetLamps × (0.75 + 0.25 flicker)。
         // 便利店（konbiniScene direct）：street = streetLamps × (0.75 + 0.25 flicker(ambient + 3.1, seed:street))。

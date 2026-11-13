@@ -635,15 +635,14 @@ private fun planeRotY(x: Double, y: Double, z: Double, w: Double, h: Double, a: 
     return a0 + a1 + a2 + a0 + a2 + a3
 }
 
-/** konbiniSignPaint.ts paintKonbiniFascia（主题图标暂按圆徽 + ♪）：左圆徽、中店名（曲名）、右 24H 小牌。 */
+/** konbiniSignPaint.ts paintKonbiniFascia（图标走兜底 Store）：左圆徽、中店名（曲名）、右 24H 小牌。 */
 internal fun paintKonbiniFascia(bitmap: Bitmap, typeface: Typeface, title: String, base: String, text: String, brand: List<String>) {
     val c = Canvas(bitmap); val w = bitmap.width.toFloat(); val h = bitmap.height.toFloat()
     c.drawColor(hexInt(base))
     val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.typeface = typeface }
     val badge = h * 0.86f; val bx = h * 0.3f; val by = (h - badge) / 2
     p.color = hexInt(brand[0]); c.drawCircle(bx + badge / 2, by + badge / 2, badge / 2, p)
-    p.color = 0xFFFFFFFF.toInt(); p.textAlign = Paint.Align.CENTER; p.textSize = badge * 0.6f
-    c.drawText("♪", bx + badge / 2, by + badge / 2 - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
+    drawMachiIcon(c, MACHI_FALLBACK_ICONS[0], bx + badge * 0.2f, by + badge * 0.2f, badge * 0.6f, 0xFFFFFFFF.toInt(), 2.4f)
     val tagW = h * 1.5f; val left = bx + badge + h * 0.35f; val right = w - tagW - h * 0.3f
     p.color = hexInt(text); p.textAlign = Paint.Align.LEFT
     fitFont(p, title, right - left, h * 0.6f)
@@ -655,15 +654,16 @@ internal fun paintKonbiniFascia(bitmap: Bitmap, typeface: Typeface, title: Strin
     c.drawText("24H", w - tagW / 2 - h * 0.15f, h * 0.52f - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
 }
 
-/** paintKonbiniPylon（图标暂按 ♪）：上半品牌色带、下半白底 24 HOURS。 */
+/** paintKonbiniPylon（图标走兜底 Store）：上半品牌色带、下半白底 24 HOURS。 */
 internal fun paintKonbiniPylon(bitmap: Bitmap, typeface: Typeface, base: String, brand: List<String>) {
     val c = Canvas(bitmap); val w = bitmap.width.toFloat(); val h = bitmap.height.toFloat()
     c.drawColor(hexInt(base))
     val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.typeface = machiTypeface(800) }
     p.color = hexInt(brand[0]); c.drawRect(0f, 0f, w, h * 0.58f, p)
     p.color = hexInt(brand[2]); c.drawRect(0f, h * 0.58f, w, h * 0.63f, p)
-    p.color = 0xFFFFFFFF.toInt(); p.textAlign = Paint.Align.CENTER; p.textSize = h * 0.4f
-    c.drawText("♪", w / 2, h * 0.29f - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
+    val iconSize = h * 0.44f
+    drawMachiIcon(c, MACHI_FALLBACK_ICONS[0], (w - iconSize) / 2, h * 0.07f, iconSize, 0xFFFFFFFF.toInt(), 2.6f)
+    p.textAlign = Paint.Align.CENTER
     p.color = hexInt(brand[2]); fitFont(p, "24", w * 0.5f, h * 0.26f)
     c.drawText("24", w * 0.32f, h * 0.8f - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
     p.color = 0xFF2A2F3A.toInt(); p.typeface = typeface; fitFont(p, "HOURS", w * 0.36f, h * 0.12f)
@@ -1077,15 +1077,14 @@ private fun neonText(c: Canvas, p: Paint, text: String, x: Float, y: Float, colo
     c.drawText(text, x, y - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p.apply { alpha = 255 })
 }
 
-/** paintStationCanopy（图标暂用 ♪）：左圆徽、中店名（歌手大写）、右 SELF 小牌。 */
+/** paintStationCanopy（图标走兜底 Store）：左圆徽、中店名（歌手大写）、右 SELF 小牌。 */
 internal fun paintStationCanopy(bitmap: Bitmap, name: String, base: String, text: String, brand: List<String>) {
     val c = Canvas(bitmap); val w = bitmap.width.toFloat(); val h = bitmap.height.toFloat()
     c.drawColor(hexInt(base))
     val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = machiTypeface(700) }
     val badge = h * 0.86f; val bx = h * 0.2f; val by = (h - badge) / 2
     p.color = hexInt(brand[0]); c.drawCircle(bx + badge / 2, by + badge / 2, badge / 2, p)
-    p.color = 0xFFFFFFFF.toInt(); p.textAlign = Paint.Align.CENTER; p.textSize = badge * 0.6f
-    c.drawText("♪", bx + badge / 2, by + badge / 2 - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
+    drawMachiIcon(c, MACHI_FALLBACK_ICONS[0], bx + badge * 0.2f, by + badge * 0.2f, badge * 0.6f, 0xFFFFFFFF.toInt(), 2.4f)
     val tagW = h * 1.7f; val left = bx + badge + h * 0.3f; val right = w - tagW - h * 0.3f
     p.color = hexInt(text); p.textAlign = Paint.Align.LEFT
     fitFont(p, name, right - left, h * 0.62f)
@@ -1097,7 +1096,7 @@ internal fun paintStationCanopy(bitmap: Bitmap, name: String, base: String, text
     c.drawText("SELF", w - tagW / 2 - h * 0.12f, h * 0.53f - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
 }
 
-/** paintStationPylon（七段数码管暂用粗体等宽数字）：上头品牌色 SELF，下面三行价格牌（播放进度、总时长、第几句）。 */
+/** paintStationPylon（七段数码管照译，图标走兜底 Store）：上头品牌色 SELF，下面三行价格牌（播放进度、总时长、第几句）。 */
 internal fun paintStationPylon(bitmap: Bitmap, brand: List<String>, rows: List<Pair<String, String>>) {
     val c = Canvas(bitmap); val w = bitmap.width.toFloat(); val h = bitmap.height.toFloat()
     c.drawColor(0xFFF4F2EC.toInt())
@@ -1105,23 +1104,78 @@ internal fun paintStationPylon(bitmap: Bitmap, brand: List<String>, rows: List<P
     val head = h * 0.34f
     p.color = hexInt(brand[0]); c.drawRect(0f, 0f, w, head, p)
     p.color = hexInt(brand[2]); c.drawRect(0f, head - h * 0.025f, w, head, p)
-    p.color = 0xFFFFFFFF.toInt(); p.textAlign = Paint.Align.CENTER; p.textSize = head * 0.5f
-    c.drawText("♪", w / 2, head * 0.4f - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
+    val iconSize = head * 0.62f
+    drawMachiIcon(c, MACHI_FALLBACK_ICONS[0], (w - iconSize) / 2, head * 0.08f, iconSize, 0xFFFFFFFF.toInt(), 2.3f)
+    p.color = 0xFFFFFFFF.toInt(); p.textAlign = Paint.Align.CENTER
     fitFont(p, "SELF", w * 0.8f, head * 0.2f)
     c.drawText("SELF", w / 2, head * 0.84f - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
+    // 三行价格牌（stationSignPaint.ts）：深色底，标签在左上角一条小字，七段数字在它下面靠右；三行同一个字高。
     val rowTop = head + h * 0.03f
     val rowH = (h - rowTop - h * 0.03f) / rows.size
+    fun span(value: String): Float {
+        var sum = 0f
+        value.forEachIndexed { i, ch -> sum += (if (ch == ':') 0.26f else 0.52f) + (if (i > 0 && ch != ':' && value[i - 1] != ':') 0.1664f else 0f) }
+        return sum
+    }
+    val widest = max(1f, rows.maxOf { span(it.second) })
+    val pt = rowH * 0.06f; val ph = rowH * 0.88f; val band = ph * 0.28f
+    val digitArea = ph - band - ph * 0.06f
+    val digitH = min(digitArea * 0.88f, (w * 0.8f) / widest)
+    val digitColor = 0xFFFF5A3C.toInt(); val offColor = android.graphics.Color.argb(13, 255, 255, 255)
     rows.forEachIndexed { i, (label, value) ->
         val y = rowTop + i * rowH
-        val pt = rowH * 0.06f; val ph = rowH * 0.88f; val band = ph * 0.28f
         p.color = 0xFF16191F.toInt(); c.drawRect(w * 0.05f, y + pt, w * 0.95f, y + pt + ph, p)
-        p.color = 0xFFE8EAEE.toInt(); p.textAlign = Paint.Align.LEFT; p.typeface = machiTypeface(500)
+        p.color = 0xFFE8EAEE.toInt(); p.textAlign = Paint.Align.LEFT; p.typeface = machiTypeface(700)
         fitFont(p, label, w * 0.78f, band * 0.62f)
         c.drawText(label, w * 0.1f, y + pt + band * 0.58f - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
-        p.color = 0xFFFF5A3C.toInt(); p.textAlign = Paint.Align.RIGHT; p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        fitFont(p, value, w * 0.8f, (ph - band) * 0.8f)
-        c.drawText(value, w * 0.9f, y + pt + band + (ph - band) / 2 - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
+        val digitW = digitH * 0.52f; val gap = digitW * 0.32f; val colonW = digitW * 0.5f
+        var x = w * 0.9f - span(value) * digitH
+        val dy = y + pt + band + (digitArea - digitH) / 2
+        value.forEachIndexed { ci, ch ->
+            if (ci > 0 && ch != ':' && value[ci - 1] != ':') x += gap
+            if (ch == ':') {
+                p.color = digitColor
+                val r = digitW * 0.09f
+                c.drawCircle(x + colonW * 0.5f, dy + digitH * 0.32f, r, p)
+                c.drawCircle(x + colonW * 0.5f, dy + digitH * 0.72f, r, p)
+                x += colonW
+                return@forEachIndexed
+            }
+            drawSevenSegment(c, p, ch, x, dy, digitW, digitH, digitColor, offColor)
+            x += digitW
+        }
     }
+}
+
+/** 七段数码管的段（a 上、b 右上、c 右下、d 下、e 左下、f 左上、g 中）。 */
+private val SEVEN_SEGMENTS = mapOf(
+    '0' to "abcdef", '1' to "bc", '2' to "abdeg", '3' to "abcdg", '4' to "bcfg", '5' to "acdfg", '6' to "acdefg", '7' to "abc", '8' to "abcdefg", '9' to "abcdfg", '-' to "g", ' ' to "",
+)
+
+/** stationSignPaint.ts drawSevenSegment：亮的段用 on 色，暗的段用 off 色（像没点亮的灯管）。 */
+private fun drawSevenSegment(c: Canvas, p: Paint, ch: Char, x: Float, y: Float, w: Float, h: Float, on: Int, off: Int) {
+    val lit = SEVEN_SEGMENTS[ch] ?: ""
+    val t = w * 0.18f; val half = h / 2
+    fun segment(name: Char, sx: Float, sy: Float, horizontal: Boolean, length: Float) {
+        p.color = if (lit.indexOf(name) >= 0) on else off
+        val path = android.graphics.Path()
+        if (horizontal) {
+            path.moveTo(sx + t * 0.5f, sy); path.lineTo(sx + t, sy - t * 0.5f); path.lineTo(sx + length - t, sy - t * 0.5f)
+            path.lineTo(sx + length - t * 0.5f, sy); path.lineTo(sx + length - t, sy + t * 0.5f); path.lineTo(sx + t, sy + t * 0.5f)
+        } else {
+            path.moveTo(sx, sy + t * 0.5f); path.lineTo(sx + t * 0.5f, sy + t); path.lineTo(sx + t * 0.5f, sy + length - t)
+            path.lineTo(sx, sy + length - t * 0.5f); path.lineTo(sx - t * 0.5f, sy + length - t); path.lineTo(sx - t * 0.5f, sy + t)
+        }
+        path.close()
+        c.drawPath(path, p)
+    }
+    segment('a', x, y + t * 0.5f, true, w)
+    segment('g', x, y + half, true, w)
+    segment('d', x, y + h - t * 0.5f, true, w)
+    segment('f', x + t * 0.5f, y, false, half)
+    segment('e', x + t * 0.5f, y + half, false, half)
+    segment('b', x + w - t * 0.5f, y, false, half)
+    segment('c', x + w - t * 0.5f, y + half, false, half)
 }
 
 /** paintMotelTall：「MOTEL」竖排霓虹。 */
