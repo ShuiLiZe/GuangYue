@@ -60,8 +60,27 @@ uniform vec3 uSun;
 uniform vec3 uHemiSky;
 uniform vec3 uHemiGround;
 uniform float uArtificial;
+// 积雪（snow.ts）：朝上的面按 积雪量 × 朝上程度 × 噪声 混成雪色（光照之前改底色）；屋顶下面不积。
+uniform float uMachiSnow;
+uniform vec3 uMachiSnowColor;
+uniform vec4 uMachiRoofs[4];
+uniform float uMachiRoofY[4];
 out vec4 fragColor;
 $MACHI_WET_PARS
+float machiSnowHash(vec2 p) { return fract(sin(dot(p, vec2(41.7, 289.3))) * 43758.5453); }
+float machiSnowNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(machiSnowHash(i), machiSnowHash(i + vec2(1.0, 0.0)), u.x), mix(machiSnowHash(i + vec2(0.0, 1.0)), machiSnowHash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float machiSheltered(vec3 p) {
+    for (int i = 0; i < 4; i++) {
+        vec4 r = uMachiRoofs[i];
+        if (p.x > r.x && p.x < r.z && p.z > r.y && p.z < r.w && p.y < uMachiRoofY[i] - 0.05) return 1.0;
+    }
+    return 0.0;
+}
 vec3 toLinear(vec3 c) { return mix(c * 0.0773993808, pow(c * 0.9478672986 + 0.0521327014, vec3(2.4)), step(0.04045, c)); }
 // MeshToonMaterial：直射光走 4 阶渐变图（86/146/206/255，最近邻），半球光照常；线性输出（色调映射在后处理最后一道）。
 float toonStep(float dotNL) {
@@ -77,6 +96,12 @@ void main() {
         if (vY < uGroundY + 0.01) discard;
         fragColor = vec4(albedo * uArtificial * vEmi, 1.0);
         return;
+    }
+    if (uMachiSnow > 0.001 && vEmi < 0.001) {
+        float machiNoise = machiSnowNoise(vWorld.xz * 2.6) * 0.65 + machiSnowNoise(vWorld.xz * 7.1) * 0.35;
+        float machiCover = smoothstep(0.5, 0.85, n.y) * smoothstep(1.0 - uMachiSnow * 0.9, 1.16 - uMachiSnow * 0.9, machiNoise + 0.25);
+        machiCover *= 1.0 - machiSheltered(vWorld);
+        albedo = mix(albedo, uMachiSnowColor, machiCover * min(1.0, uMachiSnow * 1.4));
     }
     float w = 0.5 * n.y + 0.5;
     vec3 directLight = uSun * toonStep(dot(n, uSunDir));
@@ -121,7 +146,13 @@ internal class MachiNightLight(val palette: MachiPalette, val weather: MachiWeat
     private fun lin(hex: String, k: Double): FloatArray = machiLinear(hex, k)
     val sun = lin(palette.moon, look.sunIntensity)
     val hemiSky = lin(palette.hemiSky, look.hemiIntensity)
-    val hemiGround = lin(palette.hemiGround, look.hemiIntensity)
+    // 积雪时地面反光偏冷偏亮（createMachiRuntime：hemiGround.lerp((0.55, 0.6, 0.7) × (0.35 + 0.65 daylight), snowCover × 0.5)）。
+    val hemiGround: FloatArray = run {
+        val base = machiLinear(palette.hemiGround)
+        val snowK = state.snowCover * 0.5
+        val cold = doubleArrayOf(0.55, 0.6, 0.7).map { it * (0.35 + 0.65 * state.daylight) }
+        FloatArray(3) { ((base[it] + (cold[it] - base[it]) * snowK) * look.hemiIntensity).toFloat() }
+    }
 }
 
 private class MachiRenderer(
@@ -136,6 +167,9 @@ private class MachiRenderer(
     private val weatherLayout: MachiWeatherLayout,
 ) : GLSurfaceView.Renderer {
     private val weather = MachiWeatherFx(weatherLayout)
+    private val snowCoverColor = machiLinear("#f2f5fa")
+    private val roofRects = FloatArray(16).also { a -> weatherLayout.roofs.take(4).forEachIndexed { i, r -> a[i * 4] = r.x0.toFloat(); a[i * 4 + 1] = r.z0.toFloat(); a[i * 4 + 2] = r.x1.toFloat(); a[i * 4 + 3] = r.z1.toFloat() } }
+    private val roofYs = FloatArray(4) { i -> weatherLayout.roofs.getOrNull(i)?.y?.toFloat() ?: -100f }
     private val rainColor: FloatArray
     private val rainGlintColor: FloatArray
     private val dripColor: FloatArray
@@ -242,6 +276,10 @@ private class MachiRenderer(
         GLES30.glUniform3fv(u("uHemiSky"), 1, FloatArray(3) { light.hemiSky[it] * hemiK }, 0)
         GLES30.glUniform3fv(u("uHemiGround"), 1, FloatArray(3) { light.hemiGround[it] * hemiK }, 0)
         GLES30.glUniform1f(u("uArtificial"), light.look.artificial.toFloat())
+        GLES30.glUniform1f(u("uMachiSnow"), light.state.snowCover.toFloat())
+        GLES30.glUniform3fv(u("uMachiSnowColor"), 1, snowCoverColor, 0)
+        GLES30.glUniform4fv(u("uMachiRoofs"), 4, roofRects, 0)
+        GLES30.glUniform1fv(u("uMachiRoofY"), 4, roofYs, 0)
         GLES30.glUniform1i(u("uReflectPass"), if (reflectPass) 1 else 0)
         GLES30.glUniform1i(u("uWetOn"), if (wet) 1 else 0)
         GLES30.glUniform1f(u("uGroundY"), MACHI_KOWLOON_GROUND_Y.toFloat())
