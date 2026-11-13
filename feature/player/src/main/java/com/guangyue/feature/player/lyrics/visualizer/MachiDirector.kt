@@ -128,3 +128,19 @@ internal fun resolveMachiTickerText(target: MachiBoardTarget, lines: List<Line>,
     )
     return if (parts.isNotEmpty()) "${parts.joinToString("   ")}   " else "♪ $t   ◆   "
 }
+
+// —— director.ts 闪电 ——————————————————————————————————————————————
+/** 闪电的时刻：每段副歌的第一句（前一句不是副歌）开始时。 */
+internal fun buildMachiLightningTimes(lines: List<Line>): List<Double> =
+    lines.indices.filter { isMachiChorusLine(lines[it]) && !isMachiChorusLine(lines.getOrNull(it - 1)) }.map { lines[it].startTime }
+
+/** 闪电亮度 0..1：两下闪，第二下略弱，一秒内收尽。 */
+internal fun resolveMachiLightning(times: List<Double>, time: Double): Double {
+    var since = Double.POSITIVE_INFINITY
+    for (i in times.indices.reversed()) {
+        if (times[i] <= time) { since = time - times[i]; break }
+    }
+    if (since > 1.2) return 0.0
+    fun flash(at: Double, width: Double, height: Double) = height * exp(-((since - at) * (since - at)) / (width * width))
+    return min(1.0, flash(0.04, 0.05, 1.0) + flash(0.24, 0.06, 0.7) + 0.25 * exp(-since * 3.5))
+}

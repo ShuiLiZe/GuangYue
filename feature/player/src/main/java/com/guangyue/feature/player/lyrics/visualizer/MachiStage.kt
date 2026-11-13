@@ -156,6 +156,9 @@ private class MachiRenderer(
     private val cones = MachiLightCones(machiConeMesh(machiKowloonLightCones()))
     private val lampColor = machiLinear("#e2f2ff")
     private var lastNanos = 0L
+    // 闪电（director.ts）：副歌开头两下闪；雨量 ≥ 0.5 才有，亮度 × 雨量；半球光 × (1 + 1.5 flash)、月光 × (1 + 1.2 flash)（skyLights.ts）。
+    private val lightningTimes = buildMachiLightningTimes(lines)
+    private var flash = 0.0
     private var ambient = 0.0
     private val post = MachiPostChain()
     private val invVP = FloatArray(16)
@@ -234,9 +237,10 @@ private class MachiRenderer(
         fun u(n: String) = GLES30.glGetUniformLocation(program, n)
         GLES30.glUniformMatrix4fv(u("uVP"), 1, false, vp, 0)
         GLES30.glUniform3fv(u("uSunDir"), 1, light.sunDir, 0)
-        GLES30.glUniform3fv(u("uSun"), 1, light.sun, 0)
-        GLES30.glUniform3fv(u("uHemiSky"), 1, light.hemiSky, 0)
-        GLES30.glUniform3fv(u("uHemiGround"), 1, light.hemiGround, 0)
+        val sunK = (1 + 1.2 * flash).toFloat(); val hemiK = (1 + 1.5 * flash).toFloat()
+        GLES30.glUniform3fv(u("uSun"), 1, FloatArray(3) { light.sun[it] * sunK }, 0)
+        GLES30.glUniform3fv(u("uHemiSky"), 1, FloatArray(3) { light.hemiSky[it] * hemiK }, 0)
+        GLES30.glUniform3fv(u("uHemiGround"), 1, FloatArray(3) { light.hemiGround[it] * hemiK }, 0)
         GLES30.glUniform1f(u("uArtificial"), light.look.artificial.toFloat())
         GLES30.glUniform1i(u("uReflectPass"), if (reflectPass) 1 else 0)
         GLES30.glUniform1i(u("uWetOn"), if (wet) 1 else 0)
@@ -271,6 +275,7 @@ private class MachiRenderer(
         val delta = if (lastNanos == 0L) 1.0 / 60 else min(0.1, (now - lastNanos) / 1e9)
         lastNanos = now
         val t = timeSeconds()
+        flash = if (light.state.rain < 0.5) 0.0 else resolveMachiLightning(lightningTimes, t) * light.state.rain
         val target = resolveMachiBoardTarget(lines, t)
         signs.show(target, lines)
         val view = (pose.position - pose.target).normalized()
@@ -340,7 +345,7 @@ private class MachiRenderer(
                 cloudColor = FloatArray(3) { ((skyBottom[it] + (moon[it] - skyBottom[it]) * 0.25f) * 0.7f) },
                 cloudAmount = look.clouds,
                 haze = look.haze,
-                lightning = 0.0,
+                lightning = flash,
                 glowA = floatArrayOf(-2.0f, 0f, 1.0f, 3.4f),
                 glowColorA = FloatArray(3) { (glowColorA[it] * 0.42 * neon).toFloat() },
                 glowB = floatArrayOf(MachiKowloonLayout.SCREEN_X.toFloat(), 0f, (-1.5 + 0.8).toFloat(), 3.0f),

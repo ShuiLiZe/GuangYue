@@ -79,4 +79,15 @@ class MachiLensTest {
         val huge = resolveMachiBokehLevel(1000.0)
         assertEquals(4, huge.level); assertEquals(31.25, huge.levelCoc, 1e-9); assertEquals(48, huge.taps); assertEquals(32, huge.scale)
     }
+
+    @Test
+    fun lightningFlashesTwiceThenFades() {
+        // director.ts resolveMachiLightning：两下闪（0.04 s、0.24 s），一秒多收尽。
+        val times = listOf(10.0, 30.0)
+        assertEquals(0.0, resolveMachiLightning(times, 9.0), 0.0)
+        assertEquals(1.0, resolveMachiLightning(times, 10.04), 1e-9)
+        assertEquals(0.25 * kotlin.math.exp(-1.75) + 0.7 * kotlin.math.exp(-0.0676 / 0.0036) + kotlin.math.exp(-0.2116 / 0.0025), resolveMachiLightning(times, 10.5), 1e-9)
+        assertEquals(0.0, resolveMachiLightning(times, 11.3), 0.0)
+        assertTrue(resolveMachiLightning(times, 30.24) > 0.7)
+    }
 }
