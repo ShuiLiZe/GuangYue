@@ -404,6 +404,8 @@ internal fun buildMachiKonbini(palette: MachiPalette, seed: String): MachiKonbin
     val variation = resolveMachiKonbiniVariation(seed)
     addMachiKonbiniInterior(m, g, palette, variation.shelfSeed, stats)
     val propFaces = addMachiKonbiniProps(m, palette, seed, variation, stats)
+    // のぼり旗的杆、横杆、底座（布面单独画，MachiActors.kt MachiNobori）。
+    m.addMachiNoboriPoles(MACHI_KONBINI_NOBORI, palette)
     return MachiKonbiniModel(m.toArray(), g.toArray(), boardFaces, fasciaFaces, stats, propFaces, doorMeshes.map { it.toArray() }, doorGlass.map { it.toArray() })
 }
 
@@ -581,7 +583,28 @@ private val KONBINI_BIKE_COLORS = listOf("#c8423a", "#2f6db0", "#e7c64a", "#3f8f
 private val KONBINI_UMBRELLA_COLORS = listOf("#e8ecf2", "#2f6db0", "#d24d6e", "#3e4655", "#f0b23e")
 
 /** 招牌模块要贴字的面：中心 x, y, z、朝向、宽、高（立柱灯箱两面、A 字立牌一面、贩卖机陈列窗两块）。 */
-internal class MachiKonbiniPropFaces(val pylon: List<DoubleArray>, val aFrame: List<DoubleArray>, val vending: List<DoubleArray>)
+/** konbiniScene：门口三面旗，门左边的场地边上，布面朝前右，旗杆在左。 */
+internal val MACHI_KONBINI_NOBORI = listOf(-3.25, -2.5, -1.78).map { MachiNoboriSpot(it, MachiKonbiniLayout.LOT_Y, 1.9, 0.35) }
+
+/** konbiniScene 四条车道（靠左行驶）：前路东行 / 西行，右路北行 / 南行；两端伸出底座 8。 */
+internal val MACHI_KONBINI_LANES = MachiKonbiniLayout.let { L ->
+    listOf(
+        MachiLane(-8.0, L.ROAD_INNER + 0.92, 8.0, L.ROAD_INNER + 0.92),
+        MachiLane(8.0, L.ROAD_OUTER - 1.12, -8.0, L.ROAD_OUTER - 1.12),
+        MachiLane(L.ROAD_INNER + 0.92, 8.0, L.ROAD_INNER + 0.92, -8.0),
+        MachiLane(L.ROAD_OUTER - 1.12, -8.0, L.ROAD_OUTER - 1.12, 8.0),
+    )
+}
+
+/** konbiniScene 白气：井盖一缕、屋顶空调外机一缕。 */
+internal val MACHI_KONBINI_STEAM = MachiKonbiniLayout.let { L ->
+    listOf(
+        MachiSteamSource(-2.4, L.ROAD_Y + 0.02, (L.ROAD_INNER + L.ROAD_OUTER) / 2 + 0.3, 7, 4.4, 1.0),
+        MachiSteamSource(-0.1 - 0.12, L.ROOF_TOP + 0.68, -4.75 + 0.2, 5, 3.3, 0.6),
+    )
+}
+
+internal class MachiKonbiniPropFaces(val pylon: List<DoubleArray>, val aFrame: List<DoubleArray>, val vending: List<DoubleArray>, val fans: List<MachiFanSpec> = emptyList())
 
 internal fun addMachiKonbiniProps(m: MachiMesh, palette: MachiPalette, seed: String, variation: MachiKonbiniVariation, stats: MutableMap<String, Int>): MachiKonbiniPropFaces {
     val L = MachiKonbiniLayout
@@ -614,13 +637,17 @@ internal fun addMachiKonbiniProps(m: MachiMesh, palette: MachiPalette, seed: Str
         vendingFaces += doubleArrayOf(vx + vd / 2 + 0.02 + vd / 2 + 0.004, lot + vh - 0.2 - 0.43, z, PI / 2, vw - 0.12, 0.86)
         stats["vending"] = (stats["vending"] ?: 0) + 1
     }
-    // 空调外机：屋顶两台、侧墙两台（风扇叶先按静止摆，转动后接）。
+    // 空调外机：屋顶两台、侧墙两台；风扇叶另出（顺序同 props.ts：屋顶 0、1，地面 2、3）。
+    val fans = ArrayList<MachiFanSpec>()
     fun acUnit(f: MachiFrame) {
         f.boxAt(0.82, 0.62, 0.3, 0.0, 0.04, 0.0, acBody)
         f.boxAt(0.86, 0.04, 0.34, 0.0, 0.0, 0.0, dark)
         f.tube(v3(-0.12, 0.36, 0.14), v3(-0.12, 0.36, 0.16), 0.22, dark, 20)
+        // 风扇叶单独一份网格（风扇本地坐标），渲染器每帧绕本地 z 转（MachiActors.kt MachiFans）。
         val fan = f.child(-0.12, 0.36, 0.165)
-        for (i in 0 until 3) { val a = i * 2 * PI / 3; fan.child(cos(a) * 0.09, sin(a) * 0.09, 0.0, rz = a).boxC(0.18, 0.07, 0.01, 0.0, 0.0, 0.0, metal) }
+        val fm = MachiMesh(); val local = MachiFrame(fm)
+        for (i in 0 until 3) { val a = i * 2 * PI / 3; local.child(cos(a) * 0.09, sin(a) * 0.09, 0.0, rz = a).boxC(0.18, 0.07, 0.01, 0.0, 0.0, 0.0, metal) }
+        fans += MachiFanSpec(fm.toArray(), fan.o, fan.r)
         f.boxAt(0.04, 0.3, 0.04, 0.32, 0.1, -0.14, dark)
         stats["ac"] = (stats["ac"] ?: 0) + 1
     }
@@ -759,7 +786,7 @@ internal fun addMachiKonbiniProps(m: MachiMesh, palette: MachiPalette, seed: Str
             of.tube(v3(0.0, 0.14, 0.0), v3(0.0, -0.45, 0.0), 0.01, dark)
         }
     }
-    return MachiKonbiniPropFaces(pylonFaces, aFrameFaces, vendingFaces)
+    return MachiKonbiniPropFaces(pylonFaces, aFrameFaces, vendingFaces, fans)
 }
 
 

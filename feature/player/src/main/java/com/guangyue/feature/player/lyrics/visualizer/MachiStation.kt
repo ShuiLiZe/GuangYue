@@ -172,6 +172,20 @@ internal class MachiStationModel(
     val motelFaces: List<DoubleArray>,
 )
 
+/** stationScene：加油区前沿三面旗（セルフ、洗車、灯油）。 */
+internal val MACHI_STATION_NOBORI = listOf(1.45, 1.95, 2.45).map { MachiNoboriSpot(it, MachiStationLayout.APRON_Y, 0.15, 0.4) }
+
+/** stationScene 两条车道（靠左行驶）：近的往 +x，远的往 −x；两端伸出底座 8。 */
+internal val MACHI_STATION_LANES = MachiStationLayout.LANES.let { l -> listOf(MachiLane(-8.0, l[0], 8.0, l[0]), MachiLane(8.0, l[1], -8.0, l[1])) }
+
+/** stationScene 白气：アドトラック排气管（vehicles.ts exhaust = stack + 0.05）、井盖。 */
+internal val MACHI_STATION_STEAM = MachiStationLayout.let { S ->
+    listOf(
+        MachiSteamSource(S.T_CAB_BACK - 0.1, S.T_CAB_TOP + 0.35 + 0.05, S.T_Z1 - 0.18, 5, 3.2, 0.55),
+        MachiSteamSource(-2.6, S.ROAD_Y + 0.02, (S.LANES[0] + S.LANES[1]) / 2 + 0.4, 6, 4.6, 0.9),
+    )
+}
+
 private fun v3s(x: Double, y: Double, z: Double) = doubleArrayOf(x, y, z)
 
 internal fun buildMachiStation(palette: MachiPalette, seed: String): MachiStationModel {
@@ -449,6 +463,8 @@ internal fun buildMachiStation(palette: MachiPalette, seed: String): MachiStatio
         }
         count("truck")
     }
+    // のぼり旗的杆、横杆、底座（布面单独画）。
+    m.addMachiNoboriPoles(MACHI_STATION_NOBORI, palette)
     return MachiStationModel(m.toArray(), stats, andons, canopySigns, pylonFaces, motelFaces)
 }
 

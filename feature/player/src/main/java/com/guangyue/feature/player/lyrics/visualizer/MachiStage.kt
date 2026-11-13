@@ -36,15 +36,17 @@ layout(location = 3) in float aEmi;
 uniform mat4 uVP;
 // 会动的件（便利店自动门）整体平移；其余为 0。
 uniform vec3 uOffset;
+// 会动的件（风扇、过路车，MachiActors.kt）的模型矩阵；静态网格为单位阵。
+uniform mat4 uModel;
 out vec3 vCol;
 out vec3 vNor;
 out float vEmi;
 out float vY;
 out vec3 vWorld;
 void main() {
-    vec3 p = aPos + uOffset;
+    vec3 p = (uModel * vec4(aPos, 1.0)).xyz + uOffset;
     gl_Position = uVP * vec4(p, 1.0);
-    vCol = aCol; vNor = aNor; vEmi = aEmi; vY = p.y; vWorld = p;
+    vCol = aCol; vNor = mat3(uModel) * aNor; vEmi = aEmi; vY = p.y; vWorld = p;
 }
 """
 
@@ -88,6 +90,10 @@ uniform vec2 uSpotCos[6];
 // 地上的加色光斑（自发光通道当标签：1 溢出光、2 路灯、3 贩卖机）。
 uniform int uAdd;
 uniform vec3 uPoolScale;
+// uAdd = 2：软影 / 车灯光斑（顶点色是线性原值 × uTint，混合方式由渲染器定）。
+uniform vec3 uTint;
+// 过路车按底座边缘裁掉（traffic.ts clipToBase：只留 |x|、|z| ≤ half）；0 不裁。
+uniform float uClipHalf;
 float machiBias;
 out vec4 fragColor;
 $MACHI_WET_PARS_K
@@ -113,6 +119,8 @@ float toonStep(float dotNL) {
     return i == 0 ? 86.0 / 255.0 : (i == 1 ? 146.0 / 255.0 : (i == 2 ? 206.0 / 255.0 : 1.0));
 }
 void main() {
+    if (uClipHalf > 0.0 && (abs(vWorld.x) > uClipHalf || abs(vWorld.z) > uClipHalf)) discard;
+    if (uAdd == 2) { fragColor = vec4(vCol * uTint, 1.0); return; }
     vec3 n = normalize(vNor);
     vec3 albedo = toLinear(vCol);
     if (uAdd == 1) {
@@ -294,6 +302,12 @@ internal class MachiSceneSetup(
     val doorGlass: List<FloatArray> = emptyList(),
     val doorInterval: Double = 30.0,
     val doorPhase: Double = 0.0,
+    /** 会动的件（风扇、过路车）。 */
+    val actors: List<MachiActor> = emptyList(),
+    /** のぼり旗布面、白气（MachiActors.kt）。 */
+    val nobori: MachiNobori? = null,
+    val steam: MachiSteam? = null,
+    val windYaw: Double = 0.0,
 )
 
 internal fun machiKowloonSetup(palette: MachiPalette, seed: String, title: String, artist: String): MachiSceneSetup {
@@ -320,6 +334,17 @@ internal fun machiKonbiniSetup(palette: MachiPalette, seed: String, title: Strin
         lights = machiKonbiniLights(), pools = buildMachiKonbiniPools(palette),
         doors = model.doors, doorGlass = model.doorGlass,
         doorInterval = resolveMachiKonbiniVariation(seed).doorInterval, doorPhase = resolveMachiKonbiniVariation(seed).doorPhase,
+        actors = listOf(
+            MachiFans(model.propFaces?.fans.orEmpty(), resolveMachiKonbiniVariation(seed).fanSpeed),
+            MachiTraffic(MACHI_KONBINI_LANES, MachiKonbiniLayout.ROAD_Y, palette, MachiKonbiniLayout.BASE_HALF),
+        ),
+        // konbiniScene setContent：曲名（无则专辑 / 町景）、主题名或 新発売（带图标）、おでん。
+        nobori = MachiNobori(MACHI_KONBINI_NOBORI, listOf(
+            MachiNoboriFace(palette.brand[0], "#ffffff", title.ifEmpty { "町景" }),
+            MachiNoboriFace(palette.brand[2], "#ffffff", "新発売", "♪"),
+            MachiNoboriFace(palette.brand[1], palette.signText, "おでん"),
+        )),
+        steam = MachiSteam(MACHI_KONBINI_STEAM), windYaw = w.second.windYaw,
     )
 }
 
@@ -356,6 +381,13 @@ internal fun machiStationSetup(palette: MachiPalette, seed: String, title: Strin
         mirrorY = MachiStationLayout.REFLECT_Y, wetY = MachiStationLayout.ROAD_Y + 0.002, wetBias = 0.0,
         wetY2 = MachiStationLayout.APRON_Y + 0.002, wetBias2 = 0.08,
         lights = machiStationLights(palette), pools = buildMachiStationPools(palette),
+        actors = listOf(MachiTraffic(MACHI_STATION_LANES, MachiStationLayout.ROAD_Y, palette, 6.0)),
+        nobori = MachiNobori(MACHI_STATION_NOBORI, listOf(
+            MachiNoboriFace(palette.brand[0], "#ffffff", "セルフ"),
+            MachiNoboriFace(palette.brand[2], "#ffffff", "洗車", "♪"),
+            MachiNoboriFace(palette.brand[1], palette.signText, "灯油"),
+        )),
+        steam = MachiSteam(MACHI_STATION_STEAM), windYaw = w.second.windYaw,
     )
 }
 
@@ -561,6 +593,9 @@ private class MachiRenderer(
         GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 8, 0)
         GLES30.glBindVertexArray(0)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+        setup.actors.forEach { a -> a.parts.forEach { p -> if (p.mesh.isNotEmpty()) { p.vao = vaoOf(p.mesh); p.count = p.mesh.size / 10 } } }
+        setup.nobori?.init(::link)
+        setup.steam?.init(::link)
         signs?.init(::link)
         cones?.init(::link)
         weather.init(::link)
@@ -579,6 +614,8 @@ private class MachiRenderer(
         fun u(n: String) = GLES30.glGetUniformLocation(program, n)
         GLES30.glUniformMatrix4fv(u("uVP"), 1, false, vp, 0)
         GLES30.glUniform3f(u("uOffset"), 0f, 0f, 0f)
+        GLES30.glUniformMatrix4fv(u("uModel"), 1, false, identity, 0)
+        GLES30.glUniform1f(u("uClipHalf"), 0f)
         GLES30.glUniform3fv(u("uSunDir"), 1, light.sunDir, 0)
         val sunK = (1 + 1.2 * flash).toFloat(); val hemiK = (1 + 1.5 * flash).toFloat()
         GLES30.glUniform3fv(u("uSun"), 1, FloatArray(3) { light.sun[it] * sunK }, 0)
@@ -649,7 +686,45 @@ private class MachiRenderer(
             GLES30.glBindVertexArray(vao)
             GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, count)
             drawDoors(u("uOffset"), doorVaos, doorCounts)
+            drawActors(MachiDynPart.LIT)
         }
+        GLES30.glBindVertexArray(0)
+    }
+
+    private val identity = FloatArray(16).also { android.opengl.Matrix.setIdentityM(it, 0) }
+
+    /** 会动的件：LIT 照常画；SHADOW / ADD 在不透明之后、玻璃之前，混合、不写深度（traffic.ts renderOrder 1）。 */
+    private fun drawActors(mode: Int) {
+        fun u(n: String) = GLES30.glGetUniformLocation(program, n)
+        for (a in setup.actors) for (p in a.parts) {
+            if (p.mode != mode || !p.visible || p.count == 0) continue
+            GLES30.glUniformMatrix4fv(u("uModel"), 1, false, p.model, 0)
+            GLES30.glUniform1f(u("uClipHalf"), p.clip)
+            p.tint?.let { GLES30.glUniform3fv(u("uTint"), 1, it, 0) } ?: GLES30.glUniform3f(u("uTint"), 1f, 1f, 1f)
+            GLES30.glBindVertexArray(p.vao)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, p.count)
+        }
+        GLES30.glUniformMatrix4fv(u("uModel"), 1, false, identity, 0)
+        GLES30.glUniform1f(u("uClipHalf"), 0f)
+    }
+
+    /** 软影（dst × (1 − c)）与车灯光斑（加色）。 */
+    private fun drawActorOverlays(vp: FloatArray) {
+        if (setup.actors.none { a -> a.parts.any { it.mode != MachiDynPart.LIT && it.visible } }) return
+        GLES30.glUseProgram(program)
+        GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uVP"), 1, false, vp, 0)
+        GLES30.glUniform3f(GLES30.glGetUniformLocation(program, "uOffset"), 0f, 0f, 0f)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uAdd"), 2)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uReflectPass"), 0)
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glDepthMask(false)
+        GLES30.glBlendFuncSeparate(GLES30.GL_ZERO, GLES30.GL_ONE_MINUS_SRC_COLOR, GLES30.GL_ZERO, GLES30.GL_ONE)
+        drawActors(MachiDynPart.SHADOW)
+        GLES30.glBlendFuncSeparate(GLES30.GL_ONE, GLES30.GL_ONE, GLES30.GL_ZERO, GLES30.GL_ONE)
+        drawActors(MachiDynPart.ADD)
+        GLES30.glDepthMask(true)
+        GLES30.glDisable(GLES30.GL_BLEND)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uAdd"), 0)
         GLES30.glBindVertexArray(0)
     }
 
@@ -692,6 +767,9 @@ private class MachiRenderer(
             streetLevel = light.look.streetLamps * (0.75 + 0.25 * resolveMachiFlicker(ambient + 3.1, "$seed:street", 0.45))
             updateLights()
         }
+        // 会动的件按氛围时钟（风扇转、车按 9.5 s 窗口开过）。
+        val actorFrame = MachiActorFrame(ambient, seed, MACHI_TRAFFIC_CHANCE)
+        setup.actors.forEach { it.update(actorFrame) }
         val view = (pose.position - pose.target).normalized()
         val wet = light.state.wetness > 0.001
         // 倒影（reflection.ts）：干的时候路面不取倒影，不画。
@@ -723,6 +801,9 @@ private class MachiRenderer(
         // 场景
         drawMesh(vp, reflectPass = false, wet = wet)
         if (poolCount > 0) drawMesh(vp, reflectPass = false, wet = false, pools = true)
+        drawActorOverlays(vp)
+        // のぼり旗（nobori.ts）：wind = 0.35 + 0.65 × min(1, rain)。
+        setup.nobori?.draw(vp, ambient, 0.35 + 0.65 * kotlin.math.min(1.0, resolveMachiRainAmount(light.state.rain)), light)
         if (glassCount > 0) drawMesh(vp, reflectPass = false, wet = false, glass = true)
         // 光柱（lightCones.ts）：level = 0.55 × lamp × (1 − 0.6 daylight)，lamp = streetLamps × (0.75 + 0.25 flicker)。
         // 便利店（konbiniScene direct）：street = streetLamps × (0.75 + 0.25 flicker(ambient + 3.1, seed:street))。
@@ -739,6 +820,14 @@ private class MachiRenderer(
         )
         // 雪：雪量 = snow × (0.75 + 0.25 intensity)；点大小按场景目标每世界单位像素。
         weather.drawSnow(vp, ambient, light.state.snow, 1 - 0.9 * light.state.daylight, post.sceneH / ((pose.top - pose.bottom) / pose.zoom), snowColor, snowGlintColor)
+        // 白气（steam.ts）：朝镜头的软云片，加色、不写深度。
+        setup.steam?.let { st ->
+            val fx = -view.x; val fy = -view.y; val fz = -view.z
+            var rx = -fz; var rz = fx; val rlen = kotlin.math.sqrt(rx * rx + rz * rz); rx /= rlen; rz /= rlen
+            val ux = -rz * fy; val uy = rz * fx - rx * fz; val uz = rx * fy
+            st.draw(vp, floatArrayOf(rx.toFloat(), 0f, rz.toFloat()), floatArrayOf(ux.toFloat(), uy.toFloat(), uz.toFloat()), ambient,
+                machiSteamWind(setup.windYaw), machiSteamColor(light.palette.skyBottom))
+        }
         // 歌词大屏 / 跑马灯 / 门头霓虹（MachiScreen.kt）
         ambient += delta
         signs?.draw(
