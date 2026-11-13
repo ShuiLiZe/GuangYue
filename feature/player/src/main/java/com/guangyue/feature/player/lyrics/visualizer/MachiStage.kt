@@ -5,7 +5,7 @@
 //   · 歌词大屏（逐字点亮 + 换行信号切换）、屏下 LED 跑马灯、门头霓虹店招在 GL 里画（MachiScreen.kt，对译 lyricScreen.ts / ledStrip.ts）。
 //   · toon：直射月光走 4 阶渐变（materials.ts createToonGradient）；场景画进线性 HDR 目标，后处理（MachiPost.kt）
 //     做墨线 / 贴地薄雾 / 云 / bloom，最后色调映射上屏（同 three：渲染到目标时材质不做色调映射，OutputPass 做）。
-//   · 湿路面倒影与光柱：MachiWet.kt（reflection.ts / ground.ts / lightCones.ts）；雨天只接了湿度与水洼，雨丝 / 滴水（weather.ts）未做。
+//   · 湿路面倒影与光柱：MachiWet.kt（reflection.ts / ground.ts / lightCones.ts）；雨丝 / 水花 / 滴水：MachiWeather.kt（weather.ts，雪未做）。
 // 还没做：阴影、天气粒子、另两个场景（便利店 / 车站）。
 // 只给取证页用（MachiStagePreview），未进歌词样式列表。
 package com.guangyue.feature.player.lyrics.visualizer
@@ -133,7 +133,20 @@ private class MachiRenderer(
     private val signs: MachiKowloonSigns,
     private val seed: String,
     private val puddles: MachiPuddles,
+    private val weatherLayout: MachiWeatherLayout,
 ) : GLSurfaceView.Renderer {
+    private val weather = MachiWeatherFx(weatherLayout)
+    private val rainColor: FloatArray
+    private val rainGlintColor: FloatArray
+    private val dripColor: FloatArray
+    init {
+        // weather.ts syncColors（线性空间里 lerp）
+        val sky = machiLinear(light.palette.skyBottom); val pale = machiLinear("#dfe9ff")
+        val street = machiLinear(light.palette.streetLight); val interior = machiLinear(light.palette.interiorLight)
+        rainColor = FloatArray(3) { sky[it] + (pale[it] - sky[it]) * 0.72f }
+        rainGlintColor = FloatArray(3) { street[it] + (interior[it] - street[it]) * 0.4f }
+        dripColor = FloatArray(3) { rainColor[it] + (interior[it] - rainColor[it]) * 0.25f }
+    }
     private val reflection = MachiReflection()
     private val cones = MachiLightCones(machiConeMesh(machiKowloonLightCones()))
     private val lampColor = machiLinear("#e2f2ff")
@@ -200,6 +213,7 @@ private class MachiRenderer(
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         signs.init(::link)
         cones.init(::link)
+        weather.init(::link)
         post.init(::link)
     }
 
@@ -287,6 +301,14 @@ private class MachiRenderer(
         // 光柱（lightCones.ts）：level = 0.55 × lamp × (1 − 0.6 daylight)，lamp = streetLamps × (0.75 + 0.25 flicker)。
         val lamp = light.look.streetLamps * (0.75 + 0.25 * resolveMachiFlicker(ambient + 4.2, "$seed:lamp", 0.45))
         cones.draw(vp, floatArrayOf(view.x.toFloat(), view.y.toFloat(), view.z.toFloat()), lampColor, ambient, lamp * (1 - 0.6 * light.state.daylight))
+        // 雨丝 / 水花 / 滴水（MachiWeather.kt）：雨量 = rain × 0.62（audio、chorus 未接，intensity 1）；灯照雨丝程度 1 − 0.9 daylight。
+        val vx = view.x; val vz = view.z
+        val rl = kotlin.math.sqrt(vx * vx + vz * vz)
+        weather.draw(
+            vp, floatArrayOf((vz / rl).toFloat(), 0f, (-vx / rl).toFloat()), ambient,
+            resolveMachiRainAmount(light.state.rain), light.state.wetness, 1 - 0.9 * light.state.daylight,
+            rainColor, rainGlintColor, dripColor,
+        )
         // 歌词大屏 / 跑马灯 / 门头霓虹（MachiScreen.kt）
         ambient += delta
         signs.draw(
@@ -346,8 +368,8 @@ fun MachiStagePreview(
         resolveMachiPalette(MachiTheme(backgroundColor.machiHex(), primaryColor.machiHex(), secondaryColor.machiHex(), accentColor.machiHex()), seed)
     }
     val light = remember(palette, weather) { MachiNightLight(palette, MachiWeatherKind.entries.firstOrNull { it.id == weather } ?: MachiWeatherKind.CLEAR) }
-    val puddles = remember(seed) { resolveMachiPuddles(seed) }
     val model = remember(seed) { buildMachiKowloon(seed) }
+    val weatherSetup = remember(seed, model) { resolveMachiKowloonWeather(seed, model.drips) }
     val rig = remember { MachiCameraRig(machiKowloonFramingPoints(), MachiKowloonLayout.VIEW) }
     val signs = remember(palette, songTitle, artist, seed, model) { MachiKowloonSigns(palette, songTitle, artist, seed, model.signs) }
     Box(modifier) {
@@ -355,7 +377,7 @@ fun MachiStagePreview(
             factory = { ctx ->
                 GLSurfaceView(ctx).apply {
                     setEGLContextClientVersion(3)
-                    setRenderer(MachiRenderer(model.mesh, light, rig, timeSeconds, lines, signs, seed, puddles))
+                    setRenderer(MachiRenderer(model.mesh, light, rig, timeSeconds, lines, signs, seed, weatherSetup.first, weatherSetup.second))
                     renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                 }
             },

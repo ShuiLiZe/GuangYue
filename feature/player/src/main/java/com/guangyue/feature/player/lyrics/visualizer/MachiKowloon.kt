@@ -114,7 +114,9 @@ internal class MachiMesh {
 /** 亮窗（kowloonScene.ts：窗色 × (0.28 + 0.6 × 夜里程度)，夜里 0.88；不乘 artificial，夜里 artificial = 1 相同）。 */
 internal const val MACHI_WINDOW_LEVEL = 0.88f
 
-internal class MachiKowloonModel(val mesh: FloatArray, val litWindows: Int, val darkWindows: Int, val signs: List<MachiSignPlacement> = emptyList(), val clutter: Map<String, Int> = emptyMap())
+internal class MachiKowloonModel(val mesh: FloatArray, val litWindows: Int, val darkWindows: Int, val signs: List<MachiSignPlacement> = emptyList(), val clutter: Map<String, Int> = emptyMap(),
+    /** 楼面滴水（冷气机前沿）：x, z, 起点高, 落点高, 周期, 相位。 */
+    val drips: List<DoubleArray> = emptyList())
 
 private class MachiFace(val block: MachiKowloonBlock, val ox: Double, val oz: Double, val ax: Double, val az: Double, val nx: Double, val nz: Double, val width: Double)
 
@@ -189,7 +191,7 @@ internal fun buildMachiKowloon(seed: String): MachiKowloonModel {
     // 街面道具：店招盒子、楼顶广告架、大排档、电线杆（MachiKowloonStreet.kt）。
     val signs = addMachiKowloonStreet(m, seed)
     addMachiKowloonRoofs(m, seed)
-    return MachiKowloonModel(m.toArray(), ctx.lit, ctx.dark, signs, ctx.clutter)
+    return MachiKowloonModel(m.toArray(), ctx.lit, ctx.dark, signs, ctx.clutter, ctx.drips.toList())
 }
 
 private fun pickWeighted(roll: Double): Int {
