@@ -323,6 +323,19 @@ internal fun machiKonbiniSetup(palette: MachiPalette, seed: String, title: Strin
     )
 }
 
+/** 车站：路面 asphalt（y = 0，bias 0）与加油区 concrete（y = 0.1，bias 0.08）是湿地面；倒影平面 0.04。招牌、灯后接。 */
+internal fun machiStationSetup(palette: MachiPalette, seed: String): MachiSceneSetup {
+    val model = buildMachiStation(palette, seed)
+    val w = resolveMachiStationWeather(seed)
+    val glows = machiStationGlows()
+    return MachiSceneSetup(
+        kind = "station", mesh = model.mesh, glass = null, framing = machiStationFramingPoints(), view = MachiStationLayout.VIEW,
+        signs = null, cones = machiStationLightCones(), puddles = w.first, weather = w.second, glowA = glows.first, glowB = glows.second,
+        mirrorY = MachiStationLayout.REFLECT_Y, wetY = MachiStationLayout.ROAD_Y + 0.002, wetBias = 0.0,
+        wetY2 = MachiStationLayout.APRON_Y + 0.002, wetBias2 = 0.08,
+    )
+}
+
 private class MachiRenderer(
     private val setup: MachiSceneSetup,
     private val light: MachiNightLight,
@@ -340,6 +353,8 @@ private class MachiRenderer(
     private val puddles = setup.puddles
     private val weatherLayout = setup.weather
     private val konbini = setup.kind == "konbini"
+    private val station = setup.kind == "station"
+    private val canopyColor = machiLinear(MachiStationLayout.ART.getValue("canopyLight"))
     private val clock = MachiClock()
     private val weather = MachiWeatherFx(weatherLayout)
     private val snowCoverColor = machiLinear("#f2f5fa")
@@ -710,9 +725,13 @@ private class MachiRenderer(
                 haze = look.haze,
                 lightning = flash,
                 glowA = setup.glowA,
-                glowColorA = if (konbini) FloatArray(3) { (glowColorKA[it] * 0.55 * interiorLevel * night).toFloat() } else FloatArray(3) { (glowColorA[it] * 0.42 * neon).toFloat() },
+                glowColorA = if (station) {
+                    // stationScene：canopyLevel = (0.85 + 0.15 flicker(ambient + 1.7, seed:canopy)) × (1 + 0.08 chorus) × artificial。
+                    val canopyLevel = (0.85 + 0.15 * resolveMachiFlicker(ambient + 1.7, "$seed:canopy", 0.4)) * (1 + 0.08 * resolveMachiChorus(lines, target)) * look.artificial
+                    FloatArray(3) { (canopyColor[it] * 0.5 * canopyLevel * night).toFloat() }
+                } else if (konbini) FloatArray(3) { (glowColorKA[it] * 0.55 * interiorLevel * night).toFloat() } else FloatArray(3) { (glowColorA[it] * 0.42 * neon).toFloat() },
                 glowB = setup.glowB,
-                glowColorB = if (konbini) FloatArray(3) { (glowColorKB[it] * 0.42 * lamp * night).toFloat() } else FloatArray(3) { (glowColorB[it] * 0.36 * look.artificial).toFloat() },
+                glowColorB = if (station) FloatArray(3) { (glowColorKB[it] * 0.42 * lamp * night).toFloat() } else if (konbini) FloatArray(3) { (glowColorKB[it] * 0.42 * lamp * night).toFloat() } else FloatArray(3) { (glowColorB[it] * 0.36 * look.artificial).toFloat() },
                 stars = look.stars,
             ),
             bloomStrength = look.bloom,
@@ -746,7 +765,7 @@ fun MachiStagePreview(
     /** auto（按本地时钟，Folia 默认）/ night / dusk / day。 */
     timeOfDay: String = "night",
     paused: () -> Boolean = { false },
-    /** 场景：kowloon（城寨酒吧，默认）/ konbini（便利店街角）。 */
+    /** 场景：kowloon（城寨酒吧，默认）/ konbini（便利店街角）/ station（加油站停车场）。 */
     scene: String = "kowloon",
 ) {
     val palette = remember(backgroundColor, primaryColor, secondaryColor, accentColor, seed) {
@@ -759,7 +778,11 @@ fun MachiStagePreview(
     }
     val light = remember(palette, weather, seed, daylight) { MachiNightLight(palette, runCatching { resolveMachiWeatherKind(weather, seed) }.getOrDefault(MachiWeatherKind.CLEAR), daylight) }
     val setup = remember(scene, palette, songTitle, artist, seed) {
-        if (scene == "konbini") machiKonbiniSetup(palette, seed, songTitle, artist) else machiKowloonSetup(palette, seed, songTitle, artist)
+        when (scene) {
+            "konbini" -> machiKonbiniSetup(palette, seed, songTitle, artist)
+            "station" -> machiStationSetup(palette, seed)
+            else -> machiKowloonSetup(palette, seed, songTitle, artist)
+        }
     }
     val rig = remember(setup) { MachiCameraRig(setup.framing, setup.view) }
     Box(modifier) {

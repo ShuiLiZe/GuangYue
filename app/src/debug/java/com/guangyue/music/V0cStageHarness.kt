@@ -265,7 +265,7 @@ fun V0cStage(
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
         // 2026-11-12：町景（machi）3D 舞台起步，只在取证页（未进歌词样式列表）。
-        if (style == "machi" || style == "machirain" || style == "machisnow" || style == "machiday" || style == "machidusk" || style == "machikonbini") {
+        if (style == "machi" || style == "machirain" || style == "machisnow" || style == "machiday" || style == "machidusk" || style == "machikonbini" || style == "machistation") {
             com.guangyue.feature.player.lyrics.visualizer.MachiStagePreview(
                 lines = kernel,
                 timeSeconds = { positionMs / 1000.0 },
@@ -282,9 +282,9 @@ fun V0cStage(
                 weather = when (style) { "machirain" -> "rain"; "machisnow" -> "snow"; else -> "auto" },
                 restCamera = true,
                 // machiday / machidusk：白天、黄昏（applyEnvironmentColors 三套插值）取证；其余夜。
-                timeOfDay = when (style) { "machiday", "machikonbini" -> "day"; "machidusk" -> "dusk"; else -> "night" },
-                // machikonbini：便利店街角（MachiKonbini.kt），白天（Folia 便利店基准是按本地时钟拍的白天）。
-                scene = if (style == "machikonbini") "konbini" else "kowloon",
+                timeOfDay = when (style) { "machiday", "machikonbini", "machistation" -> "day"; "machidusk" -> "dusk"; else -> "night" },
+                // machikonbini：便利店街角（MachiKonbini.kt）；machistation：加油站停车场（MachiStation.kt）。都按白天拍（Folia 基准是白天）。
+                scene = when (style) { "machikonbini" -> "konbini"; "machistation" -> "station"; else -> "kowloon" },
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh") {
