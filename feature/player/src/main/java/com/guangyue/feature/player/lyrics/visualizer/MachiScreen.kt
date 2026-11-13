@@ -482,16 +482,17 @@ internal class MachiKowloonSigns(
         }
     }
 
-    fun draw(vp: FloatArray, viewZ: Float, frame: MachiSignFrame) {
+    /** [advance] = false：只画不推进状态（倒影 pass 再画一遍用）。 */
+    fun draw(vp: FloatArray, viewZ: Float, frame: MachiSignFrame, advance: Boolean = true) {
         val cur = current ?: return
         var glitch = 0.0
         if (switchElapsed < SWITCH_SECONDS) {
-            switchElapsed += max(frame.delta, 1.0 / 120)
+            if (advance) switchElapsed += max(frame.delta, 1.0 / 120)
             val t = min(1.0, switchElapsed / SWITCH_SECONDS)
-            if (t >= 0.45) pending?.let { current = it; pending = null }
+            if (advance && t >= 0.45) pending?.let { current = it; pending = null }
             glitch = if (t >= 1) 0.0 else sin(PI * t).pow(0.7)
         }
-        chorusGlow += (frame.chorus - chorusGlow) * (1 - exp(-frame.delta * 3))
+        if (advance) chorusGlow += (frame.chorus - chorusGlow) * (1 - exp(-frame.delta * 3))
         val slot = current ?: cur
         val layout = slot.layout
         GLES30.glBindVertexArray(vao)
@@ -524,7 +525,7 @@ internal class MachiKowloonSigns(
         GLES30.glUniform1f(u("uViewZ"), viewZ)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 6)
         // 跑马灯
-        ledScroll = (ledScroll + frame.delta * 35.0 * (0.8 + 0.4 * chorusGlow) / max(1.0, ledUsed * LED_W.toDouble())) % 1.0
+        if (advance) ledScroll = (ledScroll + frame.delta * 35.0 * (0.8 + 0.4 * chorusGlow) / max(1.0, ledUsed * LED_W.toDouble())) % 1.0
         GLES30.glUseProgram(ledProgram)
         fun l(n: String) = GLES30.glGetUniformLocation(ledProgram, n)
         GLES30.glUniformMatrix4fv(l("uVP"), 1, false, vp, 0)
@@ -558,9 +559,9 @@ internal class MachiKowloonSigns(
         // 全息投影（hologram.ts）：加色、不写深度；先光束后面板。
         var holoGlitch = 0.0
         if (holoSwitch < HOLO_SWITCH) {
-            holoSwitch += max(frame.delta, 1.0 / 120)
+            if (advance) holoSwitch += max(frame.delta, 1.0 / 120)
             val t = min(1.0, holoSwitch / HOLO_SWITCH)
-            if (t >= 0.4) holoPending?.let { paintKowloonHologram(holoBitmap, typeface, it.first, it.second); upload(holoTex, holoBitmap); holoPending = null }
+            if (advance && t >= 0.4) holoPending?.let { paintKowloonHologram(holoBitmap, typeface, it.first, it.second); upload(holoTex, holoBitmap); holoPending = null }
             holoGlitch = if (t >= 1) 0.0 else sin(PI * t)
         }
         val holoLevel = (0.3 + 0.7 * (1 - frame.daylight)) * (0.9 + 0.1 * frame.flicker) * (1 + 0.15 * chorusGlow)

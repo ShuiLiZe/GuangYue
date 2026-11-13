@@ -5,7 +5,8 @@
 //   · 歌词大屏（逐字点亮 + 换行信号切换）、屏下 LED 跑马灯、门头霓虹店招在 GL 里画（MachiScreen.kt，对译 lyricScreen.ts / ledStrip.ts）。
 //   · toon：直射月光走 4 阶渐变（materials.ts createToonGradient）；场景画进线性 HDR 目标，后处理（MachiPost.kt）
 //     做墨线 / 贴地薄雾 / 云 / bloom，最后色调映射上屏（同 three：渲染到目标时材质不做色调映射，OutputPass 做）。
-// 还没做：阴影、光条与镜头 pass（MachiLens 已有纯函数）、天气、招牌、道具、另两个场景（便利店 / 车站）。
+//   · 湿路面倒影与光柱：MachiWet.kt（reflection.ts / ground.ts / lightCones.ts）；雨天只接了湿度与水洼，雨丝 / 滴水（weather.ts）未做。
+// 还没做：阴影、天气粒子、另两个场景（便利店 / 车站）。
 // 只给取证页用（MachiStagePreview），未进歌词样式列表。
 package com.guangyue.feature.player.lyrics.visualizer
 
@@ -37,24 +38,30 @@ out vec3 vCol;
 out vec3 vNor;
 out float vEmi;
 out float vY;
+out vec3 vWorld;
 void main() {
     gl_Position = uVP * vec4(aPos, 1.0);
-    vCol = aCol; vNor = aNor; vEmi = aEmi; vY = aPos.y;
+    vCol = aCol; vNor = aNor; vEmi = aEmi; vY = aPos.y; vWorld = aPos;
 }
 """
 
-private const val MACHI_FS = """#version 300 es
+private val MACHI_FS = """#version 300 es
 precision highp float;
 in vec3 vCol;
 in vec3 vNor;
 in float vEmi;
 in float vY;
+in vec3 vWorld;
+uniform int uReflectPass;
+uniform int uWetOn;
+uniform vec2 uSceneSize;
 uniform vec3 uSunDir;
 uniform vec3 uSun;
 uniform vec3 uHemiSky;
 uniform vec3 uHemiGround;
 uniform float uArtificial;
 out vec4 fragColor;
+$MACHI_WET_PARS
 vec3 toLinear(vec3 c) { return mix(c * 0.0773993808, pow(c * 0.9478672986 + 0.0521327014, vec3(2.4)), step(0.04045, c)); }
 // MeshToonMaterial：直射光走 4 阶渐变图（86/146/206/255，最近邻），半球光照常；线性输出（色调映射在后处理最后一道）。
 float toonStep(float dotNL) {
@@ -65,9 +72,22 @@ float toonStep(float dotNL) {
 void main() {
     vec3 n = normalize(vNor);
     vec3 albedo = toLinear(vCol);
+    // 倒影 pass（MachiWet.kt）：只有亮的东西映得出，其余写黑当遮挡；贴地的面（含路面本身）丢掉。
+    if (uReflectPass == 1) {
+        if (vY < uGroundY + 0.01) discard;
+        fragColor = vec4(albedo * uArtificial * vEmi, 1.0);
+        return;
+    }
     float w = 0.5 * n.y + 0.5;
-    vec3 irradiance = mix(uHemiGround, uHemiSky, w) + uSun * toonStep(dot(n, uSunDir));
+    vec3 directLight = uSun * toonStep(dot(n, uSunDir));
+    vec3 irradiance = mix(uHemiGround, uHemiSky, w) + directLight;
     vec3 lit = albedo * irradiance / 3.14159265;
+    // 湿路面（ground.ts OUTPUT）：只在贴地朝上的路面上。
+    if (uWetOn == 1 && n.y > 0.9 && abs(vY - uGroundY) < 0.012 && vEmi < 0.01) {
+        float direct = dot(albedo * directLight / 3.14159265, vec3(0.299, 0.587, 0.114));
+        vec2 screenUv = gl_FragCoord.xy / uSceneSize;
+        $MACHI_WET_OUTPUT
+    }
     vec3 glow = albedo * uArtificial;
     fragColor = vec4(mix(lit, glow, vEmi), 1.0);
 }
@@ -91,8 +111,9 @@ void main() { fragColor = vec4(toLinear(mix(uBottom, uTop, vT)), 1.0); }
 """
 
 /** 夜景的光照参数（skyLights.ts + environment.ts 夜 / 晴）。 */
-internal class MachiNightLight(val palette: MachiPalette) {
-    val look = resolveMachiEnvironmentLook(createMachiEnvironmentState(resolveMachiEnvironmentTarget(MACHI_DAYLIGHT_NIGHT, MachiWeatherKind.CLEAR)))
+internal class MachiNightLight(val palette: MachiPalette, val weather: MachiWeatherKind = MachiWeatherKind.CLEAR) {
+    val state = createMachiEnvironmentState(resolveMachiEnvironmentTarget(MACHI_DAYLIGHT_NIGHT, weather))
+    val look = resolveMachiEnvironmentLook(state)
     val sunDir: FloatArray = run {
         val l = sqrt(6.5 * 6.5 + 14.0 * 14.0 + 5.0 * 5.0)
         floatArrayOf((-6.5 / l).toFloat(), (14 / l).toFloat(), (-5 / l).toFloat())
@@ -111,7 +132,11 @@ private class MachiRenderer(
     private val lines: List<Line>,
     private val signs: MachiKowloonSigns,
     private val seed: String,
+    private val puddles: MachiPuddles,
 ) : GLSurfaceView.Renderer {
+    private val reflection = MachiReflection()
+    private val cones = MachiLightCones(machiConeMesh(machiKowloonLightCones()))
+    private val lampColor = machiLinear("#e2f2ff")
     private var lastNanos = 0L
     private var ambient = 0.0
     private val post = MachiPostChain()
@@ -174,6 +199,7 @@ private class MachiRenderer(
         GLES30.glBindVertexArray(0)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         signs.init(::link)
+        cones.init(::link)
         post.init(::link)
     }
 
@@ -181,9 +207,68 @@ private class MachiRenderer(
         GLES30.glViewport(0, 0, width, height)
         aspectW = width.toDouble(); aspectH = height.toDouble()
         post.resize(width, height)
+        reflection.resize(width, height)
+    }
+
+    private fun drawMesh(vp: FloatArray, reflectPass: Boolean, wet: Boolean) {
+        GLES30.glUseProgram(program)
+        fun u(n: String) = GLES30.glGetUniformLocation(program, n)
+        GLES30.glUniformMatrix4fv(u("uVP"), 1, false, vp, 0)
+        GLES30.glUniform3fv(u("uSunDir"), 1, light.sunDir, 0)
+        GLES30.glUniform3fv(u("uSun"), 1, light.sun, 0)
+        GLES30.glUniform3fv(u("uHemiSky"), 1, light.hemiSky, 0)
+        GLES30.glUniform3fv(u("uHemiGround"), 1, light.hemiGround, 0)
+        GLES30.glUniform1f(u("uArtificial"), light.look.artificial.toFloat())
+        GLES30.glUniform1i(u("uReflectPass"), if (reflectPass) 1 else 0)
+        GLES30.glUniform1i(u("uWetOn"), if (wet) 1 else 0)
+        GLES30.glUniform1f(u("uGroundY"), MACHI_KOWLOON_GROUND_Y.toFloat())
+        if (wet) {
+            // ground.ts 的一组 uniform；路面是 concrete（puddleBias 0.08，kowloonScene surfaces.lot）。
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, reflection.tex)
+            GLES30.glUniform1i(u("uReflection"), 1)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glUniform2f(u("uReflectSize"), reflection.width.toFloat(), reflection.height.toFloat())
+            GLES30.glUniform2f(u("uSceneSize"), post.sceneW.toFloat(), post.sceneH.toFloat())
+            GLES30.glUniform2f(u("uPuddleOffset"), puddles.offsetX.toFloat(), puddles.offsetZ.toFloat())
+            GLES30.glUniform1f(u("uPuddleAmount"), puddles.amount.toFloat())
+            GLES30.glUniform1f(u("uRain"), resolveMachiGroundRain(light.state.rain).toFloat())
+            GLES30.glUniform1f(u("uWet"), light.state.wetness.toFloat())
+            GLES30.glUniform3fv(u("uWetSky"), 1, machiLinear(light.palette.skyBottom), 0)
+            GLES30.glUniform1f(u("uReflectStrength"), MACHI_REFLECT_STRENGTH.toFloat())
+            GLES30.glUniform1f(u("uPuddleBias"), 0.08f)
+            GLES30.glUniform1f(u("uWetTime"), ambient.toFloat())
+        }
+        GLES30.glBindVertexArray(vao)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, count)
+        GLES30.glBindVertexArray(0)
     }
 
     override fun onDrawFrame(gl: GL10?) {
+        // 运镜按氛围时间（camera.ts motionTime：用上一帧累加的 ambient，帧间隔封顶 0.1 s）；幅度 4 s 内从 0 升满（DRIFT_RAMP_SECONDS）。
+        val pose = synchronized(rig) { rig.setAspect(aspectW, aspectH); rig.pose(ambient, kotlin.math.min(1.0, ambient / 4.0)) }
+        val vp = pose.viewProjection()
+        val now = System.nanoTime()
+        val delta = if (lastNanos == 0L) 1.0 / 60 else min(0.1, (now - lastNanos) / 1e9)
+        lastNanos = now
+        val t = timeSeconds()
+        val target = resolveMachiBoardTarget(lines, t)
+        signs.show(target, lines)
+        val view = (pose.position - pose.target).normalized()
+        val wet = light.state.wetness > 0.001
+        // 倒影（reflection.ts）：干的时候路面不取倒影，不画。
+        if (wet) {
+            val mirror = machiMirrorVP(vp, MACHI_KOWLOON_GROUND_Y)
+            reflection.begin()
+            GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+            drawMesh(mirror, reflectPass = true, wet = false)
+            signs.draw(
+                mirror, view.z.toFloat(),
+                MachiSignFrame(t, ambient + delta, delta, resolveMachiChorus(lines, target), 0.0, light.look.artificial, resolveMachiFlicker(ambient + delta, seed)),
+                advance = false,
+            )
+            reflection.end()
+        }
         post.beginScene()
         GLES30.glClearColor(0f, 0f, 0f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
@@ -198,35 +283,19 @@ private class MachiRenderer(
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 6)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         // 场景
-        // 运镜按氛围时间（camera.ts motionTime：下面每帧累加的 ambient，帧间隔封顶 0.1 s，用上一帧的值），不是歌曲进度；幅度 4 s 内从 0 升满（DRIFT_RAMP_SECONDS）。
-        // 之前误用歌曲秒数，37.5 s 处 drift.zoom≈1.08 + 转角偏移，整片比 Folia 放大约 1.1 倍。
-        val pose = synchronized(rig) { rig.setAspect(aspectW, aspectH); rig.pose(ambient, kotlin.math.min(1.0, ambient / 4.0)) }
-        GLES30.glUseProgram(program)
-        GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uVP"), 1, false, pose.viewProjection(), 0)
-        GLES30.glUniform3fv(GLES30.glGetUniformLocation(program, "uSunDir"), 1, light.sunDir, 0)
-        GLES30.glUniform3fv(GLES30.glGetUniformLocation(program, "uSun"), 1, light.sun, 0)
-        GLES30.glUniform3fv(GLES30.glGetUniformLocation(program, "uHemiSky"), 1, light.hemiSky, 0)
-        GLES30.glUniform3fv(GLES30.glGetUniformLocation(program, "uHemiGround"), 1, light.hemiGround, 0)
-        GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uArtificial"), light.look.artificial.toFloat())
-        GLES30.glBindVertexArray(vao)
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, count)
-        GLES30.glBindVertexArray(0)
+        drawMesh(vp, reflectPass = false, wet = wet)
+        // 光柱（lightCones.ts）：level = 0.55 × lamp × (1 − 0.6 daylight)，lamp = streetLamps × (0.75 + 0.25 flicker)。
+        val lamp = light.look.streetLamps * (0.75 + 0.25 * resolveMachiFlicker(ambient + 4.2, "$seed:lamp", 0.45))
+        cones.draw(vp, floatArrayOf(view.x.toFloat(), view.y.toFloat(), view.z.toFloat()), lampColor, ambient, lamp * (1 - 0.6 * light.state.daylight))
         // 歌词大屏 / 跑马灯 / 门头霓虹（MachiScreen.kt）
-        val now = System.nanoTime()
-        val delta = if (lastNanos == 0L) 1.0 / 60 else min(0.1, (now - lastNanos) / 1e9)
-        lastNanos = now
         ambient += delta
-        val t = timeSeconds()
-        val target = resolveMachiBoardTarget(lines, t)
-        signs.show(target, lines)
-        val view = (pose.position - pose.target).normalized()
         signs.draw(
-            pose.viewProjection(), view.z.toFloat(),
+            vp, view.z.toFloat(),
             MachiSignFrame(t, ambient, delta, resolveMachiChorus(lines, target), 0.0, light.look.artificial, resolveMachiFlicker(ambient, seed)),
         )
         // 后处理（MachiPost.kt）：墨线 / 薄雾 / 云 → bloom → 色调映射。夜里：mist 色 = skyBottom × 1.35，
         // 云色 = lerp(skyBottom, moon, 0.25) × 0.7；雾里的两处灯（kowloonScene glowA / glowB）。
-        android.opengl.Matrix.invertM(invVP, 0, pose.viewProjection(), 0)
+        android.opengl.Matrix.invertM(invVP, 0, vp, 0)
         val look = light.look
         val skyBottom = machiLinear(p.skyBottom)
         val moon = machiLinear(p.moon)
@@ -271,11 +340,13 @@ fun MachiStagePreview(
     seed: String = "machi",
     songTitle: String = "",
     artist: String = "",
+    weather: String = "clear",
 ) {
     val palette = remember(backgroundColor, primaryColor, secondaryColor, accentColor, seed) {
         resolveMachiPalette(MachiTheme(backgroundColor.machiHex(), primaryColor.machiHex(), secondaryColor.machiHex(), accentColor.machiHex()), seed)
     }
-    val light = remember(palette) { MachiNightLight(palette) }
+    val light = remember(palette, weather) { MachiNightLight(palette, MachiWeatherKind.entries.firstOrNull { it.id == weather } ?: MachiWeatherKind.CLEAR) }
+    val puddles = remember(seed) { resolveMachiPuddles(seed) }
     val model = remember(seed) { buildMachiKowloon(seed) }
     val rig = remember { MachiCameraRig(machiKowloonFramingPoints(), MachiKowloonLayout.VIEW) }
     val signs = remember(palette, songTitle, artist, seed, model) { MachiKowloonSigns(palette, songTitle, artist, seed, model.signs) }
@@ -284,7 +355,7 @@ fun MachiStagePreview(
             factory = { ctx ->
                 GLSurfaceView(ctx).apply {
                     setEGLContextClientVersion(3)
-                    setRenderer(MachiRenderer(model.mesh, light, rig, timeSeconds, lines, signs, seed))
+                    setRenderer(MachiRenderer(model.mesh, light, rig, timeSeconds, lines, signs, seed, puddles))
                     renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                 }
             },
