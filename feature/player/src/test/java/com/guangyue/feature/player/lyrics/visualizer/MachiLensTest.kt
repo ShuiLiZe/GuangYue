@@ -67,4 +67,16 @@ class MachiLensTest {
         }
         assertTrue("lens $lens drift $drift clock $clock", lens == 1440 && drift > 1000 && clock == 300)
     }
+
+    @Test
+    fun bokehLevelMatchesLensPass() {
+        // lensPass.ts resolveMachiBokehLevel：最大圆在那层不超过 8 像素，最多降到 1/32；取样 12..48。
+        assertEquals(MachiBokehLevel(0, 0.0, 12, 2), resolveMachiBokehLevel(0.0))
+        val f8 = resolveMachiBokehLevel(8.64)
+        assertEquals(0, f8.level); assertEquals(4.32, f8.levelCoc, 1e-9); assertEquals(15, f8.taps); assertEquals(2, f8.scale)
+        val wide = resolveMachiBokehLevel(40.0)
+        assertEquals(2, wide.level); assertEquals(5.0, wide.levelCoc, 1e-9); assertEquals(20, wide.taps); assertEquals(8, wide.scale)
+        val huge = resolveMachiBokehLevel(1000.0)
+        assertEquals(4, huge.level); assertEquals(31.25, huge.levelCoc, 1e-9); assertEquals(48, huge.taps); assertEquals(32, huge.scale)
+    }
 }

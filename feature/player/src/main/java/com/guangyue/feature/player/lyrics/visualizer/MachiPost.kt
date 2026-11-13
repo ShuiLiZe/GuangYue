@@ -5,10 +5,12 @@
 //   雾中散射、天空的云）→ 亮部提取（半分辨率）→ 5 级逐级降采样的可分离高斯 → 合成时把 5 级按 lerpBloomFactor 加回去
 //   → 色调映射 + sRGB 上屏。Folia 的 bloom 是先合成进半分辨率再加色叠回，这里在最后一道里直接相加，结果相同、少两遍。
 // 模拟器（swiftshader）省力：场景目标长边封顶 1600 px（Folia 的画质分档也按 DPR 降），bloom 从半分辨率起。
-// 镜头 pass 只做了色差 0.014 / 暗角 0.55 / 颗粒 0.032 / 晴夜星星（合进最后一道）；景深散景、横向光条（MachiStreakPass）、抗锯齿还没做。
+// 镜头 pass 只做了色差 0.014 / 暗角 0.55 / 颗粒 0.032 / 晴夜星星（合进最后一道）；横向光条、景深散景（lensPass.ts 圆盘取样，景深前先把 bloom / 光条叠进一张 HDR）已做；抗锯齿还没做。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.opengl.GLES30
+import kotlin.math.PI
+import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -175,6 +177,22 @@ uniform float uTime;
 uniform float uAspect;
 uniform sampler2D tStreak;
 uniform float uStreak;
+uniform sampler2D tBokeh;
+uniform float uDofMix;
+uniform vec2 uBlend;
+uniform float uComposited;
+uniform float uDepthRange;
+uniform float uFocus;
+uniform float uFocusBand;
+uniform float uFocusFalloff;
+uniform float uCocRadius;
+uniform float uTiltRadius;
+float machiCoc(float depth01, vec2 uv) {
+    float offset = depth01 * uDepthRange - uFocus;
+    float coc = smoothstep(uFocusBand, uFocusBand + uFocusFalloff, abs(offset)) * uCocRadius * (offset < 0.0 ? -1.0 : 1.0);
+    float tilt = smoothstep(0.2, 0.55, abs(uv.y - 0.5)) * uTiltRadius;
+    return abs(coc) >= tilt ? coc : tilt;
+}
 in vec2 vUv;
 out vec4 fragColor;
 float lerpBloomFactor(float factor) { return mix(factor, 1.2 - factor, bloomRadius); }
@@ -203,7 +221,7 @@ void main() {
     float edge = dot(centered, centered);
     vec2 shift = centered * edge * uAberration;
     vec3 color = vec3(texture(tScene, vUv + shift).r, texture(tScene, vUv).g, texture(tScene, vUv - shift).b);
-    if (bloomStrength > 0.0) {
+    if (uComposited < 0.5 && bloomStrength > 0.0) {
         color += 3.0 * bloomStrength * (
             lerpBloomFactor(1.0) * texture(blur1, vUv).rgb +
             lerpBloomFactor(0.8) * texture(blur2, vUv).rgb +
@@ -212,9 +230,16 @@ void main() {
             lerpBloomFactor(0.2) * texture(blur5, vUv).rgb);
     }
     // 横向镜头光条（postPasses.ts MachiStreakPass）：tint (0.62, 0.74, 1.0) × strength。
-    if (uStreak > 0.0) color += texture(tStreak, vUv).rgb * vec3(0.62, 0.74, 1.0) * uStreak;
-    // 晴夜的星星、暗角、颗粒（lensPass.ts；景深散景还没做）。
+    if (uComposited < 0.5 && uStreak > 0.0) color += texture(tStreak, vUv).rgb * vec3(0.62, 0.74, 1.0) * uStreak;
+    // 景深（lensPass.ts）：自己离焦够多就用散景；虚掉的前景盖到这里也用散景。
     float depth01 = texture(tDepth, vUv).x;
+    if (uDofMix > 0.0) {
+        vec4 bokeh = texture(tBokeh, vUv);
+        float own = smoothstep(uBlend.x, uBlend.y, abs(machiCoc(depth01, vUv)));
+        float amount = (own + bokeh.a - own * bokeh.a) * uDofMix;
+        color = mix(color, bokeh.rgb, clamp(amount, 0.0, 1.0));
+    }
+    // 晴夜的星星、暗角、颗粒（lensPass.ts）。
     if (uStars > 0.001 && depth01 > 0.9999) {
         vec2 sp = vec2(vUv.x * uAspect, vUv.y) * 140.0;
         vec2 cell = floor(sp);
@@ -270,6 +295,151 @@ void main() {
 }
 """
 
+// 景深前先把 bloom / 光条叠进一张 HDR（Folia 的镜头 pass 在 bloom、光条之后）。
+private const val COMPOSITE_FS = """#version 300 es
+precision highp float;
+uniform sampler2D tScene;
+uniform sampler2D blur1;
+uniform sampler2D blur2;
+uniform sampler2D blur3;
+uniform sampler2D blur4;
+uniform sampler2D blur5;
+uniform float bloomStrength;
+uniform float bloomRadius;
+uniform sampler2D tStreak;
+uniform float uStreak;
+in vec2 vUv;
+out vec4 fragColor;
+float lerpBloomFactor(float factor) { return mix(factor, 1.2 - factor, bloomRadius); }
+void main() {
+    vec3 color = texture(tScene, vUv).rgb;
+    if (bloomStrength > 0.0) {
+        color += 3.0 * bloomStrength * (
+            lerpBloomFactor(1.0) * texture(blur1, vUv).rgb +
+            lerpBloomFactor(0.8) * texture(blur2, vUv).rgb +
+            lerpBloomFactor(0.6) * texture(blur3, vUv).rgb +
+            lerpBloomFactor(0.4) * texture(blur4, vUv).rgb +
+            lerpBloomFactor(0.2) * texture(blur5, vUv).rgb);
+    }
+    if (uStreak > 0.0) color += texture(tStreak, vUv).rgb * vec3(0.62, 0.74, 1.0) * uStreak;
+    fragColor = vec4(color, 1.0);
+}
+"""
+
+// lensPass.ts PREFILTER / DOWNSAMPLE / GATHER / TENT（散景：以收代散的黄金角圆盘取样）。
+private const val DOF_PREFILTER_FS = """#version 300 es
+precision highp float;
+uniform sampler2D tDiffuse;
+uniform highp sampler2D tDepth;
+uniform vec2 uSourceTexel;
+in vec2 vUv;
+out vec4 fragColor;
+uniform float uDepthRange;
+uniform float uFocus;
+uniform float uFocusBand;
+uniform float uFocusFalloff;
+uniform float uCocRadius;
+uniform float uTiltRadius;
+float machiCoc(float depth01, vec2 uv) {
+    float offset = depth01 * uDepthRange - uFocus;
+    float coc = smoothstep(uFocusBand, uFocusBand + uFocusFalloff, abs(offset)) * uCocRadius * (offset < 0.0 ? -1.0 : 1.0);
+    float tilt = smoothstep(0.2, 0.55, abs(uv.y - 0.5)) * uTiltRadius;
+    return abs(coc) >= tilt ? coc : tilt;
+}
+float widest(float a, float b) { return abs(a) >= abs(b) ? a : b; }
+void main() {
+    vec2 o = uSourceTexel * 0.5;
+    vec2 p0 = vUv + vec2(-o.x, -o.y);
+    vec2 p1 = vUv + vec2(o.x, -o.y);
+    vec2 p2 = vUv + vec2(-o.x, o.y);
+    vec2 p3 = vUv + vec2(o.x, o.y);
+    vec3 color = (texture(tDiffuse, p0).rgb + texture(tDiffuse, p1).rgb + texture(tDiffuse, p2).rgb + texture(tDiffuse, p3).rgb) * 0.25;
+    float coc = widest(
+        widest(machiCoc(texture(tDepth, p0).x, p0), machiCoc(texture(tDepth, p1).x, p1)),
+        widest(machiCoc(texture(tDepth, p2).x, p2), machiCoc(texture(tDepth, p3).x, p3))
+    );
+    fragColor = vec4(color, coc);
+}
+"""
+
+private const val DOF_DOWNSAMPLE_FS = """#version 300 es
+precision highp float;
+uniform sampler2D tSource;
+uniform vec2 uSourceTexel;
+in vec2 vUv;
+out vec4 fragColor;
+float widest(float a, float b) { return abs(a) >= abs(b) ? a : b; }
+void main() {
+    vec2 o = uSourceTexel * 0.5;
+    vec4 s0 = texture(tSource, vUv + vec2(-o.x, -o.y));
+    vec4 s1 = texture(tSource, vUv + vec2(o.x, -o.y));
+    vec4 s2 = texture(tSource, vUv + vec2(-o.x, o.y));
+    vec4 s3 = texture(tSource, vUv + vec2(o.x, o.y));
+    fragColor = vec4((s0.rgb + s1.rgb + s2.rgb + s3.rgb) * 0.25, widest(widest(s0.a, s1.a), widest(s2.a, s3.a)));
+}
+"""
+
+private const val DOF_GATHER_FS = """#version 300 es
+precision highp float;
+uniform sampler2D tSource;
+uniform vec2 uTexel;
+uniform float uMaxCoc;
+uniform float uLevelScale;
+uniform float uTaps;
+in vec2 vUv;
+out vec4 fragColor;
+const mat2 GOLDEN_TURN = mat2(-0.73736888, 0.67549029, -0.67549029, -0.73736888);
+const float MARGIN = 1.2;
+void main() {
+    vec4 center = texture(tSource, vUv);
+    float centerCoc = center.a / uLevelScale;
+    vec4 far = vec4(0.0);
+    vec4 near = vec4(0.0);
+    vec2 direction = vec2(1.0, 0.0);
+    for (int i = 0; i < 48; i++) {
+        if (float(i) >= uTaps) break;
+        float radius = sqrt((float(i) + 0.5) / uTaps) * uMaxCoc;
+        vec4 tap = texture(tSource, vUv + direction * radius * uTexel);
+        direction = GOLDEN_TURN * direction;
+        float tapCoc = tap.a / uLevelScale;
+        float farCoc = max(min(centerCoc, tapCoc), 0.0);
+        float farWeight = clamp((farCoc - radius + MARGIN) / MARGIN, 0.0, 1.0);
+        float nearWeight = clamp((-tapCoc - radius + MARGIN) / MARGIN, 0.0, 1.0) * step(1.0, -tapCoc);
+        far += vec4(tap.rgb, 1.0) * farWeight;
+        near += vec4(tap.rgb, 1.0) * nearWeight;
+    }
+    vec3 farColor = far.a > 0.0 ? far.rgb / far.a : center.rgb;
+    vec3 nearColor = near.a > 0.0 ? near.rgb / near.a : center.rgb;
+    float nearAlpha = clamp(near.a * 3.14159 / uTaps, 0.0, 1.0);
+    fragColor = vec4(mix(farColor, nearColor, nearAlpha), nearAlpha);
+}
+"""
+
+private const val DOF_TENT_FS = """#version 300 es
+precision highp float;
+uniform sampler2D tSource;
+uniform vec2 uTexel;
+in vec2 vUv;
+out vec4 fragColor;
+void main() {
+    vec2 o = uTexel * 0.5;
+    fragColor = (texture(tSource, vUv + vec2(-o.x, -o.y)) + texture(tSource, vUv + vec2(o.x, -o.y))
+        + texture(tSource, vUv + vec2(-o.x, o.y)) + texture(tSource, vUv + vec2(o.x, o.y))) * 0.25;
+}
+"""
+
+/** lensPass.ts resolveMachiBokehLevel：散景用第几层（0 = 一半分辨率）、最大圆在那层几像素、取几个样、合几倍。 */
+internal data class MachiBokehLevel(val level: Int, val levelCoc: Double, val taps: Int, val scale: Int)
+
+internal fun resolveMachiBokehLevel(maxCocPx: Double): MachiBokehLevel {
+    var level = 0
+    var levelCoc = maxCocPx / 2
+    while (levelCoc > 8 && level < DOF_LEVELS - 1) { level += 1; levelCoc /= 2 }
+    val taps = min(48, max(12, ceil(PI * levelCoc * levelCoc / 4).toInt()))
+    return MachiBokehLevel(level, levelCoc, taps, 1 shl (level + 1))
+}
+
+private const val DOF_LEVELS = 5
 private const val KERNELS = 5
 private val KERNEL_SIZES = intArrayOf(6, 10, 14, 18, 22)
 private const val SCENE_MAX_SIDE = 1600
@@ -302,6 +472,15 @@ internal class MachiPostChain {
     private var streakA: Target? = null
     private var streakB: Target? = null
     private var streakResult = 0
+    private var compositeProgram = 0
+    private var dofPrefilterProgram = 0
+    private var dofDownsampleProgram = 0
+    private var dofGatherProgram = 0
+    private var dofTentProgram = 0
+    private var comp: Target? = null
+    private val dofChain = arrayOfNulls<Target>(DOF_LEVELS)
+    private val dofWorkA = arrayOfNulls<Target>(DOF_LEVELS)
+    private val dofWorkB = arrayOfNulls<Target>(DOF_LEVELS)
     private var emptyVao = 0
     private var sceneFbo = 0
     private var sceneTex = 0
@@ -328,6 +507,11 @@ internal class MachiPostChain {
         outputProgram = link(FS_VS, OUTPUT_FS)
         streakBrightProgram = link(FS_VS, STREAK_BRIGHT_FS)
         streakBlurProgram = link(FS_VS, STREAK_BLUR_FS)
+        compositeProgram = link(FS_VS, COMPOSITE_FS)
+        dofPrefilterProgram = link(FS_VS, DOF_PREFILTER_FS)
+        dofDownsampleProgram = link(FS_VS, DOF_DOWNSAMPLE_FS)
+        dofGatherProgram = link(FS_VS, DOF_GATHER_FS)
+        dofTentProgram = link(FS_VS, DOF_TENT_FS)
         val ids = IntArray(1); GLES30.glGenVertexArrays(1, ids, 0); emptyVao = ids[0]
         val ext = GLES30.glGetString(GLES30.GL_EXTENSIONS) ?: ""
         floatColor = ext.contains("GL_EXT_color_buffer_float") || ext.contains("GL_EXT_color_buffer_half_float")
@@ -356,11 +540,11 @@ internal class MachiPostChain {
     private fun release() {
         val texs = ArrayList<Int>(); val fbos = ArrayList<Int>()
         if (sceneFbo != 0) { fbos += sceneFbo; texs += sceneTex; texs += depthTex }
-        (listOf(atmo, bright, streakA, streakB) + horizontal + vertical).filterNotNull().forEach { fbos += it.fbo; texs += it.tex }
+        (listOf(atmo, bright, streakA, streakB, comp) + horizontal + vertical + dofChain + dofWorkA + dofWorkB).filterNotNull().forEach { fbos += it.fbo; texs += it.tex }
         if (texs.isNotEmpty()) GLES30.glDeleteTextures(texs.size, texs.toIntArray(), 0)
         if (fbos.isNotEmpty()) GLES30.glDeleteFramebuffers(fbos.size, fbos.toIntArray(), 0)
-        sceneFbo = 0; atmo = null; bright = null; streakA = null; streakB = null
-        horizontal.fill(null); vertical.fill(null)
+        sceneFbo = 0; atmo = null; bright = null; streakA = null; streakB = null; comp = null
+        horizontal.fill(null); vertical.fill(null); dofChain.fill(null); dofWorkA.fill(null); dofWorkB.fill(null)
     }
 
     fun resize(width: Int, height: Int) {
@@ -389,6 +573,12 @@ internal class MachiPostChain {
         atmo = target(sceneW, sceneH)
         val qw = max(1, (sceneW / 4.0).roundToInt()); val qh = max(1, (sceneH / 4.0).roundToInt())
         streakA = target(qw, qh); streakB = target(qw, qh)
+        comp = target(sceneW, sceneH)
+        for (i in 0 until DOF_LEVELS) {
+            val div = (1 shl (i + 1)).toDouble()
+            val w = max(1, (sceneW / div).roundToInt()); val h = max(1, (sceneH / div).roundToInt())
+            dofChain[i] = target(w, h); dofWorkA[i] = target(w, h); dofWorkB[i] = target(w, h)
+        }
         var rx = (sceneW / 2.0).roundToInt(); var ry = (sceneH / 2.0).roundToInt()
         bright = target(max(1, rx), max(1, ry))
         for (i in 0 until KERNELS) {
@@ -422,6 +612,7 @@ internal class MachiPostChain {
     fun finish(
         pixelWorldSize: Double, centerDistance: Double, near: Double, depthRange: Double, invVP: FloatArray,
         atmosphere: MachiAtmosphereFrame, bloomStrength: Double, streakStrength: Double = 0.0,
+        lens: MachiLens? = null,
     ) {
         val a = atmo ?: return
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
@@ -513,12 +704,76 @@ internal class MachiPostChain {
             }
             streakResult = src.tex
         }
+        // 2c. 景深（lensPass.ts）：对焦 = 镜头到目标点距离 − near（tuning.focus 'center'）；离焦圆按场景目标高度换像素。
+        val cocPx = max(0.0, lens?.coc ?: 0.0) * sceneH
+        val tiltPx = max(0.0, lens?.tilt ?: 0.0) * sceneH
+        val dofOn = lens != null && (cocPx > 0.5 || tiltPx > 0.5)
+        val bokeh = resolveMachiBokehLevel(max(cocPx, tiltPx))
+        var bokehTex = a.tex
+        fun cocUniforms(prog: Int) {
+            fun n(k: String) = GLES30.glGetUniformLocation(prog, k)
+            GLES30.glUniform1f(n("uDepthRange"), depthRange.toFloat())
+            GLES30.glUniform1f(n("uFocus"), (centerDistance - near).toFloat())
+            GLES30.glUniform1f(n("uFocusBand"), (lens?.focusBand ?: 3.0).toFloat())
+            GLES30.glUniform1f(n("uFocusFalloff"), (lens?.focusFalloff ?: 7.0).toFloat())
+            GLES30.glUniform1f(n("uCocRadius"), if (dofOn) cocPx.toFloat() else 0f)
+            GLES30.glUniform1f(n("uTiltRadius"), if (dofOn) tiltPx.toFloat() else 0f)
+        }
+        if (dofOn) {
+            val c = comp!!
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, c.fbo); GLES30.glViewport(0, 0, c.w, c.h)
+            val cp = compositeProgram
+            GLES30.glUseProgram(cp)
+            bind(0, a.tex); GLES30.glUniform1i(GLES30.glGetUniformLocation(cp, "tScene"), 0)
+            for (i in 0 until KERNELS) {
+                bind(1 + i, vertical[i]!!.tex)
+                GLES30.glUniform1i(GLES30.glGetUniformLocation(cp, "blur${i + 1}"), 1 + i)
+            }
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(cp, "bloomStrength"), if (bloomOn) bloomStrength.toFloat() else 0f)
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(cp, "bloomRadius"), 0.62f)
+            bind(7, if (streakOn) streakResult else a.tex); GLES30.glUniform1i(GLES30.glGetUniformLocation(cp, "tStreak"), 7)
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(cp, "uStreak"), if (streakOn) streakStrength.toFloat() else 0f)
+            fullscreen()
+            val first = dofChain[0]!!
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, first.fbo); GLES30.glViewport(0, 0, first.w, first.h)
+            GLES30.glUseProgram(dofPrefilterProgram)
+            bind(0, c.tex); GLES30.glUniform1i(GLES30.glGetUniformLocation(dofPrefilterProgram, "tDiffuse"), 0)
+            bind(1, depthTex); GLES30.glUniform1i(GLES30.glGetUniformLocation(dofPrefilterProgram, "tDepth"), 1)
+            GLES30.glUniform2f(GLES30.glGetUniformLocation(dofPrefilterProgram, "uSourceTexel"), 1f / sceneW, 1f / sceneH)
+            cocUniforms(dofPrefilterProgram)
+            fullscreen()
+            GLES30.glUseProgram(dofDownsampleProgram)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(dofDownsampleProgram, "tSource"), 0)
+            for (i in 1..bokeh.level) {
+                val src = dofChain[i - 1]!!; val dst = dofChain[i]!!
+                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, dst.fbo); GLES30.glViewport(0, 0, dst.w, dst.h)
+                bind(0, src.tex)
+                GLES30.glUniform2f(GLES30.glGetUniformLocation(dofDownsampleProgram, "uSourceTexel"), 1f / src.w, 1f / src.h)
+                fullscreen()
+            }
+            val src = dofChain[bokeh.level]!!; val ga = dofWorkA[bokeh.level]!!; val gb = dofWorkB[bokeh.level]!!
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, ga.fbo); GLES30.glViewport(0, 0, ga.w, ga.h)
+            val gp = dofGatherProgram
+            GLES30.glUseProgram(gp)
+            bind(0, src.tex); GLES30.glUniform1i(GLES30.glGetUniformLocation(gp, "tSource"), 0)
+            GLES30.glUniform2f(GLES30.glGetUniformLocation(gp, "uTexel"), 1f / src.w, 1f / src.h)
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(gp, "uMaxCoc"), bokeh.levelCoc.toFloat())
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(gp, "uLevelScale"), bokeh.scale.toFloat())
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(gp, "uTaps"), bokeh.taps.toFloat())
+            fullscreen()
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, gb.fbo)
+            GLES30.glUseProgram(dofTentProgram)
+            bind(0, ga.tex); GLES30.glUniform1i(GLES30.glGetUniformLocation(dofTentProgram, "tSource"), 0)
+            GLES30.glUniform2f(GLES30.glGetUniformLocation(dofTentProgram, "uTexel"), 1f / src.w, 1f / src.h)
+            fullscreen()
+            bokehTex = gb.tex
+        }
         // 3. 合成 + 色调映射上屏
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         GLES30.glViewport(0, 0, screenW, screenH)
         val o = outputProgram
         GLES30.glUseProgram(o)
-        bind(0, a.tex); GLES30.glUniform1i(GLES30.glGetUniformLocation(o, "tScene"), 0)
+        bind(0, if (dofOn) comp!!.tex else a.tex); GLES30.glUniform1i(GLES30.glGetUniformLocation(o, "tScene"), 0)
         for (i in 0 until KERNELS) {
             bind(1 + i, vertical[i]!!.tex)
             GLES30.glUniform1i(GLES30.glGetUniformLocation(o, "blur${i + 1}"), 1 + i)
@@ -534,6 +789,11 @@ internal class MachiPostChain {
         GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uAspect"), sceneW.toFloat() / max(1, sceneH))
         bind(7, if (streakOn) streakResult else a.tex); GLES30.glUniform1i(GLES30.glGetUniformLocation(o, "tStreak"), 7)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uStreak"), if (streakOn) streakStrength.toFloat() else 0f)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uComposited"), if (dofOn) 1f else 0f)
+        bind(8, bokehTex); GLES30.glUniform1i(GLES30.glGetUniformLocation(o, "tBokeh"), 8)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uDofMix"), if (dofOn) 1f else 0f)
+        GLES30.glUniform2f(GLES30.glGetUniformLocation(o, "uBlend"), 0.5f * bokeh.scale, 1.5f * bokeh.scale)
+        cocUniforms(o)
         fullscreen()
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindVertexArray(0)

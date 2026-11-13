@@ -349,6 +349,8 @@ private class MachiRenderer(
             ),
             bloomStrength = look.bloom,
             streakStrength = look.streaks,
+            // 景深按相对默认构图的缩放走（createMachiRuntime：zoom = camera.zoom / defaultView.zoom），光圈默认 f/8。
+            lens = resolveMachiLens(MachiLensTuning(), pose.zoom / MachiKowloonLayout.VIEW.zoom),
         )
     }
 }
