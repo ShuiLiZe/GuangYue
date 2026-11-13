@@ -5,7 +5,7 @@
 //   雾中散射、天空的云）→ 亮部提取（半分辨率）→ 5 级逐级降采样的可分离高斯 → 合成时把 5 级按 lerpBloomFactor 加回去
 //   → 色调映射 + sRGB 上屏。Folia 的 bloom 是先合成进半分辨率再加色叠回，这里在最后一道里直接相加，结果相同、少两遍。
 // 模拟器（swiftshader）省力：场景目标长边封顶 1600 px（Folia 的画质分档也按 DPR 降），bloom 从半分辨率起。
-// 镜头 pass 只做了色差 0.014 / 暗角 0.55 / 颗粒 0.032 / 晴夜星星（合进最后一道）；横向光条、景深散景（lensPass.ts 圆盘取样，景深前先把 bloom / 光条叠进一张 HDR）已做；抗锯齿还没做。
+// 镜头 pass 只做了色差 0.014 / 暗角 0.55 / 颗粒 0.032 / 晴夜星星（合进最后一道）；横向光条、景深散景（lensPass.ts 圆盘取样，景深前先把 bloom / 光条叠进一张 HDR）已做；抗锯齿用 FXAA（three FXAAShader，输出后在 sRGB 上做）。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.opengl.GLES30
@@ -439,6 +439,172 @@ internal fun resolveMachiBokehLevel(maxCocPx: Double): MachiBokehLevel {
     return MachiBokehLevel(level, levelCoc, taps, 1 shl (level + 1))
 }
 
+// 抗锯齿（post.ts：FXAA 在输出之后的 sRGB 上做，边缘检测才准）：three FXAAShader（r185）照抄。
+private const val FXAA_FS = """#version 300 es
+precision highp float;
+        uniform sampler2D tDiffuse;
+        uniform vec2 resolution;
+        in vec2 vUv;
+out vec4 fragColor;
+        #define EDGE_STEP_COUNT 6
+        #define EDGE_GUESS 8.0
+        #define EDGE_STEPS 1.0, 1.5, 2.0, 2.0, 2.0, 4.0
+        const float edgeSteps[EDGE_STEP_COUNT] = float[EDGE_STEP_COUNT]( EDGE_STEPS );
+        float _ContrastThreshold = 0.0312;
+        float _RelativeThreshold = 0.063;
+        float _SubpixelBlending = 1.0;
+        vec4 Sample( sampler2D  tex2D, vec2 uv ) {
+            return texture( tex2D, uv );
+        }
+        float SampleLuminance( sampler2D tex2D, vec2 uv ) {
+            return dot( Sample( tex2D, uv ).rgb, vec3( 0.3, 0.59, 0.11 ) );
+        }
+        float SampleLuminance( sampler2D tex2D, vec2 texSize, vec2 uv, float uOffset, float vOffset ) {
+            uv += texSize * vec2(uOffset, vOffset);
+            return SampleLuminance(tex2D, uv);
+        }
+        struct LuminanceData {
+            float m, n, e, s, w;
+            float ne, nw, se, sw;
+            float highest, lowest, contrast;
+        };
+        LuminanceData SampleLuminanceNeighborhood( sampler2D tex2D, vec2 texSize, vec2 uv ) {
+            LuminanceData l;
+            l.m = SampleLuminance( tex2D, uv );
+            l.n = SampleLuminance( tex2D, texSize, uv,  0.0,  1.0 );
+            l.e = SampleLuminance( tex2D, texSize, uv,  1.0,  0.0 );
+            l.s = SampleLuminance( tex2D, texSize, uv,  0.0, -1.0 );
+            l.w = SampleLuminance( tex2D, texSize, uv, -1.0,  0.0 );
+            l.ne = SampleLuminance( tex2D, texSize, uv,  1.0,  1.0 );
+            l.nw = SampleLuminance( tex2D, texSize, uv, -1.0,  1.0 );
+            l.se = SampleLuminance( tex2D, texSize, uv,  1.0, -1.0 );
+            l.sw = SampleLuminance( tex2D, texSize, uv, -1.0, -1.0 );
+            l.highest = max( max( max( max( l.n, l.e ), l.s ), l.w ), l.m );
+            l.lowest = min( min( min( min( l.n, l.e ), l.s ), l.w ), l.m );
+            l.contrast = l.highest - l.lowest;
+            return l;
+        }
+        bool ShouldSkipPixel( LuminanceData l ) {
+            float threshold = max( _ContrastThreshold, _RelativeThreshold * l.highest );
+            return l.contrast < threshold;
+        }
+        float DeterminePixelBlendFactor( LuminanceData l ) {
+            float f = 2.0 * ( l.n + l.e + l.s + l.w );
+            f += l.ne + l.nw + l.se + l.sw;
+            f *= 1.0 / 12.0;
+            f = abs( f - l.m );
+            f = clamp( f / l.contrast, 0.0, 1.0 );
+            float blendFactor = smoothstep( 0.0, 1.0, f );
+            return blendFactor * blendFactor * _SubpixelBlending;
+        }
+        struct EdgeData {
+            bool isHorizontal;
+            float pixelStep;
+            float oppositeLuminance, gradient;
+        };
+        EdgeData DetermineEdge( vec2 texSize, LuminanceData l ) {
+            EdgeData e;
+            float horizontal =
+                abs( l.n + l.s - 2.0 * l.m ) * 2.0 +
+                abs( l.ne + l.se - 2.0 * l.e ) +
+                abs( l.nw + l.sw - 2.0 * l.w );
+            float vertical =
+                abs( l.e + l.w - 2.0 * l.m ) * 2.0 +
+                abs( l.ne + l.nw - 2.0 * l.n ) +
+                abs( l.se + l.sw - 2.0 * l.s );
+            e.isHorizontal = horizontal >= vertical;
+            float pLuminance = e.isHorizontal ? l.n : l.e;
+            float nLuminance = e.isHorizontal ? l.s : l.w;
+            float pGradient = abs( pLuminance - l.m );
+            float nGradient = abs( nLuminance - l.m );
+            e.pixelStep = e.isHorizontal ? texSize.y : texSize.x;
+            if (pGradient < nGradient) {
+                e.pixelStep = -e.pixelStep;
+                e.oppositeLuminance = nLuminance;
+                e.gradient = nGradient;
+            } else {
+                e.oppositeLuminance = pLuminance;
+                e.gradient = pGradient;
+            }
+            return e;
+        }
+        float DetermineEdgeBlendFactor( sampler2D  tex2D, vec2 texSize, LuminanceData l, EdgeData e, vec2 uv ) {
+            vec2 uvEdge = uv;
+            vec2 edgeStep;
+            if (e.isHorizontal) {
+                uvEdge.y += e.pixelStep * 0.5;
+                edgeStep = vec2( texSize.x, 0.0 );
+            } else {
+                uvEdge.x += e.pixelStep * 0.5;
+                edgeStep = vec2( 0.0, texSize.y );
+            }
+            float edgeLuminance = ( l.m + e.oppositeLuminance ) * 0.5;
+            float gradientThreshold = e.gradient * 0.25;
+            vec2 puv = uvEdge + edgeStep * edgeSteps[0];
+            float pLuminanceDelta = SampleLuminance( tex2D, puv ) - edgeLuminance;
+            bool pAtEnd = abs( pLuminanceDelta ) >= gradientThreshold;
+            for ( int i = 1; i < EDGE_STEP_COUNT && !pAtEnd; i++ ) {
+                puv += edgeStep * edgeSteps[i];
+                pLuminanceDelta = SampleLuminance( tex2D, puv ) - edgeLuminance;
+                pAtEnd = abs( pLuminanceDelta ) >= gradientThreshold;
+            }
+            if ( !pAtEnd ) {
+                puv += edgeStep * EDGE_GUESS;
+            }
+            vec2 nuv = uvEdge - edgeStep * edgeSteps[0];
+            float nLuminanceDelta = SampleLuminance( tex2D, nuv ) - edgeLuminance;
+            bool nAtEnd = abs( nLuminanceDelta ) >= gradientThreshold;
+            for ( int i = 1; i < EDGE_STEP_COUNT && !nAtEnd; i++ ) {
+                nuv -= edgeStep * edgeSteps[i];
+                nLuminanceDelta = SampleLuminance( tex2D, nuv ) - edgeLuminance;
+                nAtEnd = abs( nLuminanceDelta ) >= gradientThreshold;
+            }
+            if ( !nAtEnd ) {
+                nuv -= edgeStep * EDGE_GUESS;
+            }
+            float pDistance, nDistance;
+            if ( e.isHorizontal ) {
+                pDistance = puv.x - uv.x;
+                nDistance = uv.x - nuv.x;
+            } else {
+                pDistance = puv.y - uv.y;
+                nDistance = uv.y - nuv.y;
+            }
+            float shortestDistance;
+            bool deltaSign;
+            if ( pDistance <= nDistance ) {
+                shortestDistance = pDistance;
+                deltaSign = pLuminanceDelta >= 0.0;
+            } else {
+                shortestDistance = nDistance;
+                deltaSign = nLuminanceDelta >= 0.0;
+            }
+            if ( deltaSign == ( l.m - edgeLuminance >= 0.0 ) ) {
+                return 0.0;
+            }
+            return 0.5 - shortestDistance / ( pDistance + nDistance );
+        }
+        vec4 ApplyFXAA( sampler2D  tex2D, vec2 texSize, vec2 uv ) {
+            LuminanceData luminance = SampleLuminanceNeighborhood( tex2D, texSize, uv );
+            if ( ShouldSkipPixel( luminance ) ) {
+                return Sample( tex2D, uv );
+            }
+            float pixelBlend = DeterminePixelBlendFactor( luminance );
+            EdgeData edge = DetermineEdge( texSize, luminance );
+            float edgeBlend = DetermineEdgeBlendFactor( tex2D, texSize, luminance, edge, uv );
+            float finalBlend = max( pixelBlend, edgeBlend );
+            if (edge.isHorizontal) {
+                uv.y += edge.pixelStep * finalBlend;
+            } else {
+                uv.x += edge.pixelStep * finalBlend;
+            }
+            return Sample( tex2D, uv );
+        }
+        void main() {
+            fragColor = ApplyFXAA( tDiffuse, resolution.xy, vUv );
+        }
+"""
+
 private const val DOF_LEVELS = 5
 private const val KERNELS = 5
 private val KERNEL_SIZES = intArrayOf(6, 10, 14, 18, 22)
@@ -478,6 +644,8 @@ internal class MachiPostChain {
     private var dofGatherProgram = 0
     private var dofTentProgram = 0
     private var comp: Target? = null
+    private var ldr: Target? = null
+    private var fxaaProgram = 0
     private val dofChain = arrayOfNulls<Target>(DOF_LEVELS)
     private val dofWorkA = arrayOfNulls<Target>(DOF_LEVELS)
     private val dofWorkB = arrayOfNulls<Target>(DOF_LEVELS)
@@ -512,6 +680,7 @@ internal class MachiPostChain {
         dofDownsampleProgram = link(FS_VS, DOF_DOWNSAMPLE_FS)
         dofGatherProgram = link(FS_VS, DOF_GATHER_FS)
         dofTentProgram = link(FS_VS, DOF_TENT_FS)
+        fxaaProgram = link(FS_VS, FXAA_FS)
         val ids = IntArray(1); GLES30.glGenVertexArrays(1, ids, 0); emptyVao = ids[0]
         val ext = GLES30.glGetString(GLES30.GL_EXTENSIONS) ?: ""
         floatColor = ext.contains("GL_EXT_color_buffer_float") || ext.contains("GL_EXT_color_buffer_half_float")
@@ -529,8 +698,19 @@ internal class MachiPostChain {
         return t[0]
     }
 
-    private fun target(w: Int, h: Int): Target {
-        val tex = colorTexture(w, h)
+    private fun ldrTexture(w: Int, h: Int): Int {
+        val t = IntArray(1); GLES30.glGenTextures(1, t, 0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, t[0])
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, w, h, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        return t[0]
+    }
+
+    private fun target(w: Int, h: Int, ldrColor: Boolean = false): Target {
+        val tex = if (ldrColor) ldrTexture(w, h) else colorTexture(w, h)
         val f = IntArray(1); GLES30.glGenFramebuffers(1, f, 0)
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, f[0])
         GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, tex, 0)
@@ -540,10 +720,10 @@ internal class MachiPostChain {
     private fun release() {
         val texs = ArrayList<Int>(); val fbos = ArrayList<Int>()
         if (sceneFbo != 0) { fbos += sceneFbo; texs += sceneTex; texs += depthTex }
-        (listOf(atmo, bright, streakA, streakB, comp) + horizontal + vertical + dofChain + dofWorkA + dofWorkB).filterNotNull().forEach { fbos += it.fbo; texs += it.tex }
+        (listOf(atmo, bright, streakA, streakB, comp, ldr) + horizontal + vertical + dofChain + dofWorkA + dofWorkB).filterNotNull().forEach { fbos += it.fbo; texs += it.tex }
         if (texs.isNotEmpty()) GLES30.glDeleteTextures(texs.size, texs.toIntArray(), 0)
         if (fbos.isNotEmpty()) GLES30.glDeleteFramebuffers(fbos.size, fbos.toIntArray(), 0)
-        sceneFbo = 0; atmo = null; bright = null; streakA = null; streakB = null; comp = null
+        sceneFbo = 0; atmo = null; bright = null; streakA = null; streakB = null; comp = null; ldr = null
         horizontal.fill(null); vertical.fill(null); dofChain.fill(null); dofWorkA.fill(null); dofWorkB.fill(null)
     }
 
@@ -574,6 +754,7 @@ internal class MachiPostChain {
         val qw = max(1, (sceneW / 4.0).roundToInt()); val qh = max(1, (sceneH / 4.0).roundToInt())
         streakA = target(qw, qh); streakB = target(qw, qh)
         comp = target(sceneW, sceneH)
+        ldr = target(screenW, screenH, ldrColor = true)
         for (i in 0 until DOF_LEVELS) {
             val div = (1 shl (i + 1)).toDouble()
             val w = max(1, (sceneW / div).roundToInt()); val h = max(1, (sceneH / div).roundToInt())
@@ -768,8 +949,8 @@ internal class MachiPostChain {
             fullscreen()
             bokehTex = gb.tex
         }
-        // 3. 合成 + 色调映射上屏
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        // 3. 合成 + 色调映射（进 LDR 目标，再 FXAA 上屏）
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, ldr!!.fbo)
         GLES30.glViewport(0, 0, screenW, screenH)
         val o = outputProgram
         GLES30.glUseProgram(o)
@@ -794,6 +975,13 @@ internal class MachiPostChain {
         GLES30.glUniform1f(GLES30.glGetUniformLocation(o, "uDofMix"), if (dofOn) 1f else 0f)
         GLES30.glUniform2f(GLES30.glGetUniformLocation(o, "uBlend"), 0.5f * bokeh.scale, 1.5f * bokeh.scale)
         cocUniforms(o)
+        fullscreen()
+        // 4. FXAA 上屏
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        GLES30.glViewport(0, 0, screenW, screenH)
+        GLES30.glUseProgram(fxaaProgram)
+        bind(0, ldr!!.tex); GLES30.glUniform1i(GLES30.glGetUniformLocation(fxaaProgram, "tDiffuse"), 0)
+        GLES30.glUniform2f(GLES30.glGetUniformLocation(fxaaProgram, "resolution"), 1f / screenW, 1f / screenH)
         fullscreen()
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindVertexArray(0)
