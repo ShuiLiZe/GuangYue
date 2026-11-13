@@ -635,16 +635,6 @@ private fun planeRotY(x: Double, y: Double, z: Double, w: Double, h: Double, a: 
     return a0 + a1 + a2 + a0 + a2 + a3
 }
 
-/** director.ts resolveMachiTickerText：下一句 + 本句译文；曲名卡时滚曲名与 OPEN 24H。 */
-internal fun resolveMachiTickerText(target: MachiBoardTarget, lines: List<Line>, title: String, artist: String, fallbackTitle: String): String {
-    val t = title.ifEmpty { fallbackTitle }
-    if (target.isCard) return "♪ $t${if (artist.isNotEmpty()) " — $artist" else ""}   ◆   OPEN 24H   ◆"
-    val next = lines.drop(target.index + 1).firstOrNull { it.fullText.isNotBlank() }
-    val current = lines.getOrNull(target.index)
-    val parts = listOfNotNull(next?.let { "NEXT ▸ ${it.fullText}" }, current?.translation?.takeIf { it.isNotBlank() }?.let { "◆ $it" })
-    return if (parts.isNotEmpty()) parts.joinToString("   ") + "   " else "♪ $t   ◆   "
-}
-
 /** konbiniSignPaint.ts paintKonbiniFascia（主题图标暂按圆徽 + ♪）：左圆徽、中店名（曲名）、右 24H 小牌。 */
 internal fun paintKonbiniFascia(bitmap: Bitmap, typeface: Typeface, title: String, base: String, text: String, brand: List<String>) {
     val c = Canvas(bitmap); val w = bitmap.width.toFloat(); val h = bitmap.height.toFloat()

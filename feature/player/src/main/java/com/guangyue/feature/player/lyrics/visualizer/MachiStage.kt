@@ -34,14 +34,17 @@ layout(location = 1) in vec3 aNor;
 layout(location = 2) in vec3 aCol;
 layout(location = 3) in float aEmi;
 uniform mat4 uVP;
+// 会动的件（便利店自动门）整体平移；其余为 0。
+uniform vec3 uOffset;
 out vec3 vCol;
 out vec3 vNor;
 out float vEmi;
 out float vY;
 out vec3 vWorld;
 void main() {
-    gl_Position = uVP * vec4(aPos, 1.0);
-    vCol = aCol; vNor = aNor; vEmi = aEmi; vY = aPos.y; vWorld = aPos;
+    vec3 p = aPos + uOffset;
+    gl_Position = uVP * vec4(p, 1.0);
+    vCol = aCol; vNor = aNor; vEmi = aEmi; vY = p.y; vWorld = p;
 }
 """
 
@@ -75,6 +78,16 @@ uniform float uAlpha;
 // 第二层湿地面（便利店：路面 asphalt 在 y≈0、场地 concrete 在 y≈0.12，puddleBias 各自）。
 uniform float uGroundY2;
 uniform float uPuddleBias2;
+// 场景自己的点光 / 聚光（便利店 konbiniLights.ts：decay 2、cutoff 距离；聚光 smoothstep(coneCos, penumbraCos)）；城寨 0 盏。
+uniform int uLightCount;
+uniform vec3 uLightPos[6];
+uniform vec3 uLightColor[6];
+uniform float uLightDist[6];
+uniform vec3 uSpotDir[6];
+uniform vec2 uSpotCos[6];
+// 地上的加色光斑（自发光通道当标签：1 溢出光、2 路灯、3 贩卖机）。
+uniform int uAdd;
+uniform vec3 uPoolScale;
 float machiBias;
 out vec4 fragColor;
 $MACHI_WET_PARS_K
@@ -102,6 +115,11 @@ float toonStep(float dotNL) {
 void main() {
     vec3 n = normalize(vNor);
     vec3 albedo = toLinear(vCol);
+    if (uAdd == 1) {
+        float k = vEmi < 1.5 ? uPoolScale.x : (vEmi < 2.5 ? uPoolScale.y : uPoolScale.z);
+        fragColor = vec4(albedo * k, 1.0);
+        return;
+    }
     // 倒影 pass（MachiWet.kt）：只有亮的东西映得出，其余写黑当遮挡；贴地的面（含路面本身）丢掉。
     if (uReflectPass == 1) {
         if (vY < uGroundY + 0.01) discard;
@@ -117,6 +135,17 @@ void main() {
     float w = 0.5 * n.y + 0.5;
     vec3 directLight = uSun * toonStep(dot(n, uSunDir));
     vec3 irradiance = mix(uHemiGround, uHemiSky, w) + directLight;
+    for (int i = 0; i < 6; i++) {
+        if (i >= uLightCount) break;
+        vec3 toL = uLightPos[i] - vWorld;
+        float d = length(toL);
+        vec3 l = toL / max(d, 1e-4);
+        float fall = 1.0 / max(d * d, 0.01);
+        float cut = clamp(1.0 - pow(d / uLightDist[i], 4.0), 0.0, 1.0);
+        fall *= cut * cut;
+        if (uSpotCos[i].x > -1.5) fall *= smoothstep(uSpotCos[i].x, uSpotCos[i].y, dot(-l, uSpotDir[i]));
+        irradiance += uLightColor[i] * fall * toonStep(dot(n, l));
+    }
     vec3 lit = albedo * irradiance / 3.14159265;
     // 湿路面（ground.ts OUTPUT）：只在贴地朝上的路面上。
     bool machiOnB = abs(vY - uGroundY2) < 0.012;
@@ -257,6 +286,14 @@ internal class MachiSceneSetup(
     val wetBias: Double,
     val wetY2: Double = -100.0,
     val wetBias2: Double = 0.0,
+    val lights: List<MachiKonbiniLight> = emptyList(),
+    /** 加色光斑网格（便利店）。 */
+    val pools: FloatArray? = null,
+    /** 自动门两扇（不透明、玻璃）与开合节奏（konbiniSeed doorInterval / doorPhase）。 */
+    val doors: List<FloatArray> = emptyList(),
+    val doorGlass: List<FloatArray> = emptyList(),
+    val doorInterval: Double = 30.0,
+    val doorPhase: Double = 0.0,
 )
 
 internal fun machiKowloonSetup(palette: MachiPalette, seed: String, title: String, artist: String): MachiSceneSetup {
@@ -280,6 +317,9 @@ internal fun machiKonbiniSetup(palette: MachiPalette, seed: String, title: Strin
         signs = MachiKonbiniSigns(palette, title, artist, seed, model.boardFaces, model.fasciaFaces, model.propFaces?.pylon.orEmpty()), cones = machiKonbiniLightCones(), puddles = w.first, weather = w.second, glowA = glows.first, glowB = glows.second,
         mirrorY = MachiKonbiniLayout.REFLECT_Y, wetY = MachiKonbiniLayout.ROAD_Y + 0.002, wetBias = 0.0,
         wetY2 = MachiKonbiniLayout.LOT_Y + 0.002, wetBias2 = 0.08,
+        lights = machiKonbiniLights(), pools = buildMachiKonbiniPools(palette),
+        doors = model.doors, doorGlass = model.doorGlass,
+        doorInterval = resolveMachiKonbiniVariation(seed).doorInterval, doorPhase = resolveMachiKonbiniVariation(seed).doorPhase,
     )
 }
 
@@ -339,6 +379,61 @@ private class MachiRenderer(
     private var vao = 0
     private var skyVao = 0
     private var glassVao = 0
+    private var poolVao = 0
+    private var poolCount = 0
+    private val lightPos = FloatArray(18)
+    private val lightColor = FloatArray(18)
+    private val lightDist = FloatArray(6)
+    private val spotDir = FloatArray(18)
+    private val spotCos = FloatArray(12)
+    private val spillColor = machiLinear(mcMixHex(MachiKonbiniLayout.ART.getValue("spillLight"), light.palette.interiorLight, 0.5))
+    private val vendingColor = machiLinear(light.palette.vendingLight)
+    private var interiorLevel = 1.0
+    private val doorEvents = if (setup.doors.isEmpty()) emptyList() else buildMachiKonbiniDoorEvents(lines, setup.doorInterval, setup.doorPhase)
+    private var doorOpenness = 0.0
+    private val doorVaos = IntArray(2)
+    private val doorCounts = IntArray(2)
+    private val doorGlassVaos = IntArray(2)
+    private val doorGlassCounts = IntArray(2)
+    private var offset = floatArrayOf(0f, 0f, 0f)
+    private fun vaoOf(data: FloatArray): Int {
+        val v = IntArray(1); GLES30.glGenVertexArrays(1, v, 0)
+        val b = IntArray(1); GLES30.glGenBuffers(1, b, 0)
+        GLES30.glBindVertexArray(v[0])
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, b[0])
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, data.size * 4, floatBuffer(data), GLES30.GL_STATIC_DRAW)
+        val stride = 40
+        GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, stride, 0)
+        GLES30.glEnableVertexAttribArray(1); GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, stride, 12)
+        GLES30.glEnableVertexAttribArray(2); GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, stride, 24)
+        GLES30.glEnableVertexAttribArray(3); GLES30.glVertexAttribPointer(3, 1, GLES30.GL_FLOAT, false, stride, 36)
+        return v[0]
+    }
+    private var streetLevel = 1.0
+    init {
+        setup.lights.take(6).forEachIndexed { i, l ->
+            for (k in 0..2) lightPos[i * 3 + k] = l.pos[k].toFloat()
+            lightDist[i] = l.distance.toFloat()
+            val t = l.target
+            if (t != null) {
+                val d = DoubleArray(3) { t[it] - l.pos[it] }; val len = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2])
+                for (k in 0..2) spotDir[i * 3 + k] = (d[k] / len).toFloat()
+                spotCos[i * 2] = kotlin.math.cos(l.angle).toFloat(); spotCos[i * 2 + 1] = kotlin.math.cos(l.angle * (1 - l.penumbra)).toFloat()
+            } else { spotCos[i * 2] = -2f; spotCos[i * 2 + 1] = -1f }
+        }
+    }
+    /** konbiniLights.sync：店内 × interior、溢出 × interior、路灯 × street、贩卖机常亮。 */
+    private fun updateLights() {
+        setup.lights.take(6).forEachIndexed { i, l ->
+            val (c, k) = when (l.kind) {
+                "interior" -> glowColorKA to interiorLevel
+                "spill" -> spillColor to interiorLevel
+                "street" -> glowColorKB to streetLevel
+                else -> vendingColor to 1.0
+            }
+            for (j in 0..2) lightColor[i * 3 + j] = (c[j] * l.intensity * k).toFloat()
+        }
+    }
     private var count = 0
     private var glassCount = 0
     private var aspectW = 1.0
@@ -384,6 +479,22 @@ private class MachiRenderer(
         GLES30.glEnableVertexAttribArray(2); GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, stride, 24)
         GLES30.glEnableVertexAttribArray(3); GLES30.glVertexAttribPointer(3, 1, GLES30.GL_FLOAT, false, stride, 36)
         count = mesh.size / 10
+        for (k in 0 until kotlin.math.min(2, setup.doors.size)) {
+            doorVaos[k] = vaoOf(setup.doors[k]); doorCounts[k] = setup.doors[k].size / 10
+            setup.doorGlass.getOrNull(k)?.takeIf { it.isNotEmpty() }?.let { doorGlassVaos[k] = vaoOf(it); doorGlassCounts[k] = it.size / 10 }
+        }
+        setup.pools?.takeIf { it.isNotEmpty() }?.let { pools ->
+            val pv = IntArray(1); GLES30.glGenVertexArrays(1, pv, 0); poolVao = pv[0]
+            val pb = IntArray(1); GLES30.glGenBuffers(1, pb, 0)
+            GLES30.glBindVertexArray(poolVao)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, pb[0])
+            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, pools.size * 4, floatBuffer(pools), GLES30.GL_STATIC_DRAW)
+            GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, stride, 0)
+            GLES30.glEnableVertexAttribArray(1); GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, stride, 12)
+            GLES30.glEnableVertexAttribArray(2); GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, stride, 24)
+            GLES30.glEnableVertexAttribArray(3); GLES30.glVertexAttribPointer(3, 1, GLES30.GL_FLOAT, false, stride, 36)
+            poolCount = pools.size / 10
+        }
         setup.glass?.takeIf { it.isNotEmpty() }?.let { glass ->
             val gv = IntArray(1); GLES30.glGenVertexArrays(1, gv, 0); glassVao = gv[0]
             val gb = IntArray(1); GLES30.glGenBuffers(1, gb, 0)
@@ -416,10 +527,11 @@ private class MachiRenderer(
         reflection.resize(width, height)
     }
 
-    private fun drawMesh(vp: FloatArray, reflectPass: Boolean, wet: Boolean, glass: Boolean = false) {
+    private fun drawMesh(vp: FloatArray, reflectPass: Boolean, wet: Boolean, glass: Boolean = false, pools: Boolean = false) {
         GLES30.glUseProgram(program)
         fun u(n: String) = GLES30.glGetUniformLocation(program, n)
         GLES30.glUniformMatrix4fv(u("uVP"), 1, false, vp, 0)
+        GLES30.glUniform3f(u("uOffset"), 0f, 0f, 0f)
         GLES30.glUniform3fv(u("uSunDir"), 1, light.sunDir, 0)
         val sunK = (1 + 1.2 * flash).toFloat(); val hemiK = (1 + 1.5 * flash).toFloat()
         GLES30.glUniform3fv(u("uSun"), 1, FloatArray(3) { light.sun[it] * sunK }, 0)
@@ -437,6 +549,19 @@ private class MachiRenderer(
         GLES30.glUniform1f(u("uGroundY2"), setup.wetY2.toFloat())
         GLES30.glUniform1f(u("uPuddleBias2"), setup.wetBias2.toFloat())
         GLES30.glUniform1f(u("uAlpha"), if (glass) 0.2f else 1f)
+        val nl = if (reflectPass) 0 else kotlin.math.min(6, setup.lights.size)
+        GLES30.glUniform1i(u("uLightCount"), nl)
+        if (nl > 0) {
+            GLES30.glUniform3fv(u("uLightPos"), 6, lightPos, 0)
+            GLES30.glUniform3fv(u("uLightColor"), 6, lightColor, 0)
+            GLES30.glUniform1fv(u("uLightDist"), 6, lightDist, 0)
+            GLES30.glUniform3fv(u("uSpotDir"), 6, spotDir, 0)
+            GLES30.glUniform2fv(u("uSpotCos"), 6, spotCos, 0)
+        }
+        GLES30.glUniform1i(u("uAdd"), if (pools) 1 else 0)
+        // 光斑：溢出 × interior、路灯 × street，都 × (1 − 0.85 daylight)（鼓点 thump 未接）。
+        val poolK = 1 - 0.85 * light.state.daylight
+        GLES30.glUniform3f(u("uPoolScale"), (interiorLevel * poolK).toFloat(), (streetLevel * poolK).toFloat(), poolK.toFloat())
         if (wet) {
             // ground.ts 的一组 uniform；路面是 concrete（puddleBias 0.08，kowloonScene surfaces.lot）。
             GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
@@ -454,20 +579,42 @@ private class MachiRenderer(
             GLES30.glUniform1f(u("uPuddleBias"), setup.wetBias.toFloat())
             GLES30.glUniform1f(u("uWetTime"), ambient.toFloat())
         }
-        if (glass) {
+        if (pools) {
+            GLES30.glEnable(GLES30.GL_BLEND)
+            GLES30.glBlendFuncSeparate(GLES30.GL_ONE, GLES30.GL_ONE, GLES30.GL_ZERO, GLES30.GL_ONE)
+            GLES30.glDepthMask(false)
+            GLES30.glBindVertexArray(poolVao)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, poolCount)
+            GLES30.glDepthMask(true)
+            GLES30.glDisable(GLES30.GL_BLEND)
+        } else if (glass) {
             // 透明玻璃：不写深度，按 alpha 混合（目标的 alpha 不动）。
             GLES30.glEnable(GLES30.GL_BLEND)
             GLES30.glBlendFuncSeparate(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA, GLES30.GL_ZERO, GLES30.GL_ONE)
             GLES30.glDepthMask(false)
             GLES30.glBindVertexArray(glassVao)
             GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, glassCount)
+            drawDoors(u("uOffset"), doorGlassVaos, doorGlassCounts)
             GLES30.glDepthMask(true)
             GLES30.glDisable(GLES30.GL_BLEND)
         } else {
             GLES30.glBindVertexArray(vao)
             GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, count)
+            drawDoors(u("uOffset"), doorVaos, doorCounts)
         }
         GLES30.glBindVertexArray(0)
+    }
+
+    /** 自动门：两扇各沿 x 滑开 direction × 0.86 × openness（左 −1、右 +1）。 */
+    private fun drawDoors(loc: Int, vaos: IntArray, counts: IntArray) {
+        for (k in 0..1) {
+            if (counts[k] == 0) continue
+            val dir = if (k == 0) -1f else 1f
+            GLES30.glUniform3f(loc, (dir * MachiKonbiniLayout.DOOR_SLIDE * doorOpenness).toFloat(), 0f, 0f)
+            GLES30.glBindVertexArray(vaos[k])
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, counts[k])
+        }
+        GLES30.glUniform3f(loc, 0f, 0f, 0f)
     }
 
     override fun onDrawFrame(gl: GL10?) {
@@ -482,6 +629,13 @@ private class MachiRenderer(
         flash = if (light.state.rain < 0.5) 0.0 else resolveMachiLightning(lightningTimes, t) * light.state.rain
         val target = resolveMachiBoardTarget(lines, t)
         signs?.show(target, lines)
+        if (konbini) {
+            doorOpenness = resolveMachiKonbiniDoorOpenness(doorEvents, t, setup.doorInterval, setup.doorPhase, lines.isEmpty())
+            // konbiniScene：interior = (1 + 0.1 chorus + 0.06 doorOpenness) × artificial（beat.warm 未接）。
+            interiorLevel = (1 + 0.1 * resolveMachiChorus(lines, target) + 0.06 * doorOpenness) * light.look.artificial
+            streetLevel = light.look.streetLamps * (0.75 + 0.25 * resolveMachiFlicker(ambient + 3.1, "$seed:street", 0.45))
+            updateLights()
+        }
         val view = (pose.position - pose.target).normalized()
         val wet = light.state.wetness > 0.001
         // 倒影（reflection.ts）：干的时候路面不取倒影，不画。
@@ -512,6 +666,7 @@ private class MachiRenderer(
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         // 场景
         drawMesh(vp, reflectPass = false, wet = wet)
+        if (poolCount > 0) drawMesh(vp, reflectPass = false, wet = false, pools = true)
         if (glassCount > 0) drawMesh(vp, reflectPass = false, wet = false, glass = true)
         // 光柱（lightCones.ts）：level = 0.55 × lamp × (1 − 0.6 daylight)，lamp = streetLamps × (0.75 + 0.25 flicker)。
         // 便利店（konbiniScene direct）：street = streetLamps × (0.75 + 0.25 flicker(ambient + 3.1, seed:street))。
@@ -542,7 +697,6 @@ private class MachiRenderer(
         // 便利店雾灯（konbiniScene direct）：A = interiorLight × 0.55 × interiorLevel × night，B = streetLight × 0.42 × street × night，
         // interiorLevel = (1 + 0.1 chorus) × artificial（门开合、鼓点未接），night = 1 − 0.85 daylight。
         val night = 1 - 0.85 * light.state.daylight
-        val interiorLevel = (1 + 0.1 * resolveMachiChorus(lines, target)) * look.artificial
         post.finish(
             pixelWorldSize = (pose.top - pose.bottom) / pose.zoom / post.sceneH,
             centerDistance = kotlin.math.sqrt((pose.position - pose.target).dot(pose.position - pose.target)),

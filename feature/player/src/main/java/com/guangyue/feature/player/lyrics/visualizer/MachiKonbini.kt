@@ -199,11 +199,15 @@ internal class MachiKonbiniModel(
     val fasciaFaces: List<DoubleArray>,
     val stats: Map<String, Int>,
     val propFaces: MachiKonbiniPropFaces? = null,
+    /** 两扇自动门（左、右）：不透明件与玻璃，关着的位置。 */
+    val doors: List<FloatArray> = emptyList(),
+    val doorGlass: List<FloatArray> = emptyList(),
 )
 
 internal fun buildMachiKonbini(palette: MachiPalette, seed: String): MachiKonbiniModel {
     val L = MachiKonbiniLayout
     val m = MachiMesh(); val g = MachiMesh()
+    val doorMeshes = listOf(MachiMesh(), MachiMesh()); val doorGlass = listOf(MachiMesh(), MachiMesh())
     val stats = LinkedHashMap<String, Int>()
     fun count(k: String) { stats[k] = (stats[k] ?: 0) + 1 }
     fun art(k: String) = machiRgb(L.ART.getValue(k))
@@ -312,14 +316,16 @@ internal fun buildMachiKonbini(palette: MachiPalette, seed: String): MachiKonbin
         m.box(L.DOOR_X0, L.DOOR_X1, L.FLOOR_Y, L.FLOOR_Y + 0.01, z1 - 0.9, z1 - 0.12, rubber)
         g.planeRotY(mid, (L.DOOR_HEIGHT + 0.16 + L.GLASS_TOP) / 2, z1 - 0.05, L.DOOR_X1 - L.DOOR_X0, L.GLASS_TOP - L.DOOR_HEIGHT - 0.16, 0.0, glassC)
         val pw = L.DOOR_PANEL_WIDTH
-        for (dir in listOf(-1, 1)) {
+        for ((k, dir) in listOf(-1, 1).withIndex()) {
+            // 两扇门各一份网格（关着的位置），渲染器按 konbiniDoor 的开合量沿 x 平移 direction × 0.86 × openness。
+            val dm = doorMeshes[k]; val dg = doorGlass[k]
             val cx = mid + dir * (pw / 2 - 0.02); val by = L.FLOOR_Y + 0.01
-            m.box(cx - pw / 2, cx - pw / 2 + 0.05, by, by + ph, dz - 0.025, dz + 0.025, frame)
-            m.box(cx + pw / 2 - 0.05, cx + pw / 2, by, by + ph, dz - 0.025, dz + 0.025, frame)
-            m.box(cx - pw / 2, cx + pw / 2, by, by + 0.09, dz - 0.025, dz + 0.025, frame)
-            m.box(cx - pw / 2, cx + pw / 2, by + ph - 0.05, by + ph, dz - 0.025, dz + 0.025, frame)
-            m.box(cx - 0.02, cx + 0.02, by + 0.9, by + 1.25, dz + 0.025, dz + 0.045, darkMetal)
-            g.planeRotY(cx, by + ph / 2 + 0.02, dz, pw - 0.1, ph - 0.14, 0.0, glassC)
+            dm.box(cx - pw / 2, cx - pw / 2 + 0.05, by, by + ph, dz - 0.025, dz + 0.025, frame)
+            dm.box(cx + pw / 2 - 0.05, cx + pw / 2, by, by + ph, dz - 0.025, dz + 0.025, frame)
+            dm.box(cx - pw / 2, cx + pw / 2, by, by + 0.09, dz - 0.025, dz + 0.025, frame)
+            dm.box(cx - pw / 2, cx + pw / 2, by + ph - 0.05, by + ph, dz - 0.025, dz + 0.025, frame)
+            dm.box(cx - 0.02, cx + 0.02, by + 0.9, by + 1.25, dz + 0.025, dz + 0.045, darkMetal)
+            dg.planeRotY(cx, by + ph / 2 + 0.02, dz, pw - 0.1, ph - 0.14, 0.0, glassC)
             count("doorPanel")
         }
     }
@@ -398,7 +404,7 @@ internal fun buildMachiKonbini(palette: MachiPalette, seed: String): MachiKonbin
     val variation = resolveMachiKonbiniVariation(seed)
     addMachiKonbiniInterior(m, g, palette, variation.shelfSeed, stats)
     val propFaces = addMachiKonbiniProps(m, palette, seed, variation, stats)
-    return MachiKonbiniModel(m.toArray(), g.toArray(), boardFaces, fasciaFaces, stats, propFaces)
+    return MachiKonbiniModel(m.toArray(), g.toArray(), boardFaces, fasciaFaces, stats, propFaces, doorMeshes.map { it.toArray() }, doorGlass.map { it.toArray() })
 }
 
 // ---- interior.ts：两排双面货架与商品、后墙冰柜与瓶子、收银台、杂志架、复印机与 ATM、员工门、天花灯。 ----
@@ -754,4 +760,108 @@ internal fun addMachiKonbiniProps(m: MachiMesh, palette: MachiPalette, seed: Str
         }
     }
     return MachiKonbiniPropFaces(pylonFaces, aFrameFaces, vendingFaces)
+}
+
+
+// ---- konbiniLights.ts：店内两盏暖光、玻璃外两盏溢出光、贩卖机一盏冷光（点光，decay 2）、路灯一盏聚光；地上的光斑是加色贴片。 ----
+
+/** 一盏点光 / 聚光：位置、颜色键、强度、距离；聚光另有目标、角度、半影。kind：interior / spill / street / vending。 */
+internal class MachiKonbiniLight(val kind: String, val pos: DoubleArray, val intensity: Double, val distance: Double,
+    val target: DoubleArray? = null, val angle: Double = 0.0, val penumbra: Double = 0.0)
+
+internal fun machiKonbiniLights(): List<MachiKonbiniLight> {
+    val L = MachiKonbiniLayout
+    val head = L.LAMP_HEAD
+    return listOf(
+        MachiKonbiniLight("interior", v3(-3.2, L.WALL_HEIGHT - 0.45, -1.6), 9.0, 9.0),
+        MachiKonbiniLight("interior", v3(-1.0, L.WALL_HEIGHT - 0.45, -3.6), 8.0, 9.0),
+        MachiKonbiniLight("spill", v3(-2.8, 1.9, L.Z1 + 0.9), 4.2, 6.0),
+        MachiKonbiniLight("spill", v3(L.X1 + 0.9, 1.9, -0.9), 3.6, 6.0),
+        MachiKonbiniLight("vending", v3(0.82 + 0.74 + 0.5, 1.3, (-3.25 - 4.3) / 2), 2.4, 3.2),
+        MachiKonbiniLight("street", head, 26.0, 9.0, v3(head[0] - 0.3, 0.0, head[2]), 0.95, 0.65),
+    )
+}
+
+/**
+ * 地上的光斑（加色、不写深度）：玻璃前一长条、门口一块、右面一条、路灯下一圈、贩卖机前一块。贴图的柔边按 16×16 网格
+ * 烘进顶点色（线性 × level，再写回 sRGB）；自发光通道当标签：1 溢出光、2 路灯、3 贩卖机（各自的亮度由渲染器按帧给）。
+ */
+internal fun buildMachiKonbiniPools(palette: MachiPalette): FloatArray {
+    val L = MachiKonbiniLayout
+    val m = MachiMesh()
+    val spill = machiRgb(mcMixHex(L.ART.getValue("spillLight"), palette.interiorLight, 0.5))
+    val street = machiRgb(palette.streetLight); val vending = machiRgb(palette.vendingLight)
+    fun pool(color: FloatArray, tag: Float, level: Double, w: Double, d: Double, cx: Double, cz: Double, round: Boolean, y: Double, rotated: Boolean = false) {
+        val n = 16
+        fun falloff(u: Double, v: Double): Double {
+            val dd = if (round) sqrt(u * u + v * v) else max(kotlin.math.abs(u) * 0.9, kotlin.math.abs(v))
+            val f = max(0.0, 1 - dd)
+            val bias = if (round) 1.0 else 0.55 + 0.45 * (1 - (v + 1) / 2)
+            return f * f * bias
+        }
+        fun col(u: Double, v: Double) = machiShade(color, level * falloff(u, v))
+        // 平面本地 (s, t)：s 沿宽，t 沿深，t = −1 在远离镜头的一侧（贴图上沿，靠店）。右面那条绕 y 转 90°。
+        fun world(s: Double, t: Double): DoubleArray = if (!rotated) v3(cx + s * w / 2, y, cz + t * d / 2) else v3(cx + t * d / 2, y, cz - s * w / 2)
+        for (i in 0 until n) for (j in 0 until n) {
+            val s0 = -1 + 2.0 * i / n; val s1 = -1 + 2.0 * (i + 1) / n; val t0 = -1 + 2.0 * j / n; val t1 = -1 + 2.0 * (j + 1) / n
+            m.quadColors(world(s0, t1), world(s1, t1), world(s1, t0), world(s0, t0), v3(0.0, 1.0, 0.0),
+                col(s0, t1), col(s1, t1), col(s1, t0), col(s0, t0), tag)
+        }
+    }
+    val doorMid = (L.DOOR_X0 + L.DOOR_X1) / 2
+    val y = L.LOT_Y + 0.006
+    pool(spill, 1f, 0.5, L.X1 - L.FRONT_PILLAR_END + 0.6, 2.0, (L.FRONT_PILLAR_END + L.X1) / 2, L.Z1 + 1.0, false, y)
+    pool(spill, 1f, 0.42, 2.2, 1.7, doorMid, L.Z1 + 0.95, true, y)
+    pool(spill, 1f, 0.42, 3.6, 1.6, L.X1 + 0.85, (L.RIGHT_GLASS_END + L.Z1) / 2, false, y, rotated = true)
+    pool(street, 2f, 0.55, 3.4, 3.4, L.LAMP_HEAD[0] - 0.3, L.LAMP_HEAD[2], true, L.ROAD_Y + 0.016)
+    pool(vending, 3f, 0.32, 1.4, 2.4, 0.82 + 0.74 + 0.6, (-3.25 - 4.3) / 2, true, y)
+    return m.toArray()
+}
+
+
+// ---- konbiniDoor.ts：段落开头（第一段除外）提前 0.7 s 开门，像有人进店；长空隙里按这首歌的节奏补几次。 ----
+
+internal const val KONBINI_DOOR_OPEN = 0.75
+internal const val KONBINI_DOOR_HOLD = 2.6
+internal const val KONBINI_DOOR_CLOSE = 1.0
+internal const val KONBINI_DOOR_LEAD = 0.7
+private const val KONBINI_DOOR_CYCLE = KONBINI_DOOR_OPEN + KONBINI_DOOR_HOLD + KONBINI_DOOR_CLOSE
+
+internal fun buildMachiKonbiniDoorEvents(lines: List<com.guangyue.core.lyrics.Line>, doorInterval: Double, doorPhase: Double): List<Double> {
+    val sung = lines.filter { it.fullText != "......" && it.fullText.isNotBlank() }
+    if (sung.isEmpty()) return emptyList()
+    val ps = com.guangyue.core.lyrics.ParagraphStructure
+    val drafts = ps.draftParagraphs(ps.buildStructureLines(sung), ps.resolveParagraphGapThreshold(sung))
+    val events = ArrayList<Double>()
+    drafts.forEachIndexed { i, d -> if (i > 0) events += max(0.0, d.lines[0].line.startTime - KONBINI_DOOR_LEAD) }
+    val gaps = ArrayList<DoubleArray>()
+    gaps += doubleArrayOf(0.0, sung[0].startTime)
+    for (i in 1 until sung.size) gaps += doubleArrayOf(com.guangyue.core.lyrics.RenderHints.getLineRenderEndTime(sung[i - 1]), sung[i].startTime)
+    for (gp in gaps) {
+        if (gp[1] - gp[0] < doorInterval * 0.6) continue
+        var t = gp[0] + doorInterval * (0.35 + doorPhase * 0.4)
+        while (t < gp[1] - KONBINI_DOOR_CYCLE) { events += t; t += doorInterval }
+    }
+    events.sort()
+    val out = ArrayList<Double>()
+    // 照原文：与「排序后的前一个」比（不是与上一个留下的比）。
+    events.forEachIndexed { i, t -> if (i == 0 || t - events[i - 1] >= KONBINI_DOOR_CYCLE) out += t }
+    return out
+}
+
+/** 门开了多少（0 关、1 全开）：有歌词按开门时刻表，纯音乐按 seed 的节奏周期性开。 */
+internal fun resolveMachiKonbiniDoorOpenness(events: List<Double>, time: Double, doorInterval: Double, doorPhase: Double, instrumental: Boolean): Double {
+    var since = Double.POSITIVE_INFINITY
+    if (instrumental || events.isEmpty()) {
+        val phase = time / doorInterval + doorPhase
+        since = (phase - kotlin.math.floor(phase)) * doorInterval
+    } else {
+        for (i in events.indices.reversed()) if (events[i] <= time) { since = time - events[i]; break }
+    }
+    if (since < 0 || since >= KONBINI_DOOR_CYCLE) return 0.0
+    if (since < KONBINI_DOOR_OPEN) { val t = since / KONBINI_DOOR_OPEN; return 1 - (1 - t) * (1 - t) * (1 - t) }
+    if (since < KONBINI_DOOR_OPEN + KONBINI_DOOR_HOLD) return 1.0
+    val t = (since - KONBINI_DOOR_OPEN - KONBINI_DOOR_HOLD) / KONBINI_DOOR_CLOSE
+    val e = if (t < 0.5) 4 * t * t * t else 1 - Math.pow(-2 * t + 2, 3.0) / 2
+    return 1 - e
 }

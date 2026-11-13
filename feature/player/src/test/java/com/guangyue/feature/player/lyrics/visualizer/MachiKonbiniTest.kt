@@ -55,4 +55,29 @@ class MachiKonbiniTest {
         assertEquals(3, w.glints.size)
         assertTrue(w.drips.size > 20)
     }
+
+    @Test
+    fun doorOpennessFollowsKonbiniDoorTiming() {
+        val ev = listOf(10.0)
+        assertEquals(0.0, resolveMachiKonbiniDoorOpenness(ev, 9.0, 30.0, 0.0, false), 1e-9)
+        assertEquals(0.875, resolveMachiKonbiniDoorOpenness(ev, 10.375, 30.0, 0.0, false), 1e-9)
+        assertEquals(1.0, resolveMachiKonbiniDoorOpenness(ev, 12.0, 30.0, 0.0, false), 1e-9)
+        assertEquals(0.5, resolveMachiKonbiniDoorOpenness(ev, 13.85, 30.0, 0.0, false), 1e-9)
+        assertEquals(0.0, resolveMachiKonbiniDoorOpenness(ev, 14.4, 30.0, 0.0, false), 1e-9)
+        // 纯音乐：按 doorInterval 周期开。
+        assertEquals(1.0, resolveMachiKonbiniDoorOpenness(emptyList(), 32.0, 30.0, 0.0, true), 1e-9)
+        assertTrue(buildMachiKonbiniDoorEvents(emptyList(), 30.0, 0.5).isEmpty())
+    }
+
+    @Test
+    fun lightsAndPoolsMatchKonbiniLights() {
+        val lights = machiKonbiniLights()
+        assertEquals(6, lights.size)
+        assertEquals(1, lights.count { it.target != null })
+        // 五块光斑，每块 16×16 格、每格 6 个顶点、每顶点 10 个 float。
+        assertEquals(5 * 16 * 16 * 6 * 10, buildMachiKonbiniPools(palette).size)
+        val model = buildMachiKonbini(palette, "probe-0")
+        assertEquals(2, model.doors.size)
+        assertTrue(model.doors.all { it.isNotEmpty() } && model.doorGlass.all { it.isNotEmpty() })
+    }
 }

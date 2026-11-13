@@ -99,6 +99,12 @@ internal class MachiMesh {
         for (p in listOf(a, b, c, a, c, d)) vertex(p[0], p[1], p[2], n, color, emissive)
     }
 
+    /** 四边形，四个顶点各自的颜色（地面光斑的柔边按顶点色烘进去）。 */
+    fun quadColors(a: DoubleArray, b: DoubleArray, c: DoubleArray, d: DoubleArray, n: DoubleArray, ca: FloatArray, cb: FloatArray, cc: FloatArray, cd: FloatArray, emissive: Float = 0f) {
+        vertex(a[0], a[1], a[2], n, ca, emissive); vertex(b[0], b[1], b[2], n, cb, emissive); vertex(c[0], c[1], c[2], n, cc, emissive)
+        vertex(a[0], a[1], a[2], n, ca, emissive); vertex(c[0], c[1], c[2], n, cc, emissive); vertex(d[0], d[1], d[2], n, cd, emissive)
+    }
+
     /** 轴对齐盒子（six faces；bottom 省掉——白模从不看底）。 */
     fun box(x0: Double, x1: Double, y0: Double, y1: Double, z0: Double, z1: Double, color: FloatArray, emissive: Float = 0f, bottom: Boolean = false) {
         quad(doubleArrayOf(x0, y0, z1), doubleArrayOf(x1, y0, z1), doubleArrayOf(x1, y1, z1), doubleArrayOf(x0, y1, z1), doubleArrayOf(0.0, 0.0, 1.0), color, emissive)
