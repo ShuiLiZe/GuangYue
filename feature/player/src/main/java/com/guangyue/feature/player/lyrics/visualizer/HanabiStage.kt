@@ -1139,8 +1139,11 @@ private class HbGlowNodes {
         val STEP = intArrayOf(4, 4, 3, 2)
         /** 各级模糊半径（该级像素）：约合屏上 10 / 40 / 96 / 192 px。 */
         val RADIUS = floatArrayOf(2.5f, 2.5f, 2f, 2f)
-        /** 2026-11-14 对 Folia 探针：近处亮度已对上、整屏偏暗 ~12%（缺 5 级 spread 的宽光），宽的两级加重并多一级 1/96。 */
-        val LEVEL_WEIGHT = floatArrayOf(0.7f, 0.9f, 1f, 1f)
+        /**
+         * 2026-11-14 对 Folia 探针 t37.5：hanabi-4（0.7/0.9/1/1）整屏均值 107/79/106 vs Folia 98/74/101，多出的亮集中在画面中央
+         * （珠光束的光晕比 Folia 宽）。中间 1/16 级（屏上约 40 px，光束光晕宽度主要来自它）降权，最近 1/4 级（字块软光晕）略加。
+         */
+        val LEVEL_WEIGHT = floatArrayOf(0.85f, 0.5f, 0.85f, 0.8f)
         /** 全屏亮部增益：补 Folia 逐级同级回加（spread 0.85 × 5 级）放大的光晕外缘。Folia 按最大通道取亮部后只剩 (c−0.5)/c（白 → 0.5），再经 5 级 ×0.85 回加约 4 倍；这里 3 级权重和 ≈2，故 ×2.2。 */
         const val GAIN = 2.2f
         /** API 31–32 颜色矩阵近似的色相放大（API 33+ 走按最大通道的 Folia 原式，不需要）。 */
