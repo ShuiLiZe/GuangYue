@@ -155,7 +155,7 @@ internal fun addMachiKowloonStreet(m: MachiMesh, seed: String = ""): List<MachiS
         // 灯泡（stallBulb 自发光）
         val bulbX = (x0 + x1) / 2 + 0.2; val bulbY = frontY - 0.35; val bulbZ = (z1 + front) / 2
         m.prism(bulbX, bulbY + 0.05, bulbZ, 0.006, 0.3, c(art.getValue("wire")), 4)
-        m.box(bulbX - 0.06, bulbX + 0.06, bulbY - 0.06, bulbY + 0.06, bulbZ - 0.06, bulbZ + 0.06, c("#ffd28a"), 1f, bottom = true)
+        m.box(bulbX - 0.06, bulbX + 0.06, bulbY - 0.06, bulbY + 0.06, bulbZ - 0.06, bulbZ + 0.06, c("#ffd28a"), 2.6f, bottom = true) // stallBulb level 2.6 × (0.4 + 0.6 lamps)
         // 镬：炉头 + 一只黑镬（倒圆台近似）；汤锅。
         val wx = x0 + 0.5; val wy = counter + 0.04; val wz = (z0 + z1) / 2 + 0.1
         m.prism(wx, wy, wz, 0.2, 0.08, c(art.getValue("darkMetal")), 12)
@@ -184,7 +184,7 @@ internal fun addMachiKowloonStreet(m: MachiMesh, seed: String = ""): List<MachiS
         val hx = x - 0.05; val hy = MachiKowloonStreet.POLE_LAMP_Y + 0.12; val hz = z + MachiKowloonStreet.POLE_ARM
         m.tube(doubleArrayOf(x, MachiKowloonStreet.POLE_LAMP_Y - 0.15, z + 0.1), doubleArrayOf(hx, hy + 0.08, hz - 0.2), 0.03, steel)
         m.box(hx - 0.13, hx + 0.13, hy, hy + 0.1, hz - 0.26, hz + 0.26, c(art.getValue("darkMetal")))
-        m.box(hx - 0.09, hx + 0.09, hy - 0.02, hy, hz - 0.2, hz + 0.2, c("#e2f2ff"), 1f, bottom = true)
+        m.box(hx - 0.09, hx + 0.09, hy - 0.02, hy, hz - 0.2, hz + 0.2, c("#e2f2ff"), 3f, bottom = true) // lampHead level 3.0 × (0.15 + 0.85 lamps)
     }
     val rnd = MachiRng(machiHashSeed("kowloon:street:$seed"))
     addMachiKowloonShopfronts(m)
@@ -255,7 +255,7 @@ internal fun addMachiKowloonStreet(m: MachiMesh, seed: String = ""): List<MachiS
     }
     // 全息投影机（street.ts buildProps：holoBase 方盒 + holoLens 发光圆片）
     m.box(0.9 - 0.23, 0.9 + 0.23, 0.0, 0.24, 2.3 - 0.23, 2.3 + 0.23, c("#2b2f36"))
-    m.prism(0.9, 0.24, 2.3, 0.13, 0.03, c("#62f2ff"), 14, emissive = 1f)
+    m.prism(0.9, 0.24, 2.3, 0.13, 0.03, c("#62f2ff"), 14, emissive = 2.2f) // holoLens level 2.2 × (0.4 + 0.6 night)
     return placements
 }
 

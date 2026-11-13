@@ -88,8 +88,8 @@ void main() {
         vec2 screenUv = gl_FragCoord.xy / uSceneSize;
         $MACHI_WET_OUTPUT
     }
-    vec3 glow = albedo * uArtificial;
-    fragColor = vec4(mix(lit, glow, vEmi), 1.0);
+    // 自发光（materials.ts glow：MeshBasicMaterial，颜色 × spec.level × setGlowLevel）：aEmi 就是 level，不再与受光色混合。
+    fragColor = vec4(vEmi > 0.001 ? albedo * uArtificial * vEmi : lit, 1.0);
 }
 """
 

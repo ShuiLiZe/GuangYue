@@ -111,6 +111,9 @@ internal class MachiMesh {
 }
 
 /** 城寨白模的几何与统计（单测用）。 */
+/** 亮窗（kowloonScene.ts：窗色 × (0.28 + 0.6 × 夜里程度)，夜里 0.88；不乘 artificial，夜里 artificial = 1 相同）。 */
+internal const val MACHI_WINDOW_LEVEL = 0.88f
+
 internal class MachiKowloonModel(val mesh: FloatArray, val litWindows: Int, val darkWindows: Int, val signs: List<MachiSignPlacement> = emptyList(), val clutter: Map<String, Int> = emptyMap())
 
 private class MachiFace(val block: MachiKowloonBlock, val ox: Double, val oz: Double, val ax: Double, val az: Double, val nx: Double, val nz: Double, val width: Double)
@@ -319,7 +322,7 @@ private fun facade(m: MachiMesh, f: MachiFace, rnd: MachiRng, ctx: MachiFacadeCt
                 val litRoll = rnd.next()
                 if (litRoll < 0.46) {
                     ctx.lit++
-                    fbox(s, gy - h / 2, w, h, 0.004, out, machiRgb(MachiKowloonLayout.WINDOW_LIGHTS[pickWeighted(rnd.next())]), 1f)
+                    fbox(s, gy - h / 2, w, h, 0.004, out, machiRgb(MachiKowloonLayout.WINDOW_LIGHTS[pickWeighted(rnd.next())]), MACHI_WINDOW_LEVEL)
                 } else { ctx.dark++; fbox(s, gy - h / 2, w, h, 0.004, out, FacadeArt.windowDark) }
             }
             val roll = rnd.next()

@@ -26,7 +26,7 @@ class MachiKowloonTest {
             val emissive = m[i + 9]
             val r = m[i + 6]
             // 亮窗（自发光且不是屏面的深蓝）
-            if (emissive > 0.9f && emissive < 1.1f && r > 0.4f) {
+            if (kotlin.math.abs(emissive - MACHI_WINDOW_LEVEL) < 0.01f && r > 0.4f) {
                 val x = m[i].toDouble(); val y = m[i + 1].toDouble(); val z = m[i + 2].toDouble()
                 val onScreen = kotlin.math.abs(x - sx) < MachiKowloonLayout.SCREEN_W / 2 && kotlin.math.abs(y - sy) < MachiKowloonLayout.SCREEN_H / 2 && z > -1.6
                 assertTrue("window on screen at $x,$y,$z", !onScreen)
