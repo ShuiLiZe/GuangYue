@@ -265,7 +265,7 @@ fun V0cStage(
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
         // 2026-11-12：町景（machi）3D 舞台起步，只在取证页（未进歌词样式列表）。
-        if (style == "machi" || style == "machirain" || style == "machisnow") {
+        if (style == "machi" || style == "machirain" || style == "machisnow" || style == "machiday" || style == "machidusk") {
             com.guangyue.feature.player.lyrics.visualizer.MachiStagePreview(
                 lines = kernel,
                 timeSeconds = { positionMs / 1000.0 },
@@ -280,6 +280,8 @@ fun V0cStage(
                 // machirain：雨天（湿路面 + 水洼倒影，MachiWet.kt）取证；machisnow：雪。
                 weather = when (style) { "machirain" -> "rain"; "machisnow" -> "snow"; else -> "auto" },
                 restCamera = true,
+                // machiday / machidusk：白天、黄昏（applyEnvironmentColors 三套插值）取证；其余夜。
+                timeOfDay = when (style) { "machiday" -> "day"; "machidusk" -> "dusk"; else -> "night" },
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh") {

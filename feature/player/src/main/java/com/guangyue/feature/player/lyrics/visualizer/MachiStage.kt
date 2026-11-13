@@ -135,24 +135,87 @@ vec3 toLinear(vec3 c) { return mix(c * 0.0773993808, pow(c * 0.9478672986 + 0.05
 void main() { fragColor = vec4(toLinear(mix(uBottom, uTop, vT)), 1.0); }
 """
 
-/** 夜景的光照参数（skyLights.ts + environment.ts 夜 / 晴）。 */
-internal class MachiNightLight(val palette: MachiPalette, val weather: MachiWeatherKind = MachiWeatherKind.CLEAR) {
-    val state = createMachiEnvironmentState(resolveMachiEnvironmentTarget(MACHI_DAYLIGHT_NIGHT, weather))
+/**
+ * 光照参数（skyLights.ts + environment.ts + createMachiRuntime.applyEnvironmentColors）。
+ * [daylight]：0 夜、0.45 黄昏、1 白天（timeOfDay auto 时按本地时钟，见 resolveMachiDaylight）。
+ * [palette] 是按环境推过的调色板：skyTop / skyBottom / hemiSky / hemiGround / moon 在夜、黄昏、白天三套之间插值，
+ * 阴天往灰里拉，积雪时地面反光更冷更亮（照 applyEnvironmentColors，线性空间里插值后写回 hex）。
+ */
+internal class MachiNightLight(
+    basePalette: MachiPalette,
+    val weather: MachiWeatherKind = MachiWeatherKind.CLEAR,
+    daylight: Double = MACHI_DAYLIGHT_NIGHT,
+) {
+    val state = createMachiEnvironmentState(resolveMachiEnvironmentTarget(daylight, weather))
     val look = resolveMachiEnvironmentLook(state)
+    val palette: MachiPalette = machiEnvironmentPalette(basePalette, state, look)
+    /** skyLights.update：月光 / 太阳方向在夜、黄昏、白天之间插值。 */
     val sunDir: FloatArray = run {
-        val l = sqrt(6.5 * 6.5 + 14.0 * 14.0 + 5.0 * 5.0)
-        floatArrayOf((-6.5 / l).toFloat(), (14 / l).toFloat(), (-5 / l).toFloat())
+        val night = machiNorm(-6.5, 14.0, -5.0); val dusk = machiNorm(-11.0, 5.5, 6.0); val day = machiNorm(-6.0, 16.0, 8.0)
+        val d = state.daylight
+        val (a, b, t) = if (d <= MACHI_DAYLIGHT_DUSK) Triple(night, dusk, d / MACHI_DAYLIGHT_DUSK) else Triple(dusk, day, (d - MACHI_DAYLIGHT_DUSK) / (1 - MACHI_DAYLIGHT_DUSK))
+        val v = DoubleArray(3) { a[it] + (b[it] - a[it]) * t }
+        val l = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+        FloatArray(3) { (v[it] / l).toFloat() }
     }
     private fun lin(hex: String, k: Double): FloatArray = machiLinear(hex, k)
     val sun = lin(palette.moon, look.sunIntensity)
     val hemiSky = lin(palette.hemiSky, look.hemiIntensity)
-    // 积雪时地面反光偏冷偏亮（createMachiRuntime：hemiGround.lerp((0.55, 0.6, 0.7) × (0.35 + 0.65 daylight), snowCover × 0.5)）。
-    val hemiGround: FloatArray = run {
-        val base = machiLinear(palette.hemiGround)
-        val snowK = state.snowCover * 0.5
-        val cold = doubleArrayOf(0.55, 0.6, 0.7).map { it * (0.35 + 0.65 * state.daylight) }
-        FloatArray(3) { ((base[it] + (cold[it] - base[it]) * snowK) * look.hemiIntensity).toFloat() }
+    // 积雪的地面反光已在 palette.hemiGround 里（applyEnvironmentColors）。
+    val hemiGround = lin(palette.hemiGround, look.hemiIntensity)
+    /** 薄雾色 = skyBottom × (1.35 − 0.4 daylight)。 */
+    val mistColor: FloatArray = machiLinear(palette.skyBottom, 1.35 - 0.4 * state.daylight)
+    /** 云：夜里 lerp(skyBottom, moon, 0.25) × 0.7，白天 lerp(skyBottom, 白, 0.55 − 0.25 overcast) × 0.55，按 daylight 混。 */
+    val cloudColor: FloatArray = run {
+        val sb = machiLinear(palette.skyBottom); val mn = machiLinear(palette.moon)
+        val w = 0.55 - 0.25 * look.overcast
+        FloatArray(3) {
+            val n = (sb[it] + (mn[it] - sb[it]) * 0.25) * 0.7
+            val dd = (sb[it] + (1 - sb[it]) * w) * 0.55
+            (n + (dd - n) * state.daylight).toFloat()
+        }
     }
+}
+
+private fun machiNorm(x: Double, y: Double, z: Double): DoubleArray { val l = sqrt(x * x + y * y + z * z); return doubleArrayOf(x / l, y / l, z / l) }
+
+private fun machiLinearToHex(c: DoubleArray): String {
+    fun enc(v: Double): Int {
+        val x = v.coerceIn(0.0, 1.0)
+        val s = if (x <= 0.0031308) x * 12.92 else 1.055 * Math.pow(x, 1 / 2.4) - 0.055
+        return kotlin.math.round(s * 255).toInt().coerceIn(0, 255)
+    }
+    return String.format("#%02x%02x%02x", enc(c[0]), enc(c[1]), enc(c[2]))
+}
+
+/** applyEnvironmentColors 里单个键的颜色（线性 RGB）：三套插值 → 阴天去饱和 → hemiGround 积雪偏冷。 */
+internal fun machiEnvironmentColor(key: String, night: String, dusk: String, day: String, daylight: Double, overcast: Double, snowCover: Double): DoubleArray {
+    val d0 = MACHI_DAYLIGHT_DUSK
+    val (a, b, t) = if (daylight <= d0) Triple(night, dusk, daylight / d0) else Triple(dusk, day, (daylight - d0) / (1 - d0))
+    val ca = machiLinear(a); val cb = machiLinear(b)
+    val c = DoubleArray(3) { ca[it] + (cb[it] - ca[it]) * t }
+    val lum = c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722
+    val g = lum * (if (key == "moon") 1.0 else 0.9 + 0.35 * daylight)
+    val k = overcast * (if (key == "moon") 0.45 else 0.7)
+    for (i in 0..2) c[i] += (g - c[i]) * k
+    if (key == "hemiGround") {
+        val cold = doubleArrayOf(0.55, 0.6, 0.7)
+        for (i in 0..2) c[i] += (cold[i] * (0.35 + 0.65 * daylight) - c[i]) * snowCover * 0.5
+    }
+    return c
+}
+
+/** createMachiRuntime.applyEnvironmentColors 照译（three Color 是线性的，lerp 在线性空间），结果写回 hex。 */
+internal fun machiEnvironmentPalette(base: MachiPalette, state: MachiEnvironmentState, look: MachiEnvironmentLook): MachiPalette {
+    fun derive(key: String, night: String, dusk: String, day: String) =
+        machiLinearToHex(machiEnvironmentColor(key, night, dusk, day, state.daylight, look.overcast, state.snowCover))
+    return base.copy(
+        skyTop = derive("skyTop", base.skyTop, base.skyTopDusk, base.skyTopDay),
+        skyBottom = derive("skyBottom", base.skyBottom, base.skyBottomDusk, base.skyBottomDay),
+        hemiSky = derive("hemiSky", base.hemiSky, base.hemiSkyDusk, base.hemiSkyDay),
+        hemiGround = derive("hemiGround", base.hemiGround, base.hemiGroundDusk, base.hemiGroundDay),
+        moon = derive("moon", base.moon, base.moonDusk, base.moonDay),
+    )
 }
 
 private class MachiRenderer(
@@ -167,7 +230,10 @@ private class MachiRenderer(
     private val weatherLayout: MachiWeatherLayout,
     /** 取证用：镜头停在静止位（Folia 探针 renderAt 刚挂上时运镜幅度为 0）。 */
     private val restCamera: Boolean = false,
+    /** 播放暂停时氛围时间停住（clock.ts：雨、涟漪、滴水、闪烁、运镜都定格）。 */
+    private val paused: () -> Boolean = { false },
 ) : GLSurfaceView.Renderer {
+    private val clock = MachiClock()
     private val weather = MachiWeatherFx(weatherLayout)
     private val snowCoverColor = machiLinear("#f2f5fa")
     private val roofRects = FloatArray(16).also { a -> weatherLayout.roofs.take(4).forEachIndexed { i, r -> a[i * 4] = r.x0.toFloat(); a[i * 4 + 1] = r.z0.toFloat(); a[i * 4 + 2] = r.x1.toFloat(); a[i * 4 + 3] = r.z1.toFloat() } }
@@ -191,7 +257,6 @@ private class MachiRenderer(
     private val reflection = MachiReflection()
     private val cones = MachiLightCones(machiConeMesh(machiKowloonLightCones()))
     private val lampColor = machiLinear("#e2f2ff")
-    private var lastNanos = 0L
     // 闪电（director.ts）：副歌开头两下闪；雨量 ≥ 0.5 才有，亮度 × 雨量；半球光 × (1 + 1.5 flash)、月光 × (1 + 1.2 flash)（skyLights.ts）。
     private val lightningTimes = buildMachiLightningTimes(lines)
     private var flash = 0.0
@@ -311,9 +376,10 @@ private class MachiRenderer(
         // 运镜按氛围时间（camera.ts motionTime：用上一帧累加的 ambient，帧间隔封顶 0.1 s）；幅度 4 s 内从 0 升满（DRIFT_RAMP_SECONDS）。
         val pose = synchronized(rig) { rig.setAspect(aspectW, aspectH); if (restCamera) rig.pose(0.0, 0.0) else rig.pose(ambient, kotlin.math.min(1.0, ambient / 4.0)) }
         val vp = pose.viewProjection()
-        val now = System.nanoTime()
-        val delta = if (lastNanos == 0L) 1.0 / 60 else min(0.1, (now - lastNanos) / 1e9)
-        lastNanos = now
+        // 氛围时钟（clock.ts MachiClock）：一帧最多走 0.1 s，暂停时 delta = 0。第一帧补 1/60 s，让取证首帧和原来一致。
+        clock.paused = paused()
+        clock.tick(System.nanoTime() / 1e6)
+        val delta = if (clock.realDelta == 0.0 && !clock.paused && ambient == 0.0) 1.0 / 60 else clock.delta
         val t = timeSeconds()
         flash = if (light.state.rain < 0.5) 0.0 else resolveMachiLightning(lightningTimes, t) * light.state.rain
         val target = resolveMachiBoardTarget(lines, t)
@@ -367,12 +433,10 @@ private class MachiRenderer(
             vp, view.z.toFloat(),
             MachiSignFrame(t, ambient, delta, resolveMachiChorus(lines, target), 0.0, light.look.artificial, resolveMachiFlicker(ambient, seed)),
         )
-        // 后处理（MachiPost.kt）：墨线 / 薄雾 / 云 → bloom → 色调映射。夜里：mist 色 = skyBottom × 1.35，
-        // 云色 = lerp(skyBottom, moon, 0.25) × 0.7；雾里的两处灯（kowloonScene glowA / glowB）。
+        // 后处理（MachiPost.kt）：墨线 / 薄雾 / 云 → bloom → 色调映射。薄雾色、云色按 daylight 推（MachiNightLight）；
+        // 雾里的两处灯（kowloonScene glowA / glowB）。
         android.opengl.Matrix.invertM(invVP, 0, vp, 0)
         val look = light.look
-        val skyBottom = machiLinear(p.skyBottom)
-        val moon = machiLinear(p.moon)
         val neon = 1.0 * (0.85 + 0.15 * resolveMachiFlicker(ambient, seed))
         post.finish(
             pixelWorldSize = (pose.top - pose.bottom) / pose.zoom / post.sceneH,
@@ -380,9 +444,9 @@ private class MachiRenderer(
             near = 0.1, depthRange = 200.0 - 0.1, invVP = invVP,
             atmosphere = MachiAtmosphereFrame(
                 time = ambient,
-                mistColor = FloatArray(3) { skyBottom[it] * 1.35f },
+                mistColor = light.mistColor,
                 mistAmount = look.mist,
-                cloudColor = FloatArray(3) { ((skyBottom[it] + (moon[it] - skyBottom[it]) * 0.25f) * 0.7f) },
+                cloudColor = light.cloudColor,
                 cloudAmount = look.clouds,
                 haze = look.haze,
                 lightning = flash,
@@ -420,11 +484,19 @@ fun MachiStagePreview(
     artist: String = "",
     weather: String = "clear",
     restCamera: Boolean = false,
+    /** auto（按本地时钟，Folia 默认）/ night / dusk / day。 */
+    timeOfDay: String = "night",
+    paused: () -> Boolean = { false },
 ) {
     val palette = remember(backgroundColor, primaryColor, secondaryColor, accentColor, seed) {
         resolveMachiPalette(MachiTheme(backgroundColor.machiHex(), primaryColor.machiHex(), secondaryColor.machiHex(), accentColor.machiHex()), seed)
     }
-    val light = remember(palette, weather, seed) { MachiNightLight(palette, runCatching { resolveMachiWeatherKind(weather, seed) }.getOrDefault(MachiWeatherKind.CLEAR)) }
+    // timeOfDay auto：按本地时钟取白天程度（environment.ts resolveMachiDaylight）；整点附近重建一次即可，这里随换歌 / 换主题时取。
+    val daylight = remember(timeOfDay, seed, palette) {
+        val now = java.util.Calendar.getInstance()
+        resolveMachiDaylight(timeOfDay, now.get(java.util.Calendar.HOUR_OF_DAY) + now.get(java.util.Calendar.MINUTE) / 60.0 + now.get(java.util.Calendar.SECOND) / 3600.0)
+    }
+    val light = remember(palette, weather, seed, daylight) { MachiNightLight(palette, runCatching { resolveMachiWeatherKind(weather, seed) }.getOrDefault(MachiWeatherKind.CLEAR), daylight) }
     val model = remember(seed) { buildMachiKowloon(seed) }
     val weatherSetup = remember(seed, model) { resolveMachiKowloonWeather(seed, model.drips) }
     val rig = remember { MachiCameraRig(machiKowloonFramingPoints(), MachiKowloonLayout.VIEW) }
@@ -436,7 +508,7 @@ fun MachiStagePreview(
             factory = { ctx ->
                 GLSurfaceView(ctx).apply {
                     setEGLContextClientVersion(3)
-                    setRenderer(MachiRenderer(model.mesh, light, rig, timeSeconds, lines, signs, seed, weatherSetup.first, weatherSetup.second, restCamera))
+                    setRenderer(MachiRenderer(model.mesh, light, rig, timeSeconds, lines, signs, seed, weatherSetup.first, weatherSetup.second, restCamera, paused))
                     renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                 }
             },
