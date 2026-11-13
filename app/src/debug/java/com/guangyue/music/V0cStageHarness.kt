@@ -218,7 +218,7 @@ fun V0cStage(
         val window = (view.context as? android.app.Activity)?.window ?: return@SideEffect
         WindowCompat.getInsetsController(window, view).apply {
             // B0：暗场样式（雾笺/花火/绘光）一律浅色图标，与 LyricFlowScreen 的外壳规则一致。
-            val barsDark = dark || style == "nebbia" || style == "hanabi" || style == "lumiere"
+            val barsDark = dark || style == "nebbia" || style == "hanabi" || style == "lumiere" || style.startsWith("machi")
             isAppearanceLightStatusBars = !barsDark
             isAppearanceLightNavigationBars = !barsDark
         }
@@ -375,6 +375,8 @@ fun V0cStage(
                     "hanabi" -> LyricStyle.HANABI
                     "tempera" -> LyricStyle.TEMPERA
                     "lumiere" -> LyricStyle.LUMIERE
+                    // machiplayer：歌词样式「町景」走正式播放页（LyricFlowScreen），区别于只拍舞台的 machi。
+                    "machiplayer" -> LyricStyle.MACHI
                     "tilt" -> LyricStyle.TILT
                     "claddagh" -> LyricStyle.CLADDAGH
                     else -> LyricStyle.CLASSIC
@@ -433,6 +435,7 @@ private fun v0cString(id: Int): String = when (id) {
     R.string.lyrics_style_hanabi -> "花火"
     R.string.lyrics_style_tempera -> "凝彩"
     R.string.lyrics_style_lumiere -> "绘光"
+    R.string.lyrics_style_machi -> "町景"
     R.string.lyrics_style_tilt -> "倾诉"
     R.string.lyrics_style_claddagh -> "回环"
     R.string.lyrics_style_cl_focus -> "主歌词放大倍率"
