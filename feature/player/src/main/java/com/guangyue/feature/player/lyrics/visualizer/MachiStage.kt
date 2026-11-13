@@ -246,7 +246,7 @@ internal class MachiSceneSetup(
     val glass: FloatArray?,
     val framing: List<MachiVec3>,
     val view: MachiView,
-    val signs: MachiKowloonSigns?,
+    val signs: MachiSigns?,
     val cones: List<MachiLightConeSpec>,
     val puddles: MachiPuddles,
     val weather: MachiWeatherLayout,
@@ -271,13 +271,13 @@ internal fun machiKowloonSetup(palette: MachiPalette, seed: String, title: Strin
 }
 
 /** 便利店：路面 asphalt（y = 0，bias 0）与场地 concrete（y = 0.12，bias 0.08）都是湿地面；倒影平面 0.06。 */
-internal fun machiKonbiniSetup(palette: MachiPalette, seed: String): MachiSceneSetup {
+internal fun machiKonbiniSetup(palette: MachiPalette, seed: String, title: String, artist: String): MachiSceneSetup {
     val model = buildMachiKonbini(palette, seed)
     val w = resolveMachiKonbiniWeather(seed)
     val glows = machiKonbiniGlows()
     return MachiSceneSetup(
         kind = "konbini", mesh = model.mesh, glass = model.glass, framing = machiKonbiniFramingPoints(), view = MachiKonbiniLayout.VIEW,
-        signs = null, cones = machiKonbiniLightCones(), puddles = w.first, weather = w.second, glowA = glows.first, glowB = glows.second,
+        signs = MachiKonbiniSigns(palette, title, artist, seed, model.boardFaces, model.fasciaFaces, model.propFaces?.pylon.orEmpty()), cones = machiKonbiniLightCones(), puddles = w.first, weather = w.second, glowA = glows.first, glowB = glows.second,
         mirrorY = MachiKonbiniLayout.REFLECT_Y, wetY = MachiKonbiniLayout.ROAD_Y + 0.002, wetBias = 0.0,
         wetY2 = MachiKonbiniLayout.LOT_Y + 0.002, wetBias2 = 0.08,
     )
@@ -491,7 +491,7 @@ private class MachiRenderer(
             GLES30.glEnable(GLES30.GL_DEPTH_TEST)
             drawMesh(mirror, reflectPass = true, wet = false)
             signs?.draw(
-                mirror, view.z.toFloat(),
+                mirror, floatArrayOf(view.x.toFloat(), view.y.toFloat(), view.z.toFloat()),
                 MachiSignFrame(t, ambient + delta, delta, resolveMachiChorus(lines, target), 0.0, light.look.artificial, resolveMachiFlicker(ambient + delta, seed)),
                 advance = false,
             )
@@ -531,7 +531,7 @@ private class MachiRenderer(
         // 歌词大屏 / 跑马灯 / 门头霓虹（MachiScreen.kt）
         ambient += delta
         signs?.draw(
-            vp, view.z.toFloat(),
+            vp, floatArrayOf(view.x.toFloat(), view.y.toFloat(), view.z.toFloat()),
             MachiSignFrame(t, ambient, delta, resolveMachiChorus(lines, target), 0.0, light.look.artificial, resolveMachiFlicker(ambient, seed)),
         )
         // 后处理（MachiPost.kt）：墨线 / 薄雾 / 云 → bloom → 色调映射。薄雾色、云色按 daylight 推（MachiNightLight）；
@@ -605,7 +605,7 @@ fun MachiStagePreview(
     }
     val light = remember(palette, weather, seed, daylight) { MachiNightLight(palette, runCatching { resolveMachiWeatherKind(weather, seed) }.getOrDefault(MachiWeatherKind.CLEAR), daylight) }
     val setup = remember(scene, palette, songTitle, artist, seed) {
-        if (scene == "konbini") machiKonbiniSetup(palette, seed) else machiKowloonSetup(palette, seed, songTitle, artist)
+        if (scene == "konbini") machiKonbiniSetup(palette, seed, songTitle, artist) else machiKowloonSetup(palette, seed, songTitle, artist)
     }
     val rig = remember(setup) { MachiCameraRig(setup.framing, setup.view) }
     Box(modifier) {

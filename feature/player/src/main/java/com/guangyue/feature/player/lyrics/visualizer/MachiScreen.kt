@@ -345,6 +345,14 @@ private fun planeZ(x: Double, y: Double, z: Double, w: Double, h: Double): Float
     )
 }
 
+/** 场景的招牌（城寨 / 便利店）：GL 线程上建、换牌面、每帧画。[view] 是镜头方向（从目标指向镜头，单位向量）。 */
+internal interface MachiSigns {
+    fun init(link: (String, String) -> Int)
+    fun show(target: MachiBoardTarget, lines: List<Line>)
+    /** [advance] = false：只画不推进状态（倒影 pass 再画一遍用）。 */
+    fun draw(vp: FloatArray, view: FloatArray, frame: MachiSignFrame, advance: Boolean = true)
+}
+
 /** 帧输入：歌曲时间、氛围时间、副歌权重目标、音频。 */
 internal class MachiSignFrame(val songTime: Double, val ambientTime: Double, val delta: Double, val chorus: Double, val audio: Double, val artificial: Double, val flicker: Double, val daylight: Double = 0.0)
 
@@ -357,7 +365,7 @@ internal class MachiKowloonSigns(
     private val artist: String,
     private val seed: String,
     private val placements: List<MachiSignPlacement> = emptyList(),
-) {
+) : MachiSigns {
     private var holoProgram = 0
     private var beamProgram = 0
     private var holoTex = 0
@@ -397,7 +405,7 @@ internal class MachiKowloonSigns(
     private val tickerDots = 9f
     private val tickerAspect = (TICKER_W / TICKER_H).toFloat()
 
-    fun init(link: (String, String) -> Int) {
+    override fun init(link: (String, String) -> Int) {
         screenProgram = link(SIGN_VS, SCREEN_FS)
         ledProgram = link(SIGN_VS, LED_FS)
         neonProgram = link(SIGN_VS, NEON_FS)
@@ -456,7 +464,7 @@ internal class MachiKowloonSigns(
     }
 
     /** showBoard：牌面换了就画新的，信号切换过去（第一次直接上）。 */
-    fun show(target: MachiBoardTarget, lines: List<Line>) {
+    override fun show(target: MachiBoardTarget, lines: List<Line>) {
         val key = keyOf(target)
         if (key == targetKey) return
         targetKey = key
@@ -483,7 +491,8 @@ internal class MachiKowloonSigns(
     }
 
     /** [advance] = false：只画不推进状态（倒影 pass 再画一遍用）。 */
-    fun draw(vp: FloatArray, viewZ: Float, frame: MachiSignFrame, advance: Boolean = true) {
+    override fun draw(vp: FloatArray, view: FloatArray, frame: MachiSignFrame, advance: Boolean) {
+        val viewZ = view[2]
         val cur = current ?: return
         var glitch = 0.0
         if (switchElapsed < SWITCH_SECONDS) {
@@ -614,5 +623,251 @@ internal class MachiKowloonSigns(
         const val HOLO_SWITCH = 0.35
         // layout.ts TICKER
         const val TICKER_X = 2.1; const val TICKER_Y = 3.09; const val TICKER_Z = -1.41; const val TICKER_W = 4.2; const val TICKER_H = 0.17
+    }
+}
+
+
+/** 竖直平面（绕 y 转 a，朝 (sin a, 0, cos a)），pos3 + uv2。 */
+private fun planeRotY(x: Double, y: Double, z: Double, w: Double, h: Double, a: Double): FloatArray {
+    val ex = kotlin.math.cos(a); val ez = -sin(a)
+    fun p(sx: Double, sy: Double, u: Float, v: Float) = floatArrayOf((x + ex * sx).toFloat(), (y + sy).toFloat(), (z + ez * sx).toFloat(), u, v)
+    val a0 = p(-w / 2, -h / 2, 0f, 0f); val a1 = p(w / 2, -h / 2, 1f, 0f); val a2 = p(w / 2, h / 2, 1f, 1f); val a3 = p(-w / 2, h / 2, 0f, 1f)
+    return a0 + a1 + a2 + a0 + a2 + a3
+}
+
+/** director.ts resolveMachiTickerText：下一句 + 本句译文；曲名卡时滚曲名与 OPEN 24H。 */
+internal fun resolveMachiTickerText(target: MachiBoardTarget, lines: List<Line>, title: String, artist: String, fallbackTitle: String): String {
+    val t = title.ifEmpty { fallbackTitle }
+    if (target.isCard) return "♪ $t${if (artist.isNotEmpty()) " — $artist" else ""}   ◆   OPEN 24H   ◆"
+    val next = lines.drop(target.index + 1).firstOrNull { it.fullText.isNotBlank() }
+    val current = lines.getOrNull(target.index)
+    val parts = listOfNotNull(next?.let { "NEXT ▸ ${it.fullText}" }, current?.translation?.takeIf { it.isNotBlank() }?.let { "◆ $it" })
+    return if (parts.isNotEmpty()) parts.joinToString("   ") + "   " else "♪ $t   ◆   "
+}
+
+/** konbiniSignPaint.ts paintKonbiniFascia（主题图标暂按圆徽 + ♪）：左圆徽、中店名（曲名）、右 24H 小牌。 */
+internal fun paintKonbiniFascia(bitmap: Bitmap, typeface: Typeface, title: String, base: String, text: String, brand: List<String>) {
+    val c = Canvas(bitmap); val w = bitmap.width.toFloat(); val h = bitmap.height.toFloat()
+    c.drawColor(hexInt(base))
+    val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.typeface = typeface }
+    val badge = h * 0.86f; val bx = h * 0.3f; val by = (h - badge) / 2
+    p.color = hexInt(brand[0]); c.drawCircle(bx + badge / 2, by + badge / 2, badge / 2, p)
+    p.color = 0xFFFFFFFF.toInt(); p.textAlign = Paint.Align.CENTER; p.textSize = badge * 0.6f
+    c.drawText("♪", bx + badge / 2, by + badge / 2 - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
+    val tagW = h * 1.5f; val left = bx + badge + h * 0.35f; val right = w - tagW - h * 0.3f
+    p.color = hexInt(text); p.textAlign = Paint.Align.LEFT
+    fitFont(p, title, right - left, h * 0.6f)
+    c.drawText(title, left, h * 0.53f - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
+    p.color = hexInt(brand[2])
+    c.drawRoundRect(w - tagW - h * 0.15f, h * 0.18f, w - h * 0.15f, h * 0.82f, h * 0.12f, h * 0.12f, p)
+    p.color = 0xFFFFFFFF.toInt(); p.textAlign = Paint.Align.CENTER; p.typeface = machiTypeface(800)
+    fitFont(p, "24H", tagW * 0.8f, h * 0.42f)
+    c.drawText("24H", w - tagW / 2 - h * 0.15f, h * 0.52f - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
+}
+
+/** paintKonbiniPylon（图标暂按 ♪）：上半品牌色带、下半白底 24 HOURS。 */
+internal fun paintKonbiniPylon(bitmap: Bitmap, typeface: Typeface, base: String, brand: List<String>) {
+    val c = Canvas(bitmap); val w = bitmap.width.toFloat(); val h = bitmap.height.toFloat()
+    c.drawColor(hexInt(base))
+    val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.typeface = machiTypeface(800) }
+    p.color = hexInt(brand[0]); c.drawRect(0f, 0f, w, h * 0.58f, p)
+    p.color = hexInt(brand[2]); c.drawRect(0f, h * 0.58f, w, h * 0.63f, p)
+    p.color = 0xFFFFFFFF.toInt(); p.textAlign = Paint.Align.CENTER; p.textSize = h * 0.4f
+    c.drawText("♪", w / 2, h * 0.29f - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
+    p.color = hexInt(brand[2]); fitFont(p, "24", w * 0.5f, h * 0.26f)
+    c.drawText("24", w * 0.32f, h * 0.8f - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
+    p.color = 0xFF2A2F3A.toInt(); p.typeface = typeface; fitFont(p, "HOURS", w * 0.36f, h * 0.12f)
+    c.drawText("HOURS", w * 0.66f, h * 0.8f - (p.fontMetrics.ascent + p.fontMetrics.descent) / 2, p)
+}
+
+/**
+ * 便利店的招牌（konbiniSigns.ts）：屋顶三面广告屏（同一块牌面，逐字点亮当前行）、右面店招 LED 跑马灯（下一句 / 译文）、
+ * 前面店招（曲名当店名，level 0.78）、立柱灯箱两面（level 0.95）。玻璃海报、窗内霓虹、屋顶 logo、A 字立牌后接。
+ * [boardFaces]：x, y, z, rotY；[fascia]：x, y, z, rotY, w, h（前、右）；[pylon]：同上两面。
+ */
+internal class MachiKonbiniSigns(
+    private val palette: MachiPalette,
+    private val title: String,
+    private val artist: String,
+    private val seed: String,
+    private val boardFaces: List<DoubleArray>,
+    private val fascia: List<DoubleArray>,
+    private val pylon: List<DoubleArray>,
+) : MachiSigns {
+    private val screenW = MachiKonbiniLayout.BOARD_W - 0.14
+    private val screenH = MachiKonbiniLayout.BOARD_H - 0.12
+    private val typeface = machiTypeface(700)
+    private val measure = MachiTextMeasure(typeface)
+    private val half = (SCREEN_TEXTURE_WIDTH * (screenH / screenW)).roundToInt()
+    private val box = MachiBoardBox(SCREEN_TEXTURE_WIDTH.toDouble(), half.toDouble(), 0.05, MACHI_REFERENCE_PX)
+    private val cells = floatArrayOf(CELLS_X.toFloat(), (CELLS_X * screenH / screenW).roundToInt().toFloat())
+    private class Slot(val tex: Int, val bitmap: Bitmap) { var key = ""; var layout: MachiBoardLayout? = null }
+    private lateinit var slots: Array<Slot>
+    private var current: Slot? = null
+    private var pending: Slot? = null
+    private var switchElapsed = SWITCH_SECONDS
+    private var targetKey = ""
+    private var chorusGlow = 0.0
+    private var screenProgram = 0
+    private var ledProgram = 0
+    private var neonProgram = 0
+    private var vao = 0
+    private var ledTex = 0
+    private var fasciaTex = 0
+    private var pylonTex = 0
+    private val ledBitmap = Bitmap.createBitmap(LED_W, LED_H, Bitmap.Config.ARGB_8888)
+    private var ledText = ""
+    private var ledUsed = 1f
+    private var ledWindow = 0.3f
+    private var ledScroll = 0.0
+    // ledStrip.ts：竖向 18 个点。
+    private val ledDots = 18f
+    private val ledAspect = (fascia[1][4] / fascia[1][5]).toFloat()
+    private val normals = boardFaces.map { floatArrayOf(sin(it[3]).toFloat(), 0f, kotlin.math.cos(it[3]).toFloat()) }
+
+    override fun init(link: (String, String) -> Int) {
+        screenProgram = link(SIGN_VS, SCREEN_FS)
+        ledProgram = link(SIGN_VS, LED_FS)
+        neonProgram = link(SIGN_VS, NEON_FS)
+        val ids = IntArray(5); GLES30.glGenTextures(5, ids, 0)
+        slots = Array(2) { Slot(ids[it], Bitmap.createBitmap(SCREEN_TEXTURE_WIDTH, half * 2, Bitmap.Config.ARGB_8888)) }
+        ledTex = ids[2]; fasciaTex = ids[3]; pylonTex = ids[4]
+        val ff = fascia[0]
+        val fb = Bitmap.createBitmap(1600, (1600 * ff[5] / ff[4]).roundToInt(), Bitmap.Config.ARGB_8888)
+        paintKonbiniFascia(fb, typeface, title.ifEmpty { "KONBINI" }, palette.signBase, palette.signText, palette.brand)
+        upload(fasciaTex, fb, mip = true); fb.recycle()
+        val pf = pylon[0]
+        val pb = Bitmap.createBitmap(384, (384 * pf[5] / pf[4]).roundToInt(), Bitmap.Config.ARGB_8888)
+        paintKonbiniPylon(pb, typeface, palette.signBase, palette.brand)
+        upload(pylonTex, pb, mip = true); pb.recycle()
+        var mesh = FloatArray(0)
+        boardFaces.forEach { f -> mesh += planeRotY(f[0] + sin(f[3]) * 0.006, f[1], f[2] + kotlin.math.cos(f[3]) * 0.006, screenW, screenH, f[3]) }
+        fascia.forEach { f -> mesh += planeRotY(f[0], f[1], f[2], f[4], f[5], f[3]) }
+        pylon.forEach { f -> mesh += planeRotY(f[0], f[1], f[2], f[4], f[5], f[3]) }
+        val va = IntArray(1); GLES30.glGenVertexArrays(1, va, 0); vao = va[0]
+        val bufs = IntArray(1); GLES30.glGenBuffers(1, bufs, 0)
+        GLES30.glBindVertexArray(vao)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, bufs[0])
+        val buf = java.nio.ByteBuffer.allocateDirect(mesh.size * 4).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer().apply { put(mesh); position(0) }
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, mesh.size * 4, buf, GLES30.GL_STATIC_DRAW)
+        GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 20, 0)
+        GLES30.glEnableVertexAttribArray(1); GLES30.glVertexAttribPointer(1, 2, GLES30.GL_FLOAT, false, 20, 12)
+        GLES30.glBindVertexArray(0)
+    }
+
+    private fun upload(tex: Int, bmp: Bitmap, mip: Boolean = false) {
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, if (mip) GLES30.GL_LINEAR_MIPMAP_LINEAR else GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bmp, 0)
+        if (mip) GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+    }
+
+    private fun keyOf(target: MachiBoardTarget) = if (target.isCard) "card" else "line:${target.index}"
+
+    private fun prepare(target: MachiBoardTarget, lines: List<Line>): Slot {
+        val key = keyOf(target)
+        slots.firstOrNull { it.key == key }?.let { return it }
+        val slot = slots.first { it !== current }
+        val line = if (target.isCard) null else lines.getOrNull(target.index)
+        val card = line == null
+        val layout = if (card) layoutMachiBoardCard("♪ ${title.ifEmpty { "KONBINI" }}", artist, box, measure) else layoutMachiBoardLine(line!!, box, measure)
+        paintMachiBoard(slot.bitmap, layout, typeface, palette.boardUnlit, palette.boardLit, card)
+        upload(slot.tex, slot.bitmap)
+        slot.key = key; slot.layout = layout
+        return slot
+    }
+
+    override fun show(target: MachiBoardTarget, lines: List<Line>) {
+        val key = keyOf(target)
+        if (key == targetKey) return
+        targetKey = key
+        val slot = prepare(target, lines)
+        if (current == null) { current = slot; switchElapsed = SWITCH_SECONDS; pending = null }
+        else if (slot !== current) { pending = slot; switchElapsed = 0.0 }
+        val text = resolveMachiTickerText(target, lines, title, artist, "KONBINI")
+        if (text != ledText) {
+            ledText = text
+            val u = paintMachiLedStrip(ledBitmap, typeface, text)
+            upload(ledTex, ledBitmap)
+            ledUsed = u / LED_W
+            ledWindow = min(4f, (floor(ledDots * ledAspect) * (LED_H / ledDots)) / max(1f, u))
+        }
+    }
+
+    override fun draw(vp: FloatArray, view: FloatArray, frame: MachiSignFrame, advance: Boolean) {
+        val cur = current ?: return
+        var glitch = 0.0
+        if (switchElapsed < SWITCH_SECONDS) {
+            if (advance) switchElapsed += max(frame.delta, 1.0 / 120)
+            val t = min(1.0, switchElapsed / SWITCH_SECONDS)
+            if (advance && t >= 0.45) pending?.let { current = it; pending = null }
+            glitch = if (t >= 1) 0.0 else sin(PI * t).pow(0.7)
+        }
+        if (advance) chorusGlow += (frame.chorus - chorusGlow) * (1 - exp(-frame.delta * 3))
+        val slot = current ?: cur
+        val layout = slot.layout
+        GLES30.glBindVertexArray(vao)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glUseProgram(screenProgram)
+        fun u(n: String) = GLES30.glGetUniformLocation(screenProgram, n)
+        GLES30.glUniformMatrix4fv(u("uVP"), 1, false, vp, 0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, slot.tex)
+        GLES30.glUniform1i(u("uMap"), 0)
+        val bottoms = floatArrayOf(1f, 1f, 1f)
+        val reveal = floatArrayOf(0f, 0f, 0f)
+        if (layout != null) {
+            layout.rows.forEachIndexed { i, row -> if (i < 3) bottoms[i] = if (i == layout.rows.size - 1) 1f else (row.bottom / layout.height).toFloat() }
+            resolveMachiBoardReveal(layout, frame.songTime).forEachIndexed { i, r -> if (i < 3) reveal[i] = (r / box.width).toFloat() }
+        }
+        GLES30.glUniform3fv(u("uRowBottom"), 1, bottoms, 0)
+        GLES30.glUniform3fv(u("uReveal"), 1, reveal, 0)
+        GLES30.glUniform3fv(u("uBase"), 1, machiLinear(palette.boardBase, if (palette.boardIsLight) 0.98 else 1.0), 0)
+        GLES30.glUniform1f(u("uLitGain"), (if (palette.boardIsLight) 1.0 else 1.25 + 0.2 * chorusGlow).toFloat())
+        GLES30.glUniform1f(u("uUnlitGain"), if (palette.boardIsLight) 1f else 0.9f)
+        GLES30.glUniform1f(u("uBright"), (1 + 0.05 * frame.audio + 0.06 * chorusGlow).toFloat())
+        GLES30.glUniform1f(u("uPeak"), if (palette.boardIsLight) PEAK_LIGHT else PEAK_DARK)
+        GLES30.glUniform1f(u("uGlitch"), glitch.toFloat())
+        GLES30.glUniform1f(u("uTime"), frame.ambientTime.toFloat())
+        GLES30.glUniform1f(u("uSoft"), 0.004f)
+        GLES30.glUniform2fv(u("uCells"), 1, cells, 0)
+        GLES30.glUniform3fv(u("uSheen"), 1, machiLinear(palette.moon, 0.35), 0)
+        for (i in boardFaces.indices) {
+            val n = normals[i]
+            GLES30.glUniform1f(u("uViewZ"), view[0] * n[0] + view[1] * n[1] + view[2] * n[2])
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, i * 6, 6)
+        }
+        val base = boardFaces.size * 6
+        // 前面店招（静态，MeshBasic × 0.78 × (1 + 0.08 chorus)）、立柱灯箱两面（× 0.95 × flicker）。
+        GLES30.glUseProgram(neonProgram)
+        fun n(s: String) = GLES30.glGetUniformLocation(neonProgram, s)
+        GLES30.glUniformMatrix4fv(n("uVP"), 1, false, vp, 0)
+        GLES30.glUniform1i(n("uMap"), 0)
+        val lift = 1 + 0.08 * chorusGlow + 0.05 * frame.audio
+        val flicker = if (chorusGlow > 0.5) 1.0 else frame.flicker
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, fasciaTex)
+        GLES30.glUniform1f(n("uLevel"), (0.78 * lift).toFloat())
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, base, 6)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, pylonTex)
+        GLES30.glUniform1f(n("uLevel"), (0.95 * flicker * lift).toFloat())
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, base + 12, pylon.size * 6)
+        // 右面店招 LED 跑马灯（速度 × (1 + 0.5 chorus)）。
+        if (advance) ledScroll = (ledScroll + frame.delta * 35.0 * (1 + 0.5 * chorusGlow) / max(1.0, ledUsed * LED_W.toDouble())) % 1.0
+        GLES30.glUseProgram(ledProgram)
+        fun l(s: String) = GLES30.glGetUniformLocation(ledProgram, s)
+        GLES30.glUniformMatrix4fv(l("uVP"), 1, false, vp, 0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, ledTex)
+        GLES30.glUniform1i(l("uMap"), 0)
+        GLES30.glUniform3fv(l("uLed"), 1, machiLinear(palette.led, 1.0), 0)
+        GLES30.glUniform1f(l("uScroll"), ledScroll.toFloat())
+        GLES30.glUniform1f(l("uUsed"), ledUsed)
+        GLES30.glUniform1f(l("uWindow"), ledWindow)
+        GLES30.glUniform1f(l("uDots"), ledDots)
+        GLES30.glUniform1f(l("uAspect"), ledAspect)
+        GLES30.glUniform1f(l("uBright"), (0.9 + 0.2 * frame.audio).toFloat())
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, base + 6, 6)
+        GLES30.glBindVertexArray(0)
     }
 }

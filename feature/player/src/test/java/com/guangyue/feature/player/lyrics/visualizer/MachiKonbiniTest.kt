@@ -28,6 +28,19 @@ class MachiKonbiniTest {
         assertEquals(4, model.stats["lot"])
         assertEquals(8, model.stats["curb"])
         assertEquals(14, model.stats["grate"])
+        // 店内：两排货架、商品 / 瓶子 / 杂志按种子摆。
+        assertEquals(2, model.stats["gondola"])
+        assertTrue((model.stats["product"] ?: 0) > 100)
+        assertTrue((model.stats["bottle"] ?: 0) in 120..170)
+        assertTrue((model.stats["magazine"] ?: 0) in 10..14)
+        // 道具：贩卖机两台、空调外机四台、电线杆瓷瓶 5 个、自行车一到两辆；立柱灯箱两面、A 字立牌一面、陈列窗两块。
+        assertEquals(2, model.stats["vending"])
+        assertEquals(4, model.stats["ac"])
+        assertEquals(5, model.stats["insulator"])
+        assertTrue((model.stats["bike"] ?: 0) in 1..2)
+        assertEquals(2, model.propFaces!!.pylon.size)
+        assertEquals(1, model.propFaces!!.aFrame.size)
+        assertEquals(2, model.propFaces!!.vending.size)
         // 广告塔正面法线方位角 = 默认镜头方位角 45°。
         assertEquals(45 * MACHI_DEG, model.boardFaces[0][3], 1e-9)
     }

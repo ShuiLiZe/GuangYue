@@ -282,8 +282,8 @@ fun V0cStage(
                 weather = when (style) { "machirain" -> "rain"; "machisnow" -> "snow"; else -> "auto" },
                 restCamera = true,
                 // machiday / machidusk：白天、黄昏（applyEnvironmentColors 三套插值）取证；其余夜。
-                timeOfDay = when (style) { "machiday" -> "day"; "machidusk" -> "dusk"; else -> "night" },
-                // machikonbini：便利店街角（MachiKonbini.kt）。
+                timeOfDay = when (style) { "machiday", "machikonbini" -> "day"; "machidusk" -> "dusk"; else -> "night" },
+                // machikonbini：便利店街角（MachiKonbini.kt），白天（Folia 便利店基准是按本地时钟拍的白天）。
                 scene = if (style == "machikonbini") "konbini" else "kowloon",
                 modifier = Modifier.fillMaxSize(),
             )

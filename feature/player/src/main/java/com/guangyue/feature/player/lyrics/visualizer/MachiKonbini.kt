@@ -1,7 +1,7 @@
 // 町景「便利店街角」（Folia machi scenes/konbini）白模起步：layout.ts 的尺寸表逐项照抄；base.ts 的台座 / 两条路 / 路缘 /
 // 场地 / 斑马线与路边线 / 井盖 / 排水沟盖板，store.ts 的地坪、实墙与内衬、落地玻璃与竖框、对开自动门（先按关着摆）、
 // 屋顶与女儿墙、落水管、店招带（底板 + 三色条）、屋顶三面广告塔（机箱、横梁、霓虹顶沿、顶盖、立柱与斜撑）照译。
-// 店内（interior.ts）、道具（props.ts）、招牌字面（konbiniSigns.ts）、灯（konbiniLights.ts）、门动画（konbiniDoor.ts）后续接。
+// 店内（interior.ts，商品按种子摆、颜色 = products × shade）已接；道具（props.ts，MachiFrame 本地坐标照搭）已接；、招牌字面（konbiniSigns.ts）、灯（konbiniLights.ts）、门动画（konbiniDoor.ts）后续接。
 // 圆角盒（roundedBox）按直角盒画；圆柱按 N 棱柱。随机数走自己的种子序列（MachiRng），不与 Folia 逐个对齐。
 // 网格格式同 MachiKowloon.kt：每顶点 10 个 float（位置 3、法线 3、颜色 3、自发光 1）。玻璃单独一份网格（透明 0.2、不写深度）。
 package com.guangyue.feature.player.lyrics.visualizer
@@ -160,7 +160,7 @@ internal fun MachiMesh.boxRotY(cx: Double, cy: Double, cz: Double, w: Double, h:
     orientedBox(v3(cx, cy, cz), v3(cos(a), 0.0, -sin(a)), v3(0.0, 1.0, 0.0), v3(sin(a), 0.0, cos(a)), w / 2, h / 2, d / 2, color, emissive)
 
 /** 两点之间的圆管（N 棱柱，含两端盖）：r0 在 a 端、r1 在 b 端。 */
-internal fun MachiMesh.tube(a: DoubleArray, b: DoubleArray, r0: Double, color: FloatArray, r1: Double = r0, segments: Int = 8, emissive: Float = 0f) {
+internal fun MachiMesh.ktube(a: DoubleArray, b: DoubleArray, r0: Double, color: FloatArray, r1: Double = r0, segments: Int = 8, emissive: Float = 0f) {
     val axis = norm(v3(b[0] - a[0], b[1] - a[1], b[2] - a[2]))
     val ref = if (kotlin.math.abs(axis[1]) < 0.9) v3(0.0, 1.0, 0.0) else v3(1.0, 0.0, 0.0)
     val u = norm(cross(ref, axis)); val w = cross(axis, u)
@@ -176,7 +176,7 @@ internal fun MachiMesh.tube(a: DoubleArray, b: DoubleArray, r0: Double, color: F
 
 /** 竖直圆柱：底面中心 (x, y, z)，高 h（cylinderAt）。 */
 internal fun MachiMesh.cylinderY(x: Double, y: Double, z: Double, r: Double, h: Double, color: FloatArray, rTop: Double = r, segments: Int = 10, emissive: Float = 0f) =
-    tube(v3(x, y, z), v3(x, y + h, z), r, color, rTop, segments, emissive)
+    ktube(v3(x, y, z), v3(x, y + h, z), r, color, rTop, segments, emissive)
 
 /** 朝上的水平四边形（贴地薄板 / 路面漆）。 */
 internal fun MachiMesh.floorQuad(x0: Double, x1: Double, z0: Double, z1: Double, y: Double, color: FloatArray, emissive: Float = 0f) =
@@ -198,6 +198,7 @@ internal class MachiKonbiniModel(
     /** 店招两块面：中心 x, y, z、朝向、宽、高。 */
     val fasciaFaces: List<DoubleArray>,
     val stats: Map<String, Int>,
+    val propFaces: MachiKonbiniPropFaces? = null,
 )
 
 internal fun buildMachiKonbini(palette: MachiPalette, seed: String): MachiKonbiniModel {
@@ -332,8 +333,8 @@ internal fun buildMachiKonbini(palette: MachiPalette, seed: String): MachiKonbin
         m.box(x1 + o - t, x1 + o, top, p, z0 - o, z1 + o, trim)
         val px = x0 - 0.06; val pz = z1 - 0.12
         m.cylinderY(px, L.LOT_Y + 0.2, pz, 0.045, top - L.LOT_Y - 0.2, metal)
-        m.tube(v3(px, L.LOT_Y + 0.22, pz), v3(px - 0.05, L.LOT_Y + 0.06, pz + 0.2), 0.045, metal)
-        m.tube(v3(px, top - 0.02, pz), v3(px + 0.18, top - 0.02, pz + 0.2), 0.04, metal)
+        m.ktube(v3(px, L.LOT_Y + 0.22, pz), v3(px - 0.05, L.LOT_Y + 0.06, pz + 0.2), 0.045, metal)
+        m.ktube(v3(px, top - 0.02, pz), v3(px + 0.18, top - 0.02, pz + 0.2), 0.04, metal)
     }
     // 店招带：前、右两块灯箱底板，上沿一条、下沿两条三色条。
     val fasciaFaces = ArrayList<DoubleArray>()
@@ -390,9 +391,367 @@ internal fun buildMachiKonbini(palette: MachiPalette, seed: String): MachiKonbin
             val foot = add(vtx, inward, 0.18)
             m.cylinderY(foot[0], L.ROOF_TOP, foot[2], 0.06, L.BOARD_Y0 + H + 0.1 - L.ROOF_TOP, darkMetal, segments = 8)
             val brace = add(foot, inward, 0.9)
-            m.tube(v3(brace[0], L.ROOF_TOP, brace[2]), v3(foot[0], L.BOARD_Y0 - 0.1, foot[2]), 0.03, darkMetal)
+            m.ktube(v3(brace[0], L.ROOF_TOP, brace[2]), v3(foot[0], L.BOARD_Y0 - 0.1, foot[2]), 0.03, darkMetal)
             m.box(brace[0] - 0.14, brace[0] + 0.14, L.ROOF_TOP, L.ROOF_TOP + 0.06, brace[2] - 0.14, brace[2] + 0.14, trim)
         }
     }
-    return MachiKonbiniModel(m.toArray(), g.toArray(), boardFaces, fasciaFaces, stats)
+    val variation = resolveMachiKonbiniVariation(seed)
+    addMachiKonbiniInterior(m, g, palette, variation.shelfSeed, stats)
+    val propFaces = addMachiKonbiniProps(m, palette, seed, variation, stats)
+    return MachiKonbiniModel(m.toArray(), g.toArray(), boardFaces, fasciaFaces, stats, propFaces)
+}
+
+// ---- interior.ts：两排双面货架与商品、后墙冰柜与瓶子、收银台、杂志架、复印机与 ATM、员工门、天花灯。 ----
+
+private val KONBINI_SHELF_ROWS = doubleArrayOf(-1.75, -3.15)
+private const val KONBINI_SHELF_XA = -4.5
+private const val KONBINI_SHELF_XB = -1.4
+private const val KONBINI_SHELF_DEPTH = 0.86
+private const val KONBINI_SHELF_HEIGHT = 1.45
+private val KONBINI_SHELF_LEVELS = doubleArrayOf(0.12, 0.45, 0.78, 1.1)
+
+/** 商品槽位：x, y（底）, z, w, h, d, 颜色序号, 明暗。 */
+private class KonbiniSlot(val x: Double, val y: Double, val z: Double, val w: Double, val h: Double, val d: Double, val color: Int, val shade: Double)
+
+private fun srgbToLinear(c: Float): Double = if (c <= 0.04045f) c / 12.92 else Math.pow((c + 0.055) / 1.055, 2.4)
+private fun linearToSrgb(x: Double): Float { val v = x.coerceIn(0.0, 1.0); return (if (v <= 0.0031308) v * 12.92 else 1.055 * Math.pow(v, 1 / 2.4) - 0.055).toFloat() }
+/** 线性空间里 × k（three 的实例色 = 商品色 × shade）。 */
+internal fun machiShade(rgb: FloatArray, k: Double) = FloatArray(3) { linearToSrgb(srgbToLinear(rgb[it]) * k) }
+
+internal fun addMachiKonbiniInterior(m: MachiMesh, g: MachiMesh, palette: MachiPalette, shelfSeed: Long, stats: MutableMap<String, Int>) {
+    val L = MachiKonbiniLayout
+    fun art(k: String) = machiRgb(L.ART.getValue(k))
+    val shelf = art("shelf"); val dark = machiRgb(palette.darkMetal); val frame = art("frame"); val metal = machiRgb(palette.metal)
+    val random = MachiRng(shelfSeed)
+    val y = L.FLOOR_Y
+    val shelfSlots = ArrayList<KonbiniSlot>(); val bottleSlots = ArrayList<KonbiniSlot>(); val magazineSlots = ArrayList<KonbiniSlot>()
+    val xa = KONBINI_SHELF_XA; val xb = KONBINI_SHELF_XB; val half = KONBINI_SHELF_DEPTH / 2
+    // 货架：底座、中间背板、端板、端头小招牌、三层隔板；商品两面都摆（与骨架同一条随机序列，先填后建）。
+    for (z in KONBINI_SHELF_ROWS) {
+        for (side in intArrayOf(-1, 1)) for (level in KONBINI_SHELF_LEVELS) {
+            var x = xa + 0.06
+            while (x < xb - 0.12) {
+                val w = 0.1 + random.next() * 0.14; val h = 0.12 + random.next() * 0.16; val d = 0.18 + random.next() * 0.14
+                if (random.next() > 0.08) {
+                    shelfSlots += KonbiniSlot(x + w / 2, y + level, z + side * (half - d / 2 - 0.04), w, h, d, (random.next() * 8).toInt(), 0.82 + random.next() * 0.3)
+                }
+                x += w + 0.015 + random.next() * 0.03
+            }
+        }
+        m.box(xa, xb, y, y + 0.1, z - half, z + half, dark)
+        m.box(xa, xb, y + 0.1, y + KONBINI_SHELF_HEIGHT, z - 0.03, z + 0.03, shelf)
+        m.box(xa - 0.04, xa, y, y + KONBINI_SHELF_HEIGHT + 0.05, z - half, z + half, shelf)
+        m.box(xb, xb + 0.04, y, y + KONBINI_SHELF_HEIGHT + 0.05, z - half, z + half, shelf)
+        m.box(xb + 0.04, xb + 0.06, y + KONBINI_SHELF_HEIGHT - 0.3, y + KONBINI_SHELF_HEIGHT, z - half + 0.05, z + half - 0.05, machiRgb(palette.brand[0]))
+        for (level in KONBINI_SHELF_LEVELS.drop(1)) m.box(xa, xb, y + level - 0.025, y + level, z - half, z + half, shelf)
+        stats["gondola"] = (stats["gondola"] ?: 0) + 1
+    }
+    // 冰柜里的瓶子。
+    val fx0 = -4.92; val fx1 = -1.32; val fz0 = -5.2; val fz1 = -4.58; val fh = 2.05; val doors = 5
+    for (level in 0 until 5) {
+        val ly = y + 0.16 + level * 0.33
+        var x = fx0 + 0.1
+        while (x < fx1 - 0.14) {
+            val tall = 0.18 + random.next() * 0.07
+            bottleSlots += KonbiniSlot(x + 0.04, ly, fz0 + 0.32, 0.075, tall, 0.075, (random.next() * 8).toInt(), 0.85 + random.next() * 0.3)
+            x += 0.11 + random.next() * 0.02
+        }
+    }
+    // 冰柜：柜体、灯板（glow fridgeGlow = vendingLight × 1.5）、隔架、门框与把手、整面玻璃。
+    val body = art("fridgeBody")
+    m.box(fx0, fx1, y, y + fh, fz0, fz0 + 0.06, body)
+    m.box(fx0, fx0 + 0.06, y, y + fh, fz0, fz1, body)
+    m.box(fx1 - 0.06, fx1, y, y + fh, fz0, fz1, body)
+    m.box(fx0, fx1, y + fh - 0.22, y + fh, fz0, fz1, body)
+    m.box(fx0, fx1, y, y + 0.16, fz0, fz1, body)
+    m.planeRotY((fx0 + fx1) / 2, y + 0.16 + (fh - 0.38) / 2, fz0 + 0.065, fx1 - fx0 - 0.14, fh - 0.42, 0.0, machiRgb(palette.vendingLight), 1.5f)
+    for (level in 1..4) { val ly = y + 0.16 + level * 0.33; m.box(fx0 + 0.06, fx1 - 0.06, ly - 0.012, ly, fz0 + 0.06, fz1 - 0.05, metal) }
+    val dw = (fx1 - fx0) / doors
+    for (i in 0..doors) {
+        val x = fx0 + dw * i
+        m.box(x - 0.025, x + 0.025, y + 0.16, y + fh - 0.22, fz1 - 0.03, fz1 + 0.01, frame)
+        if (i < doors) m.box(x + dw - 0.1, x + dw - 0.08, y + 0.8, y + 1.3, fz1 + 0.01, fz1 + 0.04, frame)
+    }
+    g.planeRotY((fx0 + fx1) / 2, y + 0.16 + (fh - 0.38) / 2, fz1 - 0.005, fx1 - fx0 - 0.08, fh - 0.4, 0.0, machiRgb(palette.glass))
+    // 收银台：台身、色条、台面、收银机与小屏（glow screen = led × 1.3）、咖啡机、热食柜（glow snackCase = spillLight × 1.6）。
+    run {
+        val ca = -0.38; val cb = 0.18; val za = -2.55; val zb = -1.05
+        m.box(ca, cb, y, y + 0.95, za, zb, art("counter"))
+        m.box(ca - 0.01, ca + 0.01, y + 0.62, y + 0.72, za + 0.05, zb - 0.05, machiRgb(palette.brand[2]))
+        m.box(ca - 0.04, cb + 0.02, y + 0.95, y + 0.99, za - 0.02, zb + 0.02, art("trim"))
+        m.box(ca + 0.12, ca + 0.42, y + 0.99, y + 1.13, zb - 0.42, zb - 0.12, dark)
+        m.box(ca + 0.4, ca + 0.43, y + 1.1, y + 1.34, zb - 0.38, zb - 0.16, dark)
+        m.box(ca + 0.08, ca + 0.38, y + 0.99, y + 1.36, za + 0.12, za + 0.42, dark)
+        m.planeRotY(ca + 0.395, y + 1.22, zb - 0.27, 0.2, 0.14, -PI / 2, machiRgb(palette.led), 1.3f)
+        val spill = machiRgb(mcMixHex(L.ART.getValue("spillLight"), palette.interiorLight, 0.5))
+        m.box(ca + 0.06, ca + 0.5, y + 0.99, y + 1.3, za + 0.58, za + 1.02, spill, 1.6f)
+        m.box(ca + 0.04, ca + 0.52, y + 1.3, y + 1.34, za + 0.56, za + 1.04, dark)
+    }
+    // 杂志架、复印机、ATM（屏 glow screen）、员工门；杂志斜靠在架子上沿。
+    m.box(-4.45, -1.65, y, y + 0.9, 0.02, 0.28, shelf)
+    m.box(-5.18, -4.62, y, y + 1.12, -0.72, -0.08, art("acUnit"))
+    m.box(-5.2, -4.72, y, y + 1.5, -1.72, -1.02, dark)
+    m.box(-0.92, -0.08, y, y + 2.05, L.Z0 + L.WALL, L.Z0 + L.WALL + 0.04, frame)
+    m.planeRotY(-4.715 + 0.006, y + 1.12, -1.37, 0.3, 0.22, PI / 2, machiRgb(palette.led), 1.3f)
+    run {
+        var x = -4.38
+        while (x < -1.75) { magazineSlots += KonbiniSlot(x, y + 0.9, 0.15, 0.17, 0.24, 0.02, (random.next() * 8).toInt(), 0.9 + random.next() * 0.2); x += 0.2 + random.next() * 0.04 }
+    }
+    // 天花灯：三排灯条（glow ceilingLight = interiorLight × 2.4）。
+    val ceiling = machiRgb(palette.interiorLight)
+    for (z in doubleArrayOf(-0.7, -2.45, -4.0)) for (x in doubleArrayOf(-3.9, -2.2, -0.5)) {
+        m.box(x - 0.625, x + 0.625, L.WALL_HEIGHT - 0.06 - 0.025, L.WALL_HEIGHT - 0.06 + 0.025, z - 0.11, z + 0.11, ceiling, 2.4f)
+    }
+    // 商品（实例色 = products[color] × shade）：盒子、瓶子（8 棱柱）、杂志（绕 x 轴倾 −0.25）。
+    val products = palette.products.map { machiRgb(it) }
+    fun col(s: KonbiniSlot) = machiShade(products[s.color % products.size], s.shade)
+    shelfSlots.forEach { s -> m.box(s.x - s.w / 2, s.x + s.w / 2, s.y, s.y + s.h, s.z - s.d / 2, s.z + s.d / 2, col(s)) }
+    bottleSlots.forEach { s -> m.cylinderY(s.x, s.y, s.z, s.w / 2, s.h, col(s), segments = 8) }
+    val t = -0.25
+    magazineSlots.forEach { s ->
+        m.orientedBox(v3(s.x, s.y + s.h / 2, s.z), v3(1.0, 0.0, 0.0), v3(0.0, cos(t), sin(t)), v3(0.0, -sin(t), cos(t)), s.w / 2, s.h / 2, s.d / 2, col(s))
+    }
+    stats["product"] = shelfSlots.size; stats["bottle"] = bottleSlots.size; stats["magazine"] = magazineSlots.size
+}
+
+// ---- props.ts：贩卖机两台、空调外机四台、路灯、电线杆与电线、立柱灯箱、反光镜、停车标志、垃圾箱、A 字立牌；
+//      按歌变的自行车与伞（SongProps）。每件在本地坐标里搭好再摆（MachiFrame：three 的 position + rotation XYZ）。 ----
+
+/** 3×3 旋转（行主序）× 平移：本地坐标 → 世界。 */
+internal class MachiFrame(val m: MachiMesh, val o: DoubleArray = v3(0.0, 0.0, 0.0), val r: DoubleArray = doubleArrayOf(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)) {
+    fun dir(x: Double, y: Double, z: Double) = v3(r[0] * x + r[1] * y + r[2] * z, r[3] * x + r[4] * y + r[5] * z, r[6] * x + r[7] * y + r[8] * z)
+    fun pt(x: Double, y: Double, z: Double) = add(o, dir(x, y, z))
+    fun pt(p: DoubleArray) = pt(p[0], p[1], p[2])
+    /** 子坐标系：在本地 (x, y, z) 处，按 three Euler XYZ（R = Rx · Ry · Rz）转。 */
+    fun child(x: Double, y: Double, z: Double, rx: Double = 0.0, ry: Double = 0.0, rz: Double = 0.0): MachiFrame {
+        val local = mul(mul(rotX(rx), rotY(ry)), rotZ(rz))
+        return MachiFrame(m, pt(x, y, z), mul(r, local))
+    }
+    /** boxAt：底面中心在 at，尺寸 w × h × d，可绕本地 y 转。 */
+    fun boxAt(w: Double, h: Double, d: Double, x: Double, y: Double, z: Double, color: FloatArray, emissive: Float = 0f, rotY: Double = 0.0) {
+        val f = if (rotY != 0.0) child(x, y + h / 2, z, ry = rotY) else child(x, y + h / 2, z)
+        m.orientedBox(f.o, f.dir(1.0, 0.0, 0.0), f.dir(0.0, 1.0, 0.0), f.dir(0.0, 0.0, 1.0), w / 2, h / 2, d / 2, color, emissive)
+    }
+    /** 以 (x, y, z) 为中心的盒子。 */
+    fun boxC(w: Double, h: Double, d: Double, x: Double, y: Double, z: Double, color: FloatArray, emissive: Float = 0f) = boxAt(w, h, d, x, y - h / 2, z, color, emissive)
+    fun cylinderAt(radius: Double, h: Double, x: Double, y: Double, z: Double, color: FloatArray, rTop: Double = radius, segments: Int = 12, emissive: Float = 0f) =
+        m.ktube(pt(x, y, z), pt(x, y + h, z), radius, color, rTop, segments, emissive)
+    fun tube(a: DoubleArray, b: DoubleArray, radius: Double, color: FloatArray, segments: Int = 8, rEnd: Double = radius) = m.ktube(pt(a), pt(b), radius, color, rEnd, segments)
+    /** 本地 xy 平面上的圆环（TorusGeometry，轴沿本地 z）：中心 c，主半径 R，管半径 t。 */
+    fun torus(c: DoubleArray, big: Double, t: Double, color: FloatArray, segments: Int = 20) {
+        for (i in 0 until segments) {
+            val a0 = 2 * PI * i / segments; val a1 = 2 * PI * (i + 1) / segments
+            tube(v3(c[0] + cos(a0) * big, c[1] + sin(a0) * big, c[2]), v3(c[0] + cos(a1) * big, c[1] + sin(a1) * big, c[2]), t, color, 4)
+        }
+    }
+    /** 本地 xy 平面上的多边形（朝本地 +z），扇形三角。 */
+    fun polygon(pts: List<DoubleArray>, color: FloatArray, emissive: Float = 0f) {
+        val n = norm(dir(0.0, 0.0, 1.0)); val c = pt(pts.fold(v3(0.0, 0.0, 0.0)) { acc, p -> add(acc, p, 1.0 / pts.size) })
+        for (i in pts.indices) { val a = pt(pts[i]); val b = pt(pts[(i + 1) % pts.size]); m.quad(c, a, b, b, n, color, emissive) }
+    }
+    /** 本地竖直平面（PlaneGeometry，朝本地 +z）。 */
+    fun plane(w: Double, h: Double, x: Double, y: Double, z: Double, color: FloatArray, emissive: Float = 0f) =
+        polygon(listOf(v3(x - w / 2, y - h / 2, z), v3(x + w / 2, y - h / 2, z), v3(x + w / 2, y + h / 2, z), v3(x - w / 2, y + h / 2, z)), color, emissive)
+
+    companion object {
+        fun rotX(a: Double) = doubleArrayOf(1.0, 0.0, 0.0, 0.0, cos(a), -sin(a), 0.0, sin(a), cos(a))
+        fun rotY(a: Double) = doubleArrayOf(cos(a), 0.0, sin(a), 0.0, 1.0, 0.0, -sin(a), 0.0, cos(a))
+        fun rotZ(a: Double) = doubleArrayOf(cos(a), -sin(a), 0.0, sin(a), cos(a), 0.0, 0.0, 0.0, 1.0)
+        fun mul(a: DoubleArray, b: DoubleArray) = DoubleArray(9) { i -> val row = i / 3; val col = i % 3; a[row * 3] * b[col] + a[row * 3 + 1] * b[3 + col] + a[row * 3 + 2] * b[6 + col] }
+    }
+}
+
+/** 下垂的电线（sagWire：抛物线近似，16 段）。 */
+internal fun MachiMesh.sagWire(a: DoubleArray, b: DoubleArray, sag: Double, color: FloatArray, radius: Double = 0.012) {
+    var prev = a
+    for (i in 1..16) {
+        val t = i / 16.0
+        val p = v3(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - sag * 4 * t * (1 - t), a[2] + (b[2] - a[2]) * t)
+        ktube(prev, p, radius, color, segments = 4); prev = p
+    }
+}
+
+private val KONBINI_BIKE_COLORS = listOf("#c8423a", "#2f6db0", "#e7c64a", "#3f8f5a", "#e9e6dc", "#2a2d34")
+private val KONBINI_UMBRELLA_COLORS = listOf("#e8ecf2", "#2f6db0", "#d24d6e", "#3e4655", "#f0b23e")
+
+/** 招牌模块要贴字的面：中心 x, y, z、朝向、宽、高（立柱灯箱两面、A 字立牌一面、贩卖机陈列窗两块）。 */
+internal class MachiKonbiniPropFaces(val pylon: List<DoubleArray>, val aFrame: List<DoubleArray>, val vending: List<DoubleArray>)
+
+internal fun addMachiKonbiniProps(m: MachiMesh, palette: MachiPalette, seed: String, variation: MachiKonbiniVariation, stats: MutableMap<String, Int>): MachiKonbiniPropFaces {
+    val L = MachiKonbiniLayout
+    val world = MachiFrame(m)
+    fun art(k: String) = machiRgb(L.ART.getValue(k))
+    val dark = machiRgb(palette.darkMetal); val metal = machiRgb(palette.metal); val rubber = machiRgb(palette.rubber)
+    val white = floatArrayOf(1f, 1f, 1f); val trim = art("trim"); val acBody = art("acUnit")
+    val lot = L.LOT_Y
+    val products = palette.products.map { machiRgb(it) }
+    // 自动贩卖机（正面朝本地 +z，底面中心在原点），立在店右墙外，转 90° 朝 +x。
+    val vw = 1.0; val vd = 0.74; val vh = 1.83; val vx = 0.82
+    val vendingFaces = ArrayList<DoubleArray>()
+    for (z in doubleArrayOf(-3.25, -4.3)) {
+        val f = world.child(vx + vd / 2 + 0.02, lot, z, ry = PI / 2)
+        f.boxAt(vw, vh, vd, 0.0, 0.0, 0.0, machiRgb(palette.vendingBody))
+        f.boxAt(vw + 0.04, 0.08, vd + 0.04, 0.0, 0.0, 0.0, dark)
+        f.boxAt(vw - 0.08, 0.06, 0.02, 0.0, vh - 0.12, vd / 2, machiRgb(palette.vendingAccent))
+        f.boxAt(vw - 0.3, 0.2, 0.04, -0.08, 0.16, vd / 2 - 0.01, dark)
+        f.boxAt(0.18, 0.42, 0.03, vw / 2 - 0.17, 0.62, vd / 2, metal)
+        val wh = 0.86
+        f.plane(vw - 0.12, wh, 0.0, vh - 0.2 - wh / 2, vd / 2 - 0.05, machiRgb(palette.vendingLight), 1.7f)
+        for (i in 0 until 16) {
+            val row = i / 8
+            f.boxC(0.05, 0.022, 0.02, -vw / 2 + 0.1 + (i % 8) * ((vw - 0.2) / 7), vh - 0.2 - (if (row == 0) 0.42 else wh + 0.05), vd / 2 - 0.02, machiRgb(palette.brand[0]), 1.0f)
+        }
+        for (row in 0 until 2) for (col in 0 until 8) {
+            val c = products[(col + row * 3) % 8 % products.size]
+            f.cylinderAt(0.035, 0.14, -vw / 2 + 0.1 + col * ((vw - 0.2) / 7), vh - 0.2 - wh + 0.08 + row * 0.44, vd / 2 - 0.12, machiShade(c, 1.1), segments = 8)
+        }
+        vendingFaces += doubleArrayOf(vx + vd / 2 + 0.02 + vd / 2 + 0.004, lot + vh - 0.2 - 0.43, z, PI / 2, vw - 0.12, 0.86)
+        stats["vending"] = (stats["vending"] ?: 0) + 1
+    }
+    // 空调外机：屋顶两台、侧墙两台（风扇叶先按静止摆，转动后接）。
+    fun acUnit(f: MachiFrame) {
+        f.boxAt(0.82, 0.62, 0.3, 0.0, 0.04, 0.0, acBody)
+        f.boxAt(0.86, 0.04, 0.34, 0.0, 0.0, 0.0, dark)
+        f.tube(v3(-0.12, 0.36, 0.14), v3(-0.12, 0.36, 0.16), 0.22, dark, 20)
+        val fan = f.child(-0.12, 0.36, 0.165)
+        for (i in 0 until 3) { val a = i * 2 * PI / 3; fan.child(cos(a) * 0.09, sin(a) * 0.09, 0.0, rz = a).boxC(0.18, 0.07, 0.01, 0.0, 0.0, 0.0, metal) }
+        f.boxAt(0.04, 0.3, 0.04, 0.32, 0.1, -0.14, dark)
+        stats["ac"] = (stats["ac"] ?: 0) + 1
+    }
+    acUnit(world.child(-0.1, L.ROOF_TOP, -4.75))
+    acUnit(world.child(-4.85, L.ROOF_TOP, -0.35, ry = PI / 2))
+    for (z in doubleArrayOf(-2.0, -3.1)) acUnit(world.child(-5.7, lot, z, ry = -PI / 2))
+    // 路灯：锥形灯杆、两段灯臂、灯头、底面发光（glow lampHead = streetLight × 3.2）。
+    run {
+        val f = world.child(L.LAMP_X, 0.0, L.LAMP_Z)
+        val hgt = L.LAMP_HEIGHT; val arm = L.LAMP_ARM
+        f.cylinderAt(0.085, hgt, 0.0, lot, 0.0, metal, rTop = 0.055, segments = 10)
+        f.cylinderAt(0.12, 0.3, 0.0, lot, 0.0, dark, segments = 10)
+        f.tube(v3(0.0, lot + hgt - 0.15, 0.0), v3(-arm * 0.55, lot + hgt + 0.12, 0.0), 0.04, metal)
+        f.tube(v3(-arm * 0.55, lot + hgt + 0.12, 0.0), v3(-arm, lot + hgt + 0.08, 0.0), 0.04, metal)
+        f.boxAt(0.56, 0.1, 0.24, -arm - 0.12, lot + hgt, 0.0, dark)
+        // 灯罩朝下（PlaneGeometry 绕 x 转 +90° 朝 −y）。
+        f.child(-arm - 0.12, lot + hgt - 0.003, 0.0, rx = PI / 2).plane(0.46, 0.16, 0.0, 0.0, 0.0, machiRgb(palette.streetLight), 3.2f)
+    }
+    // 电线杆：混凝土杆、黄黑护套、变压器、两层横担与瓷瓶；电线往后、往前出底座，另一根接到店的前左角。
+    run {
+        val x = -5.3; val z = 1.96; val hgt = 7.6; val top = lot + hgt
+        world.cylinderAt(0.15, hgt, x, lot, z, machiRgb(palette.pole), rTop = 0.11, segments = 14)
+        world.cylinderAt(0.165, 1.6, x, lot, z, machiRgb(palette.caution), segments = 14)
+        world.cylinderAt(0.2, 0.62, x + 0.32, top - 2.2, z, acBody, segments = 12)
+        world.tube(v3(x, top - 1.9, z), v3(x + 0.32, top - 1.9, z), 0.03, dark)
+        val ins = ArrayList<DoubleArray>()
+        for ((level, yy) in listOf(top - 0.7, top - 0.25).withIndex()) {
+            val span = if (level == 0) 0.9 else 1.2
+            m.box(x - span / 2, x + span / 2, yy - 0.05, yy + 0.05, z - 0.06, z + 0.06, dark)
+            for (off in doubleArrayOf(-span / 2 + 0.08, 0.0, span / 2 - 0.08)) { if (off == 0.0 && level == 1) continue; ins += v3(x + off, yy + 0.05, z) }
+        }
+        val wire = machiRgb(palette.wire)
+        ins.forEachIndexed { i, p ->
+            world.cylinderAt(0.04, 0.1, p[0], p[1], p[2], white, rTop = 0.025, segments = 8)
+            val end = v3(p[0], p[1] + 0.09, p[2])
+            m.sagWire(end, v3(end[0] + (i - 2) * 0.03, end[1] - 0.3, -L.BASE_HALF), 0.55 + i * 0.04, wire)
+            m.sagWire(end, v3(end[0] + (i - 2) * 0.03, end[1] - 0.2, L.BASE_HALF), 0.35 + i * 0.03, wire)
+        }
+        m.sagWire(v3(x + 0.1, top - 2.6, z), v3(L.X0 + 0.1, L.PARAPET_TOP - 0.1, L.Z1 - 0.1), 0.35, wire, 0.01)
+        world.boxAt(0.03, 0.42, 0.14, x + 0.15, lot + 1.9, z, machiRgb(palette.brand[2]))
+        stats["insulator"] = ins.size
+    }
+    // 立柱灯箱：两根立柱托着双面灯箱，转 45°。
+    val pylonFaces = ArrayList<DoubleArray>()
+    run {
+        val bw = 1.35; val bh = 1.25; val bd = 0.32; val hgt = L.PYLON_HEIGHT; val rot = 45 * MACHI_DEG
+        val f = world.child(L.PYLON_X, 0.0, L.PYLON_Z, ry = rot)
+        f.boxAt(0.12, hgt - bh, 0.12, -0.42, lot, 0.0, dark)
+        f.boxAt(0.12, hgt - bh, 0.12, 0.42, lot, 0.0, dark)
+        f.boxAt(bw, bh, bd, 0.0, lot + hgt - bh, 0.0, machiRgb(palette.signBase))
+        f.boxAt(bw + 0.04, 0.1, bd + 0.04, 0.0, lot + hgt - 0.04, 0.0, machiRgb(palette.brand[0]))
+        f.boxAt(bw + 0.02, 0.07, bd + 0.02, 0.0, lot + hgt - bh, 0.0, machiRgb(palette.brand[2]))
+        f.boxAt(1.0, 0.18, 0.4, 0.0, lot, 0.0, machiRgb(palette.concrete))
+        val cy = lot + hgt - bh / 2 - 0.02
+        for (turn in doubleArrayOf(0.0, PI)) {
+            val s = if (turn == 0.0) 1.0 else -1.0
+            pylonFaces += doubleArrayOf(L.PYLON_X + sin(rot) * s * (bd / 2 + 0.006), cy, L.PYLON_Z + cos(rot) * s * (bd / 2 + 0.006), rot + turn, bw - 0.12, bh - 0.22)
+        }
+    }
+    // 反光镜：橙色立杆、支架、圆镜（朝 125°、前倾 12°）。
+    run {
+        val pole = art("mirrorPole"); val x = -1.2; val z = 5.74; val hgt = 2.7
+        val f = world.child(x, 0.0, z)
+        f.cylinderAt(0.035, hgt, 0.0, lot, 0.0, pole, segments = 8)
+        f.tube(v3(0.0, lot + hgt - 0.1, 0.0), v3(0.2, lot + hgt - 0.1, -0.14), 0.025, pole)
+        val mf = f.child(0.26, lot + hgt - 0.1, -0.18, ry = 125 * MACHI_DEG).child(0.0, 0.0, 0.0, rx = -12 * MACHI_DEG)
+        mf.torus(v3(0.0, 0.0, 0.0), 0.3, 0.035, pole, 16)
+        mf.polygon(List(16) { i -> v3(cos(2 * PI * i / 16) * 0.29, sin(2 * PI * i / 16) * 0.29, 0.0) }, metal)
+    }
+    // 停车标志：倒三角红牌、白边，转 60°。
+    run {
+        val f = world.child(1.95, 0.0, 5.74, ry = 60 * MACHI_DEG); val hgt = 2.4; val r = 0.36
+        f.cylinderAt(0.03, hgt, 0.0, lot, 0.0, metal, segments = 8)
+        val tri = List(3) { i -> val a = -PI / 2 + i * 2 * PI / 3; v3(cos(a) * r, sin(a) * r, 0.0) }
+        val back = f.child(0.0, lot + hgt - 0.15, 0.03)
+        back.polygon(tri.map { v3(it[0] * 1.08, it[1] * 1.08, 0.04) }, white)
+        back.child(0.0, 0.0, 0.0, ry = PI).polygon(tri.map { v3(-it[0] * 1.08, it[1] * 1.08, 0.0) }, white)
+        f.child(0.0, lot + hgt - 0.15 - 0.012, 0.08).polygon(tri.map { v3(it[0] * 0.86, it[1] * 0.86, 0.0) }, machiRgb(palette.stopRed))
+    }
+    // 分类垃圾箱：三个，盖子是招牌色。
+    listOf(machiRgb(palette.brand[0]), machiRgb(palette.brand[2]), trim).forEachIndexed { i, lid ->
+        world.boxAt(0.34, 0.82, 0.36, -3.55 + (i - 1) * 0.37, lot, 0.68, acBody)
+        world.boxAt(0.36, 0.08, 0.38, -3.55 + (i - 1) * 0.37, lot + 0.82, 0.68, lid)
+    }
+    // A 字立牌：两块斜靠的板，转 30°。
+    val aFrameFaces = ArrayList<DoubleArray>()
+    run {
+        val lean = 12 * MACHI_DEG; val bw = 0.56; val bh = 0.82; val rot = 30 * MACHI_DEG
+        val f = world.child(0.95, 0.0, 1.15, ry = rot)
+        for (side in intArrayOf(1, -1)) f.child(0.0, lot + cos(lean) * bh / 2, side * sin(lean) * bh / 2, rx = side * -lean).boxC(bw, bh, 0.03, 0.0, 0.0, 0.0, dark)
+        val off = sin(lean) * bh / 2 + 0.02
+        aFrameFaces += doubleArrayOf(0.95 + sin(rot) * off, lot + cos(lean) * bh / 2, 1.15 + cos(rot) * off, rot, bw - 0.06, bh - 0.08, lean)
+    }
+    // 按歌变的：自行车（一到两辆）、伞架里的伞、地上晾着的伞。
+    val bikeColor = machiRgb(KONBINI_BIKE_COLORS[machiSeedIndex(seed, "bike", KONBINI_BIKE_COLORS.size)])
+    val umbrella = machiRgb(KONBINI_UMBRELLA_COLORS[machiSeedIndex(seed, "umbrella", KONBINI_UMBRELLA_COLORS.size)])
+    fun bicycle(f0: MachiFrame) {
+        val f = f0.child(0.0, 0.0, 0.0, rx = -4 * MACHI_DEG)
+        val wr = 0.33; val rearX = -0.55; val frontX = 0.58; val axleY = wr + 0.03
+        for (wx in doubleArrayOf(rearX, frontX)) {
+            val c = v3(wx, axleY, 0.0)
+            f.torus(c, wr, 0.028, rubber, 20)
+            f.torus(c, wr - 0.03, 0.01, metal, 16)
+            f.tube(v3(wx, axleY, -0.045), v3(wx, axleY, 0.045), 0.03, metal)
+            for (i in 0 until 6) { val a = i * PI / 6; val rr = wr - 0.03; f.tube(v3(wx + cos(a) * rr, axleY + sin(a) * rr, 0.0), v3(wx - cos(a) * rr, axleY - sin(a) * rr, 0.0), 0.004, metal, 3) }
+        }
+        val bb = v3(-0.05, 0.3, 0.0); val seatTop = v3(-0.25, 0.86, 0.0); val headTop = v3(0.42, 0.95, 0.0); val headLow = v3(0.48, 0.66, 0.0)
+        f.tube(bb, seatTop, 0.022, bikeColor); f.tube(bb, headLow, 0.026, bikeColor); f.tube(headLow, headTop, 0.024, bikeColor)
+        f.tube(bb, v3(rearX, axleY, 0.05), 0.014, bikeColor); f.tube(v3(-0.22, 0.78, 0.0), v3(rearX, axleY, 0.05), 0.014, bikeColor)
+        f.tube(headLow, v3(frontX, axleY, 0.0), 0.016, metal)
+        f.boxC(0.24, 0.06, 0.13, seatTop[0] - 0.02, seatTop[1], 0.0, rubber)
+        f.tube(v3(headTop[0] - 0.12, headTop[1] + 0.08, -0.26), v3(headTop[0] - 0.12, headTop[1] + 0.08, 0.26), 0.014, metal)
+        f.tube(headTop, v3(headTop[0] - 0.1, headTop[1] + 0.08, 0.0), 0.016, metal)
+        f.boxC(0.42, 0.09, 0.025, -0.28, 0.28, 0.07, bikeColor)
+        f.boxC(0.38, 0.02, 0.2, rearX - 0.02, axleY + 0.36, 0.0, metal)
+        f.boxC(0.32, 0.22, 0.3, frontX + 0.04, 0.82, 0.0, metal)
+        f.tube(v3(rearX + 0.1, axleY - 0.05, 0.04), v3(rearX + 0.25, 0.01, 0.14), 0.01, metal)
+        stats["bike"] = (stats["bike"] ?: 0) + 1
+    }
+    val slots = listOf(doubleArrayOf(-4.5, 1.32), doubleArrayOf(-2.85, 1.36))
+    val first = slots[variation.bikeSlot]
+    bicycle(world.child(first[0], lot, first[1], ry = PI + variation.bikeYaw))
+    if (variation.secondBike) { val o = slots[1 - variation.bikeSlot]; bicycle(world.child(o[0], lot, o[1] + 0.05, ry = PI - variation.bikeYaw * 0.7)) }
+    run {
+        val x = -1.62; val z = 0.68
+        val f = world.child(x, 0.0, z)
+        f.boxAt(0.36, 0.5, 0.22, 0.0, lot, 0.0, metal)
+        if (variation.umbrellaInStand) doubleArrayOf(-0.09, 0.04, 0.11).forEachIndexed { i, off ->
+            // ConeGeometry(0.05, 0.72) 倒过来插着：中心在 lot + 0.4，尖朝下。
+            val cf = f.child(off, lot + 0.4, (i - 1) * 0.04, rx = PI, rz = (i - 1) * 0.12)
+            cf.tube(v3(0.0, -0.36, 0.0), v3(0.0, 0.36, 0.0), 0.05, if (i == 1) trim else umbrella, 8, 0.0)
+        }
+        if (variation.openUmbrella) {
+            val of = world.child(x - 0.75, lot + 0.32, z + 0.55, rx = 0.9, ry = 0.6, rz = 0.4)
+            of.tube(v3(0.0, -0.14, 0.0), v3(0.0, 0.14, 0.0), 0.48, umbrella, 8, 0.0)
+            of.tube(v3(0.0, 0.14, 0.0), v3(0.0, -0.45, 0.0), 0.01, dark)
+        }
+    }
+    return MachiKonbiniPropFaces(pylonFaces, aFrameFaces, vendingFaces)
 }
