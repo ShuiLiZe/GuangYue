@@ -276,7 +276,8 @@ fun V0cStage(
                 secondaryColor = Color(0xFF71717A),
                 accentColor = Color(0xFFF4F4F5),
                 seed = "probe-0",
-                songTitle = "晴天",
+                // Folia 探针不给曲名（招牌落到「歌手」「KOWLOON」），这里同样留空。
+                songTitle = "",
                 // machirain：雨天（湿路面 + 水洼倒影，MachiWet.kt）取证；machisnow：雪。
                 weather = when (style) { "machirain" -> "rain"; "machisnow" -> "snow"; else -> "auto" },
                 restCamera = true,

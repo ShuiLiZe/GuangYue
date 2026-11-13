@@ -60,6 +60,9 @@ uniform vec3 uSun;
 uniform vec3 uHemiSky;
 uniform vec3 uHemiGround;
 uniform float uArtificial;
+// 亮窗（kowloonScene：litMaterial = (0.28 + 0.6 smoothNight(daylight)) × warm，不乘 artificial）。网格里亮窗的自发光烘成 MACHI_WINDOW_LEVEL（0.88），按它认出来。
+uniform float uWindowLevel;
+float emission() { return abs(vEmi - 0.88) < 0.0005 ? uWindowLevel : uArtificial * vEmi; }
 // 积雪（snow.ts）：朝上的面按 积雪量 × 朝上程度 × 噪声 混成雪色（光照之前改底色）；屋顶下面不积。
 uniform float uMachiSnow;
 uniform vec3 uMachiSnowColor;
@@ -94,7 +97,7 @@ void main() {
     // 倒影 pass（MachiWet.kt）：只有亮的东西映得出，其余写黑当遮挡；贴地的面（含路面本身）丢掉。
     if (uReflectPass == 1) {
         if (vY < uGroundY + 0.01) discard;
-        fragColor = vec4(albedo * uArtificial * vEmi, 1.0);
+        fragColor = vec4(albedo * emission(), 1.0);
         return;
     }
     if (uMachiSnow > 0.001 && vEmi < 0.001) {
@@ -114,7 +117,7 @@ void main() {
         $MACHI_WET_OUTPUT
     }
     // 自发光（materials.ts glow：MeshBasicMaterial，颜色 × spec.level × setGlowLevel）：aEmi 就是 level，不再与受光色混合。
-    fragColor = vec4(vEmi > 0.001 ? albedo * uArtificial * vEmi : lit, 1.0);
+    fragColor = vec4(vEmi > 0.001 ? albedo * emission() : lit, 1.0);
 }
 """
 
@@ -163,6 +166,11 @@ internal class MachiNightLight(
     val hemiSky = lin(palette.hemiSky, look.hemiIntensity)
     // 积雪的地面反光已在 palette.hemiGround 里（applyEnvironmentColors）。
     val hemiGround = lin(palette.hemiGround, look.hemiIntensity)
+    /** 亮窗亮度（kowloonScene.ts：(0.28 + 0.6 smoothNight) × beat.warm；鼓点未接，warm = 1）。夜里 0.88。 */
+    val windowLevel: Double = run {
+        val t = ((0.65 - state.daylight) / 0.45).coerceIn(0.0, 1.0)
+        0.28 + 0.6 * t * t * (3 - 2 * t)
+    }
     /** 薄雾色 = skyBottom × (1.35 − 0.4 daylight)。 */
     val mistColor: FloatArray = machiLinear(palette.skyBottom, 1.35 - 0.4 * state.daylight)
     /** 云：夜里 lerp(skyBottom, moon, 0.25) × 0.7，白天 lerp(skyBottom, 白, 0.55 − 0.25 overcast) × 0.55，按 daylight 混。 */
@@ -343,6 +351,7 @@ private class MachiRenderer(
         GLES30.glUniform3fv(u("uHemiSky"), 1, FloatArray(3) { light.hemiSky[it] * hemiK }, 0)
         GLES30.glUniform3fv(u("uHemiGround"), 1, FloatArray(3) { light.hemiGround[it] * hemiK }, 0)
         GLES30.glUniform1f(u("uArtificial"), light.look.artificial.toFloat())
+        GLES30.glUniform1f(u("uWindowLevel"), light.windowLevel.toFloat())
         GLES30.glUniform1f(u("uMachiSnow"), light.state.snowCover.toFloat())
         GLES30.glUniform3fv(u("uMachiSnowColor"), 1, snowCoverColor, 0)
         GLES30.glUniform4fv(u("uMachiRoofs"), 4, roofRects, 0)
