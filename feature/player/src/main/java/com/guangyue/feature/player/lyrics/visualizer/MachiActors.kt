@@ -291,6 +291,7 @@ uniform float uWind;
 uniform float uPhase;
 out vec2 vUv;
 out vec3 vNor;
+out vec3 vWorld;
 void main() {
     // 布面沿本地 +x 从旗杆往外，离旗杆越远摆幅越大（nobori.ts WAVE_VERTEX）。
     vec3 p = vec3(aPos, 0.0);
@@ -300,7 +301,9 @@ void main() {
     p.x -= abs(wave) * u * 0.012;
     vUv = vec2(aPos.x / ${FLAG_W}, 1.0 - aPos.y / ${FLAG_H});
     vNor = mat3(uModel) * vec3(0.0, 0.0, 1.0);
-    gl_Position = uVP * uModel * vec4(p.x, p.y + ${FLAG_BOTTOM}, p.z, 1.0);
+    vec4 world = uModel * vec4(p.x, p.y + ${FLAG_BOTTOM}, p.z, 1.0);
+    vWorld = world.xyz;
+    gl_Position = uVP * world;
 }
 """
 
@@ -308,7 +311,14 @@ private const val NOBORI_FS = """#version 300 es
 precision highp float;
 in vec2 vUv;
 in vec3 vNor;
+in vec3 vWorld;
 uniform sampler2D uTex;
+uniform int uLightCount;
+uniform vec3 uLightPos[6];
+uniform vec3 uLightColor[6];
+uniform float uLightDist[6];
+uniform vec3 uSpotDir[6];
+uniform vec2 uSpotCos[6];
 uniform vec3 uSunDir;
 uniform vec3 uSun;
 uniform vec3 uHemiSky;
@@ -324,10 +334,25 @@ void main() {
     vec3 albedo = toLinear(texture(uTex, vUv).rgb);
     vec3 n = normalize(gl_FrontFacing ? vNor : -vNor);
     vec3 irr = mix(uHemiGround, uHemiSky, 0.5 * n.y + 0.5) + uSun * toonStep(dot(n, uSunDir));
+    // 场景点光 / 聚光（路灯、店招灯）照旗面：与主着色器同一套衰减（physicallyCorrect 1/d² × (1−(d/dist)⁴)²）与 toon 阶梯。
+    for (int i = 0; i < 6; i++) {
+        if (i >= uLightCount) break;
+        vec3 toL = uLightPos[i] - vWorld;
+        float d = length(toL);
+        vec3 l = toL / max(d, 1e-4);
+        float fall = 1.0 / max(d * d, 0.01);
+        float cut = clamp(1.0 - pow(d / uLightDist[i], 4.0), 0.0, 1.0);
+        fall *= cut * cut;
+        if (uSpotCos[i].x > -1.5) fall *= smoothstep(uSpotCos[i].x, uSpotCos[i].y, dot(-l, uSpotDir[i]));
+        irr += uLightColor[i] * fall * toonStep(dot(n, l));
+    }
     // MeshToonMaterial(map) + emissive 0.18 × emissiveMap。
     fragColor = vec4(albedo * irr / 3.14159265 + albedo * 0.18, 1.0);
 }
 """
+
+/** 主着色器那组场景灯的 uniform 数组（最多 6 盏），供旗面等独立着色器复用。 */
+internal class MachiPointLights(val count: Int, val pos: FloatArray, val color: FloatArray, val dist: FloatArray, val spotDir: FloatArray, val spotCos: FloatArray)
 
 internal class MachiNobori(private val spots: List<MachiNoboriSpot>, private val faces: List<MachiNoboriFace>) {
     private var program = 0
@@ -365,7 +390,8 @@ internal class MachiNobori(private val spots: List<MachiNoboriSpot>, private val
     }
 
     /** wind = 0.35 + 0.65 × min(1, rain)。 */
-    fun draw(vp: FloatArray, time: Double, wind: Double, light: MachiNightLight) {
+    /** lights：与主着色器同一组点光 / 聚光（数量、位置、颜色、距离、聚光方向、聚光余弦）；null = 不打点光。 */
+    fun draw(vp: FloatArray, time: Double, wind: Double, light: MachiNightLight, lights: MachiPointLights? = null) {
         if (program == 0) return
         GLES30.glUseProgram(program)
         fun u(n: String) = GLES30.glGetUniformLocation(program, n)
@@ -376,6 +402,15 @@ internal class MachiNobori(private val spots: List<MachiNoboriSpot>, private val
         GLES30.glUniform3fv(u("uSun"), 1, light.sun, 0)
         GLES30.glUniform3fv(u("uHemiSky"), 1, light.hemiSky, 0)
         GLES30.glUniform3fv(u("uHemiGround"), 1, light.hemiGround, 0)
+        val nl = lights?.count ?: 0
+        GLES30.glUniform1i(u("uLightCount"), nl)
+        if (lights != null && nl > 0) {
+            GLES30.glUniform3fv(u("uLightPos"), 6, lights.pos, 0)
+            GLES30.glUniform3fv(u("uLightColor"), 6, lights.color, 0)
+            GLES30.glUniform1fv(u("uLightDist"), 6, lights.dist, 0)
+            GLES30.glUniform3fv(u("uSpotDir"), 6, lights.spotDir, 0)
+            GLES30.glUniform2fv(u("uSpotCos"), 6, lights.spotCos, 0)
+        }
         GLES30.glUniform1i(u("uTex"), 0)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glDisable(GLES30.GL_CULL_FACE)

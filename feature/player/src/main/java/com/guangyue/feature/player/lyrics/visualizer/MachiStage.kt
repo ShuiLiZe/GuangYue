@@ -811,7 +811,8 @@ private class MachiRenderer(
         if (poolCount > 0) drawMesh(vp, reflectPass = false, wet = false, pools = true)
         drawActorOverlays(vp)
         // のぼり旗（nobori.ts）：wind = 0.35 + 0.65 × min(1, rain)。
-        setup.nobori?.draw(vp, ambient, 0.35 + 0.65 * kotlin.math.min(1.0, resolveMachiRainAmount(light.state.rain)), light)
+        setup.nobori?.draw(vp, ambient, 0.35 + 0.65 * kotlin.math.min(1.0, resolveMachiRainAmount(light.state.rain)), light,
+            MachiPointLights(kotlin.math.min(6, setup.lights.size), lightPos, lightColor, lightDist, spotDir, spotCos))
         // 便利店贴图牌面：窗内霓虹 × (0.85 + 0.15 sin(2.2 ambient) + 0.4 chorus)（konbiniSigns update）。
         setup.decals?.let { d ->
             if (konbini) d.gain[2] = 0.85 + 0.15 * kotlin.math.sin(ambient * 2.2) + 0.4 * resolveMachiChorus(lines, target)
