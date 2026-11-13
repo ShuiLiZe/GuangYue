@@ -45,6 +45,8 @@ void main() {
 }
 """
 
+private val MACHI_WET_PARS_K = MACHI_WET_PARS.replace("+ uPuddleBias", "+ machiBias")
+
 private val MACHI_FS = """#version 300 es
 precision highp float;
 in vec3 vCol;
@@ -68,8 +70,14 @@ uniform float uMachiSnow;
 uniform vec3 uMachiSnowColor;
 uniform vec4 uMachiRoofs[4];
 uniform float uMachiRoofY[4];
+// 透明玻璃（materials.ts glass：opacity 0.2，不写深度）；不透明件为 1。
+uniform float uAlpha;
+// 第二层湿地面（便利店：路面 asphalt 在 y≈0、场地 concrete 在 y≈0.12，puddleBias 各自）。
+uniform float uGroundY2;
+uniform float uPuddleBias2;
+float machiBias;
 out vec4 fragColor;
-$MACHI_WET_PARS
+$MACHI_WET_PARS_K
 float machiSnowHash(vec2 p) { return fract(sin(dot(p, vec2(41.7, 289.3))) * 43758.5453); }
 float machiSnowNoise(vec2 p) {
     vec2 i = floor(p);
@@ -97,7 +105,7 @@ void main() {
     // 倒影 pass（MachiWet.kt）：只有亮的东西映得出，其余写黑当遮挡；贴地的面（含路面本身）丢掉。
     if (uReflectPass == 1) {
         if (vY < uGroundY + 0.01) discard;
-        fragColor = vec4(albedo * emission(), 1.0);
+        fragColor = vec4(albedo * emission(), uAlpha);
         return;
     }
     if (uMachiSnow > 0.001 && vEmi < 0.001) {
@@ -111,13 +119,15 @@ void main() {
     vec3 irradiance = mix(uHemiGround, uHemiSky, w) + directLight;
     vec3 lit = albedo * irradiance / 3.14159265;
     // 湿路面（ground.ts OUTPUT）：只在贴地朝上的路面上。
-    if (uWetOn == 1 && n.y > 0.9 && abs(vY - uGroundY) < 0.012 && vEmi < 0.01) {
+    bool machiOnB = abs(vY - uGroundY2) < 0.012;
+    machiBias = machiOnB ? uPuddleBias2 : uPuddleBias;
+    if (uWetOn == 1 && uAlpha > 0.99 && n.y > 0.9 && (abs(vY - uGroundY) < 0.012 || machiOnB) && vEmi < 0.01) {
         float direct = dot(albedo * directLight / 3.14159265, vec3(0.299, 0.587, 0.114));
         vec2 screenUv = gl_FragCoord.xy / uSceneSize;
         $MACHI_WET_OUTPUT
     }
     // 自发光（materials.ts glow：MeshBasicMaterial，颜色 × spec.level × setGlowLevel）：aEmi 就是 level，不再与受光色混合。
-    fragColor = vec4(vEmi > 0.001 ? albedo * emission() : lit, 1.0);
+    fragColor = vec4(vEmi > 0.001 ? albedo * emission() : lit, uAlpha);
 }
 """
 
@@ -226,21 +236,70 @@ internal fun machiEnvironmentPalette(base: MachiPalette, state: MachiEnvironment
     )
 }
 
+/**
+ * 一个场景交给渲染器的东西（scenes/types.ts MachiScene 的子集）：网格、玻璃、构图、招牌（可空）、光柱、天气布置、
+ * 雾里两处灯的位置、湿地面的高度与 puddleBias、倒影平面。[kind] 区分各场景自己的灯光调度（kowloon / konbini）。
+ */
+internal class MachiSceneSetup(
+    val kind: String,
+    val mesh: FloatArray,
+    val glass: FloatArray?,
+    val framing: List<MachiVec3>,
+    val view: MachiView,
+    val signs: MachiKowloonSigns?,
+    val cones: List<MachiLightConeSpec>,
+    val puddles: MachiPuddles,
+    val weather: MachiWeatherLayout,
+    val glowA: FloatArray,
+    val glowB: FloatArray,
+    val mirrorY: Double,
+    val wetY: Double,
+    val wetBias: Double,
+    val wetY2: Double = -100.0,
+    val wetBias2: Double = 0.0,
+)
+
+internal fun machiKowloonSetup(palette: MachiPalette, seed: String, title: String, artist: String): MachiSceneSetup {
+    val model = buildMachiKowloon(seed)
+    val w = resolveMachiKowloonWeather(seed, model.drips)
+    return MachiSceneSetup(
+        kind = "kowloon", mesh = model.mesh, glass = null, framing = machiKowloonFramingPoints(), view = MachiKowloonLayout.VIEW,
+        signs = MachiKowloonSigns(palette, title, artist, seed, model.signs), cones = machiKowloonLightCones(), puddles = w.first, weather = w.second,
+        glowA = floatArrayOf(-2.0f, 0f, 1.0f, 3.4f), glowB = floatArrayOf(MachiKowloonLayout.SCREEN_X.toFloat(), 0f, (-1.5 + 0.8).toFloat(), 3.0f),
+        mirrorY = MACHI_KOWLOON_GROUND_Y, wetY = MACHI_KOWLOON_GROUND_Y, wetBias = 0.08,
+    )
+}
+
+/** 便利店：路面 asphalt（y = 0，bias 0）与场地 concrete（y = 0.12，bias 0.08）都是湿地面；倒影平面 0.06。 */
+internal fun machiKonbiniSetup(palette: MachiPalette, seed: String): MachiSceneSetup {
+    val model = buildMachiKonbini(palette, seed)
+    val w = resolveMachiKonbiniWeather(seed)
+    val glows = machiKonbiniGlows()
+    return MachiSceneSetup(
+        kind = "konbini", mesh = model.mesh, glass = model.glass, framing = machiKonbiniFramingPoints(), view = MachiKonbiniLayout.VIEW,
+        signs = null, cones = machiKonbiniLightCones(), puddles = w.first, weather = w.second, glowA = glows.first, glowB = glows.second,
+        mirrorY = MachiKonbiniLayout.REFLECT_Y, wetY = MachiKonbiniLayout.ROAD_Y + 0.002, wetBias = 0.0,
+        wetY2 = MachiKonbiniLayout.LOT_Y + 0.002, wetBias2 = 0.08,
+    )
+}
+
 private class MachiRenderer(
-    private val mesh: FloatArray,
+    private val setup: MachiSceneSetup,
     private val light: MachiNightLight,
     private val rig: MachiCameraRig,
     private val timeSeconds: () -> Double,
     private val lines: List<Line>,
-    private val signs: MachiKowloonSigns,
     private val seed: String,
-    private val puddles: MachiPuddles,
-    private val weatherLayout: MachiWeatherLayout,
     /** 取证用：镜头停在静止位（Folia 探针 renderAt 刚挂上时运镜幅度为 0）。 */
     private val restCamera: Boolean = false,
     /** 播放暂停时氛围时间停住（clock.ts：雨、涟漪、滴水、闪烁、运镜都定格）。 */
     private val paused: () -> Boolean = { false },
 ) : GLSurfaceView.Renderer {
+    private val mesh = setup.mesh
+    private val signs = setup.signs
+    private val puddles = setup.puddles
+    private val weatherLayout = setup.weather
+    private val konbini = setup.kind == "konbini"
     private val clock = MachiClock()
     private val weather = MachiWeatherFx(weatherLayout)
     private val snowCoverColor = machiLinear("#f2f5fa")
@@ -263,7 +322,7 @@ private class MachiRenderer(
         snowGlintColor = street
     }
     private val reflection = MachiReflection()
-    private val cones = MachiLightCones(machiConeMesh(machiKowloonLightCones()))
+    private val cones = setup.cones.takeIf { it.isNotEmpty() }?.let { MachiLightCones(machiConeMesh(it)) }
     private val lampColor = machiLinear("#e2f2ff")
     // 闪电（director.ts）：副歌开头两下闪；雨量 ≥ 0.5 才有，亮度 × 雨量；半球光 × (1 + 1.5 flash)、月光 × (1 + 1.2 flash)（skyLights.ts）。
     private val lightningTimes = buildMachiLightningTimes(lines)
@@ -273,11 +332,15 @@ private class MachiRenderer(
     private val invVP = FloatArray(16)
     private val glowColorA = machiLinear("#ff4fb0")
     private val glowColorB = machiLinear(mcMixHex("#ff9fd0", light.palette.interiorLight, 0.45))
+    private val glowColorKA = machiLinear(light.palette.interiorLight)
+    private val glowColorKB = machiLinear(light.palette.streetLight)
     private var program = 0
     private var skyProgram = 0
     private var vao = 0
     private var skyVao = 0
+    private var glassVao = 0
     private var count = 0
+    private var glassCount = 0
     private var aspectW = 1.0
     private var aspectH = 1.0
 
@@ -321,6 +384,18 @@ private class MachiRenderer(
         GLES30.glEnableVertexAttribArray(2); GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, stride, 24)
         GLES30.glEnableVertexAttribArray(3); GLES30.glVertexAttribPointer(3, 1, GLES30.GL_FLOAT, false, stride, 36)
         count = mesh.size / 10
+        setup.glass?.takeIf { it.isNotEmpty() }?.let { glass ->
+            val gv = IntArray(1); GLES30.glGenVertexArrays(1, gv, 0); glassVao = gv[0]
+            val gb = IntArray(1); GLES30.glGenBuffers(1, gb, 0)
+            GLES30.glBindVertexArray(glassVao)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, gb[0])
+            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, glass.size * 4, floatBuffer(glass), GLES30.GL_STATIC_DRAW)
+            GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, stride, 0)
+            GLES30.glEnableVertexAttribArray(1); GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, stride, 12)
+            GLES30.glEnableVertexAttribArray(2); GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, stride, 24)
+            GLES30.glEnableVertexAttribArray(3); GLES30.glVertexAttribPointer(3, 1, GLES30.GL_FLOAT, false, stride, 36)
+            glassCount = glass.size / 10
+        }
         GLES30.glBindVertexArray(skyVao)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, bufs[1])
         val quad = floatArrayOf(-1f, -1f, 1f, -1f, 1f, 1f, -1f, -1f, 1f, 1f, -1f, 1f)
@@ -328,8 +403,8 @@ private class MachiRenderer(
         GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 8, 0)
         GLES30.glBindVertexArray(0)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
-        signs.init(::link)
-        cones.init(::link)
+        signs?.init(::link)
+        cones?.init(::link)
         weather.init(::link)
         post.init(::link)
     }
@@ -341,7 +416,7 @@ private class MachiRenderer(
         reflection.resize(width, height)
     }
 
-    private fun drawMesh(vp: FloatArray, reflectPass: Boolean, wet: Boolean) {
+    private fun drawMesh(vp: FloatArray, reflectPass: Boolean, wet: Boolean, glass: Boolean = false) {
         GLES30.glUseProgram(program)
         fun u(n: String) = GLES30.glGetUniformLocation(program, n)
         GLES30.glUniformMatrix4fv(u("uVP"), 1, false, vp, 0)
@@ -358,7 +433,10 @@ private class MachiRenderer(
         GLES30.glUniform1fv(u("uMachiRoofY"), 4, roofYs, 0)
         GLES30.glUniform1i(u("uReflectPass"), if (reflectPass) 1 else 0)
         GLES30.glUniform1i(u("uWetOn"), if (wet) 1 else 0)
-        GLES30.glUniform1f(u("uGroundY"), MACHI_KOWLOON_GROUND_Y.toFloat())
+        GLES30.glUniform1f(u("uGroundY"), setup.wetY.toFloat())
+        GLES30.glUniform1f(u("uGroundY2"), setup.wetY2.toFloat())
+        GLES30.glUniform1f(u("uPuddleBias2"), setup.wetBias2.toFloat())
+        GLES30.glUniform1f(u("uAlpha"), if (glass) 0.2f else 1f)
         if (wet) {
             // ground.ts 的一组 uniform；路面是 concrete（puddleBias 0.08，kowloonScene surfaces.lot）。
             GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
@@ -373,11 +451,22 @@ private class MachiRenderer(
             GLES30.glUniform1f(u("uWet"), light.state.wetness.toFloat())
             GLES30.glUniform3fv(u("uWetSky"), 1, machiLinear(light.palette.skyBottom), 0)
             GLES30.glUniform1f(u("uReflectStrength"), MACHI_REFLECT_STRENGTH.toFloat())
-            GLES30.glUniform1f(u("uPuddleBias"), 0.08f)
+            GLES30.glUniform1f(u("uPuddleBias"), setup.wetBias.toFloat())
             GLES30.glUniform1f(u("uWetTime"), ambient.toFloat())
         }
-        GLES30.glBindVertexArray(vao)
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, count)
+        if (glass) {
+            // 透明玻璃：不写深度，按 alpha 混合（目标的 alpha 不动）。
+            GLES30.glEnable(GLES30.GL_BLEND)
+            GLES30.glBlendFuncSeparate(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA, GLES30.GL_ZERO, GLES30.GL_ONE)
+            GLES30.glDepthMask(false)
+            GLES30.glBindVertexArray(glassVao)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, glassCount)
+            GLES30.glDepthMask(true)
+            GLES30.glDisable(GLES30.GL_BLEND)
+        } else {
+            GLES30.glBindVertexArray(vao)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, count)
+        }
         GLES30.glBindVertexArray(0)
     }
 
@@ -392,16 +481,16 @@ private class MachiRenderer(
         val t = timeSeconds()
         flash = if (light.state.rain < 0.5) 0.0 else resolveMachiLightning(lightningTimes, t) * light.state.rain
         val target = resolveMachiBoardTarget(lines, t)
-        signs.show(target, lines)
+        signs?.show(target, lines)
         val view = (pose.position - pose.target).normalized()
         val wet = light.state.wetness > 0.001
         // 倒影（reflection.ts）：干的时候路面不取倒影，不画。
         if (wet) {
-            val mirror = machiMirrorVP(vp, MACHI_KOWLOON_GROUND_Y)
+            val mirror = machiMirrorVP(vp, setup.mirrorY)
             reflection.begin()
             GLES30.glEnable(GLES30.GL_DEPTH_TEST)
             drawMesh(mirror, reflectPass = true, wet = false)
-            signs.draw(
+            signs?.draw(
                 mirror, view.z.toFloat(),
                 MachiSignFrame(t, ambient + delta, delta, resolveMachiChorus(lines, target), 0.0, light.look.artificial, resolveMachiFlicker(ambient + delta, seed)),
                 advance = false,
@@ -423,9 +512,12 @@ private class MachiRenderer(
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         // 场景
         drawMesh(vp, reflectPass = false, wet = wet)
+        if (glassCount > 0) drawMesh(vp, reflectPass = false, wet = false, glass = true)
         // 光柱（lightCones.ts）：level = 0.55 × lamp × (1 − 0.6 daylight)，lamp = streetLamps × (0.75 + 0.25 flicker)。
-        val lamp = light.look.streetLamps * (0.75 + 0.25 * resolveMachiFlicker(ambient + 4.2, "$seed:lamp", 0.45))
-        cones.draw(vp, floatArrayOf(view.x.toFloat(), view.y.toFloat(), view.z.toFloat()), lampColor, ambient, lamp * (1 - 0.6 * light.state.daylight))
+        // 便利店（konbiniScene direct）：street = streetLamps × (0.75 + 0.25 flicker(ambient + 3.1, seed:street))。
+        val lamp = if (konbini) light.look.streetLamps * (0.75 + 0.25 * resolveMachiFlicker(ambient + 3.1, "$seed:street", 0.45))
+            else light.look.streetLamps * (0.75 + 0.25 * resolveMachiFlicker(ambient + 4.2, "$seed:lamp", 0.45))
+        cones?.draw(vp, floatArrayOf(view.x.toFloat(), view.y.toFloat(), view.z.toFloat()), lampColor, ambient, lamp * (1 - 0.6 * light.state.daylight))
         // 雨丝 / 水花 / 滴水（MachiWeather.kt）：雨量 = rain × 0.62（audio、chorus 未接，intensity 1）；灯照雨丝程度 1 − 0.9 daylight。
         val vx = view.x; val vz = view.z
         val rl = kotlin.math.sqrt(vx * vx + vz * vz)
@@ -438,7 +530,7 @@ private class MachiRenderer(
         weather.drawSnow(vp, ambient, light.state.snow, 1 - 0.9 * light.state.daylight, post.sceneH / ((pose.top - pose.bottom) / pose.zoom), snowColor, snowGlintColor)
         // 歌词大屏 / 跑马灯 / 门头霓虹（MachiScreen.kt）
         ambient += delta
-        signs.draw(
+        signs?.draw(
             vp, view.z.toFloat(),
             MachiSignFrame(t, ambient, delta, resolveMachiChorus(lines, target), 0.0, light.look.artificial, resolveMachiFlicker(ambient, seed)),
         )
@@ -447,6 +539,10 @@ private class MachiRenderer(
         android.opengl.Matrix.invertM(invVP, 0, vp, 0)
         val look = light.look
         val neon = 1.0 * (0.85 + 0.15 * resolveMachiFlicker(ambient, seed))
+        // 便利店雾灯（konbiniScene direct）：A = interiorLight × 0.55 × interiorLevel × night，B = streetLight × 0.42 × street × night，
+        // interiorLevel = (1 + 0.1 chorus) × artificial（门开合、鼓点未接），night = 1 − 0.85 daylight。
+        val night = 1 - 0.85 * light.state.daylight
+        val interiorLevel = (1 + 0.1 * resolveMachiChorus(lines, target)) * look.artificial
         post.finish(
             pixelWorldSize = (pose.top - pose.bottom) / pose.zoom / post.sceneH,
             centerDistance = kotlin.math.sqrt((pose.position - pose.target).dot(pose.position - pose.target)),
@@ -459,16 +555,16 @@ private class MachiRenderer(
                 cloudAmount = look.clouds,
                 haze = look.haze,
                 lightning = flash,
-                glowA = floatArrayOf(-2.0f, 0f, 1.0f, 3.4f),
-                glowColorA = FloatArray(3) { (glowColorA[it] * 0.42 * neon).toFloat() },
-                glowB = floatArrayOf(MachiKowloonLayout.SCREEN_X.toFloat(), 0f, (-1.5 + 0.8).toFloat(), 3.0f),
-                glowColorB = FloatArray(3) { (glowColorB[it] * 0.36 * look.artificial).toFloat() },
+                glowA = setup.glowA,
+                glowColorA = if (konbini) FloatArray(3) { (glowColorKA[it] * 0.55 * interiorLevel * night).toFloat() } else FloatArray(3) { (glowColorA[it] * 0.42 * neon).toFloat() },
+                glowB = setup.glowB,
+                glowColorB = if (konbini) FloatArray(3) { (glowColorKB[it] * 0.42 * lamp * night).toFloat() } else FloatArray(3) { (glowColorB[it] * 0.36 * look.artificial).toFloat() },
                 stars = look.stars,
             ),
             bloomStrength = look.bloom,
             streakStrength = look.streaks,
             // 景深按相对默认构图的缩放走（createMachiRuntime：zoom = camera.zoom / defaultView.zoom），光圈默认 f/8。
-            lens = resolveMachiLens(MachiLensTuning(), pose.zoom / MachiKowloonLayout.VIEW.zoom),
+            lens = resolveMachiLens(MachiLensTuning(), pose.zoom / setup.view.zoom),
         )
     }
 }
@@ -496,6 +592,8 @@ fun MachiStagePreview(
     /** auto（按本地时钟，Folia 默认）/ night / dusk / day。 */
     timeOfDay: String = "night",
     paused: () -> Boolean = { false },
+    /** 场景：kowloon（城寨酒吧，默认）/ konbini（便利店街角）。 */
+    scene: String = "kowloon",
 ) {
     val palette = remember(backgroundColor, primaryColor, secondaryColor, accentColor, seed) {
         resolveMachiPalette(MachiTheme(backgroundColor.machiHex(), primaryColor.machiHex(), secondaryColor.machiHex(), accentColor.machiHex()), seed)
@@ -506,18 +604,18 @@ fun MachiStagePreview(
         resolveMachiDaylight(timeOfDay, now.get(java.util.Calendar.HOUR_OF_DAY) + now.get(java.util.Calendar.MINUTE) / 60.0 + now.get(java.util.Calendar.SECOND) / 3600.0)
     }
     val light = remember(palette, weather, seed, daylight) { MachiNightLight(palette, runCatching { resolveMachiWeatherKind(weather, seed) }.getOrDefault(MachiWeatherKind.CLEAR), daylight) }
-    val model = remember(seed) { buildMachiKowloon(seed) }
-    val weatherSetup = remember(seed, model) { resolveMachiKowloonWeather(seed, model.drips) }
-    val rig = remember { MachiCameraRig(machiKowloonFramingPoints(), MachiKowloonLayout.VIEW) }
-    val signs = remember(palette, songTitle, artist, seed, model) { MachiKowloonSigns(palette, songTitle, artist, seed, model.signs) }
+    val setup = remember(scene, palette, songTitle, artist, seed) {
+        if (scene == "konbini") machiKonbiniSetup(palette, seed) else machiKowloonSetup(palette, seed, songTitle, artist)
+    }
+    val rig = remember(setup) { MachiCameraRig(setup.framing, setup.view) }
     Box(modifier) {
       // 换歌（seed）、换主题（palette → light / signs）时整块 GLSurfaceView 重建：factory 只跑一次，渲染器拿的是建时的模型。
-      androidx.compose.runtime.key(model, light, signs, lines, restCamera) {
+      androidx.compose.runtime.key(setup, light, lines, restCamera) {
         AndroidView(
             factory = { ctx ->
                 GLSurfaceView(ctx).apply {
                     setEGLContextClientVersion(3)
-                    setRenderer(MachiRenderer(model.mesh, light, rig, timeSeconds, lines, signs, seed, weatherSetup.first, weatherSetup.second, restCamera, paused))
+                    setRenderer(MachiRenderer(setup, light, rig, timeSeconds, lines, seed, restCamera, paused))
                     renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                 }
             },
