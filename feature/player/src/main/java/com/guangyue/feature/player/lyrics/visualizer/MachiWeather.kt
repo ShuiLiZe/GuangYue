@@ -3,7 +3,8 @@
 //     灯里的雨丝被照亮（3 处 glint，半径 × glint 程度）。加色、不写深度。
 //   · 水花：实例化的扁圆环，每个实例按周期换位置（uRate 1.6）。
 //   · 滴水：冷气机前沿、大排档帆布篷前沿、酒吧门头（kowloonScene.ts drips），一段下落一段溅开，跟着路面湿度。
-//   · 雪（Points）未做；雨量 = rain × (0.62 + 0.22 audio + 0.12 chorus) × intensity，这里 audio 0、intensity 1。
+//   · 雪：Points 1400 片，慢慢落、两层摆左右飘、落到地面或屋顶淡掉，普通混合；点大小按每世界单位像素。
+//   · 雨量 = rain × (0.62 + 0.22 audio + 0.12 chorus) × intensity，这里 audio 0、intensity 1。
 //   · Math.random 的种子在这里换成固定种子（每次画面一样）。
 package com.guangyue.feature.player.lyrics.visualizer
 
@@ -257,6 +258,55 @@ void main() {
 }
 """
 
+private const val SNOW_VS = """#version 300 es
+layout(location = 0) in vec4 aSeed;
+uniform mat4 uVP;
+uniform float uTime;
+uniform vec2 uWind;
+uniform float uDensity;
+uniform float uPixelsPerUnit;
+uniform vec4 uGlints[3];
+out float vAlpha;
+out float vGlint;
+$GROUND_GLSL
+void main() {
+    vec2 base = aSeed.xy;
+    float ground = kGround(base);
+    float fall = 9.50 - ground;
+    float speed = 0.75 + 0.45 * aSeed.w;
+    float y = 9.50 - mod(uTime * speed + aSeed.z * fall, fall);
+    float drop = 9.50 - y;
+    float sway = sin(uTime * 1.1 + aSeed.z * 40.0) * 0.22 + sin(uTime * 2.3 + aSeed.w * 23.0) * 0.08;
+    vec3 position = vec3(base.x + uWind.x * drop * 0.6 + sway, y, base.y + uWind.y * drop * 0.6 + sway * 0.6);
+    float inside = step(abs(position.x), uHalf + 0.1) * step(abs(position.z), uHalf + 0.1);
+    float visible = step(aSeed.w, uDensity);
+    vAlpha = inside * visible * smoothstep(0.0, 0.35, y - ground);
+    vGlint = 0.0;
+    for (int i = 0; i < 3; i++) {
+        vec3 d = position - uGlints[i].xyz;
+        vGlint += exp(-dot(d, d) / (uGlints[i].w * uGlints[i].w));
+    }
+    gl_Position = uVP * vec4(position, 1.0);
+    gl_PointSize = (0.05 + 0.06 * aSeed.w) * uPixelsPerUnit * visible;
+}
+"""
+
+private const val SNOW_FS = """#version 300 es
+precision highp float;
+uniform vec3 uColor;
+uniform vec3 uGlintColor;
+in float vAlpha;
+in float vGlint;
+out vec4 fragColor;
+void main() {
+    float d = length(gl_PointCoord - 0.5) * 2.0;
+    float alpha = (1.0 - smoothstep(0.35, 1.0, d)) * vAlpha;
+    if (alpha < 0.01) discard;
+    vec3 color = mix(uColor, uGlintColor, min(1.0, vGlint) * 0.6);
+    fragColor = vec4(color, alpha * 0.9);
+}
+"""
+
 /** 雨丝顶点：每条两个端点，各 seed4 + end1。 */
 internal fun machiRainSeeds(count: Int, half: Double, seed: Long = 0x5eed): FloatArray {
     val r = MachiRng(seed)
@@ -275,7 +325,9 @@ internal class MachiWeatherFx(
     private val layout: MachiWeatherLayout,
     private val rainCount: Int = 2000,
     private val splashCount: Int = 560,
+    private val snowCount: Int = 1400,
 ) {
+    private var snowProgram = 0; private var snowVao = 0
     private var rainProgram = 0; private var splashProgram = 0; private var dripProgram = 0
     private var rainVao = 0; private var splashVao = 0; private var dripVao = 0
     private val roofRects = FloatArray(16)
@@ -301,6 +353,7 @@ internal class MachiWeatherFx(
         rainProgram = link(RAIN_VS, RAIN_FS)
         splashProgram = link(SPLASH_VS, SPLASH_FS)
         dripProgram = link(DRIP_VS, DRIP_FS)
+        snowProgram = link(SNOW_VS, SNOW_FS)
         val v = IntArray(3); GLES30.glGenVertexArrays(3, v, 0)
         rainVao = v[0]; splashVao = v[1]; dripVao = v[2]
         // 雨丝
@@ -332,7 +385,50 @@ internal class MachiWeatherFx(
         GLES30.glVertexAttribDivisor(1, 1)
         GLES30.glEnableVertexAttribArray(2); GLES30.glVertexAttribPointer(2, 2, GLES30.GL_FLOAT, false, 24, 16)
         GLES30.glVertexAttribDivisor(2, 1)
+        // 雪
+        val sv = IntArray(1); GLES30.glGenVertexArrays(1, sv, 0); snowVao = sv[0]
+        GLES30.glBindVertexArray(snowVao)
+        val sr = MachiRng(0x5a0bL)
+        val h = layout.half + 0.6
+        buffer(FloatArray(snowCount * 4) { i -> if (i % 4 < 2) ((sr.next() * 2 - 1) * h).toFloat() else sr.next().toFloat() })
+        GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 4, GLES30.GL_FLOAT, false, 16, 0)
         GLES30.glBindVertexArray(0)
+    }
+
+    private fun glints(glint: Double): FloatArray {
+        val g = FloatArray(12)
+        for (i in 0 until 3) {
+            val gl = layout.glints.getOrNull(i)
+            if (gl == null) { g[i * 4 + 1] = -100f; g[i * 4 + 3] = 0.001f; continue }
+            g[i * 4] = gl[0].toFloat(); g[i * 4 + 1] = gl[1].toFloat(); g[i * 4 + 2] = gl[2].toFloat()
+            g[i * 4 + 3] = max(0.001, gl[3] * glint).toFloat()
+        }
+        return g
+    }
+
+    /** 雪（weather.ts snow）：密度 snow × 0.85；颜色 #f4f7fc.lerp(hemiSky, 0.18)，灯色 streetLight（线性）。 */
+    fun drawSnow(vp: FloatArray, time: Double, snow: Double, glint: Double, pixelsPerUnit: Double, color: FloatArray, glintColor: FloatArray) {
+        val amount = min(1.0, snow)
+        if (amount <= 0.01) return
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFuncSeparate(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA, GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glDepthMask(false)
+        GLES30.glUseProgram(snowProgram)
+        fun u(n: String) = GLES30.glGetUniformLocation(snowProgram, n)
+        GLES30.glUniformMatrix4fv(u("uVP"), 1, false, vp, 0)
+        ground(snowProgram)
+        GLES30.glUniform1f(u("uTime"), time.toFloat())
+        GLES30.glUniform2fv(u("uWind"), 1, wind, 0)
+        GLES30.glUniform1f(u("uDensity"), (amount * 0.85).toFloat())
+        GLES30.glUniform1f(u("uPixelsPerUnit"), pixelsPerUnit.toFloat())
+        GLES30.glUniform3fv(u("uColor"), 1, color, 0)
+        GLES30.glUniform3fv(u("uGlintColor"), 1, glintColor, 0)
+        GLES30.glUniform4fv(u("uGlints"), 3, glints(glint), 0)
+        GLES30.glBindVertexArray(snowVao)
+        GLES30.glDrawArrays(GLES30.GL_POINTS, 0, snowCount)
+        GLES30.glBindVertexArray(0)
+        GLES30.glDepthMask(true)
+        GLES30.glDisable(GLES30.GL_BLEND)
     }
 
     private fun ground(p: Int) {
@@ -384,14 +480,7 @@ internal class MachiWeatherFx(
             GLES30.glUniform3fv(r("uColor"), 1, rainColor, 0)
             GLES30.glUniform3fv(r("uGlintColor"), 1, glintColor, 0)
             GLES30.glUniform1f(r("uOpacity"), 0.3f)
-            val g = FloatArray(12)
-            for (i in 0 until 3) {
-                val gl = layout.glints.getOrNull(i)
-                if (gl == null) { g[i * 4 + 1] = -100f; g[i * 4 + 3] = 0.001f; continue }
-                g[i * 4] = gl[0].toFloat(); g[i * 4 + 1] = gl[1].toFloat(); g[i * 4 + 2] = gl[2].toFloat()
-                g[i * 4 + 3] = max(0.001, gl[3] * glint).toFloat()
-            }
-            GLES30.glUniform4fv(r("uGlints"), 3, g, 0)
+            GLES30.glUniform4fv(r("uGlints"), 3, glints(glint), 0)
             GLES30.glBindVertexArray(rainVao)
             GLES30.glDrawArrays(GLES30.GL_LINES, 0, rainCount * 2)
         }

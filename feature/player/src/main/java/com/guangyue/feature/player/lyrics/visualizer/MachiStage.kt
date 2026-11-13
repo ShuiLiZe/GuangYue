@@ -139,6 +139,8 @@ private class MachiRenderer(
     private val rainColor: FloatArray
     private val rainGlintColor: FloatArray
     private val dripColor: FloatArray
+    private val snowColor: FloatArray
+    private val snowGlintColor: FloatArray
     init {
         // weather.ts syncColors（线性空间里 lerp）
         val sky = machiLinear(light.palette.skyBottom); val pale = machiLinear("#dfe9ff")
@@ -146,6 +148,9 @@ private class MachiRenderer(
         rainColor = FloatArray(3) { sky[it] + (pale[it] - sky[it]) * 0.72f }
         rainGlintColor = FloatArray(3) { street[it] + (interior[it] - street[it]) * 0.4f }
         dripColor = FloatArray(3) { rainColor[it] + (interior[it] - rainColor[it]) * 0.25f }
+        val flake = machiLinear("#f4f7fc"); val hemi = machiLinear(light.palette.hemiSky)
+        snowColor = FloatArray(3) { flake[it] + (hemi[it] - flake[it]) * 0.18f }
+        snowGlintColor = street
     }
     private val reflection = MachiReflection()
     private val cones = MachiLightCones(machiConeMesh(machiKowloonLightCones()))
@@ -309,6 +314,8 @@ private class MachiRenderer(
             resolveMachiRainAmount(light.state.rain), light.state.wetness, 1 - 0.9 * light.state.daylight,
             rainColor, rainGlintColor, dripColor,
         )
+        // 雪：雪量 = snow × (0.75 + 0.25 intensity)；点大小按场景目标每世界单位像素。
+        weather.drawSnow(vp, ambient, light.state.snow, 1 - 0.9 * light.state.daylight, post.sceneH / ((pose.top - pose.bottom) / pose.zoom), snowColor, snowGlintColor)
         // 歌词大屏 / 跑马灯 / 门头霓虹（MachiScreen.kt）
         ambient += delta
         signs.draw(
