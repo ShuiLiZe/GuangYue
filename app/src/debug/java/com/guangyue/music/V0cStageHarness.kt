@@ -269,14 +269,17 @@ fun V0cStage(
             com.guangyue.feature.player.lyrics.visualizer.MachiStagePreview(
                 lines = kernel,
                 timeSeconds = { positionMs / 1000.0 },
-                backgroundColor = Color(0xFF101114),
-                primaryColor = Color(0xFFF2F2F2),
-                secondaryColor = Color(0xFF8FC8F5),
-                accentColor = Color(0xFFB4553C),
-                seed = "probe",
+                // 与 Folia 探针对齐（dev/probes/visualizerMemory.probe.tsx）：主题 DEFAULT_THEME「午夜墨染」四色、
+                // seed "probe-0"、天气 auto（probe-0 按 seed 落在雾）、镜头静止位。
+                backgroundColor = Color(0xFF09090B),
+                primaryColor = Color(0xFFF4F4F5),
+                secondaryColor = Color(0xFF71717A),
+                accentColor = Color(0xFFF4F4F5),
+                seed = "probe-0",
                 songTitle = "晴天",
-                // machirain：雨天（湿路面 + 水洼倒影，MachiWet.kt）取证。
-                weather = when (style) { "machirain" -> "rain"; "machisnow" -> "snow"; else -> "clear" },
+                // machirain：雨天（湿路面 + 水洼倒影，MachiWet.kt）取证；machisnow：雪。
+                weather = when (style) { "machirain" -> "rain"; "machisnow" -> "snow"; else -> "auto" },
+                restCamera = true,
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh") {

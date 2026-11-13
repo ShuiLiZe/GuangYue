@@ -165,6 +165,8 @@ private class MachiRenderer(
     private val seed: String,
     private val puddles: MachiPuddles,
     private val weatherLayout: MachiWeatherLayout,
+    /** 取证用：镜头停在静止位（Folia 探针 renderAt 刚挂上时运镜幅度为 0）。 */
+    private val restCamera: Boolean = false,
 ) : GLSurfaceView.Renderer {
     private val weather = MachiWeatherFx(weatherLayout)
     private val snowCoverColor = machiLinear("#f2f5fa")
@@ -307,7 +309,7 @@ private class MachiRenderer(
 
     override fun onDrawFrame(gl: GL10?) {
         // 运镜按氛围时间（camera.ts motionTime：用上一帧累加的 ambient，帧间隔封顶 0.1 s）；幅度 4 s 内从 0 升满（DRIFT_RAMP_SECONDS）。
-        val pose = synchronized(rig) { rig.setAspect(aspectW, aspectH); rig.pose(ambient, kotlin.math.min(1.0, ambient / 4.0)) }
+        val pose = synchronized(rig) { rig.setAspect(aspectW, aspectH); if (restCamera) rig.pose(0.0, 0.0) else rig.pose(ambient, kotlin.math.min(1.0, ambient / 4.0)) }
         val vp = pose.viewProjection()
         val now = System.nanoTime()
         val delta = if (lastNanos == 0L) 1.0 / 60 else min(0.1, (now - lastNanos) / 1e9)
@@ -402,6 +404,7 @@ private fun Color.machiHex(): String = String.format("#%06x", toArgb() and 0xFFF
 
 /**
  * 町景取证舞台（城寨酒吧白模）。[timeSeconds] 为歌曲时间（秒）；颜色取播放页主题（同 Folia Theme 的四色）。
+ * [weather] 是天气 id 或 auto（按 seed 加权，同 Folia resolveMachiWeatherKind）；[restCamera] 让镜头停在静止位。
  */
 @Composable
 fun MachiStagePreview(
@@ -416,11 +419,12 @@ fun MachiStagePreview(
     songTitle: String = "",
     artist: String = "",
     weather: String = "clear",
+    restCamera: Boolean = false,
 ) {
     val palette = remember(backgroundColor, primaryColor, secondaryColor, accentColor, seed) {
         resolveMachiPalette(MachiTheme(backgroundColor.machiHex(), primaryColor.machiHex(), secondaryColor.machiHex(), accentColor.machiHex()), seed)
     }
-    val light = remember(palette, weather) { MachiNightLight(palette, MachiWeatherKind.entries.firstOrNull { it.id == weather } ?: MachiWeatherKind.CLEAR) }
+    val light = remember(palette, weather, seed) { MachiNightLight(palette, runCatching { resolveMachiWeatherKind(weather, seed) }.getOrDefault(MachiWeatherKind.CLEAR)) }
     val model = remember(seed) { buildMachiKowloon(seed) }
     val weatherSetup = remember(seed, model) { resolveMachiKowloonWeather(seed, model.drips) }
     val rig = remember { MachiCameraRig(machiKowloonFramingPoints(), MachiKowloonLayout.VIEW) }
@@ -430,7 +434,7 @@ fun MachiStagePreview(
             factory = { ctx ->
                 GLSurfaceView(ctx).apply {
                     setEGLContextClientVersion(3)
-                    setRenderer(MachiRenderer(model.mesh, light, rig, timeSeconds, lines, signs, seed, weatherSetup.first, weatherSetup.second))
+                    setRenderer(MachiRenderer(model.mesh, light, rig, timeSeconds, lines, signs, seed, weatherSetup.first, weatherSetup.second, restCamera))
                     renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                 }
             },
