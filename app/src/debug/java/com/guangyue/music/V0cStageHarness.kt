@@ -218,9 +218,14 @@ fun V0cStage(
         val window = (view.context as? android.app.Activity)?.window ?: return@SideEffect
         WindowCompat.getInsetsController(window, view).apply {
             // B0：暗场样式（雾笺/花火/绘光）一律浅色图标，与 LyricFlowScreen 的外壳规则一致。
-            val barsDark = dark || style == "nebbia" || style == "hanabi" || style == "lumiere" || style.startsWith("machi")
+            val barsDark = dark || style == "nebbia" || style == "hanabi" || style == "hanabiprobe" || style == "lumiere" || style.startsWith("machi")
             isAppearanceLightStatusBars = !barsDark
             isAppearanceLightNavigationBars = !barsDark
+            // hanabiprobe：Folia 探针是整屏无系统栏，对照时把状态栏 / 导航栏藏掉。
+            if (style == "hanabiprobe") {
+                hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
         }
     }
     FoliaTheme(dark = dark) {
@@ -265,7 +270,14 @@ fun V0cStage(
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
         // 2026-11-12：町景（machi）3D 舞台起步，只在取证页（未进歌词样式列表）。
-        if (style == "machi" || style == "machirain" || style == "machisnow" || style == "machiday" || style == "machidusk" || style == "machikonbini" || style == "machistation") {
+        if (style == "hanabiprobe") {
+            // 2026-11-14：花火对照 Folia 探针（DEFAULT_THEME 四色、seed probe-0、静态时钟、reduceMotion=false），只画舞台。
+            com.guangyue.feature.player.lyrics.visualizer.HanabiStagePreview(
+                lines = kernel,
+                timeSeconds = positionMs / 1000.0,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (style == "machi" || style == "machirain" || style == "machisnow" || style == "machiday" || style == "machidusk" || style == "machikonbini" || style == "machistation") {
             com.guangyue.feature.player.lyrics.visualizer.MachiStagePreview(
                 lines = kernel,
                 timeSeconds = { positionMs / 1000.0 },

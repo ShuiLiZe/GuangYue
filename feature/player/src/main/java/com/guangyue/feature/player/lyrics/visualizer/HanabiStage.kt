@@ -897,6 +897,38 @@ internal fun HanabiStage(
     }
 }
 
+/**
+ * 取证页（V0cStageHarness `hanabiprobe`）：与 Folia 探针对齐（dev/probes/visualizerMemory.probe.tsx）——
+ * 主题 DEFAULT_THEME「午夜墨染」四色、seed "probe-0"、静态时钟（定格在 [timeSeconds]）、reduceMotion=false
+ * （CI 模拟器关了系统动画，走正式播放页会被当成「减少动效」，转场与随拍都拍不到）。
+ */
+@Composable
+fun HanabiStagePreview(
+    lines: List<Line>,
+    timeSeconds: Double,
+    modifier: Modifier = Modifier,
+    backgroundColor: Color = Color(0xFF09090B),
+    primaryColor: Color = Color(0xFFF4F4F5),
+    secondaryColor: Color = Color(0xFF71717A),
+    accentColor: Color = Color(0xFFF4F4F5),
+    seed: String = "probe-0",
+) {
+    HanabiStage(
+        lines = lines,
+        clock = rememberStaticVisualizerClock(timeSeconds),
+        lyricsFontScale = 1.0,
+        accentColor = accentColor,
+        fontFamily = FontFamily.SansSerif,
+        reduceMotion = false,
+        bottomReserve = androidx.compose.ui.unit.Dp(0f),
+        modifier = modifier,
+        backgroundColor = backgroundColor,
+        primaryColor = primaryColor,
+        secondaryColor = secondaryColor,
+        seed = seed,
+    )
+}
+
 /** applyHanabiLayerFrame 的 BLUR_EPSILON：模糊强度超过它才挂模糊。 */
 private const val HB_BLUR_EPSILON = 0.3
 /** Pixi BlurFilter（quality 3）强度 s → 高斯 σ ≈ 1.72·s 逻辑像素（同凝彩 TemperaPost 的换算）。 */
@@ -946,11 +978,36 @@ internal class HbBlurSlots {
 private const val HB_FIREWORK_GLOW_STRENGTH = 1.1
 
 /**
+ * Folia pixi/bloomFilter.ts 的亮部提取（downFragment 第一级 prefilter）：按最大通道 + 软膝取亮部、整体按比例缩（保持原色，
+ * 粉彩不会被截成白光），再乘 tint（Folia combine 的 uTint）与增益。只在 API 33+（RuntimeShader）用；31–32 退回颜色矩阵近似。
+ */
+private const val HB_PREFILTER_AGSL = """
+uniform shader src;
+uniform float thr;
+uniform float knee;
+uniform float gain;
+uniform half3 tint;
+half4 main(float2 p) {
+    half4 c = src.eval(p);
+    float br = max(c.r, max(c.g, c.b));
+    float k = max(knee, 0.0001);
+    float soft = clamp(br - thr + k, 0.0, 2.0 * k);
+    soft = soft * soft / (4.0 * k);
+    float contrib = max(soft, br - thr) / max(br, 0.0001);
+    half3 rgb = c.rgb * half(clamp(contrib, 0.0, 1.0)) * tint * half(gain);
+    rgb = min(rgb, half3(1.0));
+    return half4(rgb, max(rgb.r, max(rgb.g, rgb.b)));
+}
+"""
+
+/**
  * 整层辉光（Folia pixi/bloomFilter.ts dual-filter 的手机版）：
- * scene / fw 两个 RenderNode 每帧重录；tS / tF 把它们缩到 1/4 画进来、用颜色矩阵取亮部（阈值 0.5 / 0.2，Folia hanabiScreenBloom / mg/glow），
- * 两者加色进 b0（1/4，模糊），b1（1/16）、b2（1/48）逐级从上一级缩小再模糊；d0..d2 把各级加色放大叠回屏幕。
+ * scene / fw 两个 RenderNode 每帧重录；tS / tF 把它们缩到 1/4 画进来、取亮部（阈值 0.5 / 0.2、软膝 0.3 / 0.25，Folia hanabiScreenBloom / mg/glow），
+ * 两者加色进 b0（1/4，模糊），b1（1/16）、b2（1/48）逐级从上一级缩小再模糊；d0..d2 把各级加色放大叠进辉光层 g。
+ * 合成照 Folia combineFragment：rgb = base + glow·(1 − 0.5·base.a)，超 1 不逐通道截（会烧成白块）——
+ * g 里先加各级辉光，再用场景层的 alpha × 0.5 做 DST_OUT（= 辉光 ×(1 − 0.5·base.a)），最后整层用 SCREEN 叠回屏幕（结果天然不超 1、亮处不发白）。
  * 除 scene / fw 外的节点只在尺寸变化时录一次（子节点按引用画，内容变了 HWUI 自己重画层），逐帧只改 tS / tF 的透明度 = 强度。
- * Folia 每级上采样都把同级加回（spread 0.85，5 级）→ 光晕外缘被放大好几倍：这里用颜色矩阵增益 GAIN 补，权重见 LEVEL_WEIGHT。
+ * Folia 每级上采样都把同级加回（spread 0.85，5 级）→ 光晕外缘被放大好几倍：这里用增益 GAIN 补，权重见 LEVEL_WEIGHT。
  */
 @RequiresApi(31)
 private class HbGlowNodes {
@@ -958,6 +1015,8 @@ private class HbGlowNodes {
     private val fw = android.graphics.RenderNode("hanabi-fireworks")
     private val tS = android.graphics.RenderNode("hanabi-bright-scene")
     private val tF = android.graphics.RenderNode("hanabi-bright-fireworks")
+    private val glow = android.graphics.RenderNode("hanabi-glow")
+    private val mask = android.graphics.RenderNode("hanabi-glow-mask")
     private val blurSlots = HbBlurSlots()
     private val b = Array(LEVELS) { android.graphics.RenderNode("hanabi-bloom-$it") }
     private val d = Array(LEVELS) { android.graphics.RenderNode("hanabi-bloom-out-$it") }
@@ -966,13 +1025,12 @@ private class HbGlowNodes {
     private var w = 0
     private var h = 0
 
-    private fun plus() = Paint().apply { blendMode = android.graphics.BlendMode.PLUS }
+    private fun paintOf(mode: android.graphics.BlendMode, a: Int = 255) = Paint().apply { blendMode = mode; alpha = a }
 
     /**
-     * 取亮部：out = a·(c − 阈值) + k·(c − 亮度)。前一项是按亮度的阈值（灰 / 白只看亮度），后一项把色相差放大回去——
-     * 只做逐通道阈值时粉彩色（三个通道都高）会被截成白光，Folia 的阈值按最大通道整体缩放、光晕保持原色。
+     * API 31–32 的亮部近似：out = a·(c − 阈值) + k·(c − 亮度)。前一项是按亮度的阈值，后一项把色相差放大回去。
      */
-    private fun bright(threshold: Float, gain: Float, chroma: Float): android.graphics.RenderEffect {
+    private fun brightMatrix(threshold: Float, gain: Float, chroma: Float): android.graphics.RenderEffect {
         val a = gain / (1f - threshold)
         val k = chroma
         val o = -threshold * a * 255f
@@ -985,6 +1043,18 @@ private class HbGlowNodes {
         return android.graphics.RenderEffect.createColorFilterEffect(android.graphics.ColorMatrixColorFilter(m))
     }
 
+    private fun bright(threshold: Float, knee: Float, gain: Float, tint: FloatArray, legacyChroma: Float): android.graphics.RenderEffect {
+        if (Build.VERSION.SDK_INT >= 33) {
+            val sh = android.graphics.RuntimeShader(HB_PREFILTER_AGSL)
+            sh.setFloatUniform("thr", threshold)
+            sh.setFloatUniform("knee", knee)
+            sh.setFloatUniform("gain", gain)
+            sh.setFloatUniform("tint", tint[0], tint[1], tint[2])
+            return android.graphics.RenderEffect.createRuntimeShaderEffect(sh, "src")
+        }
+        return brightMatrix(threshold, gain, legacyChroma)
+    }
+
     private fun resize(width: Int, height: Int) {
         if (width == w && height == h) return
         w = width; h = height
@@ -995,18 +1065,20 @@ private class HbGlowNodes {
             bw[k] = max(2, (w + div - 1) / div); bh[k] = max(2, (h + div - 1) / div)
             b[k].setPosition(0, 0, bw[k], bh[k]); d[k].setPosition(0, 0, bw[k], bh[k])
             b[k].setRenderEffect(android.graphics.RenderEffect.createBlurEffect(RADIUS[k], RADIUS[k], Shader.TileMode.DECAL))
-            d[k].setUseCompositingLayer(true, plus())
+            d[k].setUseCompositingLayer(true, paintOf(android.graphics.BlendMode.PLUS))
             d[k].setAlpha(LEVEL_WEIGHT[k])
         }
-        for ((node, src, thr) in listOf(Triple(tS, scene, 0.5f), Triple(tF, fw, 0.2f))) {
-            val gain = if (node === tF) GAIN_FIREWORKS else GAIN
-            val chroma = if (node === tF) 0f else CHROMA
+        for (node in listOf(tS, tF)) {
+            val isFw = node === tF
             node.setPosition(0, 0, bw[0], bh[0])
-            node.setRenderEffect(bright(thr, gain, chroma))
-            node.setUseCompositingLayer(true, plus())
+            node.setRenderEffect(
+                if (isFw) bright(0.2f, 0.25f, GAIN_FIREWORKS, TINT_FIREWORKS, 0f)
+                else bright(0.5f, 0.3f, GAIN, TINT_SCREEN, LEGACY_CHROMA),
+            )
+            node.setUseCompositingLayer(true, paintOf(android.graphics.BlendMode.PLUS))
             val rc = node.beginRecording(bw[0], bh[0])
             rc.scale(bw[0].toFloat() / w, bh[0].toFloat() / h)
-            rc.drawRenderNode(src)
+            rc.drawRenderNode(if (isFw) fw else scene)
             node.endRecording()
         }
         var rc = b[0].beginRecording(bw[0], bh[0])
@@ -1023,6 +1095,23 @@ private class HbGlowNodes {
             rc.drawRenderNode(b[k])
             d[k].endRecording()
         }
+        // 辉光 × (1 − 0.5·base.a)：场景层按引用画进一个 DST_OUT、透明度 0.5 的合成层。
+        mask.setPosition(0, 0, w, h)
+        mask.setUseCompositingLayer(true, paintOf(android.graphics.BlendMode.DST_OUT, 128))
+        rc = mask.beginRecording(w, h)
+        rc.drawRenderNode(scene)
+        mask.endRecording()
+        glow.setPosition(0, 0, w, h)
+        glow.setUseCompositingLayer(true, paintOf(android.graphics.BlendMode.SCREEN))
+        rc = glow.beginRecording(w, h)
+        for (k in 0 until LEVELS) {
+            rc.save()
+            rc.scale(w.toFloat() / bw[k], h.toFloat() / bh[k])
+            rc.drawRenderNode(d[k])
+            rc.restore()
+        }
+        rc.drawRenderNode(mask)
+        glow.endRecording()
     }
 
     fun draw(c: android.graphics.Canvas, renderer: HbRenderer, t: Double, width: Float, height: Float, background: Int) {
@@ -1040,27 +1129,26 @@ private class HbGlowNodes {
         tS.setAlpha(min(1.0, renderer.screenBloomStrength).toFloat())
         tF.setAlpha(min(1.0, renderer.fireworkGlow).toFloat())
         c.drawRenderNode(scene)
-        for (k in 0 until LEVELS) {
-            c.save()
-            c.scale(w.toFloat() / bw[k], h.toFloat() / bh[k])
-            c.drawRenderNode(d[k])
-            c.restore()
-        }
+        c.drawRenderNode(glow)
         renderer.drawTop(c, t, width, height)
     }
 
     companion object {
-        const val LEVELS = 3
-        /** 每级比上一级再缩几倍：1/4、1/16、1/48。 */
-        val STEP = intArrayOf(4, 4, 3)
-        /** 各级模糊半径（该级像素）：约合屏上 10 / 40 / 96 px。 */
-        val RADIUS = floatArrayOf(2.5f, 2.5f, 2f)
-        val LEVEL_WEIGHT = floatArrayOf(0.75f, 0.7f, 0.6f)
-        /** 亮部增益（取亮部后 × GAIN 再截到 1）：补 Folia 逐级同级回加放大的光晕外缘。 */
-        const val GAIN = 1.3f
-        /** 全屏亮部的色相放大（见 bright）：让粉彩字块 / 贴纸的光晕带颜色，不发白。 */
-        const val CHROMA = 2f
-        /** 烟花层：火星细（降到 1/4 后只剩一两个像素、很淡），增益再大些，光晕才接近 Folia 烟花层 bloom（强度 1.1、阈值 0.2）。 */
-        const val GAIN_FIREWORKS = 3.4f
+        const val LEVELS = 4
+        /** 每级比上一级再缩几倍：1/4、1/16、1/48、1/96。 */
+        val STEP = intArrayOf(4, 4, 3, 2)
+        /** 各级模糊半径（该级像素）：约合屏上 10 / 40 / 96 / 192 px。 */
+        val RADIUS = floatArrayOf(2.5f, 2.5f, 2f, 2f)
+        /** 2026-11-14 对 Folia 探针：近处亮度已对上、整屏偏暗 ~12%（缺 5 级 spread 的宽光），宽的两级加重并多一级 1/96。 */
+        val LEVEL_WEIGHT = floatArrayOf(0.7f, 0.9f, 1f, 1f)
+        /** 全屏亮部增益：补 Folia 逐级同级回加（spread 0.85 × 5 级）放大的光晕外缘。Folia 按最大通道取亮部后只剩 (c−0.5)/c（白 → 0.5），再经 5 级 ×0.85 回加约 4 倍；这里 3 级权重和 ≈2，故 ×2.2。 */
+        const val GAIN = 2.2f
+        /** API 31–32 颜色矩阵近似的色相放大（API 33+ 走按最大通道的 Folia 原式，不需要）。 */
+        const val LEGACY_CHROMA = 1.2f
+        /** 烟花层：火星细（降到 1/4 后只剩一两个像素、很淡），增益大些，光晕才接近 Folia 烟花层 bloom（强度 1.1、阈值 0.2）。 */
+        const val GAIN_FIREWORKS = 3.0f
+        /** Folia 的 tint：全屏 [1, 0.95, 0.98]（createHanabiPixiRuntime）、烟花 [1, 0.96, 0.9]（mg/glow.ts）。 */
+        val TINT_SCREEN = floatArrayOf(1f, 0.95f, 0.98f)
+        val TINT_FIREWORKS = floatArrayOf(1f, 0.96f, 0.9f)
     }
 }

@@ -108,13 +108,13 @@ if [ -n "${SCENE:-}" ]; then
     fi
     # 凝彩片尾海报：探针最后一句 119.9 s 唱完，+0.35 s 起出现、+2 s 升满。
     # 凝彩 / 花火片尾：探针最后一句 119.9 s 唱完（花火 +1.1 s 金冠开花、+1.45 s 起曲名逐字弹出）。
-    if [ "$SCENE" = "tempera" ] || [ "$SCENE" = "hanabi" ]; then
+    if [ "$SCENE" = "tempera" ] || [ "$SCENE" = "hanabi" ] || [ "$SCENE" = "hanabiprobe" ]; then
       son "$SCENE-land-123" 123500
     fi
     # 花火片尾歌词退场模糊（R7⑪ HbBlurSlots）：最后一句 119.9 s 唱完，+0.6 s 歌词半透明、模糊 3。
     # 段落转场模糊在 CI 拍不到：模拟器 disable-animations → reduceMotion → 转场关掉（Folia 段落边界每 6 s，转场窗 x.2–x+1.0 s）。
-    if [ "$SCENE" = "hanabi" ]; then
-      son hanabi-land-120 120500
+    if [ "$SCENE" = "hanabi" ] || [ "$SCENE" = "hanabiprobe" ]; then
+      son "$SCENE-land-120" 120500
     fi
   fi
   adb shell settings put system user_rotation 0
