@@ -42,4 +42,14 @@ class MachiStationTest {
         assertEquals(3, w.roofs.size)
         assertTrue(w.drips.size > 15)
     }
+
+    @Test
+    fun lightsPoolsAndClockMatchStation() {
+        val lights = machiStationLights(palette)
+        assertEquals(5, lights.size)
+        assertEquals(3, lights.count { it.target != null })
+        assertEquals(3 * 16 * 16 * 6 * 10, buildMachiStationPools(palette).size)
+        assertEquals(" 1:05", formatMachiClock(65.9))
+        assertEquals("99:00", formatMachiClock(99 * 60.0 + 3600))
+    }
 }

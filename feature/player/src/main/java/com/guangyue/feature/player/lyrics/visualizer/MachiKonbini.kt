@@ -767,7 +767,9 @@ internal fun addMachiKonbiniProps(m: MachiMesh, palette: MachiPalette, seed: Str
 
 /** 一盏点光 / 聚光：位置、颜色键、强度、距离；聚光另有目标、角度、半影。kind：interior / spill / street / vending。 */
 internal class MachiKonbiniLight(val kind: String, val pos: DoubleArray, val intensity: Double, val distance: Double,
-    val target: DoubleArray? = null, val angle: Double = 0.0, val penumbra: Double = 0.0)
+    val target: DoubleArray? = null, val angle: Double = 0.0, val penumbra: Double = 0.0,
+    /** 颜色（hex，不给就按 kind 取场景的灯色）。 */
+    val color: String? = null)
 
 internal fun machiKonbiniLights(): List<MachiKonbiniLight> {
     val L = MachiKonbiniLayout
@@ -791,7 +793,22 @@ internal fun buildMachiKonbiniPools(palette: MachiPalette): FloatArray {
     val m = MachiMesh()
     val spill = machiRgb(mcMixHex(L.ART.getValue("spillLight"), palette.interiorLight, 0.5))
     val street = machiRgb(palette.streetLight); val vending = machiRgb(palette.vendingLight)
-    fun pool(color: FloatArray, tag: Float, level: Double, w: Double, d: Double, cx: Double, cz: Double, round: Boolean, y: Double, rotated: Boolean = false) {
+    fun pool(color: FloatArray, tag: Float, level: Double, w: Double, d: Double, cx: Double, cz: Double, round: Boolean, y: Double, rotated: Boolean = false) =
+        m.machiPool(color, tag, level, w, d, cx, cz, round, y, rotated)
+    val doorMid = (L.DOOR_X0 + L.DOOR_X1) / 2
+    val y = L.LOT_Y + 0.006
+    pool(spill, 1f, 0.5, L.X1 - L.FRONT_PILLAR_END + 0.6, 2.0, (L.FRONT_PILLAR_END + L.X1) / 2, L.Z1 + 1.0, false, y)
+    pool(spill, 1f, 0.42, 2.2, 1.7, doorMid, L.Z1 + 0.95, true, y)
+    pool(spill, 1f, 0.42, 3.6, 1.6, L.X1 + 0.85, (L.RIGHT_GLASS_END + L.Z1) / 2, false, y, rotated = true)
+    pool(street, 2f, 0.55, 3.4, 3.4, L.LAMP_HEAD[0] - 0.3, L.LAMP_HEAD[2], true, L.ROAD_Y + 0.016)
+    pool(vending, 3f, 0.32, 1.4, 2.4, 0.82 + 0.74 + 0.6, (-3.25 - 4.3) / 2, true, y)
+    return m.toArray()
+}
+
+/** 一块加色光斑（16×16 网格烘柔边）：round 圆，否则长条（靠 t = −1 一侧更亮）；rotated 绕 y 转 90°。 */
+internal fun MachiMesh.machiPool(color: FloatArray, tag: Float, level: Double, w: Double, d: Double, cx: Double, cz: Double, round: Boolean, y: Double, rotated: Boolean = false) {
+        val m = this
+        run {
         val n = 16
         fun falloff(u: Double, v: Double): Double {
             val dd = if (round) sqrt(u * u + v * v) else max(kotlin.math.abs(u) * 0.9, kotlin.math.abs(v))
@@ -808,14 +825,6 @@ internal fun buildMachiKonbiniPools(palette: MachiPalette): FloatArray {
                 col(s0, t1), col(s1, t1), col(s1, t0), col(s0, t0), tag)
         }
     }
-    val doorMid = (L.DOOR_X0 + L.DOOR_X1) / 2
-    val y = L.LOT_Y + 0.006
-    pool(spill, 1f, 0.5, L.X1 - L.FRONT_PILLAR_END + 0.6, 2.0, (L.FRONT_PILLAR_END + L.X1) / 2, L.Z1 + 1.0, false, y)
-    pool(spill, 1f, 0.42, 2.2, 1.7, doorMid, L.Z1 + 0.95, true, y)
-    pool(spill, 1f, 0.42, 3.6, 1.6, L.X1 + 0.85, (L.RIGHT_GLASS_END + L.Z1) / 2, false, y, rotated = true)
-    pool(street, 2f, 0.55, 3.4, 3.4, L.LAMP_HEAD[0] - 0.3, L.LAMP_HEAD[2], true, L.ROAD_Y + 0.016)
-    pool(vending, 3f, 0.32, 1.4, 2.4, 0.82 + 0.74 + 0.6, (-3.25 - 4.3) / 2, true, y)
-    return m.toArray()
 }
 
 

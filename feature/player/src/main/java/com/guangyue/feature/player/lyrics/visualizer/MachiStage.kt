@@ -324,15 +324,38 @@ internal fun machiKonbiniSetup(palette: MachiPalette, seed: String, title: Strin
 }
 
 /** 车站：路面 asphalt（y = 0，bias 0）与加油区 concrete（y = 0.1，bias 0.08）是湿地面；倒影平面 0.04。招牌、灯后接。 */
-internal fun machiStationSetup(palette: MachiPalette, seed: String): MachiSceneSetup {
+internal fun machiStationSetup(palette: MachiPalette, seed: String, title: String, artist: String, lines: List<Line>): MachiSceneSetup {
     val model = buildMachiStation(palette, seed)
+    val t = title.ifEmpty { "MACHI" }
+    val total = lines.lastOrNull()?.endTime ?: 0.0
+    // stationSigns.ts：货车屏（逐字点亮）、出租车顶灯（第一辆滚下一句，其余滚曲名 + 空車）、罩棚前右（歌手大写，0.82）、
+    // 价格立柱两面（播放进度 / 总时长 / 第几句，0.92）、旅馆竖灯箱 MOTEL（1.15）、名字横牌（曲名，1.1）、VACANCY（副歌时 NO 也亮，1.1）。
+    val leds = model.andons.mapIndexed { i, a ->
+        MachiLedSpec(doubleArrayOf(a[0], a[1], a[2], 0.0, a[3], a[4]), 10f) { target, ls ->
+            if (i == 0) resolveMachiTickerText(target, ls, title, artist, "MACHI")
+            else "♪ $t${if (artist.isNotEmpty()) " — $artist" else ""}   ◆   空車   ◆   "
+        }
+    }
+    val mf = model.motelFaces
+    val statics = listOf(
+        MachiStaticSpec(model.canopySigns, 1024, 0.82, { b, _, _ -> paintStationCanopy(b, artist.ifEmpty { t }.uppercase(), palette.signBase, palette.signText, palette.brand) }),
+        MachiStaticSpec(model.pylonFaces, 360, 0.92, { b, time, li ->
+            paintStationPylon(b, palette.brand, listOf("レギュラー" to formatMachiClock(time), "ハイオク" to formatMachiClock(total), "軽油" to (if (li >= 0) (li + 1).toString().padStart(3, ' ') else "---")))
+        }, { time, li -> "${formatMachiClock(time)}|$li" }),
+        MachiStaticSpec(listOf(mf[0]), 256, 1.15, { b, _, _ -> paintMotelTall(b, palette.neon) }),
+        MachiStaticSpec(listOf(mf[1]), 640, 1.1, { b, _, _ -> paintMotelName(b, t, palette.brand[2]) }),
+        MachiStaticSpec(listOf(mf[2]), 384, 1.1, { b, _, li -> paintMotelVacancy(b, isMachiChorusLine(lines.getOrNull(li))) }, { _, li -> isMachiChorusLine(lines.getOrNull(li)).toString() }),
+    )
+    val S = MachiStationLayout
+    val signs = MachiPanelSigns(palette, title, artist, "MACHI", S.TS_W, S.TS_H, listOf(doubleArrayOf(S.TS_X, S.TS_Y, S.TS_Z, 0.0)), leds, statics)
     val w = resolveMachiStationWeather(seed)
     val glows = machiStationGlows()
     return MachiSceneSetup(
         kind = "station", mesh = model.mesh, glass = null, framing = machiStationFramingPoints(), view = MachiStationLayout.VIEW,
-        signs = null, cones = machiStationLightCones(), puddles = w.first, weather = w.second, glowA = glows.first, glowB = glows.second,
+        signs = signs, cones = machiStationLightCones(), puddles = w.first, weather = w.second, glowA = glows.first, glowB = glows.second,
         mirrorY = MachiStationLayout.REFLECT_Y, wetY = MachiStationLayout.ROAD_Y + 0.002, wetBias = 0.0,
         wetY2 = MachiStationLayout.APRON_Y + 0.002, wetBias2 = 0.08,
+        lights = machiStationLights(palette), pools = buildMachiStationPools(palette),
     )
 }
 
@@ -437,15 +460,24 @@ private class MachiRenderer(
             } else { spotCos[i * 2] = -2f; spotCos[i * 2 + 1] = -1f }
         }
     }
-    /** konbiniLights.sync：店内 × interior、溢出 × interior、路灯 × street、贩卖机常亮。 */
+    private val lightBase = setup.lights.map { l -> l.color?.let { machiLinear(it) } }
+    // 车站：罩棚 / 旅馆霓虹 / 货车屏的亮度（stationScene direct）。
+    private var canopyLevel = 1.0
+    private var neonLevel = 1.0
+    private var screenLevel = 1.0
+    /** konbiniLights / stationLights.sync：店内与溢出 × interior、路灯 × street、罩棚 × canopy、霓虹 × neon、屏 × screen，贩卖机常亮。 */
     private fun updateLights() {
         setup.lights.take(6).forEachIndexed { i, l ->
-            val (c, k) = when (l.kind) {
+            val (c0, k) = when (l.kind) {
                 "interior" -> glowColorKA to interiorLevel
                 "spill" -> spillColor to interiorLevel
                 "street" -> glowColorKB to streetLevel
+                "canopy" -> glowColorKA to canopyLevel
+                "neon" -> glowColorKA to neonLevel
+                "screen" -> glowColorKA to screenLevel
                 else -> vendingColor to 1.0
             }
+            val c = lightBase[i] ?: c0
             for (j in 0..2) lightColor[i * 3 + j] = (c[j] * l.intensity * k).toFloat()
         }
     }
@@ -576,7 +608,8 @@ private class MachiRenderer(
         GLES30.glUniform1i(u("uAdd"), if (pools) 1 else 0)
         // 光斑：溢出 × interior、路灯 × street，都 × (1 − 0.85 daylight)（鼓点 thump 未接）。
         val poolK = 1 - 0.85 * light.state.daylight
-        GLES30.glUniform3f(u("uPoolScale"), (interiorLevel * poolK).toFloat(), (streetLevel * poolK).toFloat(), poolK.toFloat())
+        if (station) GLES30.glUniform3f(u("uPoolScale"), (canopyLevel * poolK).toFloat(), (streetLevel * poolK).toFloat(), (screenLevel * poolK).toFloat())
+        else GLES30.glUniform3f(u("uPoolScale"), (interiorLevel * poolK).toFloat(), (streetLevel * poolK).toFloat(), poolK.toFloat())
         if (wet) {
             // ground.ts 的一组 uniform；路面是 concrete（puddleBias 0.08，kowloonScene surfaces.lot）。
             GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
@@ -644,6 +677,14 @@ private class MachiRenderer(
         flash = if (light.state.rain < 0.5) 0.0 else resolveMachiLightning(lightningTimes, t) * light.state.rain
         val target = resolveMachiBoardTarget(lines, t)
         signs?.show(target, lines)
+        if (station) {
+            val chorus = resolveMachiChorus(lines, target)
+            canopyLevel = (0.85 + 0.15 * resolveMachiFlicker(ambient + 1.7, "$seed:canopy", 0.4)) * (1 + 0.08 * chorus) * light.look.artificial
+            streetLevel = light.look.streetLamps * (0.75 + 0.25 * resolveMachiFlicker(ambient + 4.2, "$seed:lamp", 0.45))
+            neonLevel = light.look.artificial * (0.8 + 0.2 * resolveMachiFlicker(ambient, seed))
+            screenLevel = (1 - 0.8 * light.state.daylight) * (1 + 0.2 * chorus)
+            updateLights()
+        }
         if (konbini) {
             doorOpenness = resolveMachiKonbiniDoorOpenness(doorEvents, t, setup.doorInterval, setup.doorPhase, lines.isEmpty())
             // konbiniScene：interior = (1 + 0.1 chorus + 0.06 doorOpenness) × artificial（beat.warm 未接）。
@@ -777,10 +818,10 @@ fun MachiStagePreview(
         resolveMachiDaylight(timeOfDay, now.get(java.util.Calendar.HOUR_OF_DAY) + now.get(java.util.Calendar.MINUTE) / 60.0 + now.get(java.util.Calendar.SECOND) / 3600.0)
     }
     val light = remember(palette, weather, seed, daylight) { MachiNightLight(palette, runCatching { resolveMachiWeatherKind(weather, seed) }.getOrDefault(MachiWeatherKind.CLEAR), daylight) }
-    val setup = remember(scene, palette, songTitle, artist, seed) {
+    val setup = remember(scene, palette, songTitle, artist, seed, lines) {
         when (scene) {
             "konbini" -> machiKonbiniSetup(palette, seed, songTitle, artist)
-            "station" -> machiStationSetup(palette, seed)
+            "station" -> machiStationSetup(palette, seed, songTitle, artist, lines)
             else -> machiKowloonSetup(palette, seed, songTitle, artist)
         }
     }

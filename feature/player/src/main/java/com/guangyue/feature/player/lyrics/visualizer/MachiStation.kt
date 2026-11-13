@@ -451,3 +451,31 @@ internal fun buildMachiStation(palette: MachiPalette, seed: String): MachiStatio
     }
     return MachiStationModel(m.toArray(), stats, andons, canopySigns, pylonFaces, motelFaces)
 }
+
+// ---- stationLights.ts：罩棚两盏聚光、场地灯一盏聚光、旅馆霓虹一盏点光、货车屏一盏点光；地上三块加色光斑。 ----
+
+internal fun machiStationLights(palette: MachiPalette): List<MachiKonbiniLight> {
+    val S = MachiStationLayout
+    val head = S.LAMP_HEAD
+    val cz = (S.C_Z0 + S.C_Z1) / 2
+    val canopy = S.ART.getValue("canopyLight")
+    val neonAt = motelWorld(0.8, S.MO_H - 2.55 + 0.5, 0.6)
+    return listOf(S.C_X0 + 1.3, S.C_X1 - 1.3).map { x ->
+        MachiKonbiniLight("canopy", doubleArrayOf(x, S.C_UNDER - 0.06, cz), 16.0, 9.0, doubleArrayOf(x, 0.0, cz + 0.4), 1.15, 0.7, canopy)
+    } + listOf(
+        MachiKonbiniLight("street", head, 24.0, 9.0, doubleArrayOf(head[0] - 0.4, 0.0, head[2] - 0.6), 0.9, 0.6),
+        MachiKonbiniLight("neon", neonAt, 3.0, 5.0, color = palette.neon),
+        MachiKonbiniLight("screen", doubleArrayOf(S.TS_X, S.TS_Y - 0.4, S.TS_Z + 1.4), 2.4, 5.5, color = palette.boardLit),
+    )
+}
+
+/** 地上的光斑：罩棚下一大块（标签 1）、场地灯下一圈（2）、货车屏前一块（3）；软椭圆按圆形柔边烘。 */
+internal fun buildMachiStationPools(palette: MachiPalette): FloatArray {
+    val S = MachiStationLayout
+    val m = MachiMesh()
+    val head = S.LAMP_HEAD
+    m.machiPool(machiRgb(S.ART.getValue("canopyLight")), 1f, 0.34, S.C_X1 - S.C_X0 + 1.2, S.C_Z1 - S.C_Z0 + 1.4, (S.C_X0 + S.C_X1) / 2, (S.C_Z0 + S.C_Z1) / 2, true, S.APRON_Y + 0.016)
+    m.machiPool(machiRgb(palette.streetLight), 2f, 0.5, 3.4, 3.4, head[0] - 0.4, head[2] - 0.6, true, S.ROAD_Y + 0.016)
+    m.machiPool(machiRgb(palette.boardLit), 3f, 0.16, 5.2, 2.6, S.TS_X, S.TS_Z + 1.5, true, S.ROAD_Y + 0.016)
+    return m.toArray()
+}
