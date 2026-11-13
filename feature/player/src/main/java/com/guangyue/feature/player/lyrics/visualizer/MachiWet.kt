@@ -226,7 +226,10 @@ internal fun machiConeMesh(specs: List<MachiLightConeSpec>, segments: Int = 20):
         }
         for (i in 0 until segments) {
             val a = rim(i); val b = rim(i + 1)
-            val mid = rim(i).let { r0 -> val r1 = rim(i + 1); DoubleArray(6) { k -> if (k < 3) s.apex[k] else (r0[k] + r1[k]) / 2 } }
+            // 灯头处的法线取两条棱的平均再归一（three 的尖顶点每段各一个，法线同理）。
+            val mid = DoubleArray(6) { k -> if (k < 3) s.apex[k] else (a[k] + b[k]) / 2 }
+            val ml = sqrt(mid[3] * mid[3] + mid[4] * mid[4] + mid[5] * mid[5])
+            for (k in 3..5) mid[k] /= ml
             put(mid, 1.0); put(a, 0.0); put(b, 0.0)
         }
     }
