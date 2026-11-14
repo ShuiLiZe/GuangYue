@@ -468,6 +468,7 @@ class HomeViewModel @Inject constructor(
     private suspend fun resolveTracks(tile: HomeTile): List<TrackEntity> {
         if (tile.key.startsWith(LibraryTiles.PREFIX)) return libraryTracks(tile.key)
         if (ArtistTiles.isArtist(tile.key)) return tracksOfArtist(tile)
+        if (AlbumTiles.isAlbum(tile.key)) return tracksOfAlbum(tile)
         run {
             val list = when (tile.kind) {
                 HomeTileKind.PLAYLIST -> {
@@ -550,6 +551,36 @@ class HomeViewModel @Inject constructor(
             acc = r.first; more = r.second
         }
         return acc.map { it.toEntity() }
+    }
+
+    /** 专辑块 → 插件 getAlbumInfo 的曲目；取不到抛出，集合层显示「加载失败，点此重试」。 */
+    private suspend fun tracksOfAlbum(tile: HomeTile): List<TrackEntity> {
+        val (pluginId, album) = AlbumTiles.albumOf(tile.key, tile.title) ?: error("unknown album tile ${tile.key}")
+        val (_, songs) = bridge.getAlbumInfo(pluginId, album) ?: error("getAlbumInfo failed for ${tile.key}")
+        return songs.map { it.toEntity() }
+    }
+
+    /**
+     * 歌手页的专辑（Folia 歌手页热门歌曲之后接专辑，混排一面墙）：getArtistWorks(type=album) 按页拉，
+     * 与歌曲同一套翻页合并；插件不支持 / 失败就回空（歌手页照样只显示歌曲）。
+     */
+    fun loadArtistAlbums(tile: HomeTile, onDone: (List<HomeTile>) -> Unit) {
+        val (pluginId, artist) = ArtistTiles.artistOf(tile.key, tile.title) ?: return onDone(emptyList())
+        viewModelScope.launch {
+            val albums = runCatching {
+                val first = bridge.getArtistWorksPage(pluginId, artist, 1, SearchType.ALBUM) ?: return@runCatching emptyList()
+                var (acc, more) = ArtistTiles.mergePage(emptyList(), first.albums, first.isEnd, 1) { "${it.platform}:${it.id}" }
+                var page = 1
+                while (more) {
+                    page += 1
+                    val next = bridge.getArtistWorksPage(pluginId, artist, page, SearchType.ALBUM) ?: break
+                    val r = ArtistTiles.mergePage(acc, next.albums, next.isEnd, page) { "${it.platform}:${it.id}" }
+                    acc = r.first; more = r.second
+                }
+                acc
+            }.getOrDefault(emptyList())
+            onDone(albums.map { AlbumTiles.tile(pluginId, it) })
+        }
     }
 
     private fun MusicItem.toEntity() = TrackEntity(

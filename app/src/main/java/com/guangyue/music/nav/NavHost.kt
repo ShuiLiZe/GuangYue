@@ -156,6 +156,8 @@ fun GuangYueNavHost(
 
     // B2：进入的集合（HomeTile 不可序列化；进程被杀后集合页回首页）。
     var openedCollection by remember { mutableStateOf<com.guangyue.feature.library.home.HomeTile?>(null) }
+    // 2026-11-14：集合层可以叠（歌手页 → 专辑）：每个返回栈条目记住自己打开的是哪个集合，返回时回到原来的。
+    val collectionOfEntry = remember { mutableMapOf<String, com.guangyue.feature.library.home.HomeTile>() }
 
     NavHost(navController = navController, startDestination = Routes.HOME) {
 
@@ -269,7 +271,7 @@ fun GuangYueNavHost(
         // ---------- 顶层：搜索 ----------
         // ---------- B2：集合层（Bravais 墙换成该集合的曲目） ----------
         composable(Routes.COLLECTION) {
-            val tile = openedCollection
+            val tile = collectionOfEntry[it.id] ?: openedCollection?.also { t -> collectionOfEntry[it.id] = t }
             if (tile == null) {
                 LaunchedEffect(Unit) { navController.popBackStack() }
                 return@composable
@@ -305,6 +307,16 @@ fun GuangYueNavHost(
                 if (!isLib) tracks = null
                 vm.loadTracksOf(tile) { list -> if (list == null) failed = true else tracks = list }
             }
+            // 歌手页：热门歌曲之后接专辑（Folia projectArtistItems），专辑点进去是专辑集合层。
+            val isArtistPage = com.guangyue.feature.library.viewmodel.ArtistTiles.isArtist(tile.key)
+            var albumTiles by remember(tile.key) { mutableStateOf<List<com.guangyue.feature.library.home.HomeTile>>(emptyList()) }
+            LaunchedEffect(tile.key, attempt) {
+                if (isArtistPage) vm.loadArtistAlbums(tile) { got -> albumTiles = got }
+            }
+            val openAlbum: (com.guangyue.feature.library.home.HomeTile) -> Unit = { t ->
+                openedCollection = t
+                navController.navigate(Routes.COLLECTION)
+            }
             val list = tracks.orEmpty()
             val trackTiles = remember(list) {
                 list.mapIndexed { i, t ->
@@ -320,6 +332,7 @@ fun GuangYueNavHost(
             val kindLabel = when {
                 isLib -> "曲库"
                 com.guangyue.feature.library.viewmodel.ArtistTiles.isArtist(tile.key) -> com.guangyue.feature.library.viewmodel.ArtistTiles.kindLabel(tile)
+                com.guangyue.feature.library.viewmodel.AlbumTiles.isAlbum(tile.key) -> "专辑"
                 else -> when (tile.kind) {
                 com.guangyue.feature.library.home.HomeTileKind.STATION -> "榜单"
                 else -> "歌单"
@@ -341,19 +354,36 @@ fun GuangYueNavHost(
             ShellColumn(
                 content = {
                     com.guangyue.music.ui.home.BravaisWall(
-                        sections = listOf("曲目" to trackTiles),
+                        sections = if (albumTiles.isEmpty()) listOf("曲目" to trackTiles) else listOf("曲目" to trackTiles, "专辑" to albumTiles),
                         title = "广乐",
                         inkColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
                         groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
                         onOpenSearch = { navController.navigate(Routes.SEARCH) },
-                        onEnqueueTile = { t -> trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> playback.appendTracks(listOf(list[i])) } },
-                        onDownloadTile = { t -> trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> downloadSome(listOf(list[i])) } },
-                        onDownloadTileLong = { t -> trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> collectionPick = listOf(list[i]) } },
+                        onEnqueueTile = { t ->
+                            if (com.guangyue.feature.library.viewmodel.AlbumTiles.isAlbum(t.key)) vm.playTracksOf(t) { ts, _ -> playback.appendTracks(ts) }
+                            else trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> playback.appendTracks(listOf(list[i])) }
+                        },
+                        onDownloadTile = { t ->
+                            if (com.guangyue.feature.library.viewmodel.AlbumTiles.isAlbum(t.key)) vm.tracksForDownload(t) { ts -> if (ts.isNotEmpty()) downloadSome(ts) }
+                            else trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> downloadSome(listOf(list[i])) }
+                        },
+                        onDownloadTileLong = { t ->
+                            if (com.guangyue.feature.library.viewmodel.AlbumTiles.isAlbum(t.key)) vm.tracksForDownload(t) { ts -> if (ts.isNotEmpty()) collectionPick = ts }
+                            else trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> collectionPick = listOf(list[i]) }
+                        },
+                        onEnterTile = openAlbum,
                         onOpenTile = { t ->
-                            val i = trackTiles.indexOf(t)
-                            if (i >= 0) {
-                                playback.setQueueFromTracks(list, i, true)
-                                navController.navigate(Routes.LYRIC_FLOW)
+                            if (com.guangyue.feature.library.viewmodel.AlbumTiles.isAlbum(t.key)) {
+                                vm.playTracksOf(t) { ts, at ->
+                                    playback.setQueueFromTracks(ts, at, true)
+                                    navController.navigate(Routes.LYRIC_FLOW)
+                                }
+                            } else {
+                                val i = trackTiles.indexOf(t)
+                                if (i >= 0) {
+                                    playback.setQueueFromTracks(list, i, true)
+                                    navController.navigate(Routes.LYRIC_FLOW)
+                                }
                             }
                         },
                             isCurrent = wallIsCurrent,
@@ -458,7 +488,17 @@ fun GuangYueNavHost(
                             vm.onQueryChange(q)
                             vm.searchNow()
                         },
-                        onOpenAlbum = { item -> vm.openAlbum(item) },
+                        // 2026-11-14：音源有 getAlbumInfo 时专辑进集合层（专辑曲目墙）；否则仍按专辑名再搜一次。
+                        onOpenAlbum = { item ->
+                            val plugin = state.selected
+                            val album = state.albums.firstOrNull { a -> a.platform == item.platform && a.id == item.id }
+                            if (plugin != null && plugin.hasAlbumInfo && album != null) {
+                                openedCollection = com.guangyue.feature.library.viewmodel.AlbumTiles.tile(plugin.id, album)
+                                navController.navigate(Routes.COLLECTION)
+                            } else {
+                                vm.openAlbum(item)
+                            }
+                        },
                         // 2026-11-14 歌手页：音源有 getArtistWorks 时进集合层（歌手的歌曲墙 / 列表）；否则仍按歌手名再搜一次。
                         onOpenArtist = { item ->
                             val plugin = state.selected

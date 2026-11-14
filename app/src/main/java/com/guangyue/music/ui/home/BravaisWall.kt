@@ -337,7 +337,7 @@ fun BravaisWall(
                             if (collection == null) WallFrame(inkColor) { if (!dragging) expanded = null }
                             else Box(Modifier.fillMaxSize().clickable(indication = null, interactionSource = null) { if (!dragging) expanded = null })
                         } else {
-                            val enter = onEnterTile?.takeIf { face.kind == HomeTileKind.PLAYLIST || face.kind == HomeTileKind.SHEET || face.kind == HomeTileKind.STATION }
+                            val enter = onEnterTile?.takeIf { face.kind == HomeTileKind.PLAYLIST || face.kind == HomeTileKind.SHEET || face.kind == HomeTileKind.STATION || com.guangyue.feature.library.viewmodel.AlbumTiles.isAlbum(face.key) }
                             Poster(
                                 face, inkColor, groundColor, scale, isOpen,
                                 onPlay = { onOpenTile(face) },
