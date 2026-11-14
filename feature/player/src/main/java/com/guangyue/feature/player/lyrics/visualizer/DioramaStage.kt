@@ -115,7 +115,8 @@ private class DioramaMoteLayer {
 /** Compose → GL 线程的输入：当前歌的歌词与种子（换歌时整体换掉，渲染线程每帧读一次）。 */
 private class DioramaStageSong(val lines: List<Line>, val seed: String)
 
-private class DioramaStageInput(@Volatile var song: DioramaStageSong)
+/** colors = 主题目标色（particle 对比色版 + 原四色），渲染线程按 COLOR_DAMP_RATE 阻尼追过去。 */
+private class DioramaStageInput(@Volatile var song: DioramaStageSong, @Volatile var colors: Pair<DioramaParticleColors, DioramaDampedColors>)
 
 /** 挂载窗口：当前行（与转场中离场行）的可见行、当前行单元、粒子缓冲、静止位镜头。 */
 private class DioramaStageWindow(
@@ -159,16 +160,15 @@ private class DioramaStageRenderer(
     private val input: DioramaStageInput,
     private val corridor: Boolean,
     private val density: Double,
-    private val particleColors: DioramaParticleColors,
-    private val damped: DioramaDampedColors,
-    private val background: Color,
     private val restCamera: Boolean,
     private val timeSeconds: () -> Double,
 ) : GLSurfaceView.Renderer {
     private val contrast = DioramaParticleLayer()
     private val glow = DioramaParticleLayer()
-    private val contrastU = DioramaParticleUniforms(particleColors, 0f, 0f)
-    private val glowU = DioramaParticleUniforms(particleColors, 1f, 0.6f)
+    private val contrastU = DioramaParticleUniforms(input.colors.first, 0f, 0f)
+    private val glowU = DioramaParticleUniforms(input.colors.first, 1f, 0.6f)
+    /** DioramaScene.tsx：damped.x.lerp(target, 1 − exp(−COLOR_DAMP_RATE·Δ))，换主题时文字 / 尘埃 / 雾 / 底色缓缓过渡。 */
+    private var damped = input.colors.second
     private val field = DioramaParticleFieldState()
     private val motes = DioramaMoteLayer()
     private val text = DioramaTextLayer()
@@ -309,6 +309,12 @@ private class DioramaStageRenderer(
         if (w?.globalIndex != idx || w?.outgoingIndex != transitionOutgoing) enter(idx, transitionOutgoing)
         val win = w ?: return
         val aspect = width.toDouble() / height.coerceAtLeast(1)
+        val (particleColors, target) = input.colors
+        val colorK = 1 - kotlin.math.exp(-DIORAMA_COLOR_DAMP_RATE * delta)
+        damped = DioramaDampedColors(
+            damped.primary.lerp(target.primary, colorK), damped.accent.lerp(target.accent, colorK),
+            damped.secondary.lerp(target.secondary, colorK), damped.bg.lerp(target.bg, colorK),
+        )
         // 还没有真实频谱：按 0.5 s 一拍的合成底鼓 / 中频 / 高频（与 DioramaParticlePreview 同一套），让涟漪与辉光可见。
         val beat = (t % 0.5) < 0.06
         val bands = DioramaAudioBands(if (beat) 230.0 else 70.0, 110.0, if ((t % 1.0) < 0.08) 200.0 else 90.0, 60.0)
@@ -335,7 +341,7 @@ private class DioramaStageRenderer(
             dioramaComposeMatrix(eye, rig.cameraQuaternion, 1.0, camWorld)
             Matrix.invertM(view, 0, camWorld, 0)
         }
-        GLES30.glClearColor(background.red, background.green, background.blue, 1f)
+        GLES30.glClearColor(dioramaLinearToSrgb(damped.bg.r).toFloat(), dioramaLinearToSrgb(damped.bg.g).toFloat(), dioramaLinearToSrgb(damped.bg.b).toFloat(), 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         val cam = floatArrayOf(eye.x.toFloat(), eye.y.toFloat(), eye.z.toFloat())
 
@@ -427,23 +433,25 @@ fun DioramaStage(
     modifier: Modifier = Modifier,
 ) {
     // 换歌不重建 GLSurfaceView：同一个渲染器里走 Folia 的换歌状态机（新走廊在雾外偏移处生成，镜头一镜到底飞过去）。
-    val input = remember { DioramaStageInput(DioramaStageSong(lines, seed)) }
-    androidx.compose.runtime.SideEffect {
-        val cur = input.song
-        if (cur.lines !== lines || cur.seed != seed) input.song = DioramaStageSong(lines, seed)
-    }
     val colors = remember(primaryColor, accentColor, secondaryColor, backgroundColor) {
         val p = dioramaColorFromHex(stageHex(primaryColor)); val a = dioramaColorFromHex(stageHex(accentColor))
         val sc = dioramaColorFromHex(stageHex(secondaryColor)); val bg = dioramaColorFromHex(stageHex(backgroundColor))
         resolveDioramaParticleContrastColors(DioramaParticleColors(p, a, sc), bg) to DioramaDampedColors(p, a, sc, bg)
     }
-    androidx.compose.runtime.key(colors, restCamera, corridor, density) {
+    // 换歌、换主题都不重建 GLSurfaceView：渲染线程每帧读 input（换主题走颜色阻尼）。
+    val input = remember { DioramaStageInput(DioramaStageSong(lines, seed), colors) }
+    androidx.compose.runtime.SideEffect {
+        val cur = input.song
+        if (cur.lines !== lines || cur.seed != seed) input.song = DioramaStageSong(lines, seed)
+        if (input.colors != colors) input.colors = colors
+    }
+    androidx.compose.runtime.key(restCamera, corridor, density) {
         AndroidView(
             modifier = modifier,
             factory = { ctx ->
                 GLSurfaceView(ctx).apply {
                     setEGLContextClientVersion(3)
-                    setRenderer(DioramaStageRenderer(input, corridor, density, colors.first, colors.second, backgroundColor, restCamera, timeSeconds))
+                    setRenderer(DioramaStageRenderer(input, corridor, density, restCamera, timeSeconds))
                     renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                 }
             },
