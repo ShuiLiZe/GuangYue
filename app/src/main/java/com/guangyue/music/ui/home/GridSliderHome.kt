@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -47,6 +48,8 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.PagerDefaults
@@ -221,6 +224,8 @@ fun GridSliderHome(
     providerButton: (@Composable () -> Unit)? = null,
     /** 空态下方的动作行（Folia OnlineProviderAccountlessPanel 的「Log in to 平台」胶囊 + 平台图标）；参数是页签名。 */
     emptyAction: (@Composable (String) -> Unit)? = null,
+    /** 底部悬浮播放条（Folia FloatingPlayerControls 手机版胶囊）；null = 没在放歌不显示。 */
+    playbackBar: (@Composable () -> Unit)? = null,
 ) {
     // Folia 首页页签就是各个数据源本身（歌单 / 推荐 / 探索 / 专辑 / 本地），没有「全部」。
     var tab by rememberSaveable { mutableStateOf(initialTab.coerceIn(0, max(0, sections.size - 1))) }
@@ -371,9 +376,22 @@ fun GridSliderHome(
                 onDownload = onDownloadTile?.takeIf { focused.kind == HomeTileKind.TRACK }?.let { { it(focused) } },
                 onDownloadLong = onDownloadTileLong?.takeIf { focused.kind == HomeTileKind.TRACK }?.let { { it(focused) } },
             )
+            // 给底部悬浮播放条 / 平台按钮让位（Folia 卡片标题在播放条上方）。
+            Spacer(Modifier.height(if (playbackBar != null) 84.dp else 16.dp))
+            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
         }
     }
-    if (providerButton != null) {
+    if (playbackBar != null) {
+        // Folia 手机版：底部居中的播放胶囊，右边留出平台按钮的位置。
+        Box(
+            Modifier.align(Alignment.BottomStart)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                .padding(start = 16.dp, end = 16.dp + 48.dp + 12.dp, bottom = 16.dp)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) { playbackBar() }
+    }
+        if (providerButton != null) {
         // Folia SwitcherPill：右下角浮着的平台按钮（fixed bottom-4 right-4）。
         Box(
             Modifier.align(Alignment.BottomEnd)
@@ -805,6 +823,57 @@ fun ProviderSwitcher(
                     }
                 }
             }
+        }
+    }
+}
+
+
+/**
+ * 底部悬浮播放条，照 folia-sonnet 手机版首页：深色半透明胶囊（rounded-full），左右是已播 / 总时长（等宽小字），
+ * 中间一条进度轨，右端白色圆形播放 / 暂停键。点胶囊本体进播放页。
+ */
+@Composable
+fun HomePlaybackBar(
+    positionMs: () -> Long,
+    durationMs: Long,
+    playing: Boolean,
+    dark: Boolean,
+    onToggle: () -> Unit,
+    onOpen: () -> Unit,
+) {
+    val ink = if (dark) Color.White else Color.Black
+    fun fmt(ms: Long): String { val t = (ms / 1000).coerceAtLeast(0); return "%02d:%02d".format(t / 60, t % 60) }
+    Row(
+        Modifier
+            .widthIn(max = 420.dp)
+            .fillMaxWidth()
+            .height(56.dp)
+            .shadow(16.dp, RoundedCornerShape(50))
+            .clip(RoundedCornerShape(50))
+            .background((if (dark) Color.Black else Color.White).copy(alpha = if (dark) 0.45f else 0.7f))
+            .border(1.dp, ink.copy(alpha = 0.06f), RoundedCornerShape(50))
+            .clickable(onClick = onOpen)
+            .semantics { contentDescription = "播放条，点开进播放页" }
+            .padding(start = 20.dp, end = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val pos = positionMs()
+        val mono = androidx.compose.ui.text.font.FontFamily.Monospace
+        Text(fmt(pos), color = ink.copy(alpha = 0.4f), fontSize = 10.sp, fontFamily = mono)
+        Spacer(Modifier.width(12.dp))
+        val frac = if (durationMs > 0) (pos.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+        Box(Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(50)).background(ink.copy(alpha = 0.12f))) {
+            Box(Modifier.fillMaxWidth(frac).fillMaxHeight().background(ink.copy(alpha = 0.55f)))
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(fmt(durationMs), color = ink.copy(alpha = 0.4f), fontSize = 10.sp, fontFamily = mono)
+        Spacer(Modifier.width(10.dp))
+        Box(
+            Modifier.size(44.dp).clip(CircleShape).background(Color.White).clickable(onClick = onToggle)
+                .semantics { contentDescription = if (playing) "暂停" else "播放" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(if (playing) GuangYueIcons.Pause else GuangYueIcons.Play, null, tint = Color.Black, modifier = Modifier.size(20.dp))
         }
     }
 }

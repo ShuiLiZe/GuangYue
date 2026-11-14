@@ -255,6 +255,16 @@ fun GuangYueNavHost(
                                     )
                                 }
                             },
+                            playbackBar = if (playbackState.item == null) null else ({
+                                com.guangyue.music.ui.home.HomePlaybackBar(
+                                    positionMs = { playbackState.positionMs },
+                                    durationMs = playbackState.durationMs,
+                                    playing = playbackState.isPlaying,
+                                    dark = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() < 0.5f,
+                                    onToggle = { playback.toggle() },
+                                    onOpen = { navController.navigate(Routes.LYRIC_FLOW) },
+                                )
+                            }),
                             providerButton = {
                                 val src by vm.currentSource.collectAsStateWithLifecycle()
                                 // Folia SwitcherPill：点开是平台切换（可用音源，点了直接切）+「音源与登录…」。
