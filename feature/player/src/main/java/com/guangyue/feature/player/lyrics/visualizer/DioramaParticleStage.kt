@@ -175,5 +175,7 @@ fun DioramaParticlePreview(
                 renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
             }
         },
+        // 2026-11-14：与 DioramaStage 一致，离开组合时停 GL 线程（之前缺这一步，点云取证连拍几张后模拟器卡死）。
+        onRelease = { it.onPause() },
     )
 }
