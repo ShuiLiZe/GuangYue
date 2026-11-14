@@ -420,6 +420,8 @@ data class SeamCollection(
      * 参数是命中的块（原顺序）与是否随机。null 时过滤中也放整张。
      */
     val onPlayTiles: ((tiles: List<HomeTile>, shuffle: Boolean) -> Unit)? = null,
+    /** 2026-11-14 歌手页：圆形头像（Folia BravaisSeamArtist 头像），null 时只有标题。 */
+    val avatar: String? = null,
 )
 
 /**
@@ -479,10 +481,18 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listM
             }
         }
         Spacer(Modifier.height(6.dp))
-        Text(
-            c.name, color = ink, fontSize = 22.sp, lineHeight = 27.sp, fontWeight = FontWeight.ExtraBold,
-            maxLines = 1, overflow = TextOverflow.Ellipsis,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (c.avatar != null) {
+                Box(Modifier.size(30.dp).clip(CircleShape).background(ink.copy(alpha = 0.08f))) {
+                    AsyncImage(model = c.avatar, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                }
+                Spacer(Modifier.width(10.dp))
+            }
+            Text(
+                c.name, color = ink, fontSize = 22.sp, lineHeight = 27.sp, fontWeight = FontWeight.ExtraBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
         if (filter != null && (c.count ?: 0) > 0) {
             Spacer(Modifier.height(8.dp))
             SeamFilterField(filter, ink)

@@ -416,6 +416,7 @@ fun GuangYueNavHost(
                                 }
                             }) else null,
                             fillingMeta = fillingMeta,
+                            avatar = if (com.guangyue.feature.library.viewmodel.ArtistTiles.isArtist(tile.key)) tile.artwork else null,
                         ),
                     )
                     TrackDownloadPick(collectionPick, vm) { collectionPick = null }
