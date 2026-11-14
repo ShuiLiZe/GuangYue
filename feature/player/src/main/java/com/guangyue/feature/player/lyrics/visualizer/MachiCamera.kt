@@ -3,7 +3,8 @@
 //   · applyFrustum：按宽高比取能装下构图的半高（留白 2%、给字幕让 5%），竖向装不下时多出来的 85% 从下沿裁。
 //   · settle：静止位置叠运镜（resolveMachiDrift），转角夹在默认 ±75°、俯角 20°–70°、缩放 0.75–3.6，平移 ±5 m。
 //   · place：镜头在目标点 + 球坐标方向 × 60 m，lookAt 目标点；three 的 OrthographicCamera.zoom 绕视锥中心缩放。
-// 输出列主序 4×4（GLES 直接用）。手机版不接 OrbitControls（没有拖拽 / 自定义视角 / 闲置回正）。
+// 输出列主序 4×4（GLES 直接用）。拖拽照 OrbitControls 的默认视角模式：单指转（rotateSpeed 0.55）、双指缩放 / 平移（panSpeed 0.8），
+// 限角同 MACHI_CAMERA_LIMITS；一拖运镜就停，松手约 8 秒后缓回默认构图（k = 1 − e^(−1.6 dt)），回正后运镜 4 秒升满。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import kotlin.math.PI
@@ -122,6 +123,65 @@ internal class MachiCameraRig(private val points: List<MachiVec3>, private val h
     private var halfHeight = 8.0
     private var base = MachiVec3(0.0, 0.0, 0.0)
 
+    // ── 拖拽（默认视角模式）：相对默认构图的偏移，转角 / 俯仰（弧度）、缩放倍数、按默认朝向的左右 / 前后平移（米）。
+    private var dAz = 0.0
+    private var dEl = 0.0
+    private var dZoom = 1.0
+    private var dPanX = 0.0
+    private var dPanZ = 0.0
+    private var interacting = false
+    private var idleMs = -1L
+    private var returning = false
+    /** 运镜闸门：拖动时归零，回到静止位置后按真实时间 4 秒升到 1（camera.ts stepMotion 的 motionWeight 归零再起）。 */
+    private var gate = 1.0
+
+    private fun offAmount() = kotlin.math.abs(dAz) + kotlin.math.abs(dEl) + kotlin.math.abs(dZoom - 1) + kotlin.math.abs(dPanX) + kotlin.math.abs(dPanZ)
+
+    fun beginDrag() { interacting = true; returning = false; idleMs = -1; gate = 0.0 }
+
+    fun endDrag(nowMs: Long) { interacting = false; idleMs = nowMs }
+
+    /** 单指拖：OrbitControls rotateLeft / rotateUp（2π·Δ / 视口高 × rotateSpeed）。 */
+    fun rotate(dxPx: Double, dyPx: Double, heightPx: Double) {
+        val k = 2 * PI / max(1.0, heightPx) * 0.55
+        dAz = mcClamp(dAz - dxPx * k, -MachiCameraLimits.AZIMUTH_RANGE, MachiCameraLimits.AZIMUTH_RANGE)
+        val el = mcClamp(home.elevation + dEl + dyPx * k, MachiCameraLimits.MIN_ELEVATION, MachiCameraLimits.MAX_ELEVATION)
+        dEl = el - home.elevation
+    }
+
+    /** 双指捏合：缩放倍数，夹在 0.75–3.6（按绝对缩放）。 */
+    fun zoomBy(factor: Double) {
+        val z = mcClamp(home.zoom * dZoom * factor, MachiCameraLimits.MIN_ZOOM, MachiCameraLimits.MAX_ZOOM)
+        dZoom = z / home.zoom
+    }
+
+    /** 双指平移：沿地面（screenSpacePanning = false），按当前朝向换算后存成默认朝向的左右 / 前后，夹在 ±5 m。 */
+    fun pan(dxPx: Double, dyPx: Double, heightPx: Double) {
+        val zoom = home.zoom * dZoom
+        val s = 2 * halfHeight / zoom / max(1.0, heightPx) * 0.8
+        val az = home.azimuth + dAz
+        val rightCur = MachiVec3(cos(az), 0.0, -sin(az))
+        val backCur = MachiVec3(-sin(az), 0.0, -cos(az))
+        val move = rightCur * (-dxPx * s) + backCur * (dyPx * s)
+        val rightHome = MachiVec3(cos(home.azimuth), 0.0, -sin(home.azimuth))
+        val backHome = MachiVec3(-sin(home.azimuth), 0.0, -cos(home.azimuth))
+        dPanX = mcClamp(dPanX + move.dot(rightHome), -MachiCameraLimits.PAN, MachiCameraLimits.PAN)
+        dPanZ = mcClamp(dPanZ + move.dot(backHome), -MachiCameraLimits.PAN, MachiCameraLimits.PAN)
+    }
+
+    /** 每帧推进闲置回正与运镜闸门；返回运镜幅度的乘数。 */
+    fun step(realDelta: Double, nowMs: Long): Double {
+        if (!interacting && idleMs > 0 && nowMs - idleMs > 8000) { returning = offAmount() > 1e-3; idleMs = -1 }
+        if (returning) {
+            val k = 1 - kotlin.math.exp(-realDelta * 1.6)
+            dAz -= dAz * k; dEl -= dEl * k; dZoom += (1 - dZoom) * k; dPanX -= dPanX * k; dPanZ -= dPanZ * k
+            if (offAmount() < 2e-3) { dAz = 0.0; dEl = 0.0; dZoom = 1.0; dPanX = 0.0; dPanZ = 0.0; returning = false }
+        }
+        val still = !interacting && !returning && idleMs < 0
+        gate = if (still) min(1.0, gate + realDelta / 4.0) else 0.0
+        return gate
+    }
+
     init { fitDefault() }
 
     private fun fitDefault() {
@@ -156,7 +216,9 @@ internal class MachiCameraRig(private val points: List<MachiVec3>, private val h
         applyFrustum()
     }
 
-    private fun restTarget(extraX: Double, extraZ: Double): MachiVec3 {
+    private fun restTarget(extraX0: Double, extraZ0: Double): MachiVec3 {
+        val extraX = extraX0 + dPanX
+        val extraZ = extraZ0 + dPanZ
         if (extraX == 0.0 && extraZ == 0.0) return base
         val right = MachiVec3(cos(home.azimuth), 0.0, -sin(home.azimuth))
         val back = MachiVec3(-sin(home.azimuth), 0.0, -cos(home.azimuth))
@@ -171,14 +233,19 @@ internal class MachiCameraRig(private val points: List<MachiVec3>, private val h
         val weight = w0 * w0 * (3 - 2 * w0)
         val view: MachiView
         val target: MachiVec3
+        val home = MachiView(
+            azimuth = this.home.azimuth + dAz,
+            elevation = mcClamp(this.home.elevation + dEl, MachiCameraLimits.MIN_ELEVATION, MachiCameraLimits.MAX_ELEVATION),
+            zoom = mcClamp(this.home.zoom * dZoom, MachiCameraLimits.MIN_ZOOM, MachiCameraLimits.MAX_ZOOM),
+        )
         if (weight <= 0) {
             view = home; target = restTarget(0.0, 0.0)
         } else {
             val drift = resolveMachiDrift(driftTime)
             val range = MachiCameraLimits.AZIMUTH_RANGE
-            val panScale = weight * min(1.0, home.zoom / home.zoom)
+            val panScale = weight * min(1.0, this.home.zoom / home.zoom)
             view = MachiView(
-                azimuth = mcClamp(home.azimuth + drift.azimuth * MACHI_DEG * weight, home.azimuth - range, home.azimuth + range),
+                azimuth = mcClamp(home.azimuth + drift.azimuth * MACHI_DEG * weight, this.home.azimuth - range, this.home.azimuth + range),
                 elevation = mcClamp(home.elevation + drift.elevation * MACHI_DEG * weight, MachiCameraLimits.MIN_ELEVATION, MachiCameraLimits.MAX_ELEVATION),
                 zoom = mcClamp(home.zoom * drift.zoom.pow(weight), MachiCameraLimits.MIN_ZOOM, MachiCameraLimits.MAX_ZOOM),
             )

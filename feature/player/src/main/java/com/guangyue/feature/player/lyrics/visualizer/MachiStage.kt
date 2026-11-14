@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
@@ -750,7 +753,12 @@ private class MachiRenderer(
 
     override fun onDrawFrame(gl: GL10?) {
         // 运镜按氛围时间（camera.ts motionTime：用上一帧累加的 ambient，帧间隔封顶 0.1 s）；幅度 4 s 内从 0 升满（DRIFT_RAMP_SECONDS）。
-        val pose = synchronized(rig) { rig.setAspect(aspectW, aspectH); if (restCamera) rig.pose(0.0, 0.0) else rig.pose(ambient, kotlin.math.min(1.0, ambient / 4.0)) }
+        val pose = synchronized(rig) {
+            rig.setAspect(aspectW, aspectH)
+            // 拖拽：闲置回正 + 运镜闸门（一拖运镜停，回到静止位置后 4 秒升满）。
+            val gate = rig.step(clock.realDelta.let { if (it <= 0.0) 1.0 / 60 else it }, System.currentTimeMillis())
+            if (restCamera) rig.pose(0.0, 0.0) else rig.pose(ambient, kotlin.math.min(1.0, ambient / 4.0) * gate)
+        }
         val vp = pose.viewProjection()
         // 氛围时钟（clock.ts MachiClock）：一帧最多走 0.1 s，暂停时 delta = 0。第一帧补 1/60 s，让取证首帧和原来一致。
         clock.paused = paused()
@@ -911,6 +919,8 @@ fun MachiStagePreview(
     paused: () -> Boolean = { false },
     /** 场景：kowloon（城寨酒吧，默认）/ konbini（便利店街角）/ station（加油站停车场）。 */
     scene: String = "kowloon",
+    /** 播放页可拖动镜头（Folia OrbitControls）。 */
+    draggable: Boolean = false,
 ) {
     val palette = remember(backgroundColor, primaryColor, secondaryColor, accentColor, seed) {
         resolveMachiPalette(MachiTheme(backgroundColor.machiHex(), primaryColor.machiHex(), secondaryColor.machiHex(), accentColor.machiHex()), seed)
@@ -921,8 +931,10 @@ fun MachiStagePreview(
         resolveMachiDaylight(timeOfDay, now.get(java.util.Calendar.HOUR_OF_DAY) + now.get(java.util.Calendar.MINUTE) / 60.0 + now.get(java.util.Calendar.SECOND) / 3600.0)
     }
     val light = remember(palette, weather, seed, daylight) { MachiNightLight(palette, runCatching { resolveMachiWeatherKind(weather, seed) }.getOrDefault(MachiWeatherKind.CLEAR), daylight) }
-    val setup = remember(scene, palette, songTitle, artist, seed, lines) {
-        when (scene) {
+    // scene auto：按歌选（machiTuning.ts resolveMachiSceneId：FNV-1a("machi-scene:" + seed) % 3，顺序 konbini / station / kowloon）。
+    val sceneId = if (scene == "auto") listOf("konbini", "station", "kowloon")[(machiHashSeed("machi-scene:$seed") % 3).toInt()] else scene
+    val setup = remember(sceneId, palette, songTitle, artist, seed, lines) {
+        when (sceneId) {
             "konbini" -> machiKonbiniSetup(palette, seed, songTitle, artist)
             "station" -> machiStationSetup(palette, seed, songTitle, artist, lines)
             else -> machiKowloonSetup(palette, seed, songTitle, artist)
@@ -942,6 +954,55 @@ fun MachiStagePreview(
             },
             modifier = Modifier.fillMaxSize(),
             onRelease = { it.onPause() },
+        )
+      }
+      // Folia 播放页町景可拖：单指转、双指缩放 / 平移（OrbitControls）；预览（restCamera）不接拖拽。
+      if (draggable && !restCamera) {
+        Box(
+            Modifier.fillMaxSize().pointerInput(rig) {
+                awaitEachGesture {
+                    val first = awaitFirstDown(requireUnconsumed = false)
+                    // 过了触摸阈值才算拖（轻点留给播放页开关控件）。
+                    var dragging = false
+                    var travel = 0f
+                    var prevCentroid = first.position
+                    var prevSpan = 0f
+                    var prevCount = 1
+                    while (true) {
+                        val ev = awaitPointerEvent()
+                        val pressed = ev.changes.filter { it.pressed }
+                        if (pressed.isEmpty()) break
+                        val cx = pressed.map { it.position.x }.average().toFloat()
+                        val cy = pressed.map { it.position.y }.average().toFloat()
+                        val centroid = androidx.compose.ui.geometry.Offset(cx, cy)
+                        val span = if (pressed.size >= 2) (pressed[0].position - pressed[1].position).getDistance() else 0f
+                        if (!dragging) {
+                            travel += (centroid - prevCentroid).getDistance()
+                            if (travel > viewConfiguration.touchSlop || pressed.size >= 2) {
+                                dragging = true
+                                synchronized(rig) { rig.beginDrag() }
+                            } else {
+                                prevCentroid = centroid; prevCount = pressed.size
+                                continue
+                            }
+                        }
+                        if (pressed.size == prevCount) {
+                            val d = centroid - prevCentroid
+                            val h = size.height.toDouble()
+                            synchronized(rig) {
+                                if (pressed.size == 1) rig.rotate(d.x.toDouble(), d.y.toDouble(), h)
+                                else {
+                                    if (prevSpan > 0f && span > 0f) rig.zoomBy((span / prevSpan).toDouble())
+                                    rig.pan(d.x.toDouble(), d.y.toDouble(), h)
+                                }
+                            }
+                        }
+                        prevCentroid = centroid; prevSpan = span; prevCount = pressed.size
+                        ev.changes.forEach { it.consume() }
+                    }
+                    if (dragging) synchronized(rig) { rig.endDrag(System.currentTimeMillis()) }
+                }
+            },
         )
       }
     }

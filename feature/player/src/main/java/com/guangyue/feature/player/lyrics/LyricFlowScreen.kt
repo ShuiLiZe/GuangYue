@@ -568,6 +568,9 @@ fun LyricFlowScreen(
                 weather = "auto",
                 timeOfDay = "auto",
                 paused = { !playback.isPlaying },
+                // Folia：三个场景（便利店街角 / 加油站 / 城寨酒吧）按歌自动选；播放页可拖动镜头。
+                scene = "auto",
+                draggable = true,
                 modifier = Modifier.fillMaxSize(),
             )
         }
