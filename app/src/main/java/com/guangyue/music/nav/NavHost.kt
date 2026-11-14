@@ -864,6 +864,7 @@ fun GuangYueNavHost(
                     panelOpen = panelOpen,
                     lyricOffsetMs = lyricOffset,
                     onNext = { playback.next() },
+                    onPrevious = { playback.previous() },
                     modeIcon = stageModeIcon(playbackState.shuffle, playbackState.repeatMode),
                     modeLabel = stageModeLabel(playbackState.shuffle, playbackState.repeatMode),
                     onCycleMode = {

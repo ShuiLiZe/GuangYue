@@ -149,6 +149,8 @@ fun LyricFlowScreen(
     lyricOffsetMs: Long = 0L,
     /** P2b：展开胶囊的右槽下一首、左槽播放模式。 */
     onNext: (() -> Unit)? = null,
+    /** 2026-11-14：展开胶囊歌名两侧的上一首 / 下一首箭头（folia-sonnet 触屏档 track-title 两侧箭头）；null 不画左箭头。 */
+    onPrevious: (() -> Unit)? = null,
     modeIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     modeLabel: String = "",
     onCycleMode: (() -> Unit)? = null,
@@ -877,6 +879,7 @@ fun LyricFlowScreen(
                     },
                     title = playback.item?.title.orEmpty(),
                     onNext = onNext,
+                    onPrevious = onPrevious,
                     modeIcon = modeIcon,
                     modeLabel = modeLabel,
                     onCycleMode = onCycleMode,
@@ -1037,6 +1040,7 @@ private fun LyricBar(
     onScrubEnd: () -> Unit = {},
     title: String = "",
     onNext: (() -> Unit)? = null,
+    onPrevious: (() -> Unit)? = null,
     modeIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     modeLabel: String = "",
     onCycleMode: (() -> Unit)? = null,
@@ -1073,7 +1077,7 @@ private fun LyricBar(
                     .padding(horizontal = GySpace.pageH),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(formatTime(positionMs), fontSize = 11.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+                Text(formatTime(positionMs), fontSize = 12.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
                 Spacer(Modifier.width(GySpace.s))
                 Box(
                     Modifier
@@ -1091,21 +1095,27 @@ private fun LyricBar(
                     )
                 }
                 Spacer(Modifier.width(GySpace.s))
-                Text(formatTime(durationMs), fontSize = 11.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+                Text(formatTime(durationMs), fontSize = 12.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
             }
         } else {
             Column(Modifier.fillMaxWidth().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    title,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = pillInk,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).clickableNoRipple { expanded = false },
-                )
-                Spacer(Modifier.height(8.dp))
+                // 2026-11-14：folia-sonnet androidPhoneFit 触屏档 —— 歌名两侧钉一对箭头（上一首 / 下一首），
+                // 两侧等宽对称，歌名在中间带居中、过长省略。箭头视觉 16dp，触控 44dp（与本行其它键同档）。
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TitleArrow(GuangYueIcons.ChevronLeft, "上一首", pillInk, onPrevious) { touch++ }
+                    Text(
+                        title,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = pillInk,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp).clickableNoRipple { expanded = false },
+                    )
+                    TitleArrow(GuangYueIcons.ChevronRight, "下一首", pillInk, onNext) { touch++ }
+                }
+                Spacer(Modifier.height(4.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                         if (modeIcon != null && onCycleMode != null) {
@@ -1146,7 +1156,7 @@ private fun LyricBar(
                 }
                 Spacer(Modifier.height(4.dp))
                 Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(formatTime(positionMs), fontSize = 11.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+                    Text(formatTime(positionMs), fontSize = 12.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
                     Spacer(Modifier.width(GySpace.s))
                     Slider(
                         value = progress.coerceIn(0f, 1f),
@@ -1164,10 +1174,36 @@ private fun LyricBar(
                         modifier = Modifier.weight(1f).height(36.dp).semantics { contentDescription = seekBarLabel },
                     )
                     Spacer(Modifier.width(GySpace.s))
-                    Text(formatTime(durationMs), fontSize = 11.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+                    Text(formatTime(durationMs), fontSize = 12.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
                 }
             }
         }
+    }
+}
+
+/** 展开胶囊歌名两侧的箭头；[onClick] 为 null 时只占位（保持歌名居中对称）。 */
+@Composable
+private fun TitleArrow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    ink: Color,
+    onClick: (() -> Unit)?,
+    onTouch: () -> Unit,
+) {
+    Box(
+        Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickableNoRipple { onClick(); onTouch() }.semantics { contentDescription = label }
+                } else {
+                    Modifier
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (onClick != null) Icon(icon, null, tint = ink.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
     }
 }
 

@@ -518,6 +518,13 @@ fun V0cStage(
                 fumeStillFrame = fumeSteps > 0,
                 fumeDebugFrames = debugFrames,
                 // 2026-11-14 取证 nowplaying / nextup：Folia NowPlayingToast 停在左上返回键下方。
+                // 2026-11-14 barexpanded：展开胶囊（歌名两侧上一首 / 下一首箭头）。
+                initialBarExpanded = style == "barexpanded",
+                onNext = if (style == "barexpanded") ({}) else null,
+                onPrevious = if (style == "barexpanded") ({}) else null,
+                modeIcon = if (style == "barexpanded") com.guangyue.feature.library.design.icons.GuangYueIcons.ListMusic else null,
+                modeLabel = "顺序播放",
+                onCycleMode = if (style == "barexpanded") ({}) else null,
                 showNowPlayingCard = style == "nowplaying" || style == "nextup",
                 nowPlayingNext = com.guangyue.feature.player.lyrics.NowPlayingCardSong("晴天", "周杰伦", null),
                 nowPlayingHold = style == "nowplaying",
