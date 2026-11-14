@@ -270,7 +270,35 @@ fun V0cStage(
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
         // 2026-11-12：町景（machi）3D 舞台起步，只在取证页（未进歌词样式列表）。
-        if (style == "dioramaswitch") {
+        if (style == "collection" || style == "collectionfilter" || style == "collectionwall") {
+            // 2026-11-14：集合层过滤取证（缝里「过滤当前页」）。collection = 列表无过滤；collectionfilter = 列表 + 过滤词「周」；
+            // collectionwall = 墙 + 过滤词「beat」。
+            val names = listOf(
+                "发如雪" to "周杰伦 · 十一月的萧邦", "Yesterday" to "The Beatles · Help!", "七里香" to "周杰伦 · 七里香",
+                "Hey Jude" to "The Beatles", "晴天" to "周杰伦 · 叶惠美", "夜曲" to "周杰伦 · 十一月的萧邦",
+                "Let It Be" to "The Beatles · Let It Be", "后来" to "刘若英 · 我等你", "稻香" to "周杰伦 · 魔杰座",
+                "Imagine" to "John Lennon", "Something" to "The Beatles · Abbey Road", "月亮代表我的心" to "邓丽君",
+                "Michelle" to "The Beatles · Rubber Soul", "简单爱" to "周杰伦 · 范特西",
+            )
+            val tiles = names.mapIndexed { i, (t, sub) ->
+                com.guangyue.feature.library.home.HomeTile("c$i", t, sub, kind = com.guangyue.feature.library.home.HomeTileKind.TRACK)
+            }
+            com.guangyue.music.ui.home.BravaisWall(
+                sections = listOf("歌单" to tiles),
+                title = "广乐",
+                inkColor = if (dark) Color(0xFFF4F4F5) else Color(0xFF18181B),
+                groundColor = if (dark) Color(0xFF09090B) else Color(0xFFF4F4F5),
+                onOpenTile = {},
+                onOpenSearch = {},
+                collection = com.guangyue.music.ui.home.SeamCollection(
+                    name = "我喜欢的音乐", kindLabel = "歌单", count = tiles.size, loading = false, failed = false,
+                    onBack = {}, onPlayAll = {}, onShuffle = {}, onRetry = {},
+                ),
+                initialListMode = style != "collectionwall",
+                initialFilterQuery = when (style) { "collectionfilter" -> "周"; "collectionwall" -> "beat"; else -> "" },
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (style == "dioramaswitch") {
             // 2026-11-14：镜台换歌一镜到底取证：2 秒后换种子（= 换歌），新走廊在雾外偏移处生成，镜头飞过去。
             val switchSeed = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("probe-0") }
             androidx.compose.runtime.LaunchedEffect(Unit) { kotlinx.coroutines.delay(2000); switchSeed.value = "probe-1" }

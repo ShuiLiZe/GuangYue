@@ -467,6 +467,7 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun resolveTracks(tile: HomeTile): List<TrackEntity> {
         if (tile.key.startsWith(LibraryTiles.PREFIX)) return libraryTracks(tile.key)
+        if (ArtistTiles.isArtist(tile.key)) return tracksOfArtist(tile)
         run {
             val list = when (tile.kind) {
                 HomeTileKind.PLAYLIST -> {
@@ -531,6 +532,15 @@ class HomeViewModel @Inject constructor(
         return runCatching { bridge.getTopListDetail(source.id, leaf, page) }
             .getOrDefault(emptyList())
             .map { it.toEntity() }
+    }
+
+    /**
+     * 2026-11-14 歌手页：插件 getArtistWorks（第 1 页，歌曲）。插件没有这个函数或调用失败时抛出，集合层显示「加载失败，点此重试」。
+     */
+    private suspend fun tracksOfArtist(tile: HomeTile): List<TrackEntity> {
+        val (pluginId, artist) = ArtistTiles.artistOf(tile.key, tile.title) ?: error("unknown artist tile ${tile.key}")
+        val works = bridge.getArtistWorks(pluginId, artist, 1, SearchType.MUSIC) ?: error("getArtistWorks failed for ${tile.key}")
+        return works.first.map { it.toEntity() }
     }
 
     private fun MusicItem.toEntity() = TrackEntity(

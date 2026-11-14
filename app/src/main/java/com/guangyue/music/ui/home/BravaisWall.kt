@@ -16,6 +16,17 @@
 //  3. 排名原点 = 初始镜头中心；拖动时不重排（Folia 同：排名只在换数据时重算）。
 package com.guangyue.music.ui.home
 
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.Canvas
@@ -122,12 +133,26 @@ fun BravaisWall(
     onDownloadTileLong: ((HomeTile) -> Unit)? = null,
     /** 集合层初始是列表（true）/ 墙（false）；null = 按曲目数自动选（[CollectionLayout.preferList]）。取证用。 */
     initialListMode: Boolean? = null,
+    /** 集合层过滤词初值（取证用；平时空）。 */
+    initialFilterQuery: String = "",
 ) {
     // B1d：缝（Seam）横条的页签 = 墙的数据来源；第 0 个是「全部」（各段按 key 去重拼起来）。
     var tab by rememberSaveable { mutableStateOf(0) }  // 进播放页再回来保留页签
-    val tiles = remember(sections, tab) {
+    val sourceTiles = remember(sections, tab) {
         if (tab == 0) sections.flatMap { it.second }.distinctBy { it.key } else sections.getOrNull(tab - 1)?.second.orEmpty()
     }
+    // 2026-11-14 集合层过滤（Folia collectionQuery + 缝里「过滤当前页」）：只收窄当前墙 / 列表，不发请求；首页不过滤。
+    var filterQuery by rememberSaveable(collection?.name) { mutableStateOf(initialFilterQuery) }
+    val tiles = remember(sourceTiles, filterQuery, collection != null) {
+        if (collection == null) sourceTiles else CollectionFilter.apply(sourceTiles, filterQuery)
+    }
+    val seamFilter = if (collection == null) null else SeamFilter(
+        query = filterQuery,
+        onChange = { filterQuery = it },
+        matches = tiles.size,
+        total = sourceTiles.size,
+        shown = tiles,
+    )
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     BoxWithConstraints(modifier.fillMaxSize().clipToBounds()) {
@@ -173,7 +198,7 @@ fun BravaisWall(
         // 2026-11-10 用户真机：「我喜欢」只有 1 首，集合页却是一整面空画框，找不到那首歌。
         // 集合层：曲目少（≤ LIST_DEFAULT_MAX）或多到墙放不下（> 3×3 区块 108 槽）时默认用列表，信息条上可切换。
         var listPref by rememberSaveable(collection?.name) { mutableStateOf(initialListMode) }
-        val listMode = collection != null && (listPref ?: CollectionLayout.preferList(tiles.size))
+        val listMode = collection != null && (listPref ?: CollectionLayout.preferList(sourceTiles.size))
         if (listMode && collection != null) {
             Box(Modifier.fillMaxSize()) {
                 CollectionTrackList(
@@ -197,7 +222,7 @@ fun BravaisWall(
                         .zIndex(10f)
                         .background(groundColor),
                 ) {
-                    SeamCollectionRow(collection, title, inkColor, listMode = true, onToggleList = { listPref = false })
+                    SeamCollectionRow(collection, title, inkColor, listMode = true, onToggleList = { listPref = false }, filter = seamFilter)
                 }
                 Box(
                     Modifier
@@ -343,7 +368,7 @@ fun BravaisWall(
                     .background(groundColor),
             ) {
                 if (collection != null) {
-                    SeamCollectionRow(collection, title, inkColor, listMode = false, onToggleList = { listPref = true })
+                    SeamCollectionRow(collection, title, inkColor, listMode = false, onToggleList = { listPref = true }, filter = seamFilter)
                 } else {
                     SeamHomeRow(title, listOf("全部") + sections.map { it.first }, tab, inkColor, onSelect = { tab = it; expanded = null }, onOpenSearch = onOpenSearch)
                 }
@@ -371,7 +396,7 @@ private val FLIP_IN = CubicBezierEasing(0.2f, 0.7f, 0.25f, 1f)
 private const val SEAM_HOME_HEIGHT = 72f
 
 /** 集合层信息条高：Folia 横条完整态 212（桌面）；手机只留面包屑 + 标题 + 元数据/按钮三行，取 148。 */
-private const val SEAM_COLLECTION_HEIGHT = 148f
+private const val SEAM_COLLECTION_HEIGHT = 182f
 
 /** B2：集合层信息条的数据（BravaisSeamCollection 的手机子集）。 */
 data class SeamCollection(
@@ -390,15 +415,21 @@ data class SeamCollection(
     val onFillMeta: (() -> Unit)? = null,
     /** 补全进行中（按钮置灰、文字换成「补全中…」）。 */
     val fillingMeta: Boolean = false,
+    /**
+     * 2026-11-14：过滤时「播放全部 / 随机」只放命中的曲目（Folia playScope：过滤后的 contextTracks）。
+     * 参数是命中的块（原顺序）与是否随机。null 时过滤中也放整张。
+     */
+    val onPlayTiles: ((tiles: List<HomeTile>, shuffle: Boolean) -> Unit)? = null,
 )
 
 /**
  * 集合信息条（BravaisSeamCrumbs + BravaisSeamTitle + BravaisSeamCollection 元数据行与高频按钮）：
  * 第一行面包屑「‹ 广乐 / 类型」，点根返回；第二行集合名 22/800；第三行「N 首 · 类型」或加载中 / 失败（重试），右侧「播放全部」实心胶囊 +「随机」。
- * 未移：收藏星标、过滤输入、列表面板、「⋯ 更多」、补页进度、每日推荐日期步进。
+ * 第三行（2026-11-14）：「过滤当前页」输入位（BravaisSeamFilterField：漏斗 + 下划线，有词时右边匹配数 + 清除），过滤时元数据行换成「命中 / 总数」。
+ * 未移：收藏星标、列表面板、「⋯ 更多」、补页进度、每日推荐日期步进；「播放全部」仍放整张（Folia 过滤时放命中范围）。
  */
 @Composable
-private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listMode: Boolean = false, onToggleList: (() -> Unit)? = null) {
+private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listMode: Boolean = false, onToggleList: (() -> Unit)? = null, filter: SeamFilter? = null) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(
@@ -452,9 +483,15 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listM
             c.name, color = ink, fontSize = 22.sp, lineHeight = 27.sp, fontWeight = FontWeight.ExtraBold,
             maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
+        if (filter != null && (c.count ?: 0) > 0) {
+            Spacer(Modifier.height(8.dp))
+            SeamFilterField(filter, ink)
+        }
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically) {
+            val filtering = filter != null && CollectionFilter.normalize(filter.query).isNotEmpty()
             val meta = when {
+                filtering && filter != null -> "${CollectionFilter.matchLabel(filter.matches, filter.total)} 首 · ${c.kindLabel}"
                 c.loading -> "加载中…"
                 c.failed -> "加载失败，点此重试"
                 c.count == 0 -> "没有取到曲目 · 点此重试"
@@ -470,7 +507,10 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listM
                     .weight(1f)
                     .then(if (c.failed || c.count == 0) Modifier.clickable(onClick = c.onRetry) else Modifier),
             )
-            val ready = !c.loading && !c.failed && (c.count ?: 0) > 0
+            val scoped = filtering && filter != null && c.onPlayTiles != null
+            val ready = !c.loading && !c.failed && (c.count ?: 0) > 0 && (!scoped || (filter?.matches ?: 0) > 0)
+            val playAll: () -> Unit = { if (scoped && filter != null) c.onPlayTiles?.invoke(filter.shown, false) else c.onPlayAll() }
+            val shuffleAll: () -> Unit = { if (scoped && filter != null) c.onPlayTiles?.invoke(filter.shown, true) else c.onShuffle() }
             if (onToggleList != null && (c.count ?: 0) > 0) {
                 // 列表 / 墙 切换（手机加的）：列表里能直接看到每首歌并点播。
                 Box(
@@ -495,7 +535,7 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listM
                     .height(36.dp)
                     .clip(CircleShape)
                     .background(if (ready) ink else ink.copy(alpha = 0.2f))
-                    .clickable(enabled = ready, onClick = c.onPlayAll)
+                    .clickable(enabled = ready, onClick = playAll)
                     .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -509,10 +549,72 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listM
                     .size(36.dp)
                     .clip(CircleShape)
                     .background(ink.copy(alpha = 0.08f))
-                    .clickable(enabled = ready, onClick = c.onShuffle),
+                    .clickable(enabled = ready, onClick = shuffleAll),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(GuangYueIcons.Shuffle, contentDescription = "随机播放", tint = ink.copy(alpha = if (ready) 0.8f else 0.3f), modifier = Modifier.size(17.dp))
+            }
+        }
+    }
+}
+
+/** 缝里过滤输入位的状态（Folia BravaisSeamFilter 子集）。 */
+data class SeamFilter(
+    val query: String,
+    val onChange: (String) -> Unit,
+    val matches: Int,
+    val total: Int,
+    /** 命中的块（原顺序）；过滤时「播放全部 / 随机」的范围。 */
+    val shown: List<HomeTile> = emptyList(),
+)
+
+/**
+ * 「过滤当前页」输入位（BravaisSeamFilterField 手机版）：缝的字色、一道下划线（聚焦时加深），漏斗图标 + 占位「过滤当前页」；
+ * 有词时右边是匹配数与清除键。键盘「完成」收起输入法（Folia ↓ / Enter 把焦点交给墙，手机没有方向键）。
+ */
+@Composable
+private fun SeamFilterField(f: SeamFilter, ink: Color) {
+    var focused by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val line = ink.copy(alpha = if (focused) 0.6f else 0.2f)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(30.dp)
+            .drawBehind {
+                val y = size.height - 0.5.dp.toPx()
+                drawLine(line, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(GuangYueIcons.Filter, contentDescription = null, tint = ink.copy(alpha = 0.55f), modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(8.dp))
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            if (f.query.isEmpty()) {
+                Text("过滤当前页", color = ink.copy(alpha = 0.4f), fontSize = 13.sp, maxLines = 1)
+            }
+            BasicTextField(
+                value = f.query,
+                onValueChange = f.onChange,
+                singleLine = true,
+                textStyle = TextStyle(color = ink, fontSize = 13.sp),
+                cursorBrush = SolidColor(ink),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focused = it.isFocused }
+                    .semantics { contentDescription = "过滤当前页" },
+            )
+        }
+        if (f.query.isNotEmpty()) {
+            Text(CollectionFilter.matchLabel(f.matches, f.total), color = ink.copy(alpha = 0.55f), fontSize = 12.sp, maxLines = 1)
+            Spacer(Modifier.width(4.dp))
+            Box(
+                Modifier.size(28.dp).clip(CircleShape).clickable { f.onChange("") },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(GuangYueIcons.X, contentDescription = "清除过滤", tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
             }
         }
     }

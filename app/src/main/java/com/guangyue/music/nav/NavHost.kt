@@ -319,6 +319,7 @@ fun GuangYueNavHost(
             }
             val kindLabel = when {
                 isLib -> "曲库"
+                com.guangyue.feature.library.viewmodel.ArtistTiles.isArtist(tile.key) -> "歌手"
                 else -> when (tile.kind) {
                 com.guangyue.feature.library.home.HomeTileKind.STATION -> "榜单"
                 else -> "歌单"
@@ -383,6 +384,20 @@ fun GuangYueNavHost(
                             },
                             onRetry = { attempt++ },
                             onDownloadAll = { if (list.isNotEmpty()) downloadSome(list) },
+                            // 2026-11-14：过滤中「播放全部 / 随机」只放命中的曲目（Folia playScope）。
+                            onPlayTiles = { shown, shuffle ->
+                                val picked = shown.mapNotNull { t -> trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> list[i] } }
+                                if (picked.isNotEmpty()) {
+                                    if (shuffle) {
+                                        playback.setQueueFromTracks(picked, picked.indices.random(), true)
+                                        playback.setShuffle(true)
+                                    } else {
+                                        playback.setShuffle(false)
+                                        playback.setQueueFromTracks(picked, 0, true)
+                                    }
+                                    navController.navigate(Routes.LYRIC_FLOW)
+                                }
+                            },
                             // 2026-11-10：曲库（我喜欢 / 全部歌曲 / 最近播放）补全歌词与封面。
                             onFillMeta = if (isLib) ({
                                 if (list.isNotEmpty() && !fillingMeta) {
@@ -443,7 +458,22 @@ fun GuangYueNavHost(
                             vm.searchNow()
                         },
                         onOpenAlbum = { item -> vm.openAlbum(item) },
-                        onOpenArtist = { item -> vm.openArtist(item) },
+                        // 2026-11-14 歌手页：音源有 getArtistWorks 时进集合层（歌手的歌曲墙 / 列表）；否则仍按歌手名再搜一次。
+                        onOpenArtist = { item ->
+                            val plugin = state.selected
+                            val artist = state.artists.firstOrNull { a -> a.platform == item.platform && a.id == item.id && item.type == "artist" }
+                                ?: when {
+                                    item.type == "artist" -> com.guangyue.core.plugin.ArtistItem(item.platform, item.id, item.title, item.artwork)
+                                    item.artistId != null -> com.guangyue.core.plugin.ArtistItem(item.platform, item.artistId!!, item.displayArtist)
+                                    else -> null
+                                }
+                            if (plugin != null && plugin.hasArtistWorks && artist != null) {
+                                openedCollection = com.guangyue.feature.library.viewmodel.ArtistTiles.tile(plugin.id, artist)
+                                navController.navigate(Routes.COLLECTION)
+                            } else {
+                                vm.openArtist(item)
+                            }
+                        },
                         onTabChange = { vm.onTabChange(it) },
                         // 0.0.9 a-1：失败提示条里的「重试」——清该插件缓存后真重发一次请求。
                         onRetry = { vm.retry() },
