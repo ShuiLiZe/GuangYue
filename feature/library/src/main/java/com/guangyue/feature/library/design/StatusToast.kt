@@ -1,5 +1,8 @@
 package com.guangyue.feature.library.design
 
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -113,6 +116,9 @@ fun StatusToastHost(dark: Boolean, modifier: Modifier = Modifier) {
         val now = item
         if (now == null) {
             visible = false
+            // 退场动画走完再拆掉 Popup 窗口（窗口留着会挡住顶部的点按）。
+            delay(260)
+            shown = null
             return@LaunchedEffect
         }
         if (visible && shown != null && shown?.key != now.key) {
@@ -126,25 +132,34 @@ fun StatusToastHost(dark: Boolean, modifier: Modifier = Modifier) {
         StatusToasts.dismiss(now.key)
     }
     val conf = LocalConfiguration.current
-    Box(
-        modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(top = 18.dp, start = 16.dp, end = 16.dp),
-        contentAlignment = Alignment.TopCenter,
+    // 状态栏高度在宿主这边量好（Popup 是独立窗口，不一定拿得到 inset）。
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val t0 = shown ?: return
+    // 2026-11-14：放进 Popup（只在有提示时创建）——ModalBottomSheet / 对话框是独立窗口，
+    // 提示若画在根布局里会被它们盖住；提示出现时才建的窗口叠在最上面（Folia toast 也压在弹层之上）。
+    Popup(
+        alignment = Alignment.TopCenter,
+        properties = PopupProperties(focusable = false, clippingEnabled = false),
     ) {
-        AnimatedVisibility(
-            visible = visible && shown != null,
-            enter = fadeIn(tween(320)) + slideInVertically(tween(320)) { -it / 3 },
-            exit = fadeOut(tween(220)) + slideOutVertically(tween(220)) { -it / 5 },
+        Box(
+            modifier
+                .fillMaxWidth()
+                .padding(top = topInset + 18.dp, start = 16.dp, end = 16.dp),
+            contentAlignment = Alignment.TopCenter,
         ) {
-            val t = shown ?: return@AnimatedVisibility
-            StatusToastPill(
-                item = t,
-                dark = dark,
-                maxWidth = toastMaxWidth(conf.screenWidthDp, conf.screenHeightDp),
-                onTap = { StatusToasts.dismiss(t.key); visible = false },
-            )
+            AnimatedVisibility(
+                visible = visible,
+                enter = fadeIn(tween(320)) + slideInVertically(tween(320)) { -it / 3 },
+                exit = fadeOut(tween(220)) + slideOutVertically(tween(220)) { -it / 5 },
+            ) {
+                val t = shown ?: t0
+                StatusToastPill(
+                    item = t,
+                    dark = dark,
+                    maxWidth = toastMaxWidth(conf.screenWidthDp, conf.screenHeightDp),
+                    onTap = { StatusToasts.dismiss(t.key); visible = false },
+                )
+            }
         }
     }
 }

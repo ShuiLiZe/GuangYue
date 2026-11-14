@@ -297,6 +297,22 @@ fun V0cStage(
                     }
                 }
             }
+        } else         if (style == "toastsheet") {
+            // 2026-11-14：提示胶囊压在弹层之上（弹层开着时 1 秒后弹提示，Popup 窗口晚建、叠在最上）。
+            androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(Color(0xFF3A2A28))) {
+                com.guangyue.feature.player.screen.PlaylistSelectionSheet(
+                    playlists = listOf(
+                        com.guangyue.feature.player.screen.PlaylistChoice(1, "我的收藏", 128),
+                        com.guangyue.feature.player.screen.PlaylistChoice(2, "开车听", 42),
+                    ),
+                    onSelect = {}, onCreate = {}, onDismiss = {},
+                )
+                com.guangyue.feature.library.design.StatusToastHost(dark = true)
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    kotlinx.coroutines.delay(1000)
+                    com.guangyue.feature.library.design.StatusToasts.show("已加入「开车听」")
+                }
+            }
         } else         if (style == "playlistpick" || style == "playlistnew") {
             // 2026-11-14：「添加到歌单」弹层取证（Folia PlaylistSelectionDialog；playlistnew = 新建页）。
             androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(Color(0xFF3A2A28))) {
