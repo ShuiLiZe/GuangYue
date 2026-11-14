@@ -339,7 +339,8 @@ fun V0cStage(
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
                 )
             }
-        } else         if (style == "collection" || style == "collectionfilter" || style == "collectionwall" || style == "artistwall" || style == "artistlist" || style == "artistalbums" || style == "artistbio") {
+        } else         if (style == "collection" || style == "collectionfilter" || style == "collectionwall" || style == "artistwall" || style == "artistlist" || style == "artistalbums" || style == "artistbio" || style == "collectionmore") {
+            // 2026-11-14：collectionmore = 本地歌单「⋯ 更多」菜单展开（改名 / 添加到歌单 / 删除歌单）。
             // 2026-11-14：集合层过滤取证（缝里「过滤当前页」）。collection = 列表无过滤；collectionfilter = 列表 + 过滤词「周」；
             // collectionwall = 墙 + 过滤词「beat」。
             val names = listOf(
@@ -358,6 +359,7 @@ fun V0cStage(
             val albums = listOf("叶惠美" to "2003", "七里香" to "2004", "十一月的萧邦" to "2005", "范特西" to "2001", "魔杰座" to "2008").mapIndexed { i, (t, y) ->
                 com.guangyue.feature.library.home.HomeTile("album:p:qq:$i", t, y, kind = com.guangyue.feature.library.home.HomeTileKind.ALBUM)
             }
+            androidx.compose.runtime.CompositionLocalProvider(com.guangyue.music.ui.home.LocalSeamMenuInitiallyOpen provides (style == "collectionmore")) {
             com.guangyue.music.ui.home.BravaisWall(
                 sections = if (style == "artistalbums") listOf("曲目" to tiles.take(3), "专辑" to albums) else if (artist) listOf("曲目" to tiles, "专辑" to albums) else listOf("歌单" to tiles),
                 onEnterTile = if (artist) ({}) else null,
@@ -371,11 +373,20 @@ fun V0cStage(
                     onBack = {}, onPlayAll = {}, onShuffle = {}, onRetry = {},
                     // artistbio：带一段长简介（收起两行截断）。
                     description = if (style == "artistbio") "周杰伦，华语流行乐男歌手、音乐人、演员、导演。2000 年发行首张个人专辑《Jay》，融合 R&B、嘻哈与中国风，开创了华语乐坛的「周氏风格」。\n代表作有《七里香》《晴天》《稻香》《夜曲》等。" else null,
+                    menu = if (artist) listOf(
+                        com.guangyue.music.ui.home.SeamMenuItem("reload", "重新加载") {},
+                        com.guangyue.music.ui.home.SeamMenuItem("add-to-playlist", "添加到歌单") {},
+                    ) else listOf(
+                        com.guangyue.music.ui.home.SeamMenuItem("rename", "改名") {},
+                        com.guangyue.music.ui.home.SeamMenuItem("add-to-playlist", "添加到歌单") {},
+                        com.guangyue.music.ui.home.SeamMenuItem("delete-collection", "删除歌单", danger = true) {},
+                    ),
                 ),
                 initialListMode = style != "collectionwall" && style != "artistwall" && style != "artistalbums",
                 initialFilterQuery = when (style) { "collectionfilter" -> "周"; "collectionwall" -> "beat"; else -> "" },
                 modifier = Modifier.fillMaxSize(),
             )
+            }
         } else if (style == "dioramaswitch") {
             // 2026-11-14：镜台换歌一镜到底取证：2 秒后换种子（= 换歌），新走廊在雾外偏移处生成，镜头飞过去。
             val switchSeed = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("probe-0") }

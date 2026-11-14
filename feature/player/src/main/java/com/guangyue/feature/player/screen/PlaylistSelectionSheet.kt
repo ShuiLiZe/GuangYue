@@ -217,8 +217,10 @@ private fun CreatePage(
     busy: Boolean,
     onCancel: () -> Unit,
     onSave: (String) -> Unit,
+    initial: String = "",
+    confirmLabel: String = "保存",
 ) {
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(initial) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     val canSave = name.isNotBlank() && !busy
@@ -263,6 +265,38 @@ private fun CreatePage(
                 .background(Gyp.ink)
                 .clickable(enabled = canSave) { onSave(name.trim()) },
             contentAlignment = Alignment.Center,
-        ) { Text("保存", fontSize = 14.sp, color = Gyp.card, fontWeight = FontWeight.SemiBold) }
+        ) { Text(confirmLabel, fontSize = 14.sp, color = Gyp.card, fontWeight = FontWeight.SemiBold) }
+    }
+}
+
+/**
+ * 起名弹层（Folia 集合「⋯ 更多 → 改名」：标题「给这个歌单改名」、输入框带原名、取消 / 保存）。
+ * 与「新建歌单」页同一套输入行与按钮。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlaylistNameSheet(
+    title: String,
+    hint: String,
+    initial: String,
+    onSave: suspend (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var pending by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(pending) {
+        val name = pending ?: return@LaunchedEffect
+        runCatching { onSave(name) }
+        pending = null
+        onDismiss()
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Gyp.card) {
+        Column(Modifier.testTag(PlaylistSelectionSheetTag).padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
+            Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Gyp.ink)
+            Spacer(Modifier.height(2.dp))
+            Text(hint, fontSize = 12.sp, color = Gyp.inkSoft)
+            Spacer(Modifier.height(14.dp))
+            CreatePage(busy = pending != null, onCancel = onDismiss, onSave = { pending = it }, initial = initial)
+        }
     }
 }

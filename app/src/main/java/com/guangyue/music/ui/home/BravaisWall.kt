@@ -453,6 +453,23 @@ data class SeamCollection(
      * 缝里收起时截断（海报版两行），点一下就地展开 / 收起，展开封顶 14em、再长在这一块里滚动。null / 空白时不占位。
      */
     val description: String? = null,
+    /**
+     * 2026-11-14：「⋯ 更多」低频集合动作（Folia useBravaisCollectionSeam 的 menu：重新加载、改名、加入歌单、删除歌单…）。
+     * 空列表时不出按钮。
+     */
+    val menu: List<SeamMenuItem> = emptyList(),
+)
+
+/** 取证用：「⋯ 更多」一进来就展开。 */
+internal val LocalSeamMenuInitiallyOpen = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+/** 「⋯ 更多」里的一项（Folia BravaisSeamMenuItem）。[danger] 红字（删除）。 */
+data class SeamMenuItem(
+    val id: String,
+    val label: String,
+    val danger: Boolean = false,
+    val disabled: Boolean = false,
+    val run: () -> Unit,
 )
 
 /**
@@ -475,7 +492,7 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listM
       Column {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             SeamCrumbs(c, root, ink)
-            if (c.onDownloadAll != null || c.onFillMeta != null) Spacer(Modifier.weight(1f))
+            if (c.onDownloadAll != null || c.onFillMeta != null || c.menu.isNotEmpty()) Spacer(Modifier.weight(1f))
             SeamTopActions(c, ink)
         }
         Spacer(Modifier.height(6.dp))
@@ -562,6 +579,59 @@ private fun SeamTopActions(c: SeamCollection, ink: Color) {
                 Icon(GuangYueIcons.Download, contentDescription = null, tint = ink.copy(alpha = if (ready) 0.8f else 0.3f), modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("全部下载", color = ink.copy(alpha = if (ready) 0.8f else 0.3f), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            }
+        }
+        if (c.menu.isNotEmpty()) {
+            if (c.onDownloadAll != null || c.onFillMeta != null) Spacer(Modifier.width(6.dp))
+            SeamMoreMenu(c.menu, ink)
+        }
+    }
+}
+
+/**
+ * 「⋯ 更多」（Folia BravaisSeamCollectionMenu）：圆形「⋯」键，点开一列菜单（悬浮、不推挤缝里内容），
+ * 点项即执行并收起，点别处 / 返回收起；删除类红字。手机：键视觉 32dp（与「补全 / 下载」同高）、命中 48dp，菜单行 48dp、字 14sp。
+ */
+@Composable
+private fun SeamMoreMenu(items: List<SeamMenuItem>, ink: Color) {
+    var open by remember { mutableStateOf(LocalSeamMenuInitiallyOpen.current) }
+    Box {
+        Box(
+            Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .clickable(onClickLabel = "更多") { open = true }
+                .semantics { contentDescription = "更多" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(Modifier.size(32.dp).clip(CircleShape).background(ink.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
+                Icon(GuangYueIcons.MoreHorizontal, contentDescription = null, tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(17.dp))
+            }
+        }
+        androidx.compose.material3.DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            shape = RoundedCornerShape(14.dp),
+        ) {
+            items.forEach { item ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = {
+                        Text(
+                            item.label,
+                            fontSize = 14.sp,
+                            color = when {
+                                item.danger -> Color(0xFFEF4444)
+                                else -> androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                            }.copy(alpha = if (item.disabled) 0.38f else 1f),
+                        )
+                    },
+                    enabled = !item.disabled,
+                    onClick = {
+                        open = false
+                        item.run()
+                    },
+                    modifier = Modifier.heightIn(min = 48.dp).widthIn(min = 160.dp),
+                )
             }
         }
     }
@@ -677,7 +747,7 @@ private fun SeamCollectionRowCompact(c: SeamCollection, root: String, ink: Color
             } else {
                 Spacer(Modifier.weight(1f))
             }
-            if (c.onDownloadAll != null || c.onFillMeta != null) {
+            if (c.onDownloadAll != null || c.onFillMeta != null || c.menu.isNotEmpty()) {
                 Spacer(Modifier.width(8.dp))
                 SeamTopActions(c, ink)
             }

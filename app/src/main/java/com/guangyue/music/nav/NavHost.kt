@@ -283,6 +283,12 @@ fun GuangYueNavHost(
             var failed by remember(tile.key) { mutableStateOf(false) }
             var attempt by remember(tile.key) { mutableStateOf(0) }
             var fillingMeta by remember(tile.key) { mutableStateOf(false) }
+            // 2026-11-14：「⋯ 更多」（Folia 集合低频动作）：改名 / 删除只给本地歌单；加入歌单给所有有曲目的集合。
+            val localPlaylistId = if (tile.kind == com.guangyue.feature.library.home.HomeTileKind.PLAYLIST) tile.key.substringAfter("playlist:").toLongOrNull() else null
+            var shownName by remember(tile.key) { mutableStateOf(tile.title) }
+            var seamRename by remember(tile.key) { mutableStateOf(false) }
+            var seamDelete by remember(tile.key) { mutableStateOf(false) }
+            var seamPick by remember(tile.key) { mutableStateOf(false) }
             // 2026-11-10：我喜欢 / 全部歌曲 / 最近播放（lib:*）跟着收藏数、下载数变就重取，
             // 在播放页取消收藏回来列表就是新的。
             val isLib = tile.key.startsWith(com.guangyue.feature.library.viewmodel.LibraryTiles.PREFIX)
@@ -398,7 +404,7 @@ fun GuangYueNavHost(
                             onTogglePlayback = { playback.toggle() },
                             onEnterPlayback = { navController.navigate(Routes.LYRIC_FLOW) },
                         collection = com.guangyue.music.ui.home.SeamCollection(
-                            name = tile.title,
+                            name = shownName,
                             kindLabel = kindLabel,
                             count = tracks?.size,
                             loading = tracks == null && !failed,
@@ -459,9 +465,79 @@ fun GuangYueNavHost(
                                 com.guangyue.feature.library.viewmodel.AlbumTiles.isAlbum(tile.key) -> com.guangyue.feature.library.viewmodel.AlbumTiles.albumOf(tile.key)?.second?.description
                                 else -> null
                             },
+                            menu = buildList {
+                                if (!isLib && localPlaylistId == null) {
+                                    add(com.guangyue.music.ui.home.SeamMenuItem("reload", "重新加载", disabled = tracks == null && !failed) { attempt++ })
+                                }
+                                if (localPlaylistId != null) {
+                                    add(com.guangyue.music.ui.home.SeamMenuItem("rename", "改名") { seamRename = true })
+                                }
+                                add(com.guangyue.music.ui.home.SeamMenuItem("add-to-playlist", "添加到歌单", disabled = list.isEmpty()) { seamPick = true })
+                                if (localPlaylistId != null) {
+                                    add(com.guangyue.music.ui.home.SeamMenuItem("delete-collection", "删除歌单", danger = true) { seamDelete = true })
+                                }
+                            },
                         ),
                     )
                     TrackDownloadPick(collectionPick, vm) { collectionPick = null }
+                    val seamRepo = remember { playlistRepositoryOf(collectionCtx) }
+                    if (seamPick) {
+                        val sheets by seamRepo.playlists().collectAsStateWithLifecycle(initialValue = emptyList())
+                        var counts by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) }
+                        LaunchedEffect(sheets) {
+                            counts = sheets.associate { p -> p.id to runCatching { seamRepo.snapshot(p.id).size }.getOrDefault(0) }
+                        }
+                        com.guangyue.feature.player.screen.PlaylistSelectionSheet(
+                            // 不能把歌单加进它自己。
+                            playlists = sheets.filter { p -> p.id != localPlaylistId }
+                                .map { p -> com.guangyue.feature.player.screen.PlaylistChoice(p.id, p.name, counts[p.id] ?: 0) },
+                            onSelect = { id ->
+                                seamRepo.addTracks(id, list)
+                                val name = sheets.firstOrNull { p -> p.id == id }?.name.orEmpty()
+                                com.guangyue.feature.library.design.StatusToasts.show("已把 ${list.size} 首加入「$name」")
+                            },
+                            onCreate = { name ->
+                                val id = seamRepo.create(name)
+                                seamRepo.addTracks(id, list)
+                                com.guangyue.feature.library.design.StatusToasts.show("已新建「$name」，共 ${list.size} 首")
+                            },
+                            onDismiss = { seamPick = false },
+                        )
+                    }
+                    if (seamRename && localPlaylistId != null) {
+                        com.guangyue.feature.player.screen.PlaylistNameSheet(
+                            title = "给这个歌单改名",
+                            hint = "输入歌单名称",
+                            initial = shownName,
+                            onSave = { name ->
+                                seamRepo.rename(localPlaylistId, name)
+                                shownName = name
+                                com.guangyue.feature.library.design.StatusToasts.show("已改名为「$name」")
+                            },
+                            onDismiss = { seamRename = false },
+                        )
+                    }
+                    if (seamDelete && localPlaylistId != null) {
+                        val scope = androidx.compose.runtime.rememberCoroutineScope()
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = { seamDelete = false },
+                            title = { androidx.compose.material3.Text("删除「$shownName」？") },
+                            text = { androidx.compose.material3.Text("歌单里的歌不会从曲库删除。") },
+                            confirmButton = {
+                                androidx.compose.material3.TextButton(onClick = {
+                                    seamDelete = false
+                                    scope.launch {
+                                        seamRepo.delete(localPlaylistId)
+                                        com.guangyue.feature.library.design.StatusToasts.show("已删除「$shownName」")
+                                        navController.popBackStack()
+                                    }
+                                }) { androidx.compose.material3.Text("删除", color = androidx.compose.ui.graphics.Color(0xFFEF4444)) }
+                            },
+                            dismissButton = {
+                                androidx.compose.material3.TextButton(onClick = { seamDelete = false }) { androidx.compose.material3.Text("取消") }
+                            },
+                        )
+                    }
                 },
                 miniPlayer = miniPlayer,
                 bottomBar = bottomBar,
