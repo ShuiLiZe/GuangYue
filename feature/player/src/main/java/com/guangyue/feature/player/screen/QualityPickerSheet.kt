@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,7 +60,8 @@ fun QualityPickerSheet(
         sheetState = sheetState,
         containerColor = Gyp.card,
     ) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+        // 2026-11-14：手机横屏（约 336dp 高）六档放不下——整列可滚（folia-sonnet 横屏弹窗档：内容一高就在弹窗里滚，不顶出屏）。
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(GuangYueIcons.AudioLines, null, tint = accent, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -77,7 +80,7 @@ fun QualityPickerSheet(
                 } else {
                     "共 ${options.size} 档 · 由当前音源提供"
                 },
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 color = Gyp.inkSoft,
             )
             Spacer(Modifier.height(14.dp))
@@ -111,7 +114,8 @@ private fun QualityRow(
             .height(56.dp)
             .padding(vertical = 4.dp)
             .background(
-                if (selected) accent.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.72f),
+                // 2026-11-14：原来未选行是白 72%，深色主题下白字压白底看不清 → 改用主题的 tint 底（浅深两套）。
+                if (selected) accent.copy(alpha = 0.10f) else Gyp.tint,
                 RoundedCornerShape(14.dp),
             )
             .clickable(onClick = onClick)
@@ -133,11 +137,11 @@ private fun QualityRow(
                             .background(accent.copy(alpha = 0.16f), RoundedCornerShape(4.dp))
                             .padding(horizontal = 4.dp, vertical = 1.dp),
                     ) {
-                        Text("HD", fontSize = 9.sp, color = accent, fontWeight = FontWeight.Bold)
+                        Text("HD", fontSize = 10.sp, color = accent, fontWeight = FontWeight.Bold)
                     }
                 }
             }
-            Text(quality.subtitle, fontSize = 11.sp, color = Gyp.inkSoft)
+            Text(quality.subtitle, fontSize = 12.sp, lineHeight = 16.sp, color = Gyp.inkSoft)
         }
         if (selected) {
             Box(
