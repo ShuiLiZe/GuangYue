@@ -57,6 +57,8 @@ enum class LyricStyle(val id: String) {
     LUMIERE("lumiere"),
     /** 「町景」：Folia machi（3D 等距夜景：九龙城寨街口，歌词打在楼面大屏上，雨雪雾与湿地倒影、bloom / 光条 / 景深 / FXAA；手机先只做城寨一景，便利店、车站未做）。暂无参数面板。 */
     MACHI("machi"),
+    /** 「镜台」：Folia diorama（3D 走廊：镜头沿歌词路径穿行，粒子隧道 / 点云、背景尘埃、邻行与当前行逐字平面，普通辉光与灵魂出窍跟唱；手机暂用合成频段、无换歌转场与参数面板）。 */
+    DIORAMA("diorama"),
     ;
 
     companion object {

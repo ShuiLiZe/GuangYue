@@ -110,26 +110,57 @@ private class DioramaMoteLayer {
     }
 }
 
-/** 舞台静态部分（主线程建好交给 GL 线程）。 */
+/** 舞台的歌词走廊（主线程建好交给 GL 线程）：一首歌一条走廊。 */
 private class DioramaStageSetup(
     val sequencer: DioramaSequencerState,
+    val lines: List<Line>,
     val total: Int,
-    val globalIndex: Int,
     val seed: String,
+    val corridor: Boolean,
+    val density: Double,
+)
+
+/** 某一行当前时的挂载内容：可见行、当前行单元、粒子缓冲、静止位镜头。 */
+private class DioramaStageWindow(
+    val globalIndex: Int,
     val visible: List<DioramaVisibleLine>,
     val units: List<DioramaLyricUnit>,
     val particles: DioramaParticleGeometryData,
     val waveNumberMax: Double,
-    val corridor: Boolean,
-    val eye: DioramaVec,
+    val restEye: DioramaVec,
     val frame: DioramaFrame,
 )
+
+private val stageMotion = resolveDioramaMotionParams()
+
+private fun buildDioramaStageWindow(s: DioramaStageSetup, idx: Int): DioramaStageWindow {
+    val vis = DioramaGeometryVisibility(mode = if (s.corridor) DioramaGeometryMode.CORRIDOR else DioramaGeometryMode.CLOUDS)
+    val mounted = resolveDioramaMountedIndices(idx, null, s.total)
+    val spans = buildDioramaCorridorSpans(s.sequencer, idx, null, vis)
+    val clusters = buildDioramaParticleClusters(s.sequencer, mounted, stageMotion, vis, 1.0)
+    val (data, k) = buildDioramaParticleBuffer(s.corridor, clusters, spans, s.density)
+    val frame = dioramaResolveGlobal(s.sequencer, idx)!!.frame
+    val eye = DioramaVec(
+        frame.position.x - frame.forward.x * DIORAMA_HERO_DISTANCE + frame.up.x * DIORAMA_CAMERA_LIFT,
+        frame.position.y - frame.forward.y * DIORAMA_HERO_DISTANCE + frame.up.y * DIORAMA_CAMERA_LIFT,
+        frame.position.z - frame.forward.z * DIORAMA_HERO_DISTANCE + frame.up.z * DIORAMA_CAMERA_LIFT,
+    )
+    val visible = buildDioramaVisibleLines(s.sequencer, mounted, idx, null, stageMotion.weaveScale)
+    val activeLine = s.lines.getOrNull(idx)
+    val units = if (activeLine == null) emptyList() else splitDioramaLyricUnits(activeLine, GraphemeTimings.buildDenseLineGraphemeTimeline(activeLine))
+    return DioramaStageWindow(idx, visible, units, data, k, eye, frame)
+}
+
+/** 当前行 = 开始时间已过的最后一行（间奏停在上一行，开头停在第 0 行）。 */
+private fun dioramaStageIndex(lines: List<Line>, t: Double, total: Int): Int =
+    lines.indexOfLast { it.startTime <= t }.coerceIn(0, (total - 1).coerceAtLeast(0))
 
 private class DioramaStageRenderer(
     private val s: DioramaStageSetup,
     private val particleColors: DioramaParticleColors,
     private val damped: DioramaDampedColors,
     private val background: Color,
+    private val restCamera: Boolean,
     private val timeSeconds: () -> Double,
 ) : GLSurfaceView.Renderer {
     private val contrast = DioramaParticleLayer()
@@ -140,7 +171,9 @@ private class DioramaStageRenderer(
     private val motes = DioramaMoteLayer()
     private val text = DioramaTextLayer()
     private val font = DioramaFont(null)
+    private val rig = DioramaCameraRig()
     private val view = FloatArray(16)
+    private val camWorld = FloatArray(16)
     private val proj = FloatArray(16)
     private var width = 1
     private var height = 1
@@ -154,6 +187,7 @@ private class DioramaStageRenderer(
     private var trebleEnv = 0.0
     private var powerEnv = 0.0
 
+    private var w: DioramaStageWindow? = null
     private val lineRasters = HashMap<Int, DioramaLineRaster>()
     private val lineTextures = HashMap<Int, DioramaGlTexture>()
     private var placed: List<DioramaPlacedUnit> = emptyList()
@@ -163,24 +197,40 @@ private class DioramaStageRenderer(
     private val looks = ArrayList<DioramaUnitLook>()
     private var lightVals = FloatArray(0)
     private var soulVals = FloatArray(0)
+    private var activeLineWorldWidth = 0.0
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         contrast.init(); glow.init()
-        contrast.upload(s.particles); glow.upload(s.particles)
         motes.init(DIORAMA_MOTE_MAX_POINTS * 3)
         text.init()
-        for (v in s.visible) {
-            if (v.index == s.globalIndex || v.line.fullText.isEmpty()) continue
+        // 重建 GL 上下文时旧纹理已失效：清掉缓存，下一帧按当前行重建。
+        lineRasters.clear(); lineTextures.clear(); unitBase.clear(); unitGlow.clear(); looks.clear(); placed = emptyList()
+        moteWritten.fill(Int.MIN_VALUE)
+        w = null
+    }
+
+    /** 换行：粒子缓冲换窗口；邻行栅格按行号复用、离窗的释放；当前行单元重栅格化、逐单元状态清零。 */
+    private fun enter(idx: Int) {
+        val nw = buildDioramaStageWindow(s, idx)
+        w = nw
+        contrast.upload(nw.particles); glow.upload(nw.particles)
+        val keep = nw.visible.filter { it.index != idx && it.line.fullText.isNotEmpty() }.map { it.index }.toSet()
+        (lineTextures.keys - keep).forEach { lineTextures.remove(it)?.release(); lineRasters.remove(it)?.recycle() }
+        for (v in nw.visible) {
+            if (v.index !in keep || lineRasters.containsKey(v.index)) continue
             val r = rasterDioramaLine(v.line.fullText, font)
             lineRasters[v.index] = r
             lineTextures[v.index] = DioramaGlTexture(r.bitmap)
         }
-        val active = s.visible.firstOrNull { it.index == s.globalIndex }
-        layoutDioramaActiveUnits(active?.line, s.units, font)?.let { (p, w) ->
-            placed = p; lineWidth = w
+        unitBase.forEach { it.release() }; unitGlow.forEach { it.release() }
+        placed.forEach { it.raster.recycle() }
+        unitBase.clear(); unitGlow.clear(); looks.clear(); placed = emptyList(); lineWidth = 0.0
+        val active = nw.visible.firstOrNull { it.index == idx }
+        layoutDioramaActiveUnits(active?.line, nw.units, font)?.let { (p, lw) ->
+            placed = p; lineWidth = lw
             p.forEach { unitBase += DioramaGlTexture(it.raster.base); unitGlow += DioramaGlTexture(it.raster.glow); looks += DioramaUnitLook() }
-            lightVals = FloatArray(p.size); soulVals = FloatArray(p.size)
         }
+        lightVals = FloatArray(placed.size); soulVals = FloatArray(placed.size)
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -197,8 +247,11 @@ private class DioramaStageRenderer(
         lastNanos = nowNanos
         elapsed += delta
         val t = timeSeconds()
+        val idx = dioramaStageIndex(s.lines, t, s.total)
+        if (w?.globalIndex != idx) enter(idx)
+        val win = w ?: return
         val aspect = width.toDouble() / height.coerceAtLeast(1)
-        // 取证页没有真实音频：与 DioramaParticlePreview 同一套合成频段（0.5 s 一拍）。
+        // 还没有真实频谱：按 0.5 s 一拍的合成底鼓 / 中频 / 高频（与 DioramaParticlePreview 同一套），让涟漪与辉光可见。
         val beat = (t % 0.5) < 0.06
         val bands = DioramaAudioBands(if (beat) 230.0 else 70.0, 110.0, if ((t % 1.0) < 0.08) 200.0 else 90.0, 60.0)
         val power = 120.0
@@ -206,21 +259,30 @@ private class DioramaStageRenderer(
         powerEnv = dioramaStepEnvelope(powerEnv, min(1.0, power / 255), 18.0, 3.5, delta)
         stepDioramaParticleField(
             field,
-            DioramaParticleFrameInput(delta, bands, 1.0, t, s.corridor, s.globalIndex, false, height.toDouble(), s.waveNumberMax, particleColors),
+            DioramaParticleFrameInput(delta, bands, 1.0, t, s.corridor, idx, false, height.toDouble(), win.waveNumberMax, particleColors),
             listOf(contrastU, glowU),
         )
-        val eye = s.eye; val f = s.frame
-        Matrix.setLookAtM(
-            view, 0, eye.x.toFloat(), eye.y.toFloat(), eye.z.toFloat(),
-            (eye.x + f.forward.x).toFloat(), (eye.y + f.forward.y).toFloat(), (eye.z + f.forward.z).toFloat(),
-            f.up.x.toFloat(), f.up.y.toFloat(), f.up.z.toFloat(),
-        )
+        val eye: DioramaVec
+        if (restCamera) {
+            eye = win.restEye; val f = win.frame
+            Matrix.setLookAtM(
+                view, 0, eye.x.toFloat(), eye.y.toFloat(), eye.z.toFloat(),
+                (eye.x + f.forward.x).toFloat(), (eye.y + f.forward.y).toFloat(), (eye.z + f.forward.z).toFloat(),
+                f.up.x.toFloat(), f.up.y.toFloat(), f.up.z.toFloat(),
+            )
+        } else {
+            // CameraRig.tsx：读头跟字横移、13 种运镜、漂移、收束；相机矩阵取逆即视图矩阵。
+            rig.step(t, delta, elapsed, s.sequencer, idx, activeLineWorldWidth, stageMotion, 0, 55.0, aspect)
+            eye = rig.cameraPosition
+            dioramaComposeMatrix(eye, rig.cameraQuaternion, 1.0, camWorld)
+            Matrix.invertM(view, 0, camWorld, 0)
+        }
         GLES30.glClearColor(background.red, background.green, background.blue, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         val cam = floatArrayOf(eye.x.toFloat(), eye.y.toFloat(), eye.z.toFloat())
 
         // 背景尘埃：窗口回收 + 轻微漂移；大小随高频、透明度随整体能量、颜色 secondary→accent 30%。
-        if (recycleDioramaMoteWindow(moteWritten, motePositions, s.sequencer, s.globalIndex, s.total, moteCirc, moteRadial, s.seed)) {
+        if (recycleDioramaMoteWindow(moteWritten, motePositions, s.sequencer, idx, s.total, moteCirc, moteRadial, s.seed)) {
             motes.upload(motePositions, DIORAMA_MOTE_WINDOW_LINES * moteCirc * moteRadial * 3)
         }
         val moteModel = FloatArray(16).also {
@@ -238,27 +300,29 @@ private class DioramaStageRenderer(
         // 邻行（renderOrder 0，透明物体按离镜头远→近）。
         val draws = ArrayList<Pair<Double, DioramaTextDraw>>()
         val metrics = lineRasters.mapValues { DioramaRasterMetrics(it.value.advancePx, it.value.fontPx) }
-        val nb = updateDioramaNeighborLines(s.visible, s.globalIndex, null, metrics, eye, 55.0, aspect, 1.0, damped)
+        val nb = updateDioramaNeighborLines(win.visible, idx, null, metrics, eye, 55.0, aspect, 1.0, damped)
         for (look in nb) {
-            val v = s.visible.first { it.index == look.index }
+            val v = win.visible.first { it.index == look.index }
             val r = lineRasters[look.index] ?: continue
+            val tex = lineTextures[look.index] ?: continue
             if (look.opacity <= 0) continue
             val wpp = DIORAMA_LINE_FONT_SIZE / r.fontPx
             draws += dist(v.position, eye) to DioramaTextDraw(
                 dioramaComposeMatrix(v.position, v.quaternion, look.scale), (r.canvasWidthPx * wpp).toFloat(), (r.canvasHeightPx * wpp).toFloat(),
-                lineTextures.getValue(look.index), look.color, look.opacity.toFloat(), additive = false, depthTest = true,
+                tex, look.color, look.opacity.toFloat(), additive = false, depthTest = true,
             )
         }
         val ordered = draws.sortedByDescending { it.first }.map { it.second }.toMutableList()
 
         // 当前行：组摆在行位、按英雄距离缩放；单元三层（辉光 17 → 灵魂 18 → 字身 19，都不做深度测试）。
-        val active = s.visible.firstOrNull { it.index == s.globalIndex }
+        val active = win.visible.firstOrNull { it.index == idx }
         if (active != null && placed.isNotEmpty()) {
             val fit = resolveDioramaFrameFitScale(lineWidth, DIORAMA_HERO_DISTANCE, 55.0, aspect) * active.placement.scale
+            activeLineWorldWidth = lineWidth * fit
             val group = dioramaComposeMatrix(active.position, active.quaternion, fit)
             val life = resolveDioramaTextLife(dist(active.position, eye))
             val breath = 0.9 + 0.1 * sin(elapsed * 1.9)
-            updateDioramaActiveUnits(s.units, looks, lightVals, soulVals, t, delta, life, breath, powerEnv, damped, emptyMap(), 1.0, 1.0, false, 0.0)
+            updateDioramaActiveUnits(win.units, looks, lightVals, soulVals, t, delta, life, breath, powerEnv, damped, emptyMap(), 1.0, 1.0, false, 0.0)
             fun planeAt(x: Double, y: Double, z: Double, sc: Double): FloatArray {
                 val local = FloatArray(16); Matrix.setIdentityM(local, 0)
                 Matrix.translateM(local, 0, x.toFloat(), y.toFloat(), z.toFloat())
@@ -267,12 +331,14 @@ private class DioramaStageRenderer(
             }
             val glows = ArrayList<DioramaTextDraw>(); val souls = ArrayList<DioramaTextDraw>(); val bases = ArrayList<DioramaTextDraw>()
             placed.forEachIndexed { i, p ->
-                val l = looks[i]; val w = p.slot.width.toFloat(); val h = p.slot.height.toFloat()
-                if (l.glowVisible) glows += DioramaTextDraw(planeAt(p.slot.centerX, 0.0, -0.01, 1.0), w, h, unitGlow[i], l.glowColor, l.glowOpacity.toFloat(), additive = true, depthTest = false)
-                if (l.soulVisible) souls += DioramaTextDraw(planeAt(p.slot.centerX, l.soulY, -0.005, l.soulScale), w, h, unitBase[i], l.soulColor, l.soulOpacity.toFloat(), additive = true, depthTest = false)
-                bases += DioramaTextDraw(planeAt(p.slot.centerX, 0.0, 0.0, 1.0), w, h, unitBase[i], l.baseColor, l.baseOpacity.toFloat(), additive = false, depthTest = false)
+                val l = looks[i]; val pw = p.slot.width.toFloat(); val ph = p.slot.height.toFloat()
+                if (l.glowVisible) glows += DioramaTextDraw(planeAt(p.slot.centerX, 0.0, -0.01, 1.0), pw, ph, unitGlow[i], l.glowColor, l.glowOpacity.toFloat(), additive = true, depthTest = false)
+                if (l.soulVisible) souls += DioramaTextDraw(planeAt(p.slot.centerX, l.soulY, -0.005, l.soulScale), pw, ph, unitBase[i], l.soulColor, l.soulOpacity.toFloat(), additive = true, depthTest = false)
+                bases += DioramaTextDraw(planeAt(p.slot.centerX, 0.0, 0.0, 1.0), pw, ph, unitBase[i], l.baseColor, l.baseOpacity.toFloat(), additive = false, depthTest = false)
             }
             ordered += glows; ordered += souls; ordered += bases
+        } else {
+            activeLineWorldWidth = 0.0
         }
         text.draw(ordered, view, proj, damped.bg, DIORAMA_FOG_NEAR.toFloat(), DIORAMA_FOG_FAR.toFloat())
     }
@@ -284,9 +350,50 @@ private fun stageHex(c: Color): String {
 }
 
 /**
- * 镜台舞台取证预览：探针歌词一条走廊，镜头停在 timeSeconds 所在行的静止位（后退 HERO_DISTANCE、抬 CAMERA_LIFT），
- * 画粒子（隧道 / 点云）+ 背景尘埃 + 邻行 + 当前行逐单元（默认：普通辉光 1、灵魂出窍 1、当前字漂移关、渐变关）。
+ * 镜台舞台：一首歌一条走廊，画粒子（隧道 / 点云）+ 背景尘埃 + 邻行 + 当前行逐单元（Folia 默认：普通辉光 1、
+ * 灵魂出窍 1、当前字漂移关、渐变关）。restCamera = true 时镜头停在当前行静止位（取证），否则走 DioramaCameraRig。
+ * 换歌（lines / seed）、换主题时整块 GLSurfaceView 重建。
  */
+@Composable
+fun DioramaStage(
+    lines: List<Line>,
+    timeSeconds: () -> Double,
+    backgroundColor: Color,
+    primaryColor: Color,
+    accentColor: Color,
+    secondaryColor: Color,
+    seed: String = "probe-0",
+    corridor: Boolean = false,
+    restCamera: Boolean = false,
+    density: Double = 768.0,
+    modifier: Modifier = Modifier,
+) {
+    val setup = remember(lines, corridor, seed, density) {
+        val sq = DioramaSequencerState()
+        dioramaAppendSegment(sq, seed, lines, 0, DioramaVec(0.0, 0.0, 0.0))
+        DioramaStageSetup(sq, lines, dioramaTotalGlobalLines(sq), seed, corridor, density)
+    }
+    val colors = remember(primaryColor, accentColor, secondaryColor, backgroundColor) {
+        val p = dioramaColorFromHex(stageHex(primaryColor)); val a = dioramaColorFromHex(stageHex(accentColor))
+        val sc = dioramaColorFromHex(stageHex(secondaryColor)); val bg = dioramaColorFromHex(stageHex(backgroundColor))
+        resolveDioramaParticleContrastColors(DioramaParticleColors(p, a, sc), bg) to DioramaDampedColors(p, a, sc, bg)
+    }
+    androidx.compose.runtime.key(setup, colors, restCamera) {
+        AndroidView(
+            modifier = modifier,
+            factory = { ctx ->
+                GLSurfaceView(ctx).apply {
+                    setEGLContextClientVersion(3)
+                    setRenderer(DioramaStageRenderer(setup, colors.first, colors.second, backgroundColor, restCamera, timeSeconds))
+                    renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+                }
+            },
+            onRelease = { it.onPause() },
+        )
+    }
+}
+
+/** 取证预览：定格在 timeSeconds，镜头静止位。 */
 @Composable
 fun DioramaStagePreview(
     lines: List<Line>,
@@ -298,44 +405,6 @@ fun DioramaStagePreview(
     secondaryColor: Color,
     seed: String = "probe-0",
     density: Double = 768.0,
+    restCamera: Boolean = true,
     modifier: Modifier = Modifier,
-) {
-    val setup = remember(lines, corridor, seed, density, timeSeconds) {
-        val sq = DioramaSequencerState()
-        dioramaAppendSegment(sq, seed, lines, 0, DioramaVec(0.0, 0.0, 0.0))
-        val total = dioramaTotalGlobalLines(sq)
-        val idx = lines.indexOfLast { it.startTime <= timeSeconds }.coerceIn(0, (total - 1).coerceAtLeast(0))
-        val vis = DioramaGeometryVisibility(mode = if (corridor) DioramaGeometryMode.CORRIDOR else DioramaGeometryMode.CLOUDS)
-        val mounted = resolveDioramaMountedIndices(idx, null, total)
-        val motion = resolveDioramaMotionParams()
-        val spans = buildDioramaCorridorSpans(sq, idx, null, vis)
-        val clusters = buildDioramaParticleClusters(sq, mounted, motion, vis, 1.0)
-        val (data, k) = buildDioramaParticleBuffer(corridor, clusters, spans, density)
-        val frame = dioramaResolveGlobal(sq, idx)!!.frame
-        val eye = DioramaVec(
-            frame.position.x - frame.forward.x * DIORAMA_HERO_DISTANCE + frame.up.x * DIORAMA_CAMERA_LIFT,
-            frame.position.y - frame.forward.y * DIORAMA_HERO_DISTANCE + frame.up.y * DIORAMA_CAMERA_LIFT,
-            frame.position.z - frame.forward.z * DIORAMA_HERO_DISTANCE + frame.up.z * DIORAMA_CAMERA_LIFT,
-        )
-        val visible = buildDioramaVisibleLines(sq, mounted, idx, null, motion.weaveScale)
-        val activeLine = lines.getOrNull(idx)
-        val units = if (activeLine == null) emptyList() else splitDioramaLyricUnits(activeLine, GraphemeTimings.buildDenseLineGraphemeTimeline(activeLine))
-        android.util.Log.i("DioramaStage", "line=$idx points=${data.pointCount} visible=${visible.size} units=${units.size} corridor=$corridor")
-        DioramaStageSetup(sq, total, idx, seed, visible, units, data, k, corridor, eye, frame)
-    }
-    val colors = remember(primaryColor, accentColor, secondaryColor, backgroundColor) {
-        val p = dioramaColorFromHex(stageHex(primaryColor)); val a = dioramaColorFromHex(stageHex(accentColor))
-        val sc = dioramaColorFromHex(stageHex(secondaryColor)); val bg = dioramaColorFromHex(stageHex(backgroundColor))
-        resolveDioramaParticleContrastColors(DioramaParticleColors(p, a, sc), bg) to DioramaDampedColors(p, a, sc, bg)
-    }
-    AndroidView(
-        modifier = modifier,
-        factory = { ctx ->
-            GLSurfaceView(ctx).apply {
-                setEGLContextClientVersion(3)
-                setRenderer(DioramaStageRenderer(setup, colors.first, colors.second, backgroundColor) { timeSeconds })
-                renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
-            }
-        },
-    )
-}
+) = DioramaStage(lines, { timeSeconds }, backgroundColor, primaryColor, accentColor, secondaryColor, seed, corridor, restCamera, density, modifier)

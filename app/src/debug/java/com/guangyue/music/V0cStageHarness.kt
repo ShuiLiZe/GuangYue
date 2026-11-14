@@ -418,6 +418,8 @@ fun V0cStage(
                     "lumiere" -> LyricStyle.LUMIERE
                     // machiplayer：歌词样式「町景」走正式播放页（LyricFlowScreen），区别于只拍舞台的 machi。
                     "machiplayer" -> LyricStyle.MACHI
+                    // dioramaplayer：歌词样式「镜台」走正式播放页（运镜开着）。
+                    "dioramaplayer" -> LyricStyle.DIORAMA
                     "tilt" -> LyricStyle.TILT
                     "claddagh" -> LyricStyle.CLADDAGH
                     else -> LyricStyle.CLASSIC

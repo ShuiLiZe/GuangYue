@@ -186,7 +186,7 @@ fun LyricFlowScreen(
     // B0 修：雾笺 / 花火 / 绘光自带固定暗场（Folia 外壳 #05070a / 夜空 / 暗场），与 App 深浅无关。
     // 浅色模式下顶栏、胶囊、系统栏图标仍按浅色主题画成深色，压在夜色上看不清——这三种样式一律按深色画外壳。
     val darkFieldStyle = lyricStyle == LyricStyle.NEBBIA || lyricStyle == LyricStyle.HANABI ||
-        lyricStyle == LyricStyle.LUMIERE || lyricStyle == LyricStyle.MACHI
+        lyricStyle == LyricStyle.LUMIERE || lyricStyle == LyricStyle.MACHI || lyricStyle == LyricStyle.DIORAMA
     val themeDark = darkMode
     @Suppress("NAME_SHADOWING")
     val darkMode = themeDark || darkFieldStyle
@@ -551,6 +551,19 @@ fun LyricFlowScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        // 镜台：Folia diorama 3D 走廊（GL：粒子点云 + 背景尘埃 + 邻行 / 当前行逐字平面，CameraRig 运镜）。整屏铺满，字幕层照常画译文。
+        if (lyricStyle == LyricStyle.DIORAMA && kernelLines.isNotEmpty() && emptyKind == null) {
+            com.guangyue.feature.player.lyrics.visualizer.DioramaStage(
+                lines = kernelLines,
+                timeSeconds = { clock.seconds() },
+                backgroundColor = theme.background,
+                primaryColor = theme.primary,
+                accentColor = theme.accent,
+                secondaryColor = theme.secondary,
+                seed = playback.item?.key ?: "diorama",
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         // R6 凝彩：Folia tempera 原版对译（段落→shot→构图色块 + 拼贴排版 + 文字反色），整屏铺满。
         if (lyricStyle == LyricStyle.TEMPERA && kernelLines.isNotEmpty() && emptyKind == null) {
             com.guangyue.feature.player.lyrics.visualizer.TemperaStage(
@@ -725,7 +738,7 @@ fun LyricFlowScreen(
                         failure = failure,
                         onRetry = null,
                     )
-                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL || lyricStyle == LyricStyle.CLADDAGH || lyricStyle == LyricStyle.MONET || lyricStyle == LyricStyle.PENDOLO || lyricStyle == LyricStyle.NEBBIA || lyricStyle == LyricStyle.SONNET || lyricStyle == LyricStyle.HANABI || lyricStyle == LyricStyle.TEMPERA || lyricStyle == LyricStyle.LUMIERE || lyricStyle == LyricStyle.MACHI) && kernelLines.isNotEmpty()) {
+                } else if ((lyricStyle == LyricStyle.FUME || lyricStyle == LyricStyle.CADENZA || lyricStyle == LyricStyle.STILL || lyricStyle == LyricStyle.CLADDAGH || lyricStyle == LyricStyle.MONET || lyricStyle == LyricStyle.PENDOLO || lyricStyle == LyricStyle.NEBBIA || lyricStyle == LyricStyle.SONNET || lyricStyle == LyricStyle.HANABI || lyricStyle == LyricStyle.TEMPERA || lyricStyle == LyricStyle.LUMIERE || lyricStyle == LyricStyle.MACHI || lyricStyle == LyricStyle.DIORAMA) && kernelLines.isNotEmpty()) {
                     // 浮名：画布已经铺在整屏那一层（本函数开头），舞台 Box 里留空，
                     // 只保留顶栏 / 字幕层 / 播放条这些「浮在画布上」的层。
                 } else if (lyricStyle == LyricStyle.TILT && activeLine != null && activeLine.hasVisibleWords()) {
