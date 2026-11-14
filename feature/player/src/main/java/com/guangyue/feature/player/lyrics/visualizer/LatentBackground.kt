@@ -342,14 +342,24 @@ float bayer2(float x, float y) {
   return y < 0.5 ? 2.0 : 1.0;
 }
 
+float dithAt(float2 pxUV) {
+  float2 p = floor(fract(pxUV / 4.0) * 4.0);
+  float2 lo = mod(p, 2.0);
+  float2 hi = floor(p / 2.0);
+  return (4.0 * bayer2(lo.x, lo.y) + bayer2(hi.x, hi.y)) / 16.0 - 0.5;
+}
+
+// 浏览器里 paper 的 WebGL 画布只有 pr 倍（手机上约 1.6），再被页面按 devicePixelRatio（约 2.75）
+// 双线性拉伸到屏幕上，所以 Folia 的点阵边缘是柔的。这里把那一步也做了：在「画布像素」网格上取
+// 四个相邻像素中心各算一次点阵，再按片元在格子里的位置双线性混合。
+// 形状场（warp）在格子之间变化很慢，四个采样共用片元所在格子的那一份，只多算四次查表。
 float4 main(float2 fragCoord) {
   float2 fc = fragCoord * u_k;
-  float2 gl = float2(fc.x, u_res.y - fc.y);
   float t = 0.5 * u_time;
   float pxSize = u_pxSize * u_pr;
-  float2 pxUV = (gl - 0.5 * u_res) / pxSize;
-  float2 cpUV = (floor(pxUV) + 0.5) * pxSize;
 
+  float2 glc = float2(fc.x, u_res.y - fc.y);
+  float2 cpUV = (floor((glc - 0.5 * u_res) / pxSize) + 0.5) * pxSize;
   float2 shapeUV = cpUV / u_pr / u_scale + 0.5;
   shapeUV *= 0.003;
   for (int k = 1; k < 6; k++) {
@@ -360,11 +370,13 @@ float4 main(float2 fragCoord) {
   float shape = 0.15 / max(0.001, abs(sin(t - shapeUV.y - shapeUV.x)));
   shape = smoothstep(0.02, 1.0, shape);
 
-  float2 p = floor(fract(pxUV / 4.0) * 4.0);
-  float2 lo = mod(p, 2.0);
-  float2 hi = floor(p / 2.0);
-  float dith = (4.0 * bayer2(lo.x, lo.y) + bayer2(hi.x, hi.y)) / 16.0 - 0.5;
-  float res = step(0.5, shape + dith);
+  float2 base = floor(fc - 0.5) + 0.5;
+  float2 f = fc - 0.5 - floor(fc - 0.5);
+  float r00 = step(0.5, shape + dithAt((float2(base.x, u_res.y - base.y) - 0.5 * u_res) / pxSize));
+  float r10 = step(0.5, shape + dithAt((float2(base.x + 1.0, u_res.y - base.y) - 0.5 * u_res) / pxSize));
+  float r01 = step(0.5, shape + dithAt((float2(base.x, u_res.y - base.y - 1.0) - 0.5 * u_res) / pxSize));
+  float r11 = step(0.5, shape + dithAt((float2(base.x + 1.0, u_res.y - base.y - 1.0) - 0.5 * u_res) / pxSize));
+  float res = mix(mix(r00, r10, f.x), mix(r01, r11, f.x), f.y);
 
   float3 fg = u_colorFront.rgb * u_colorFront.a;
   float3 bg = u_colorBack.rgb * u_colorBack.a;
