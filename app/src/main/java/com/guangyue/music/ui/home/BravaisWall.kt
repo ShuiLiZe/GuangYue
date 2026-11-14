@@ -21,6 +21,9 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -180,7 +183,9 @@ fun BravaisWall(
         val camY = remember { Animatable(startY.toFloat()) }
         // 排名：初始镜头中心附近 3×3 区块，条目按排名落位（换数据才重算）。
         // 缝：竖屏横条（axis y），放在世界 y=0 的区块边界上（区块边界不切砖）；上半墙上移、下半墙下移各半条高。
-        val seamH = if (collection != null) SEAM_COLLECTION_HEIGHT else SEAM_HOME_HEIGHT
+        // 2026-11-14 手机横屏（高 < 480dp）：信息条改紧凑两行（folia-sonnet androidPhoneFit 的 compact 档同理：矮屏把竖向空间还给内容）。
+        val compactSeam = LocalConfiguration.current.screenHeightDp < SEAM_COMPACT_SCREEN_DP
+        val seamH = if (collection != null) (if (compactSeam) SEAM_COLLECTION_COMPACT_HEIGHT else SEAM_COLLECTION_HEIGHT) else SEAM_HOME_HEIGHT
         // 2026-11-14：集合层信息条带简介时会长高（简介展开），列表的顶部留白按实测高度走；墙仍按基准高度下移（墙在条下滑过）。
         var seamMeasured by remember { mutableStateOf(seamH) }
         val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value
@@ -413,6 +418,12 @@ private const val SEAM_HOME_HEIGHT = 72f
 /** 集合层信息条高：Folia 横条完整态 212（桌面）；手机只留面包屑 + 标题 + 元数据/按钮三行，取 148。 */
 private const val SEAM_COLLECTION_HEIGHT = 182f
 
+/** 横屏紧凑信息条的基准高：两行（面包屑+名+简介一行、过滤+元数据+按钮一行），各 48dp 触控 + 上下内边距。 */
+internal const val SEAM_COLLECTION_COMPACT_HEIGHT = 112f
+
+/** 屏高低于此值（dp）即用紧凑信息条：360dp 宽机横屏约 336dp 高；平板横屏不受影响。 */
+internal const val SEAM_COMPACT_SCREEN_DP = 480
+
 /** B2：集合层信息条的数据（BravaisSeamCollection 的手机子集）。 */
 data class SeamCollection(
     val name: String,
@@ -452,6 +463,10 @@ data class SeamCollection(
  */
 @Composable
 private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listMode: Boolean = false, onToggleList: (() -> Unit)? = null, filter: SeamFilter? = null) {
+    if (LocalConfiguration.current.screenHeightDp < SEAM_COMPACT_SCREEN_DP) {
+        SeamCollectionRowCompact(c, root, ink, listMode, onToggleList, filter)
+        return
+    }
     // 2026-11-14：高度不再写死——至少基准高（按钮行贴底），带简介时随简介长高（Folia 完整信息条里「关于」一节）。
     Column(
         Modifier.fillMaxWidth().heightIn(min = SEAM_COLLECTION_HEIGHT.dp).padding(horizontal = 16.dp, vertical = 10.dp),
@@ -459,51 +474,9 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listM
     ) {
       Column {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = c.onBack).padding(end = 6.dp, top = 4.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(GuangYueIcons.ChevronLeft, contentDescription = "返回", tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
-                Text(root, color = ink.copy(alpha = 0.62f), fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-            }
-            Text(" / ", color = ink.copy(alpha = 0.3f), fontSize = 13.sp)
-            Text(c.kindLabel, color = ink.copy(alpha = 0.62f), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            SeamCrumbs(c, root, ink)
             if (c.onDownloadAll != null || c.onFillMeta != null) Spacer(Modifier.weight(1f))
-            if (c.onFillMeta != null) {
-                // 2026-11-10：曲库补全歌词 / 封面（自动匹配当前音源）。
-                val ready = !c.loading && !c.failed && (c.count ?: 0) > 0 && !c.fillingMeta
-                Row(
-                    Modifier
-                        .height(32.dp)
-                        .clip(CircleShape)
-                        .background(ink.copy(alpha = 0.08f))
-                        .clickable(enabled = ready, onClick = c.onFillMeta)
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(GuangYueIcons.WandSparkles, contentDescription = null, tint = ink.copy(alpha = if (ready) 0.8f else 0.3f), modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(if (c.fillingMeta) "补全中…" else "补全信息", color = ink.copy(alpha = if (ready) 0.8f else 0.3f), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                }
-                if (c.onDownloadAll != null) Spacer(Modifier.width(6.dp))
-            }
-            if (c.onDownloadAll != null) {
-                // 0.0.19：整张下载。窄屏（270dp）上第三行放不下第三颗键，放到面包屑行右端。
-                val ready = !c.loading && !c.failed && (c.count ?: 0) > 0
-                Row(
-                    Modifier
-                        .height(32.dp)
-                        .clip(CircleShape)
-                        .background(ink.copy(alpha = 0.08f))
-                        .clickable(enabled = ready, onClick = c.onDownloadAll)
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(GuangYueIcons.Download, contentDescription = null, tint = ink.copy(alpha = if (ready) 0.8f else 0.3f), modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("全部下载", color = ink.copy(alpha = if (ready) 0.8f else 0.3f), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                }
-            }
+            SeamTopActions(c, ink)
         }
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -530,74 +503,216 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listM
       }
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            val filtering = filter != null && CollectionFilter.normalize(filter.query).isNotEmpty()
-            val meta = when {
-                filtering && filter != null -> "${CollectionFilter.matchLabel(filter.matches, filter.total)} 首 · ${c.kindLabel}"
-                c.loading -> "加载中…"
-                c.failed -> "加载失败，点此重试"
-                c.count == 0 -> "没有取到曲目 · 点此重试"
-                c.count != null -> "${c.count} 首 · ${c.kindLabel}"
-                else -> c.kindLabel
-            }
-            Text(
-                meta,
-                color = ink.copy(alpha = if (c.failed) 0.85f else 0.62f),
-                fontSize = 13.sp,
-                maxLines = 1,
-                modifier = Modifier
-                    .weight(1f)
-                    .then(if (c.failed || c.count == 0) Modifier.clickable(onClick = c.onRetry) else Modifier),
-            )
-            val scoped = filtering && filter != null && c.onPlayTiles != null
-            val ready = !c.loading && !c.failed && (c.count ?: 0) > 0 && (!scoped || (filter?.matches ?: 0) > 0)
-            val playAll: () -> Unit = { if (scoped && filter != null) c.onPlayTiles?.invoke(filter.shown, false) else c.onPlayAll() }
-            val shuffleAll: () -> Unit = { if (scoped && filter != null) c.onPlayTiles?.invoke(filter.shown, true) else c.onShuffle() }
-            if (onToggleList != null && (c.count ?: 0) > 0) {
-                // 列表 / 墙 切换（手机加的）：列表里能直接看到每首歌并点播。
-                Box(
-                    Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(ink.copy(alpha = 0.08f))
-                        .clickable(onClick = onToggleList),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (listMode) GuangYueIcons.LayoutGrid else GuangYueIcons.List,
-                        contentDescription = if (listMode) "切换为封面墙" else "切换为列表",
-                        tint = ink.copy(alpha = 0.8f),
-                        modifier = Modifier.size(17.dp),
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-            }
+            SeamPlayControls(c, ink, listMode, onToggleList, filter, metaFill = true)
+        }
+    }
+}
+
+
+/** 面包屑「‹ 广乐 / 类型」，点根返回（BravaisSeamCrumbs）。 */
+@Composable
+private fun SeamCrumbs(c: SeamCollection, root: String, ink: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = c.onBack).padding(end = 6.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(GuangYueIcons.ChevronLeft, contentDescription = "返回", tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
+            Text(root, color = ink.copy(alpha = 0.62f), fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+        }
+        Text(" / ", color = ink.copy(alpha = 0.3f), fontSize = 13.sp)
+        Text(c.kindLabel, color = ink.copy(alpha = 0.62f), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+    }
+}
+
+/** 面包屑行右端的「补全信息」「全部下载」（手机加的；窄屏第三行放不下）。 */
+@Composable
+private fun SeamTopActions(c: SeamCollection, ink: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (c.onFillMeta != null) {
+            // 2026-11-10：曲库补全歌词 / 封面（自动匹配当前音源）。
+            val ready = !c.loading && !c.failed && (c.count ?: 0) > 0 && !c.fillingMeta
             Row(
                 Modifier
-                    .height(36.dp)
-                    .clip(CircleShape)
-                    .background(if (ready) ink else ink.copy(alpha = 0.2f))
-                    .clickable(enabled = ready, onClick = playAll)
-                    .padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(GuangYueIcons.Play, contentDescription = null, tint = Color.White.takeIf { ink.luminanceDark() } ?: Color.Black, modifier = Modifier.size(15.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("播放全部", color = Color.White.takeIf { ink.luminanceDark() } ?: Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.width(8.dp))
-            Box(
-                Modifier
-                    .size(36.dp)
+                    .height(32.dp)
                     .clip(CircleShape)
                     .background(ink.copy(alpha = 0.08f))
-                    .clickable(enabled = ready, onClick = shuffleAll),
-                contentAlignment = Alignment.Center,
+                    .clickable(enabled = ready, onClick = c.onFillMeta)
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(GuangYueIcons.Shuffle, contentDescription = "随机播放", tint = ink.copy(alpha = if (ready) 0.8f else 0.3f), modifier = Modifier.size(17.dp))
+                Icon(GuangYueIcons.WandSparkles, contentDescription = null, tint = ink.copy(alpha = if (ready) 0.8f else 0.3f), modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(if (c.fillingMeta) "补全中…" else "补全信息", color = ink.copy(alpha = if (ready) 0.8f else 0.3f), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            }
+            if (c.onDownloadAll != null) Spacer(Modifier.width(6.dp))
+        }
+        if (c.onDownloadAll != null) {
+            // 0.0.19：整张下载。窄屏（270dp）上第三行放不下第三颗键，放到面包屑行右端。
+            val ready = !c.loading && !c.failed && (c.count ?: 0) > 0
+            Row(
+                Modifier
+                    .height(32.dp)
+                    .clip(CircleShape)
+                    .background(ink.copy(alpha = 0.08f))
+                    .clickable(enabled = ready, onClick = c.onDownloadAll)
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(GuangYueIcons.Download, contentDescription = null, tint = ink.copy(alpha = if (ready) 0.8f else 0.3f), modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("全部下载", color = ink.copy(alpha = if (ready) 0.8f else 0.3f), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
             }
         }
     }
 }
+
+/** 元数据「N 首 · 类型」+ 列表/墙切换 + 播放全部 + 随机（BravaisSeamCollection 元数据行）。[metaFill] 时元数据吃掉剩余宽度。 */
+@Composable
+private fun RowScope.SeamPlayControls(c: SeamCollection, ink: Color, listMode: Boolean, onToggleList: (() -> Unit)?, filter: SeamFilter?, metaFill: Boolean) {
+    val filtering = filter != null && CollectionFilter.normalize(filter.query).isNotEmpty()
+    val meta = when {
+        filtering && filter != null -> "${CollectionFilter.matchLabel(filter.matches, filter.total)} 首 · ${c.kindLabel}"
+        c.loading -> "加载中…"
+        c.failed -> "加载失败，点此重试"
+        c.count == 0 -> "没有取到曲目 · 点此重试"
+        c.count != null -> "${c.count} 首 · ${c.kindLabel}"
+        else -> c.kindLabel
+    }
+    Text(
+        meta,
+        color = ink.copy(alpha = if (c.failed) 0.85f else 0.62f),
+        fontSize = 13.sp,
+        maxLines = 1,
+        modifier = (if (metaFill) Modifier.weight(1f) else Modifier)
+            .then(if (c.failed || c.count == 0) Modifier.clickable(onClick = c.onRetry) else Modifier),
+    )
+    if (!metaFill) Spacer(Modifier.width(12.dp))
+    val scoped = filtering && filter != null && c.onPlayTiles != null
+    val ready = !c.loading && !c.failed && (c.count ?: 0) > 0 && (!scoped || (filter?.matches ?: 0) > 0)
+    val playAll: () -> Unit = { if (scoped && filter != null) c.onPlayTiles?.invoke(filter.shown, false) else c.onPlayAll() }
+    val shuffleAll: () -> Unit = { if (scoped && filter != null) c.onPlayTiles?.invoke(filter.shown, true) else c.onShuffle() }
+    if (onToggleList != null && (c.count ?: 0) > 0) {
+        // 列表 / 墙 切换（手机加的）：列表里能直接看到每首歌并点播。
+        Box(
+            Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(ink.copy(alpha = 0.08f))
+                .clickable(onClick = onToggleList),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (listMode) GuangYueIcons.LayoutGrid else GuangYueIcons.List,
+                contentDescription = if (listMode) "切换为封面墙" else "切换为列表",
+                tint = ink.copy(alpha = 0.8f),
+                modifier = Modifier.size(17.dp),
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+    }
+    Row(
+        Modifier
+            .height(36.dp)
+            .clip(CircleShape)
+            .background(if (ready) ink else ink.copy(alpha = 0.2f))
+            .clickable(enabled = ready, onClick = playAll)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(GuangYueIcons.Play, contentDescription = null, tint = Color.White.takeIf { ink.luminanceDark() } ?: Color.Black, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(6.dp))
+        Text("播放全部", color = Color.White.takeIf { ink.luminanceDark() } ?: Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    }
+    Spacer(Modifier.width(8.dp))
+    Box(
+        Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(ink.copy(alpha = 0.08f))
+            .clickable(enabled = ready, onClick = shuffleAll),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(GuangYueIcons.Shuffle, contentDescription = "随机播放", tint = ink.copy(alpha = if (ready) 0.8f else 0.3f), modifier = Modifier.size(17.dp))
+    }
+}
+
+/**
+ * 横屏紧凑信息条（2026-11-14）：手机横屏只有约 336dp 高，竖屏那套四段（面包屑 / 名 / 简介 / 过滤 / 按钮）要占去过半屏。
+ * 参照 folia-sonnet androidPhoneFit.css 的 compact 档（矮屏把竖向空间还给内容、按钮排收一档但仍一眼可点），压成两行：
+ * 第一行「‹ 广乐 / 类型 · 名 · 简介一行（点开就地展开，封顶 96dp 可滚）· 补全 / 下载」；第二行「过滤输入位 · 元数据 · 切换 / 播放全部 / 随机」。
+ * 触控仍 ≥ 48dp（每行 48dp 高）。
+ */
+@Composable
+private fun SeamCollectionRowCompact(c: SeamCollection, root: String, ink: Color, listMode: Boolean, onToggleList: (() -> Unit)?, filter: SeamFilter?) {
+    val blurb = c.description?.trim().orEmpty()
+    var blurbOpen by remember(blurb) { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            SeamCrumbs(c, root, ink)
+            Spacer(Modifier.width(12.dp))
+            if (c.avatar != null) {
+                Box(Modifier.size(28.dp).clip(CircleShape).background(ink.copy(alpha = 0.08f))) {
+                    AsyncImage(model = c.avatar, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                }
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(
+                c.name, color = ink, fontSize = 18.sp, lineHeight = 22.sp, fontWeight = FontWeight.ExtraBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 240.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            if (blurb.isNotEmpty() && !blurbOpen) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(onClickLabel = "展开") { blurbOpen = true }
+                        .semantics { stateDescription = "已收起" },
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Text(blurb, color = ink.copy(alpha = 0.66f), fontSize = 13.sp, lineHeight = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
+            if (c.onDownloadAll != null || c.onFillMeta != null) {
+                Spacer(Modifier.width(8.dp))
+                SeamTopActions(c, ink)
+            }
+        }
+        if (blurb.isNotEmpty() && blurbOpen) {
+            val scroll = rememberScrollState()
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(onClickLabel = "收起") { blurbOpen = false }
+                    .semantics { stateDescription = "已展开" },
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    blurb, color = ink.copy(alpha = 0.66f), fontSize = 13.sp, lineHeight = 20.sp,
+                    modifier = Modifier.heightIn(max = BLURB_COMPACT_OPEN_MAX_DP.dp).verticalScroll(scroll),
+                )
+            }
+        }
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (filter != null && (c.count ?: 0) > 0) {
+                Box(Modifier.weight(1f).widthIn(max = 320.dp)) { SeamFilterField(filter, ink) }
+                Spacer(Modifier.width(16.dp))
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
+            SeamPlayControls(c, ink, listMode, onToggleList, filter, metaFill = false)
+        }
+    }
+}
+
+/** 横屏简介展开封顶（dp）：矮屏只给约三分之一屏高。 */
+internal const val BLURB_COMPACT_OPEN_MAX_DP = 96
 
 /**
  * 缝里的一段说明文字（Folia BravaisSeamBlurb 手机版）：歌手简介 / 集合描述共用。收起时 [BLURB_COLLAPSED_LINES] 行截断
