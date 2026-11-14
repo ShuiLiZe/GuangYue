@@ -270,12 +270,14 @@ fun V0cStage(
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
         // 2026-11-12：町景（machi）3D 舞台起步，只在取证页（未进歌词样式列表）。
-        if (style == "dioramastage" || style == "dioramastageclouds") {
+        if (style == "dioramastage" || style == "dioramastageclouds" || style == "dioramarig") {
             // 2026-11-14：镜台舞台取证（粒子 + 背景尘埃 + 邻行 + 当前行逐单元），DEFAULT_THEME 四色、seed probe-0、静止位。
             com.guangyue.feature.player.lyrics.visualizer.DioramaStagePreview(
                 lines = kernel,
                 timeSeconds = positionMs / 1000.0,
                 corridor = style == "dioramastage",
+                // dioramarig：Folia 默认（点云 + CameraRig 在定格时刻收敛的机位），对照 folia-diorama-t37.5-p800.png。
+                restCamera = style != "dioramarig",
                 backgroundColor = Color(0xFF09090B),
                 primaryColor = Color(0xFFF4F4F5),
                 accentColor = Color(0xFFF4F4F5),
