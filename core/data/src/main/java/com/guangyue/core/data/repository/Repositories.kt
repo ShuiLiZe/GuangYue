@@ -23,6 +23,9 @@ class PlaylistRepository @Inject constructor(private val db: GuangYueDatabase) {
 
     fun tracks(playlistId: Long): Flow<List<TrackEntity>> = dao.observeTracks(playlistId)
 
+    /** 各歌单曲目数（一条 GROUP BY）；没有曲目的歌单不在表里，按 0 算。 */
+    suspend fun trackCounts(): Map<Long, Int> = dao.trackCounts().associate { it.playlistId to it.trackCount }
+
     suspend fun create(name: String, description: String? = null): Long =
         dao.insert(PlaylistEntity(name = name, description = description))
 

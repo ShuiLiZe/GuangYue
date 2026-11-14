@@ -127,6 +127,10 @@ interface PlaylistDao {
     @Query("DELETE FROM playlist_track WHERE playlist_id = :playlistId")
     suspend fun clear(playlistId: Long)
 
+    /** 2026-11-14：各歌单曲目数一次查完（「添加到歌单」弹层的「N 首歌曲」，免得逐个 snapshot）。 */
+    @Query("SELECT playlist_id AS playlistId, COUNT(*) AS trackCount FROM playlist_track GROUP BY playlist_id")
+    suspend fun trackCounts(): List<PlaylistTrackCount>
+
     @Query("SELECT MAX(position) FROM playlist_track WHERE playlist_id = :playlistId")
     suspend fun maxPosition(playlistId: Long): Int?
 
@@ -183,3 +187,6 @@ interface SearchHistoryDao {
     @Query("DELETE FROM search_history")
     suspend fun clear()
 }
+
+/** 歌单曲目数（[PlaylistDao.trackCounts] 的一行）。 */
+data class PlaylistTrackCount(val playlistId: Long, val trackCount: Int)

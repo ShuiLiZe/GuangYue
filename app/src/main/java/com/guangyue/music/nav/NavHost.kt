@@ -485,7 +485,7 @@ fun GuangYueNavHost(
                         val sheets by seamRepo.playlists().collectAsStateWithLifecycle(initialValue = emptyList())
                         var counts by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) }
                         LaunchedEffect(sheets) {
-                            counts = sheets.associate { p -> p.id to runCatching { seamRepo.snapshot(p.id).size }.getOrDefault(0) }
+                            counts = runCatching { seamRepo.trackCounts() }.getOrDefault(emptyMap())
                         }
                         com.guangyue.feature.player.screen.PlaylistSelectionSheet(
                             // 不能把歌单加进它自己。
@@ -997,7 +997,7 @@ fun GuangYueNavHost(
                     val sheets by playlistRepo.playlists().collectAsStateWithLifecycle(initialValue = emptyList())
                     var counts by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) }
                     LaunchedEffect(sheets) {
-                        counts = sheets.associate { it.id to runCatching { playlistRepo.snapshot(it.id).size }.getOrDefault(0) }
+                        counts = runCatching { playlistRepo.trackCounts() }.getOrDefault(emptyMap())
                     }
                     val song = playbackState.item
                     com.guangyue.feature.player.screen.PlaylistSelectionSheet(
