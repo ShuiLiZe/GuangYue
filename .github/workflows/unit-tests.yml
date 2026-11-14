@@ -53,6 +53,8 @@ jobs:
         run: ./gradlew :core:download:testDebugUnitTest --tests '*DownloadQualityPick*' --no-daemon --stacktrace
       - name: 集合页布局单测（app，只跑 CollectionLayout*）
         run: ./gradlew :app:testDebugUnitTest --tests '*CollectionLayout*' --no-daemon --stacktrace
+      - name: 首页 3D 滑卡单测（app，只跑 GridSlider*）
+        run: ./gradlew :app:testDebugUnitTest --tests '*GridSlider*' --no-daemon --stacktrace
       - name: 编译 debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
       - name: 上传 debug APK

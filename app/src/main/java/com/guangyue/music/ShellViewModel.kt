@@ -35,4 +35,14 @@ class ShellViewModel @Inject constructor(
         _explicitDark.value = dark
         viewModelScope.launch { preferences.darkMode = dark }
     }
+
+    /** 0.0.27：首页样式（[com.guangyue.core.prefs.HomeStyles]：wall = 封面墙，grid = 3D 滑卡）。首帧同步读。 */
+    private val _homeStyle = MutableStateFlow(preferences.homeStyleId)
+    val homeStyle: StateFlow<String> = _homeStyle.asStateFlow()
+
+    fun setHomeStyle(id: String) {
+        if (_homeStyle.value == id) return
+        preferences.homeStyleId = id
+        _homeStyle.value = preferences.homeStyleId
+    }
 }

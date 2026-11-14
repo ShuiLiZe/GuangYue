@@ -243,8 +243,17 @@ class AppPreferences @Inject constructor(
         get() = prefs.getString(KEY_VIS_BACKGROUND, "latent")?.takeIf { it == "latent" || it == "common" } ?: "latent"
         set(value) = prefs.edit().putString(KEY_VIS_BACKGROUND, value).apply()
 
+    /**
+     * 0.0.27：首页样式（Folia「资料库界面」librarySuite：bravais = 墙面、grid = 网格首页的 3D 滑卡）。
+     * 取值 "wall" / "grid"，默认 "wall"（封面墙）；未知值一律回落 "wall"。
+     */
+    var homeStyleId: String
+        get() = prefs.getString(KEY_HOME_STYLE, HomeStyles.WALL)?.takeIf { it == HomeStyles.WALL || it == HomeStyles.GRID } ?: HomeStyles.WALL
+        set(value) = prefs.edit().putString(KEY_HOME_STYLE, if (value == HomeStyles.GRID) HomeStyles.GRID else HomeStyles.WALL).apply()
+
     private companion object {
         const val KEY_VIS_BACKGROUND = "visualizer_background_mode"
+        const val KEY_HOME_STYLE = "library_home_style"
         const val FILE = "guangyue_prefs"
         const val KEY_DARK = "ui_dark_mode"
         const val KEY_LAST_SOURCE = "search_last_source"
@@ -293,4 +302,12 @@ class AppPreferences @Inject constructor(
         /** 取链源支持的音质档，由低到高。 */
         val LX_QUALITIES = listOf("128k", "320k", "flac", "flac24bit")
     }
+}
+
+/** 0.0.27：首页样式的落盘取值（[AppPreferences.homeStyleId]）。 */
+object HomeStyles {
+    /** 封面墙（默认，Folia bravais 墙面）。 */
+    const val WALL = "wall"
+    /** 3D 滑卡（Folia 网格首页 Grid3DSlider）。 */
+    const val GRID = "grid"
 }

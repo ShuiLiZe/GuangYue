@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -74,6 +75,10 @@ fun SettingsScreen(
     onOpenPlugins: (() -> Unit)? = null,
     onOpenDownloads: (() -> Unit)? = null,
     versionName: String = "0.0.8",
+    /** 0.0.27：资料库界面（首页样式）选项；空列表不显示这一行。 */
+    homeStyles: List<HomeStyleOption> = emptyList(),
+    homeStyle: String = "",
+    onPickHomeStyle: (String) -> Unit = {},
 ) {
     var query by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
     var page by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(SettingsPage.APPEARANCE) }
@@ -89,6 +94,11 @@ fun SettingsScreen(
     val items = buildList {
         add(SettingItem(SettingsPage.APPEARANCE, "外观", "深色模式", "跟随 Folia 的「午夜墨染」深色底", icon(if (darkMode) GuangYueIcons.Moon else GuangYueIcons.Sun),
             trailing = { FoliaToggle(checked = darkMode, onChange = onDarkModeChange) }))
+        if (homeStyles.isNotEmpty()) {
+            // Folia「设置 → 界面设置 → 资料库界面」（options.librarySuite / librarySuiteDesc）；手机设置没有「界面设置」页，放在外观里。
+            add(SettingItem(SettingsPage.APPEARANCE, "资料库", "资料库界面", "首页用哪套界面浏览。切换时保留播放队列。", icon(GuangYueIcons.LayoutGrid),
+                below = { HomeStylePicker(homeStyles, homeStyle, onPickHomeStyle) }))
+        }
         if (lyricStyles.isNotEmpty()) {
             add(SettingItem(SettingsPage.PLAYER, "歌词动画", "歌词样式", "播放舞台上的歌词画法；各样式的参数在舞台的样式弹层里调", icon(GuangYueIcons.Sparkles),
                 below = {
@@ -425,3 +435,45 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/** 0.0.27：资料库界面的一个选项（Folia librarySuiteOnboarding 的卡片：名字 + 小标签 + 一句说明）。 */
+data class HomeStyleOption(val id: String, val title: String, val tag: String, val description: String)
+
+/** 资料库界面选择：每项一整行（≥56dp 触控），选中项带底色与对勾。 */
+@Composable
+private fun HomeStylePicker(options: List<HomeStyleOption>, current: String, onPick: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.forEach { o ->
+            val on = o.id == current
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .androidxHeightInMin56()
+                    .clip(RoundedCornerShape(GyRadius.field))
+                    .background(if (on) Gyp.raise else Gyp.tint)
+                    .clickableNoRipple { if (!on) onPick(o.id) }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(o.title, fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, color = Gyp.ink)
+                        Text(
+                            o.tag, fontSize = 12.sp, color = Gyp.t2,
+                            modifier = Modifier.padding(start = 8.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Gyp.tint)
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                        )
+                    }
+                    Text(o.description, fontSize = 12.sp, color = Gyp.t2, modifier = Modifier.padding(top = 2.dp))
+                }
+                Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                    if (on) Icon(GuangYueIcons.Check, "已选", tint = Gyp.ink, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+    }
+}
+
+private fun Modifier.androidxHeightInMin56(): Modifier = this.then(Modifier.heightIn(min = 56.dp))

@@ -97,6 +97,9 @@ fun GuangYueNavHost(
     bottomBar: (@Composable () -> Unit)? = null,
 ) {
     val accent: Color = GuangYueDesign.AccentDaylight
+    // 0.0.27：首页样式（封面墙 / 3D 滑卡）。取外壳的 ShellViewModel（这里还在 NavHost 外，作用域是 Activity，与 MainActivity 同一个）。
+    val shellVm: com.guangyue.music.ShellViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    val homeStyle by shellVm.homeStyle.collectAsStateWithLifecycle()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val playbackState by playback.state.collectAsStateWithLifecycle()
 
@@ -194,6 +197,41 @@ fun GuangYueNavHost(
                 var homePick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<com.guangyue.core.data.model.TrackEntity>?>(null) }
                 ShellColumn(
                     content = {
+                        if (homeStyle == com.guangyue.core.prefs.HomeStyles.GRID) {
+                        // 0.0.27：第二种首页样式「网格」（Folia 网格首页 Grid3DSlider：3D 滑卡），数据与回调同封面墙。
+                        com.guangyue.music.ui.home.GridSliderHome(
+                            sections = wallSections,
+                            title = "广乐",
+                            inkColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
+                            groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
+                            onOpenSearch = { navController.navigate(Routes.SEARCH) },
+                            onEnqueueTile = { tile -> vm.playTracksOf(tile) { tracks, _ -> playback.appendTracks(tracks) } },
+                            onDownloadTile = { tile ->
+                                vm.tracksForDownload(tile) { ts ->
+                                    if (ts.isNotEmpty()) {
+                                        val (added, skipped) = vm.downloadTracks(ts, vm.defaultDownloadQuality)
+                                        com.guangyue.feature.library.design.StatusToasts.show(downloadToastText(ts, added, skipped))
+                                    }
+                                }
+                            },
+                            onDownloadTileLong = { tile -> vm.tracksForDownload(tile) { ts -> if (ts.isNotEmpty()) homePick = ts } },
+                            isCurrent = wallIsCurrent,
+                            isQueued = wallIsQueued,
+                            playing = playbackState.isPlaying,
+                            onTogglePlayback = { playback.toggle() },
+                            onEnterPlayback = { navController.navigate(Routes.LYRIC_FLOW) },
+                            onEnterTile = { tile ->
+                                openedCollection = tile
+                                navController.navigate(Routes.COLLECTION)
+                            },
+                            onOpenTile = { tile ->
+                                vm.playTracksOf(tile) { tracks, at ->
+                                    playback.setQueueFromTracks(tracks, at, true)
+                                    navController.navigate(Routes.LYRIC_FLOW)
+                                }
+                            },
+                        )
+                        } else
                         com.guangyue.music.ui.home.BravaisWall(
                             sections = wallSections,
                             title = "广乐",
@@ -853,6 +891,13 @@ fun GuangYueNavHost(
                 },
                 onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
                 onOpenDownloads = { navController.navigate(Routes.DOWNLOAD_SETTINGS) },
+                homeStyles = HOME_STYLE_OPTIONS,
+                homeStyle = homeStyle,
+                onPickHomeStyle = { id ->
+                    shellVm.setHomeStyle(id)
+                    // Folia notifications.homeLayoutGrid「首页布局已切换为…」。
+                    com.guangyue.feature.library.design.StatusToasts.show("已切换为" + (HOME_STYLE_OPTIONS.firstOrNull { it.id == id }?.title ?: "") + "首页")
+                },
                 versionName = com.guangyue.music.BuildConfig.VERSION_NAME,
             )
         }
@@ -1245,3 +1290,19 @@ internal fun stageModeLabel(shuffle: Boolean, repeatMode: Int) =
         com.guangyue.feature.player.screen.PlayerMode.LoopOne -> "单曲循环"
         com.guangyue.feature.player.screen.PlayerMode.Sequential -> "顺序播放"
     }
+
+/** 0.0.27：「资料库界面」的两套首页（Folia librarySuiteOnboarding：bravais 无限 / grid 经典），默认封面墙在前。 */
+internal val HOME_STYLE_OPTIONS = listOf(
+    com.guangyue.feature.library.screen.HomeStyleOption(
+        id = com.guangyue.core.prefs.HomeStyles.WALL,
+        title = "墙面",
+        tag = "无限",
+        description = "一整面没有尽头的磁贴墙，拖动着浏览；点一块展开，再点进入或播放。",
+    ),
+    com.guangyue.feature.library.screen.HomeStyleOption(
+        id = com.guangyue.core.prefs.HomeStyles.GRID,
+        title = "网格",
+        tag = "经典",
+        description = "卡片一字排开，左右滑动挑选；点居中的卡片进入歌单或播放。",
+    ),
+)

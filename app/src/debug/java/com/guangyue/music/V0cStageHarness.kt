@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -357,6 +359,66 @@ fun V0cStage(
                     modeLabel = "顺序播放",
                     onCycleMode = {},
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                )
+            }
+        } else if (style == "gridhome") {
+            // 0.0.27：首页第二种样式「网格」（3D 滑卡）取证。夹具 = 推荐 / 榜单 / 最近三段（无封面，走占位色块）。
+            // 拍摄时刻借 v0c_ms 当变体：3000 = 浅色；14000 = 聚焦第 5 张且它正在播放（暂停 + 进入播放页）；
+            // 44000 = 字体 1.3 倍、聚焦单曲（带下载键）；其余 = 深色、聚焦第 1 张。
+            val light = positionMs == 3_000L
+            val big = positionMs == 44_000L
+            val k = com.guangyue.feature.library.home.HomeTileKind.SHEET
+            val rec = listOf(
+                "深夜电台 · 安静的歌" to "网易云音乐", "周末的咖啡馆" to "QQ 音乐", "通勤路上的好心情" to "网易云音乐",
+                "九十年代华语金曲" to "酷狗音乐", "雨天适合听的钢琴曲" to "QQ 音乐", "跑步节奏 160 BPM" to "网易云音乐",
+            ).mapIndexed { i, (t, sub) -> com.guangyue.feature.library.home.HomeTile("sheet:$i", t, sub, kind = k) }
+            val charts = listOf("飙升榜" to "每日更新", "新歌榜" to "每日更新", "热歌榜" to "每周四更新", "原创榜" to "每周四更新")
+                .mapIndexed { i, (t, sub) -> com.guangyue.feature.library.home.HomeTile("chart:$i", t, sub, kind = com.guangyue.feature.library.home.HomeTileKind.PLAYLIST) }
+            val recent = listOf("晴天" to "周杰伦", "后来" to "刘若英", "夜曲（一首名字很长很长的测试歌曲用来看截断）" to "周杰伦", "月亮代表我的心" to "邓丽君")
+                .mapIndexed { i, (t, sub) -> com.guangyue.feature.library.home.HomeTile("track:r$i", t, sub, kind = com.guangyue.feature.library.home.HomeTileKind.TRACK) }
+            val focus = when (positionMs) { 14_000L -> 4; 44_000L -> 12; else -> 0 }
+            val currentKey = if (positionMs == 14_000L) "sheet:4" else ""
+            val baseDensity = LocalDensity.current
+            FoliaTheme(dark = !light) {
+                CompositionLocalProvider(
+                    LocalDensity provides androidx.compose.ui.unit.Density(baseDensity.density, if (big) 1.3f else baseDensity.fontScale),
+                ) {
+                    Box(
+                        Modifier.fillMaxSize()
+                            .background(if (light) Color(0xFFF4F4F5) else Color(0xFF09090B))
+                            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars.only(androidx.compose.foundation.layout.WindowInsetsSides.Bottom)),
+                    ) {
+                        com.guangyue.music.ui.home.GridSliderHome(
+                            sections = listOf("推荐" to rec, "榜单" to charts, "最近" to recent),
+                            title = "广乐",
+                            inkColor = if (light) Color(0xFF18181B) else Color(0xFFF4F4F5),
+                            groundColor = if (light) Color(0xFFF4F4F5) else Color(0xFF09090B),
+                            onOpenTile = {},
+                            onOpenSearch = {},
+                            onEnterTile = {},
+                            onDownloadTile = {},
+                            isCurrent = { it.key == currentKey },
+                            playing = true,
+                            onEnterPlayback = {},
+                            initialFocus = focus,
+                        )
+                    }
+                }
+            }
+        } else if (style == "gridhomeswitch") {
+            // 0.0.27：切换入口取证 = 设置 → 外观 → 资料库界面（Folia「设置 → 界面设置 → 资料库界面」）。
+            // 3000 = 浅色、选中「网格」；其余 = 深色、默认「墙面」。
+            val light = positionMs == 3_000L
+            FoliaTheme(dark = !light) {
+                com.guangyue.feature.library.screen.SettingsScreen(
+                    darkMode = !light,
+                    onDarkModeChange = {},
+                    onOpenLicenses = {},
+                    onBack = {},
+                    homeStyles = com.guangyue.music.nav.HOME_STYLE_OPTIONS,
+                    homeStyle = if (light) com.guangyue.core.prefs.HomeStyles.GRID else com.guangyue.core.prefs.HomeStyles.WALL,
+                    versionName = "0.0.27",
+                    modifier = Modifier.navigationBarsPadding(),
                 )
             }
         } else         if (style == "collection" || style == "collectionfilter" || style == "collectionwall" || style == "artistwall" || style == "artistlist" || style == "artistalbums" || style == "artistbio" || style == "collectionmore") {
