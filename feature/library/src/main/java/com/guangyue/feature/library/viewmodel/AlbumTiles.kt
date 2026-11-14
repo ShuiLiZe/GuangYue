@@ -18,6 +18,9 @@ object AlbumTiles {
 
     fun isAlbum(key: String): Boolean = key.startsWith(PREFIX)
 
+    /** 登记过的专辑原始对象（没登记过回 null，不重建桩）。 */
+    fun knownOrNull(key: String): AlbumItem? = known[key]?.second
+
     /** 副标题照 Folia 写年份（albumYear）；不知道年份时写「专辑」。 */
     fun tile(pluginId: String, album: AlbumItem): HomeTile {
         val key = keyOf(pluginId, album)

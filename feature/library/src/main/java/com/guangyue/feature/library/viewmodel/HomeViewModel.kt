@@ -583,6 +583,22 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 2026-11-14：曲目行长按的「查看歌手 / 查看专辑」（Folia 聚焦卡上的歌手、专辑链接，[TrackLinks]）。
+     * 音源按曲目平台找：同平台、启用、没报错、声明了 getArtistWorks / getAlbumInfo 的插件。
+     */
+    fun trackLinks(t: TrackEntity, ownKey: String?): List<TrackLinks.Link> {
+        if (t.source == TrackEntity.SOURCE_LOCAL) return emptyList()
+        val item = com.guangyue.core.data.model.TrackMapper.toMusicItem(t) ?: return emptyList()
+        val list = plugins.plugins.value.filter { it.enabled && it.error == null }
+        return TrackLinks.of(
+            item,
+            artistPlugin = { p -> list.firstOrNull { it.platform == p && it.hasArtistWorks }?.id },
+            albumPlugin = { p -> list.firstOrNull { it.platform == p && it.hasAlbumInfo }?.id },
+            ownKey = ownKey,
+        )
+    }
+
     private fun MusicItem.toEntity() = TrackEntity(
         key = "${platform}:${id}",
         title = title,

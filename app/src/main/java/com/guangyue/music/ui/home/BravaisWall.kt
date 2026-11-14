@@ -16,6 +16,7 @@
 //  3. 排名原点 = 初始镜头中心；拖动时不重排（Folia 同：排名只在换数据时重算）。
 package com.guangyue.music.ui.home
 
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.layout.onSizeChanged
@@ -135,6 +136,11 @@ fun BravaisWall(
     onDownloadTile: ((HomeTile) -> Unit)? = null,
     /** 2026-11-12：长按下载键（选音质）。null 时长按无反应、只有点按。 */
     onDownloadTileLong: ((HomeTile) -> Unit)? = null,
+    /**
+     * 2026-11-14：集合层列表的曲目行长按弹出的链接（Folia 聚焦卡上的歌手 / 专辑链接：「查看歌手 · 名字」「查看专辑 · 名字」）。
+     * 每项是 (文字, 动作)；回空表示这首没有可开的链接（长按不弹）。null 时整行只有点按。
+     */
+    trackLinksOf: ((HomeTile) -> List<Pair<String, () -> Unit>>)? = null,
     /** 集合层初始是列表（true）/ 墙（false）；null = 按曲目数自动选（[CollectionLayout.preferList]）。取证用。 */
     initialListMode: Boolean? = null,
     /** 集合层过滤词初值（取证用；平时空）。 */
@@ -220,6 +226,7 @@ fun BravaisWall(
                     onEnqueue = onEnqueueTile,
                     onDownload = onDownloadTile,
                     onDownloadLong = onDownloadTileLong,
+                    linksOf = trackLinksOf,
                 )
                 Box(
                     Modifier
@@ -941,6 +948,7 @@ private fun CollectionTrackList(
     onEnqueue: (HomeTile) -> Unit,
     onDownload: ((HomeTile) -> Unit)?,
     onDownloadLong: ((HomeTile) -> Unit)? = null,
+    linksOf: ((HomeTile) -> List<Pair<String, () -> Unit>>)? = null,
 ) {
     if (tiles.isEmpty()) {
         Box(Modifier.fillMaxSize().padding(top = topPad.dp), contentAlignment = Alignment.Center) {
@@ -955,10 +963,17 @@ private fun CollectionTrackList(
         items(tiles.size, key = { tiles[it].key }) { i ->
             val t = tiles[i]
             val cur = isCurrent(t)
+            // 长按：歌手 / 专辑链接（有链接才弹；没有就只有点按）。
+            var links by remember(t.key) { mutableStateOf<List<Pair<String, () -> Unit>>>(emptyList()) }
+            Box {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clickable { onPlay(t) }
+                    .combinedClickable(
+                        onClick = { onPlay(t) },
+                        onLongClickLabel = if (linksOf != null) "更多" else null,
+                        onLongClick = if (linksOf != null) ({ links = linksOf(t) }) else null,
+                    )
                     .background(if (cur) ink.copy(alpha = 0.06f) else Color.Transparent)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -992,6 +1007,20 @@ private fun CollectionTrackList(
                         contentAlignment = Alignment.Center,
                     ) { Icon(GuangYueIcons.Download, contentDescription = "下载", tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(18.dp)) }
                 }
+            }
+            androidx.compose.material3.DropdownMenu(
+                expanded = links.isNotEmpty(),
+                onDismissRequest = { links = emptyList() },
+                offset = androidx.compose.ui.unit.DpOffset(72.dp, 0.dp),
+            ) {
+                links.forEach { (label, go) ->
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text(label, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        onClick = { links = emptyList(); go() },
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    )
+                }
+            }
             }
         }
     }

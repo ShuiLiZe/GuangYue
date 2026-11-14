@@ -18,6 +18,9 @@ object ArtistTiles {
 
     fun isArtist(key: String): Boolean = key.startsWith(PREFIX)
 
+    /** 登记过的歌手原始对象（没登记过回 null，不重建桩）。 */
+    fun knownOrNull(key: String): ArtistItem? = known[key]?.second
+
     fun tile(pluginId: String, artist: ArtistItem): HomeTile {
         val key = keyOf(pluginId, artist)
         known[key] = pluginId to artist

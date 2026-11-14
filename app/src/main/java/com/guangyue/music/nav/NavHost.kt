@@ -372,6 +372,12 @@ fun GuangYueNavHost(
                             else trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i -> collectionPick = listOf(list[i]) }
                         },
                         onEnterTile = openAlbum,
+                        // 2026-11-14：列表曲目行长按「查看歌手 / 查看专辑」（Folia 聚焦卡上的链接），本页自己不出。
+                        trackLinksOf = { t ->
+                            trackTiles.indexOf(t).takeIf { i -> i >= 0 }?.let { i ->
+                                vm.trackLinks(list[i], ownKey = tile.key).map { link -> link.label to { openAlbum(link.tile) } }
+                            }.orEmpty()
+                        },
                         onOpenTile = { t ->
                             if (com.guangyue.feature.library.viewmodel.AlbumTiles.isAlbum(t.key)) {
                                 vm.playTracksOf(t) { ts, at ->
