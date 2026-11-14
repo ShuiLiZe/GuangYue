@@ -214,7 +214,11 @@ fun GridSliderHome(
     /** 页签胶囊末尾的「去别处」页签（Folia extraTabs）：点了直接跳页，不切换本页列表。 */
     extraTabs: List<Pair<String, () -> Unit>> = emptyList(),
     /** 搜索框占位（Folia home.searchDatabase）。 */
-    searchHint: String = "搜索歌曲、歌手…",
+    searchHint: String = "搜索在线歌曲...",
+    /** Folia 首页背后的动态背景（可视化背景层）；null 时退回焦点封面大模糊。 */
+    background: (@Composable () -> Unit)? = null,
+    /** 右下角平台按钮（Folia SwitcherPill / ProviderConnectButton）。 */
+    providerButton: (@Composable () -> Unit)? = null,
 ) {
     // Folia 首页页签就是各个数据源本身（歌单 / 推荐 / 探索 / 专辑 / 本地），没有「全部」。
     var tab by rememberSaveable { mutableStateOf(initialTab.coerceIn(0, max(0, sections.size - 1))) }
@@ -229,8 +233,13 @@ fun GridSliderHome(
 
     // folia-sonnet 首页背后是一层当前焦点封面的大模糊（gridBackdrop / backdrop-blur），手机版同样保留。
     var backdrop by remember { mutableStateOf<Any?>(null) }
+    val darkInk = inkColor.red + inkColor.green + inkColor.blue > 1.5f
     Box(modifier.fillMaxSize().background(groundColor)) {
-    if (backdrop != null) {
+    if (background != null) {
+        background()
+        // Folia Grid3D 根节点 mainBg：夜间 bg-black/20、日间 bg-white/40，压在动态背景上。
+        Box(Modifier.fillMaxSize().background(if (darkInk) Color.Black.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.4f)))
+    } else if (backdrop != null) {
         AsyncImage(
             model = backdrop,
             contentDescription = null,
@@ -333,6 +342,14 @@ fun GridSliderHome(
             )
         }
     }
+    if (providerButton != null) {
+        // Folia SwitcherPill：右下角浮着的平台按钮（fixed bottom-4 right-4）。
+        Box(
+            Modifier.align(Alignment.BottomEnd)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                .padding(16.dp),
+        ) { providerButton() }
+    }
     }
 }
 
@@ -401,7 +418,7 @@ private fun GridHomeHeader(
             all.forEach { (label, on, go) ->
                 Box(
                     Modifier
-                        .heightIn(min = if (compact) 24.dp else 32.dp)
+                        .heightIn(min = if (compact) 24.dp else 28.dp)
                         .clip(RoundedCornerShape(50))
                         .background(if (on) Color.White else Color.Transparent)
                         .clickable(onClick = go)
@@ -412,7 +429,7 @@ private fun GridHomeHeader(
                     Text(
                         label,
                         color = if (on) Color.Black else ink.copy(alpha = 0.6f),
-                        fontSize = if (compact) 11.sp else 13.sp,
+                        fontSize = if (compact) 11.sp else 12.sp,
                         fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
                         maxLines = 1,
                     )
@@ -545,24 +562,24 @@ private fun GridCaption(
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
-            Spacer(Modifier.width(12.dp))
-            Box(Modifier.widthIn(max = 420.dp).horizontalScroll(rememberScrollState())) { actions() }
+
         }
     } else {
         Column(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+            Modifier.fillMaxWidth().padding(start = 32.dp, end = 32.dp, top = 4.dp, bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // Folia Grid3DSlider 标题块：h3 text-2xl font-bold + p text-xs opacity-50 font-mono mt-1，
+            // 下面不放操作按钮 —— 点中间那张卡进入 / 播放，播放控制交给底部悬浮播放条。
             Text(
-                tile.title, color = ink, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                tile.title, color = ink, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
             )
             Text(
-                GridSliderModel.secondary(tile), color = ink.copy(alpha = 0.6f), fontSize = 13.sp, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 2.dp),
+                GridSliderModel.secondary(tile), color = ink.copy(alpha = 0.5f), fontSize = 12.sp, maxLines = 1,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp),
             )
-            Spacer(Modifier.height(12.dp))
-            Box(Modifier.horizontalScroll(rememberScrollState())) { actions() }
         }
     }
 }
@@ -593,3 +610,36 @@ private fun mixColor(a: Color, b: Color, t: Float): Color = Color(
     a.blue + (b.blue - a.blue) * t,
     a.alpha + (b.alpha - a.alpha) * t,
 )
+
+/**
+ * 右下角平台按钮，照 Folia SwitcherPill：rounded-[26px] 菜单底色 + p-0.5，里面一个 40dp 圆形平台头像；
+ * 没有登录头像时显示当前音源名的首字。点开 = 音源 / 插件 / 登录管理（Folia 的平台切换器）。
+ */
+@Composable
+fun ProviderPill(label: String?, dark: Boolean, onClick: () -> Unit) {
+    val menu = if (dark) Color(0xFF1F1F22) else Color(0xFFFFFFFF)
+    Box(
+        Modifier
+            .shadow(8.dp, RoundedCornerShape(26.dp))
+            .clip(RoundedCornerShape(26.dp))
+            .background(menu)
+            .padding(2.dp),
+    ) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color(0xFFE5312B))
+                .clickable(onClick = onClick)
+                .semantics { contentDescription = "音源与登录" + (label?.let { "：$it" } ?: "") },
+            contentAlignment = Alignment.Center,
+        ) {
+            val ch = label?.trim()?.firstOrNull()?.toString()
+            if (ch != null) {
+                Text(ch, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            } else {
+                Icon(GuangYueIcons.Settings, null, tint = Color.White, modifier = Modifier.size(20.dp))
+            }
+        }
+    }
+}

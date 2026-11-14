@@ -1,5 +1,6 @@
 package com.guangyue.music.nav
 
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
@@ -232,6 +233,25 @@ fun GuangYueNavHost(
                             polaroid = gridCardStyle != com.guangyue.core.prefs.GridCardStyles.IMAGE,
                             // folia-sonnet 手机版首页：没有底栏，标题旁齿轮进设置，页签胶囊末尾带「去别处」的页签。
                             onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                            // Folia 手机版：首页背后跑的是播放页同一层可视化背景（不暂停），右下角是平台按钮。
+                            background = {
+                                val homeStyleVm: LyricStyleViewModel = hiltViewModel()
+                                val homeBg by homeStyleVm.background.collectAsStateWithLifecycle()
+                                com.guangyue.feature.player.lyrics.visualizer.HomeVisualizerBackground(
+                                    coverUrl = playbackState.item?.artworkUri,
+                                    dark = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() < 0.5f,
+                                    latent = homeBg == "latent",
+                                    playing = playbackState.isPlaying,
+                                )
+                            },
+                            providerButton = {
+                                val src by vm.currentSource.collectAsStateWithLifecycle()
+                                com.guangyue.music.ui.home.ProviderPill(
+                                    label = src?.name,
+                                    dark = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() < 0.5f,
+                                    onClick = { navController.navigate(Routes.PLUGINS) },
+                                )
+                            },
 
                             title = "广乐",
                             inkColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
