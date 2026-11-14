@@ -245,11 +245,13 @@ class AppPreferences @Inject constructor(
 
     /**
      * 0.0.27：首页样式（Folia「资料库界面」librarySuite：bravais = 墙面、grid = 网格首页的 3D 滑卡）。
-     * 取值 "wall" / "grid"，默认 "wall"（封面墙）；未知值一律回落 "wall"。
+     * 取值 "wall" / "grid"。0.0.28 起默认 "grid"：Folia 原版与手机版 folia-sonnet 的
+     * DEFAULT_LIBRARY_SUITE_ID 都是 'grid'，手机版的竖横屏紧凑适配（androidPhoneFit.css ⑤）也是给网格首页做的。
+     * 没选过的用户跟默认走；手动选过「墙面」的保留。未知值回落默认。
      */
     var homeStyleId: String
-        get() = prefs.getString(KEY_HOME_STYLE, HomeStyles.WALL)?.takeIf { it == HomeStyles.WALL || it == HomeStyles.GRID } ?: HomeStyles.WALL
-        set(value) = prefs.edit().putString(KEY_HOME_STYLE, if (value == HomeStyles.GRID) HomeStyles.GRID else HomeStyles.WALL).apply()
+        get() = prefs.getString(KEY_HOME_STYLE, HomeStyles.DEFAULT)?.takeIf { it == HomeStyles.WALL || it == HomeStyles.GRID } ?: HomeStyles.DEFAULT
+        set(value) = prefs.edit().putString(KEY_HOME_STYLE, if (value == HomeStyles.WALL) HomeStyles.WALL else HomeStyles.GRID).apply()
 
     private companion object {
         const val KEY_VIS_BACKGROUND = "visualizer_background_mode"
@@ -306,8 +308,10 @@ class AppPreferences @Inject constructor(
 
 /** 0.0.27：首页样式的落盘取值（[AppPreferences.homeStyleId]）。 */
 object HomeStyles {
-    /** 封面墙（默认，Folia bravais 墙面）。 */
+    /** 封面墙（Folia bravais 墙面）。 */
     const val WALL = "wall"
-    /** 3D 滑卡（Folia 网格首页 Grid3DSlider）。 */
+    /** 3D 滑卡（Folia 网格首页 Grid3DSlider；默认）。 */
     const val GRID = "grid"
+    /** 与 Folia / folia-sonnet 的 DEFAULT_LIBRARY_SUITE_ID 一致。 */
+    const val DEFAULT = GRID
 }

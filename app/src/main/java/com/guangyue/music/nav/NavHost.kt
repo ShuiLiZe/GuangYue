@@ -1291,7 +1291,7 @@ internal fun stageModeLabel(shuffle: Boolean, repeatMode: Int) =
         com.guangyue.feature.player.screen.PlayerMode.Sequential -> "顺序播放"
     }
 
-/** 0.0.27：「资料库界面」的两套首页（Folia librarySuiteOnboarding：bravais 无限 / grid 经典），默认封面墙在前。 */
+/** 0.0.27：「资料库界面」的两套首页（Folia librarySuiteOnboarding：bravais 无限 / grid 经典），顺序照 Folia 引导页；默认是网格（HomeStyles.DEFAULT）。 */
 internal val HOME_STYLE_OPTIONS = listOf(
     com.guangyue.feature.library.screen.HomeStyleOption(
         id = com.guangyue.core.prefs.HomeStyles.WALL,
