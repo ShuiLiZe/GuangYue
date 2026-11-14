@@ -517,7 +517,7 @@ fun V0cStage(
                 timeSeconds = positionMs / 1000.0,
                 modifier = Modifier.fillMaxSize(),
             )
-        } else if (style == "machi" || style == "machirain" || style == "machisnow" || style == "machiday" || style == "machidusk" || style == "machikonbini" || style == "machistation") {
+        } else if (style == "machi" || style == "machirain" || style == "machisnow" || style == "machiday" || style == "machidusk" || style == "machikonbini" || style == "machistation" || style.startsWith("machidrag")) {
             com.guangyue.feature.player.lyrics.visualizer.MachiStagePreview(
                 lines = kernel,
                 timeSeconds = { positionMs / 1000.0 },
@@ -527,16 +527,21 @@ fun V0cStage(
                 primaryColor = Color(0xFFF4F4F5),
                 secondaryColor = Color(0xFF71717A),
                 accentColor = Color(0xFFF4F4F5),
-                seed = "probe-0",
+                seed = if (style.startsWith("machidrag-")) style.removePrefix("machidrag-") else "probe-0",
                 // Folia 探针不给曲名（招牌落到「歌手」「KOWLOON」），这里同样留空。
                 songTitle = "",
                 // machirain：雨天（湿路面 + 水洼倒影，MachiWet.kt）取证；machisnow：雪。
                 weather = when (style) { "machirain" -> "rain"; "machisnow" -> "snow"; else -> "auto" },
-                restCamera = true,
+                restCamera = !style.startsWith("machidrag"),
+                // machidrag[-seed]：播放页同款（scene auto + 可拖动镜头），取证拖拽与按歌选场景。
+                draggable = style.startsWith("machidrag"),
                 // machiday / machidusk：白天、黄昏（applyEnvironmentColors 三套插值）取证；其余夜。
                 timeOfDay = when (style) { "machiday", "machikonbini", "machistation" -> "day"; "machidusk" -> "dusk"; else -> "night" },
                 // machikonbini：便利店街角（MachiKonbini.kt）；machistation：加油站停车场（MachiStation.kt）。都按白天拍（Folia 基准是白天）。
-                scene = when (style) { "machikonbini" -> "konbini"; "machistation" -> "station"; else -> "kowloon" },
+                scene = when {
+                    style == "machikonbini" -> "konbini"; style == "machistation" -> "station"
+                    style.startsWith("machidrag") -> "auto"; else -> "kowloon"
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama" || style == "sheetsubtitle") {
