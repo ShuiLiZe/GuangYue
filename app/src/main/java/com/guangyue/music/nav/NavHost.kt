@@ -197,7 +197,19 @@ fun GuangYueNavHost(
             val wallSections = remember(sheets, recent, charts) {
                 listOf("推荐" to vm.recommended(sheets, recent), "榜单" to charts, "最近" to recent).filter { it.second.isNotEmpty() }
             }
-            if (wallSections.isNotEmpty()) {
+            // 网格首页照 Folia 页签：歌单 / 推荐 / 探索 / 专辑 / 本地（空的页签照样在，里面给空态说明）。
+            val homeMine by vm.playlistsFlow.collectAsStateWithLifecycle()
+            val homeLocal by vm.localTiles.collectAsStateWithLifecycle()
+            val gridSections = remember(homeMine, sheets, recent, charts, homeLocal) {
+                listOf(
+                    "歌单" to homeMine,
+                    "推荐" to vm.recommended(sheets, recent),
+                    "探索" to charts,
+                    "专辑" to emptyList(),
+                    "本地" to homeLocal,
+                )
+            }
+            if (wallSections.isNotEmpty() || homeStyle == com.guangyue.core.prefs.HomeStyles.GRID) {
                 val homeCtx = androidx.compose.ui.platform.LocalContext.current
                 var homePick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<com.guangyue.core.data.model.TrackEntity>?>(null) }
                 ShellColumn(
@@ -205,14 +217,22 @@ fun GuangYueNavHost(
                         if (homeStyle == com.guangyue.core.prefs.HomeStyles.GRID) {
                         // 0.0.27：第二种首页样式「网格」（Folia 网格首页 Grid3DSlider：3D 滑卡），数据与回调同封面墙。
                         com.guangyue.music.ui.home.GridSliderHome(
-                            sections = wallSections,
+                            sections = gridSections,
+                            initialTab = 1,
+                            emptyText = { label ->
+                                when (label) {
+                                    "歌单" -> "还没有歌单。在播放页把歌加进歌单，或从推荐里收藏。"
+                                    "推荐" -> if (wallLoading) "正在加载推荐…" else if (wallFailed) "推荐加载失败，稍后再试。" else "当前音源没有推荐内容。"
+                                    "探索" -> if (wallLoading) "正在加载…" else "当前音源暂不支持探索。"
+                                    "专辑" -> "当前音源暂不支持专辑库。"
+                                    "本地" -> "暂无本地音乐。下载的歌会出现在这里。"
+                                    else -> "这里还没有内容"
+                                }
+                            },
                             polaroid = gridCardStyle != com.guangyue.core.prefs.GridCardStyles.IMAGE,
                             // folia-sonnet 手机版首页：没有底栏，标题旁齿轮进设置，页签胶囊末尾带「去别处」的页签。
                             onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                            extraTabs = listOf(
-                                "本地" to { navController.navigate(Routes.DOWNLOADS) },
-                                "我的" to { navController.navigate(Routes.PROFILE) },
-                            ),
+
                             title = "广乐",
                             inkColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
                             groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,

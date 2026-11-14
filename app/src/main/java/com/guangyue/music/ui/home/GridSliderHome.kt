@@ -205,6 +205,10 @@ fun GridSliderHome(
     polaroid: Boolean = true,
     /** 取证用：开场聚焦第几张。 */
     initialFocus: Int = 0,
+    /** 开场停在第几个页签。 */
+    initialTab: Int = 0,
+    /** 某个页签没内容时的说明（Folia 各页签的空态 / 不可用原因）。 */
+    emptyText: (String) -> String = { "这里还没有内容" },
     /** folia-sonnet 首页头部标题旁的齿轮（onOpenSettings）；null 不显示。 */
     onOpenSettings: (() -> Unit)? = null,
     /** 页签胶囊末尾的「去别处」页签（Folia extraTabs）：点了直接跳页，不切换本页列表。 */
@@ -212,10 +216,11 @@ fun GridSliderHome(
     /** 搜索框占位（Folia home.searchDatabase）。 */
     searchHint: String = "搜索歌曲、歌手…",
 ) {
-    var tab by rememberSaveable { mutableStateOf(0) }
-    val tabs = remember(sections) { listOf("全部") + sections.map { it.first } }
+    // Folia 首页页签就是各个数据源本身（歌单 / 推荐 / 探索 / 专辑 / 本地），没有「全部」。
+    var tab by rememberSaveable { mutableStateOf(initialTab.coerceIn(0, max(0, sections.size - 1))) }
+    val tabs = remember(sections) { sections.map { it.first } }
     val tiles = remember(sections, tab) {
-        if (tab == 0) sections.flatMap { it.second }.distinctBy { it.key } else sections.getOrNull(tab - 1)?.second.orEmpty()
+        sections.getOrNull(tab)?.second.orEmpty()
     }
     val compact = LocalConfiguration.current.screenHeightDp < GRID_COMPACT_SCREEN_DP
     val fontScale = LocalDensity.current.fontScale
@@ -249,14 +254,14 @@ fun GridSliderHome(
         )
         if (tiles.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text("这里还没有内容", color = inkColor.copy(alpha = 0.5f), fontSize = 14.sp)
+                Text(emptyText(tabs.getOrNull(tab).orEmpty()), color = inkColor.copy(alpha = 0.5f), fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 32.dp))
             }
             return@Column
         }
         // 换页签 = 换一份列表：焦点回到开头（Folia 列表变化走 'none' 直接跳）。
         key(tab) {
             val pager = rememberPagerState(
-                initialPage = GridSliderModel.clampFocus(if (tab == 0) initialFocus else 0, tiles.size),
+                initialPage = GridSliderModel.clampFocus(if (tab == initialTab) initialFocus else 0, tiles.size),
                 pageCount = { tiles.size },
             )
             val scope = rememberCoroutineScope()
