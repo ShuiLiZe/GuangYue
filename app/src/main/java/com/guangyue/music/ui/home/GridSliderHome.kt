@@ -67,6 +67,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -204,6 +205,12 @@ fun GridSliderHome(
     polaroid: Boolean = true,
     /** 取证用：开场聚焦第几张。 */
     initialFocus: Int = 0,
+    /** folia-sonnet 首页头部标题旁的齿轮（onOpenSettings）；null 不显示。 */
+    onOpenSettings: (() -> Unit)? = null,
+    /** 页签胶囊末尾的「去别处」页签（Folia extraTabs）：点了直接跳页，不切换本页列表。 */
+    extraTabs: List<Pair<String, () -> Unit>> = emptyList(),
+    /** 搜索框占位（Folia home.searchDatabase）。 */
+    searchHint: String = "搜索歌曲、歌手…",
 ) {
     var tab by rememberSaveable { mutableStateOf(0) }
     val tabs = remember(sections) { listOf("全部") + sections.map { it.first } }
@@ -215,13 +222,31 @@ fun GridSliderHome(
     val insets = WindowInsets.safeDrawing.union(WindowInsets.displayCutout)
         .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
 
+    // folia-sonnet 首页背后是一层当前焦点封面的大模糊（gridBackdrop / backdrop-blur），手机版同样保留。
+    var backdrop by remember { mutableStateOf<Any?>(null) }
+    Box(modifier.fillMaxSize().background(groundColor)) {
+    if (backdrop != null) {
+        AsyncImage(
+            model = backdrop,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { scaleX = 1.3f; scaleY = 1.3f; alpha = 0.55f }
+                .then(if (android.os.Build.VERSION.SDK_INT >= 31) Modifier.blur(72.dp) else Modifier),
+        )
+        Box(Modifier.fillMaxSize().background(groundColor.copy(alpha = 0.55f)))
+    }
     Column(
-        modifier
+        Modifier
             .fillMaxSize()
-            .background(groundColor)
             .windowInsetsPadding(insets),
     ) {
-        GridHomeHeader(title, tabs, tab, inkColor, compact, onSelect = { tab = it }, onOpenSearch = onOpenSearch)
+        GridHomeHeader(
+            title, tabs, tab, inkColor, compact,
+            onSelect = { tab = it }, onOpenSearch = onOpenSearch,
+            onOpenSettings = onOpenSettings, extraTabs = extraTabs, searchHint = searchHint,
+        )
         if (tiles.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text("这里还没有内容", color = inkColor.copy(alpha = 0.5f), fontSize = 14.sp)
@@ -237,6 +262,7 @@ fun GridSliderHome(
             val scope = rememberCoroutineScope()
             val focus = GridSliderModel.clampFocus(pager.currentPage, tiles.size)
             val focused = tiles[focus]
+            androidx.compose.runtime.LaunchedEffect(focused.artwork) { backdrop = focused.artwork }
             fun select(t: HomeTile) {
                 val enter = onEnterTile?.takeIf { GridSliderModel.opensCollection(t) }
                 (enter ?: onOpenTile)(t)
@@ -302,64 +328,91 @@ fun GridSliderHome(
             )
         }
     }
+    }
 }
 
-/** 顶栏：标题 + 视图胶囊（GridViewTabs：页签横排，选中项带底色）+ 搜索。 */
+/**
+ * 顶栏，照 folia-sonnet Grid3D.tsx 的 data-folia-home-header（手机宽度 = grid-cols-2，p-4，gap-y-4）：
+ * 第一行左边「标题 + 齿轮」（text-2xl bold），右边半宽的搜索框（rounded-full，py-2 pl-10）；
+ * 第二行跨两列居中的页签胶囊（p-1 rounded-full scale-90，选中项白底黑字，未选 60% 字色），胶囊内横滑。
+ * 横屏（紧凑档）照 androidPhoneFit.css：头部 padding 6/12、标题 1rem、搜索框上下 4px、页签 24dp 高。
+ */
 @Composable
 private fun GridHomeHeader(
     title: String, tabs: List<String>, active: Int, ink: Color, compact: Boolean,
     onSelect: (Int) -> Unit, onOpenSearch: () -> Unit,
+    onOpenSettings: (() -> Unit)?, extraTabs: List<Pair<String, () -> Unit>>, searchHint: String,
 ) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = if (compact) 48.dp else 56.dp).padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    val dark = ink.red + ink.green + ink.blue > 1.5f
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = if (compact) 12.dp else 16.dp, vertical = if (compact) 6.dp else 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(title, color = ink, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 4.5.sp, maxLines = 1)
-        Spacer(Modifier.width(12.dp))
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            // folia-sonnet androidPhoneFit.css「tab strip」：胶囊本身封顶在可用宽度内（圆角 18、内边距 3、高 ≤40），
-            // 页签在胶囊里面横向滚。以前 horizontalScroll 在 clip/背景外层，胶囊跟着内容一起被截，右端「最近」被切一块。
-            Row(
-                Modifier
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(ink.copy(alpha = 0.06f))
-                    .border(1.dp, ink.copy(alpha = 0.08f), RoundedCornerShape(18.dp))
-                    .padding(3.dp)
-                    .horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                tabs.forEachIndexed { i, label ->
-                    val on = i == active
-                    // 手机版胶囊高 ≤40（34 + 上下 3），页签左右内边距收一档。
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title, color = ink.copy(alpha = 0.9f), fontSize = if (compact) 16.sp else 24.sp,
+                    fontWeight = FontWeight.Bold, maxLines = 1,
+                )
+                if (onOpenSettings != null) {
+                    Spacer(Modifier.width(8.dp))
                     Box(
-                        Modifier
-                            .heightIn(min = 34.dp)
-                            .clip(RoundedCornerShape(15.dp))
-                            .clickable { if (!on) onSelect(i) }
-                            .semantics { contentDescription = if (on) "$label，已选中" else label },
+                        Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onOpenSettings)
+                            .semantics { contentDescription = "设置" },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            label,
-                            color = if (on) ink else ink.copy(alpha = 0.62f),
-                            fontSize = 14.sp,
-                            fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
-                            maxLines = 1,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(15.dp))
-                                .background(if (on) ink.copy(alpha = 0.14f) else Color.Transparent)
-                                .padding(horizontal = 12.dp, vertical = 7.dp),
-                        )
+                        Icon(GuangYueIcons.Settings, null, tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(22.dp))
                     }
                 }
             }
+            Row(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(50))
+                    .background(ink.copy(alpha = 0.05f))
+                    .border(1.dp, (if (dark) Color.White else Color.Black).copy(alpha = 0.10f), RoundedCornerShape(50))
+                    .clickable(onClick = onOpenSearch)
+                    .semantics { contentDescription = "搜索" }
+                    .padding(start = 12.dp, end = 14.dp, top = if (compact) 6.dp else 9.dp, bottom = if (compact) 6.dp else 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(GuangYueIcons.Search, null, tint = ink.copy(alpha = 0.4f), modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(searchHint, color = ink.copy(alpha = 0.4f), fontSize = if (compact) 12.sp else 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
-        Spacer(Modifier.width(4.dp))
-        Box(
-            Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onOpenSearch),
-            contentAlignment = Alignment.Center,
+        Spacer(Modifier.height(if (compact) 4.dp else 14.dp))
+        Row(
+            Modifier
+                .graphicsLayer { scaleX = 0.9f; scaleY = 0.9f }
+                .clip(RoundedCornerShape(50))
+                .background(ink.copy(alpha = if (dark) 0.10f else 0.05f))
+                .padding(if (compact) 2.dp else 4.dp)
+                .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(GuangYueIcons.Search, contentDescription = "搜索", tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
+            val all = tabs.mapIndexed { i, l -> Triple(l, i == active) { if (i != active) onSelect(i) } } +
+                extraTabs.map { (l, go) -> Triple(l, false, go) }
+            all.forEach { (label, on, go) ->
+                Box(
+                    Modifier
+                        .heightIn(min = if (compact) 24.dp else 32.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(if (on) Color.White else Color.Transparent)
+                        .clickable(onClick = go)
+                        .semantics { contentDescription = if (on) "$label，已选中" else label }
+                        .padding(horizontal = if (compact) 8.dp else 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        label,
+                        color = if (on) Color.Black else ink.copy(alpha = 0.6f),
+                        fontSize = if (compact) 11.sp else 13.sp,
+                        fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
 }

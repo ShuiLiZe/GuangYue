@@ -1,5 +1,7 @@
 package com.guangyue.music.nav
 
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -203,6 +205,12 @@ fun GuangYueNavHost(
                         com.guangyue.music.ui.home.GridSliderHome(
                             sections = wallSections,
                             polaroid = gridCardStyle != com.guangyue.core.prefs.GridCardStyles.IMAGE,
+                            // folia-sonnet 手机版首页：没有底栏，标题旁齿轮进设置，页签胶囊末尾带「去别处」的页签。
+                            onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                            extraTabs = listOf(
+                                "本地" to { navController.navigate(Routes.DOWNLOADS) },
+                                "我的" to { navController.navigate(Routes.PROFILE) },
+                            ),
                             title = "广乐",
                             inkColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
                             groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
@@ -270,7 +278,10 @@ fun GuangYueNavHost(
                         TrackDownloadPick(homePick, vm) { homePick = null }
                     },
                     miniPlayer = miniPlayer,
-                    bottomBar = bottomBar,
+                    // 网格首页照 folia-sonnet 手机版不挂底栏，只让出系统导航条的高度。
+                    bottomBar = if (homeStyle == com.guangyue.core.prefs.HomeStyles.GRID) {
+                        { androidx.compose.foundation.layout.Spacer(Modifier.windowInsetsBottomHeight(androidx.compose.foundation.layout.WindowInsets.navigationBars)) }
+                    } else bottomBar,
                 )
                 return@composable
             }
