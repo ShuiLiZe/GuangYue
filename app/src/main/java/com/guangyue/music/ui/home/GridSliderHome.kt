@@ -219,6 +219,8 @@ fun GridSliderHome(
     background: (@Composable () -> Unit)? = null,
     /** 右下角平台按钮（Folia SwitcherPill / ProviderConnectButton）。 */
     providerButton: (@Composable () -> Unit)? = null,
+    /** 空态下方的动作行（Folia OnlineProviderAccountlessPanel 的「Log in to 平台」胶囊 + 平台图标）；参数是页签名。 */
+    emptyAction: (@Composable (String) -> Unit)? = null,
 ) {
     // Folia 首页页签就是各个数据源本身（歌单 / 推荐 / 探索 / 专辑 / 本地），没有「全部」。
     var tab by rememberSaveable { mutableStateOf(initialTab.coerceIn(0, max(0, sections.size - 1))) }
@@ -276,12 +278,20 @@ fun GridSliderHome(
                         Box(
                             Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(inkColor.copy(alpha = 0.08f)),
                             contentAlignment = Alignment.Center,
-                        ) { Icon(GuangYueIcons.Search, null, tint = inkColor.copy(alpha = 0.45f), modifier = Modifier.size(28.dp)) }
+                        ) {
+                            // Folia 账号类空态用人像图标，其余用搜索。
+                            val ic = if (tabs.getOrNull(tab) == "歌单") GuangYueIcons.User else GuangYueIcons.Search
+                            Icon(ic, null, tint = inkColor.copy(alpha = 0.45f), modifier = Modifier.size(28.dp))
+                        }
                         Spacer(Modifier.height(20.dp))
                         Text(head, color = inkColor.copy(alpha = 0.9f), fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                         if (rest.isNotEmpty()) {
                             Spacer(Modifier.height(8.dp))
                             Text(rest, color = inkColor.copy(alpha = 0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
+                        }
+                        if (emptyAction != null) {
+                            Spacer(Modifier.height(24.dp))
+                            emptyAction(tabs.getOrNull(tab).orEmpty())
                         }
                     }
                 }
@@ -394,7 +404,7 @@ private fun GridHomeHeader(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    title, color = ink.copy(alpha = 0.9f), fontSize = if (compact) 16.sp else 24.sp,
+                    title, color = ink.copy(alpha = 0.9f), fontSize = if (compact) 16.sp else 20.sp,
                     fontWeight = FontWeight.Bold, maxLines = 1,
                 )
                 if (onOpenSettings != null) {
@@ -643,7 +653,7 @@ fun ProviderPill(label: String?, dark: Boolean, onClick: () -> Unit) {
             .shadow(8.dp, RoundedCornerShape(26.dp))
             .clip(RoundedCornerShape(26.dp))
             .background(menu)
-            .padding(2.dp),
+            .padding(4.dp),
     ) {
         Box(
             Modifier
@@ -661,5 +671,41 @@ fun ProviderPill(label: String?, dark: Boolean, onClick: () -> Unit) {
                 Icon(GuangYueIcons.Settings, null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
         }
+    }
+}
+
+
+/**
+ * Folia OnlineProviderAccountlessPanel 的登录行：浅底胶囊「登录 平台」，点开 = 音源 / 插件 / 登录管理。
+ */
+@Composable
+fun ProviderLoginPill(label: String?, ink: Color, onClick: () -> Unit) {
+    val dark = ink.red + ink.green + ink.blue > 1.5f
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(ink.copy(alpha = if (dark) 0.10f else 0.06f))
+            .clickable(onClick = onClick)
+            .padding(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            Modifier.clip(RoundedCornerShape(50)).background(ink.copy(alpha = if (dark) 0.12f else 0.08f))
+                .padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(28.dp).clip(CircleShape).background(Color(0xFFE5312B)), contentAlignment = Alignment.Center) {
+                val ch = label?.trim()?.firstOrNull()?.toString()
+                if (ch != null) Text(ch, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                else Icon(GuangYueIcons.Plug, null, tint = Color.White, modifier = Modifier.size(16.dp))
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(if (label != null) "登录 $label" else "添加音源", color = ink.copy(alpha = 0.9f), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        }
+        Spacer(Modifier.width(8.dp))
+        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+            Icon(GuangYueIcons.Plug, null, tint = ink.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(4.dp))
     }
 }

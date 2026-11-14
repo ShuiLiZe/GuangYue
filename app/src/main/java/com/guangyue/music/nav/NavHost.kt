@@ -222,7 +222,7 @@ fun GuangYueNavHost(
                             initialTab = 1,
                             emptyText = { label ->
                                 when (label) {
-                                    "歌单" -> "还没有歌单。在播放页把歌加进歌单，或从推荐里收藏。"
+                                    "歌单" -> "先登录或搜几首歌。登录音源后，这里会显示你的歌单、收藏专辑和电台。"
                                     "推荐" -> if (wallLoading) "正在加载推荐…" else if (wallFailed) "推荐加载失败，稍后再试。" else "当前音源没有推荐内容。"
                                     "探索" -> if (wallLoading) "正在加载…" else "当前音源暂不支持探索。"
                                     "专辑" -> "当前音源暂不支持专辑库。"
@@ -243,6 +243,16 @@ fun GuangYueNavHost(
                                     latent = homeBg == "latent",
                                     playing = playbackState.isPlaying,
                                 )
+                            },
+                            emptyAction = { label ->
+                                if (label == "歌单") {
+                                    val src by vm.currentSource.collectAsStateWithLifecycle()
+                                    com.guangyue.music.ui.home.ProviderLoginPill(
+                                        label = src?.name,
+                                        ink = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
+                                        onClick = { navController.navigate(Routes.PLUGINS) },
+                                    )
+                                }
                             },
                             providerButton = {
                                 val src by vm.currentSource.collectAsStateWithLifecycle()
