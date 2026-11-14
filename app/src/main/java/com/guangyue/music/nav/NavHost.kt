@@ -351,7 +351,7 @@ fun GuangYueNavHost(
                         )
                         TrackDownloadPick(homePick, vm) { homePick = null }
                     },
-                    miniPlayer = miniPlayer,
+                    miniPlayer = if (homeStyle == com.guangyue.core.prefs.HomeStyles.GRID) null else miniPlayer, // 网格首页用 Folia 的悬浮播放胶囊（playbackBar），不再叠壳层迷你播放器。
                     // 网格首页照 folia-sonnet 手机版不挂底栏，只让出系统导航条的高度。
                     // 网格首页背景铺到系统导航条下面（Folia 整屏背景）；迷你条在时它自己让开导航条。
                     bottomBar = if (homeStyle == com.guangyue.core.prefs.HomeStyles.GRID) null else bottomBar,
