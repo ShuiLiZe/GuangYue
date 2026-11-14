@@ -209,7 +209,8 @@ fun BravaisWall(
                     loading = collection.loading,
                     isCurrent = isCurrent,
                     playing = playing,
-                    onPlay = onOpenTile,
+                    // 歌手页列表里的专辑行：点进专辑集合层（Folia 歌手页专辑条目 = 打开专辑）。
+                    onPlay = { t -> if (onEnterTile != null && com.guangyue.feature.library.viewmodel.AlbumTiles.isAlbum(t.key)) onEnterTile(t) else onOpenTile(t) },
                     onEnqueue = onEnqueueTile,
                     onDownload = onDownloadTile,
                     onDownloadLong = onDownloadTileLong,

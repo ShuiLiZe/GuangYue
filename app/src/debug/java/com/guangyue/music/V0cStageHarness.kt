@@ -270,7 +270,7 @@ fun V0cStage(
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
         // 2026-11-12：町景（machi）3D 舞台起步，只在取证页（未进歌词样式列表）。
-        if (style == "collection" || style == "collectionfilter" || style == "collectionwall") {
+        if (style == "collection" || style == "collectionfilter" || style == "collectionwall" || style == "artistwall" || style == "artistlist") {
             // 2026-11-14：集合层过滤取证（缝里「过滤当前页」）。collection = 列表无过滤；collectionfilter = 列表 + 过滤词「周」；
             // collectionwall = 墙 + 过滤词「beat」。
             val names = listOf(
@@ -283,18 +283,24 @@ fun V0cStage(
             val tiles = names.mapIndexed { i, (t, sub) ->
                 com.guangyue.feature.library.home.HomeTile("c$i", t, sub, kind = com.guangyue.feature.library.home.HomeTileKind.TRACK)
             }
+            // 2026-11-14：artistwall / artistlist = 歌手页（热门歌曲在前、专辑在后，Folia projectArtistItems）。
+            val artist = style == "artistwall" || style == "artistlist"
+            val albums = listOf("叶惠美" to "2003", "七里香" to "2004", "十一月的萧邦" to "2005", "范特西" to "2001", "魔杰座" to "2008").mapIndexed { i, (t, y) ->
+                com.guangyue.feature.library.home.HomeTile("album:p:qq:$i", t, y, kind = com.guangyue.feature.library.home.HomeTileKind.ALBUM)
+            }
             com.guangyue.music.ui.home.BravaisWall(
-                sections = listOf("歌单" to tiles),
+                sections = if (artist) listOf("曲目" to tiles, "专辑" to albums) else listOf("歌单" to tiles),
+                onEnterTile = if (artist) ({}) else null,
                 title = "广乐",
                 inkColor = if (dark) Color(0xFFF4F4F5) else Color(0xFF18181B),
                 groundColor = if (dark) Color(0xFF09090B) else Color(0xFFF4F4F5),
                 onOpenTile = {},
                 onOpenSearch = {},
                 collection = com.guangyue.music.ui.home.SeamCollection(
-                    name = "我喜欢的音乐", kindLabel = "歌单", count = tiles.size, loading = false, failed = false,
+                    name = if (artist) "周杰伦" else "我喜欢的音乐", kindLabel = if (artist) "歌手 · 1000万 粉丝" else "歌单", count = tiles.size, loading = false, failed = false,
                     onBack = {}, onPlayAll = {}, onShuffle = {}, onRetry = {},
                 ),
-                initialListMode = style != "collectionwall",
+                initialListMode = style != "collectionwall" && style != "artistwall",
                 initialFilterQuery = when (style) { "collectionfilter" -> "周"; "collectionwall" -> "beat"; else -> "" },
                 modifier = Modifier.fillMaxSize(),
             )
