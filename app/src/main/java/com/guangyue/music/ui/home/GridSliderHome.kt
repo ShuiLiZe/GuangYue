@@ -317,21 +317,24 @@ private fun GridHomeHeader(
         Text(title, color = ink, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 4.5.sp, maxLines = 1)
         Spacer(Modifier.width(12.dp))
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            // folia-sonnet androidPhoneFit.css「tab strip」：胶囊本身封顶在可用宽度内（圆角 18、内边距 3、高 ≤40），
+            // 页签在胶囊里面横向滚。以前 horizontalScroll 在 clip/背景外层，胶囊跟着内容一起被截，右端「最近」被切一块。
             Row(
                 Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .clip(RoundedCornerShape(50))
+                    .clip(RoundedCornerShape(18.dp))
                     .background(ink.copy(alpha = 0.06f))
-                    .border(1.dp, ink.copy(alpha = 0.08f), RoundedCornerShape(50))
-                    .padding(horizontal = 4.dp),
+                    .border(1.dp, ink.copy(alpha = 0.08f), RoundedCornerShape(18.dp))
+                    .padding(3.dp)
+                    .horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 tabs.forEachIndexed { i, label ->
                     val on = i == active
-                    // 触控区 48dp 高，可见的选中底是里面 36dp 的胶囊。
+                    // 手机版胶囊高 ≤40（34 + 上下 3），页签左右内边距收一档。
                     Box(
                         Modifier
-                            .heightIn(min = 48.dp)
+                            .heightIn(min = 34.dp)
+                            .clip(RoundedCornerShape(15.dp))
                             .clickable { if (!on) onSelect(i) }
                             .semantics { contentDescription = if (on) "$label，已选中" else label },
                         contentAlignment = Alignment.Center,
@@ -343,9 +346,9 @@ private fun GridHomeHeader(
                             fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
                             maxLines = 1,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(50))
+                                .clip(RoundedCornerShape(15.dp))
                                 .background(if (on) ink.copy(alpha = 0.14f) else Color.Transparent)
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
                         )
                     }
                 }
