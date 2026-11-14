@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -315,9 +316,15 @@ private fun LyricStylePanelContent(
     val glassFill = Gyp.card.copy(alpha = 0.85f)
     val glassBorder = Gyp.line2
     // V1b-4：浮名参数一长串，面板最高占屏 82%（留出状态栏与身后舞台），超出部分在面板里滚。
-    val maxPanelHeight = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.82f).dp
+    // 2026-11-14 手机横屏（屏高 < 480dp，约 336dp）：参照 folia-sonnet androidPhoneFit 横屏弹窗档——宽度封顶、
+    // 高度给满安全区（92%），标题与「歌词动画 / 字幕」分段并成一行、去掉说明小字，把竖向空间还给条目。
+    val conf = androidx.compose.ui.platform.LocalConfiguration.current
+    val compact = conf.screenHeightDp < SHEET_COMPACT_SCREEN_DP
+    val maxPanelHeight = (conf.screenHeightDp * (if (compact) 0.92f else 0.82f)).dp
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
     Box(
         modifier = Modifier
+            .widthIn(max = SHEET_MAX_WIDTH_DP.dp)
             .fillMaxWidth()
             .heightIn(max = maxPanelHeight)
             .clip(LyricSheetShape)
@@ -336,7 +343,9 @@ private fun LyricStylePanelContent(
                         .background(Gyp.t3, RoundedCornerShape(999.dp)),
                 )
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
+            // Folia 歌词样式窗口右栏分页（SECTION_OPTIONS）：手机上只放「歌词动画」「字幕」两页，顶部分段切换。
+            var section by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initialSection) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = GuangYueIcons.Sparkles,
@@ -352,22 +361,30 @@ private fun LyricStylePanelContent(
                     fontWeight = FontWeight.Bold,
                     color = Gyp.ink,
                 )
+                if (compact && onSubtitle != null) {
+                    Box(Modifier.width(16.dp))
+                    SheetSectionTabs(
+                        labels = listOf("歌词动画", "字幕"),
+                        selected = section,
+                        onSelect = { section = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
-            Text(
-                text = str(strings.desc),
-                fontSize = 11.sp,
-                color = Gyp.inkSoft,
-                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
-            )
-
-            // Folia 歌词样式窗口右栏分页（SECTION_OPTIONS）：手机上只放「歌词动画」「字幕」两页，顶部分段切换。
-            var section by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initialSection) }
-            if (onSubtitle != null) {
-                SheetSectionTabs(
-                    labels = listOf("歌词动画", "字幕"),
-                    selected = section,
-                    onSelect = { section = it },
+            if (!compact) {
+                Text(
+                    text = str(strings.desc),
+                    fontSize = 11.sp,
+                    color = Gyp.inkSoft,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
                 )
+                if (onSubtitle != null) {
+                    SheetSectionTabs(
+                        labels = listOf("歌词动画", "字幕"),
+                        selected = section,
+                        onSelect = { section = it },
+                    )
+                }
             }
             if (section == 1 && onSubtitle != null) {
                 SubtitleSettingsRows(subtitle, accent, onSubtitle)
@@ -493,6 +510,7 @@ private fun LyricStylePanelContent(
             }
             Box(Modifier.height(GySpace.m))
         }
+    }
     }
 }
 
@@ -1424,12 +1442,17 @@ private fun SubtitleSettingsRows(
 }
 
 
+/** 屏高低于此值（dp）时歌词样式面板走横屏紧凑档。 */
+internal const val SHEET_COMPACT_SCREEN_DP = 480
+
+/** 面板宽度上限（Material 弹层默认 640dp；横屏 800dp 宽时不必铺满整屏）。 */
+internal const val SHEET_MAX_WIDTH_DP = 640
+
 /** 分页切换：整行等分，每格 48dp 高（触控 ≥48dp），选中格 raise 底 + 阴影，与 [SegmentedRow] 同一套外观。 */
 @Composable
-private fun SheetSectionTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+private fun SheetSectionTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier.fillMaxWidth()) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Gyp.tint)
