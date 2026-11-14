@@ -75,7 +75,8 @@ fun GuangYueRoot(
                 // 这里不再重复 padding，否则刘海屏上底栏会被抬高整整一条手势条。
                 // 2026-11-14 用户：完全照 Folia —— Folia（含手机版 folia-sonnet）没有底栏。
                 // 顶层页只让出系统导航条那一截（铺底色），搜索走首页搜索框，设置走齿轮。
-                bottomBar = if (isTopLevel) {
+                // 首页自己铺满到系统导航条下面（Folia 背景是整屏的），不让外壳垫底色。
+                bottomBar = if (isTopLevel && currentRoute != Routes.HOME) {
                     {
                         androidx.compose.foundation.layout.Spacer(
                             Modifier.fillMaxWidth()

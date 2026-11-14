@@ -263,7 +263,28 @@ fun GridSliderHome(
         )
         if (tiles.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text(emptyText(tabs.getOrNull(tab).orEmpty()), color = inkColor.copy(alpha = 0.5f), fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 32.dp))
+                // Folia 空态（OnlineProviderAccountlessPanel / emptyMessage）：圆角方块图标 + 粗标题 + 一行淡说明。
+                val msg = emptyText(tabs.getOrNull(tab).orEmpty())
+                if (msg.startsWith("正在加载")) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        color = inkColor.copy(alpha = 0.3f), strokeWidth = 2.dp, modifier = Modifier.size(28.dp),
+                    )
+                } else {
+                    val head = msg.substringBefore('。')
+                    val rest = msg.substringAfter('。', "").trim()
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 28.dp)) {
+                        Box(
+                            Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(inkColor.copy(alpha = 0.08f)),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(GuangYueIcons.Search, null, tint = inkColor.copy(alpha = 0.45f), modifier = Modifier.size(28.dp)) }
+                        Spacer(Modifier.height(20.dp))
+                        Text(head, color = inkColor.copy(alpha = 0.9f), fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        if (rest.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(rest, color = inkColor.copy(alpha = 0.5f), fontSize = 12.sp, textAlign = TextAlign.Center)
+                        }
+                    }
+                }
             }
             return@Column
         }

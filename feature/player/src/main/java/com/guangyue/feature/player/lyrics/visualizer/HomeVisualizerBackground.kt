@@ -20,7 +20,9 @@ fun HomeVisualizerBackground(
 ) {
     val hasCover = !coverUrl.isNullOrBlank()
     val source = remember(coverUrl) { resolveCoverSource(coverUrl) }
-    val theme = rememberCoverBackdrop(source, dark)
+    // 没在放歌：Folia 无封面路径是中性灰底，不能拿内置测试封面去取色（会染成粉色）。
+    val coverTheme = rememberCoverBackdrop(source, dark)
+    val theme = if (hasCover) coverTheme else remember(dark) { themeFromCover(null, dark).toPalette() }
     val palette = remember(theme) {
         CoverPalette(
             backgroundColor = theme.background,
