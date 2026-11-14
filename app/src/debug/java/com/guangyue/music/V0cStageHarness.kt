@@ -272,7 +272,26 @@ fun V0cStage(
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
         // 2026-11-12：町景（machi）3D 舞台起步，只在取证页（未进歌词样式列表）。
-        if (style == "minibar") {
+        if (style == "playlistpick" || style == "playlistnew") {
+            // 2026-11-14：「添加到歌单」弹层取证（Folia PlaylistSelectionDialog；playlistnew = 新建页）。
+            androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(Color(0xFF3A2A28))) {
+                com.guangyue.feature.player.screen.PlaylistSelectionSheet(
+                    playlists = listOf(
+                        com.guangyue.feature.player.screen.PlaylistChoice(1, "我的收藏", 128),
+                        com.guangyue.feature.player.screen.PlaylistChoice(2, "开车听", 42),
+                        com.guangyue.feature.player.screen.PlaylistChoice(3, "一个名字特别长特别长的歌单用来看省略号会不会压到加号", 7),
+                        com.guangyue.feature.player.screen.PlaylistChoice(4, "周杰伦合集", 63),
+                        com.guangyue.feature.player.screen.PlaylistChoice(5, "睡前", 15),
+                        com.guangyue.feature.player.screen.PlaylistChoice(6, "跑步", 30),
+                        com.guangyue.feature.player.screen.PlaylistChoice(7, "粤语老歌", 88),
+                    ),
+                    onSelect = {},
+                    onCreate = {},
+                    onDismiss = {},
+                    initialCreating = style == "playlistnew",
+                )
+            }
+        } else         if (style == "minibar") {
             // 2026-11-14：浮动胶囊取证（竖屏三行 / 横屏紧凑两行，folia-sonnet 横屏档）。底部对齐，同 ShellColumn 的左右 / 下边距。
             androidx.compose.foundation.layout.Box(
                 Modifier.fillMaxSize().background(Color(0xFF18181B)).navigationBarsPadding(),

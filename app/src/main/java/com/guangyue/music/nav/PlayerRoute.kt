@@ -364,6 +364,17 @@ interface TrackRepositoryEntryPoint {
     fun tracks(): TrackRepository
 }
 
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface PlaylistRepositoryEntryPoint {
+    fun playlists(): com.guangyue.core.data.repository.PlaylistRepository
+}
+
+internal fun playlistRepositoryOf(ctx: android.content.Context): com.guangyue.core.data.repository.PlaylistRepository =
+    dagger.hilt.android.EntryPointAccessors
+        .fromApplication(ctx.applicationContext, PlaylistRepositoryEntryPoint::class.java)
+        .playlists()
+
 internal fun trackRepositoryOf(ctx: android.content.Context): TrackRepository =
     dagger.hilt.android.EntryPointAccessors
         .fromApplication(ctx.applicationContext, TrackRepositoryEntryPoint::class.java)

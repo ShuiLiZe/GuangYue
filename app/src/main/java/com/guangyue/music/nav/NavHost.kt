@@ -820,6 +820,7 @@ fun GuangYueNavHost(
             // P1b：面板是舞台上的浮卡（Folia UnifiedPanel），不再整页跳 PLAYER。
             var panelOpen by rememberSaveable { mutableStateOf(false) }
             var panelTab by rememberSaveable { mutableStateOf(com.guangyue.feature.player.screen.StagePanelTab.COVER) }
+            var addToPlaylistOpen by rememberSaveable { mutableStateOf(false) }
             androidx.activity.compose.BackHandler(enabled = panelOpen && !styleSheetOpen) { panelOpen = false }
             val kernelLines = remember(lyric) {
                 LyricTimeline.toLines(
@@ -901,9 +902,11 @@ fun GuangYueNavHost(
                         panelOpen = false
                         styleSheetOpen = true
                     },
+                    // 2026-11-14：以前「加入歌单」直接跳搜索页（错的）。改成 Folia AddToPlaylistHost：
+                    // 弹出歌单选择弹层，把当前这首加进选中的歌单，或新建歌单再加。
                     onAddToPlaylist = {
                         panelOpen = false
-                        navController.navigate(Routes.SEARCH)
+                        addToPlaylistOpen = true
                     },
                     lyricOffsetMs = lyricOffset,
                     onLyricOffset = vm::setOffset,
@@ -913,6 +916,31 @@ fun GuangYueNavHost(
                         else -> (playbackState.item?.origin?.pluginId ?: "").substringBefore("-").ifBlank { "音源" } + " · ${lyric.lines.size} 行"
                     },
                 )
+                if (addToPlaylistOpen) {
+                    val playlistRepo = remember { playlistRepositoryOf(lyricContext) }
+                    val sheets by playlistRepo.playlists().collectAsStateWithLifecycle(initialValue = emptyList())
+                    var counts by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) }
+                    LaunchedEffect(sheets) {
+                        counts = sheets.associate { it.id to runCatching { playlistRepo.snapshot(it.id).size }.getOrDefault(0) }
+                    }
+                    val song = playbackState.item
+                    com.guangyue.feature.player.screen.PlaylistSelectionSheet(
+                        playlists = sheets.map { com.guangyue.feature.player.screen.PlaylistChoice(it.id, it.name, counts[it.id] ?: 0) },
+                        onSelect = { id ->
+                            val row = song?.toCachedTrack() ?: return@PlaylistSelectionSheet
+                            playlistRepo.addTracks(id, listOf(row))
+                            val name = sheets.firstOrNull { it.id == id }?.name.orEmpty()
+                            android.widget.Toast.makeText(lyricContext, "已加入「$name」", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        onCreate = { name ->
+                            val row = song?.toCachedTrack() ?: return@PlaylistSelectionSheet
+                            val id = playlistRepo.create(name)
+                            playlistRepo.addTracks(id, listOf(row))
+                            android.widget.Toast.makeText(lyricContext, "已新建「$name」并加入", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        onDismiss = { addToPlaylistOpen = false },
+                    )
+                }
                 if (styleSheetOpen) {
                     LyricStyleSheet(
                         tuning = tuning,
