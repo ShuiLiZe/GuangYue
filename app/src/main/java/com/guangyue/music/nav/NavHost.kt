@@ -447,6 +447,12 @@ fun GuangYueNavHost(
                             }) else null,
                             fillingMeta = fillingMeta,
                             avatar = if (com.guangyue.feature.library.viewmodel.ArtistTiles.isArtist(tile.key)) tile.artwork else null,
+                            // 2026-11-14：歌手简介 / 专辑介绍（Folia BravaisSeamAbout 正文），来自插件搜索结果的 description。
+                            description = when {
+                                com.guangyue.feature.library.viewmodel.ArtistTiles.isArtist(tile.key) -> com.guangyue.feature.library.viewmodel.ArtistTiles.artistOf(tile.key)?.second?.description
+                                com.guangyue.feature.library.viewmodel.AlbumTiles.isAlbum(tile.key) -> com.guangyue.feature.library.viewmodel.AlbumTiles.albumOf(tile.key)?.second?.description
+                                else -> null
+                            },
                         ),
                     )
                     TrackDownloadPick(collectionPick, vm) { collectionPick = null }

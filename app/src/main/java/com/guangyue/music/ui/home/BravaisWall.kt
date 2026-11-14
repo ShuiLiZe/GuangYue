@@ -16,6 +16,10 @@
 //  3. 排名原点 = 初始镜头中心；拖动时不重排（Folia 同：排名只在换数据时重算）。
 package com.guangyue.music.ui.home
 
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -171,6 +175,8 @@ fun BravaisWall(
         // 排名：初始镜头中心附近 3×3 区块，条目按排名落位（换数据才重算）。
         // 缝：竖屏横条（axis y），放在世界 y=0 的区块边界上（区块边界不切砖）；上半墙上移、下半墙下移各半条高。
         val seamH = if (collection != null) SEAM_COLLECTION_HEIGHT else SEAM_HOME_HEIGHT
+        // 2026-11-14：集合层信息条带简介时会长高（简介展开），列表的顶部留白按实测高度走；墙仍按基准高度下移（墙在条下滑过）。
+        var seamMeasured by remember { mutableStateOf(seamH) }
         val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding().value
         val ranked = remember(tiles, vw, vh) {
             val ox = bw / 2
@@ -203,7 +209,7 @@ fun BravaisWall(
             Box(Modifier.fillMaxSize()) {
                 CollectionTrackList(
                     tiles = tiles,
-                    topPad = statusTop + seamH,
+                    topPad = statusTop + maxOf(seamH, seamMeasured),
                     ink = inkColor,
                     ground = groundColor,
                     loading = collection.loading,
@@ -219,7 +225,8 @@ fun BravaisWall(
                     Modifier
                         .offset { IntOffset(0, (statusTop * density.density).roundToInt()) }
                         .fillMaxWidth()
-                        .height(seamH.dp)
+                        .heightIn(min = seamH.dp)
+                        .onSizeChanged { seamMeasured = it.height / density.density }
                         .zIndex(10f)
                         .background(groundColor),
                 ) {
@@ -364,7 +371,7 @@ fun BravaisWall(
                 Modifier
                     .offset { IntOffset(0, (seamTop * density.density).roundToInt()) }
                     .fillMaxWidth()
-                    .height(seamH.dp)
+                    .then(if (collection != null) Modifier.heightIn(min = seamH.dp) else Modifier.height(seamH.dp))
                     .zIndex(10f)
                     .background(groundColor),
             ) {
@@ -423,6 +430,11 @@ data class SeamCollection(
     val onPlayTiles: ((tiles: List<HomeTile>, shuffle: Boolean) -> Unit)? = null,
     /** 2026-11-14 歌手页：圆形头像（Folia BravaisSeamArtist 头像），null 时只有标题。 */
     val avatar: String? = null,
+    /**
+     * 2026-11-14：简介 / 描述（Folia BravaisSeamBlurb：歌手页「关于艺术家」正文、集合页的描述）。
+     * 缝里收起时截断（海报版两行），点一下就地展开 / 收起，展开封顶 14em、再长在这一块里滚动。null / 空白时不占位。
+     */
+    val description: String? = null,
 )
 
 /**
@@ -433,7 +445,12 @@ data class SeamCollection(
  */
 @Composable
 private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listMode: Boolean = false, onToggleList: (() -> Unit)? = null, filter: SeamFilter? = null) {
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)) {
+    // 2026-11-14：高度不再写死——至少基准高（按钮行贴底），带简介时随简介长高（Folia 完整信息条里「关于」一节）。
+    Column(
+        Modifier.fillMaxWidth().heightIn(min = SEAM_COLLECTION_HEIGHT.dp).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+      Column {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(
                 Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = c.onBack).padding(end = 6.dp, top = 4.dp, bottom = 4.dp),
@@ -494,11 +511,17 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listM
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
+        val blurb = c.description?.trim().orEmpty()
+        if (blurb.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            SeamBlurb(blurb, ink)
+        }
         if (filter != null && (c.count ?: 0) > 0) {
             Spacer(Modifier.height(8.dp))
             SeamFilterField(filter, ink)
         }
-        Spacer(Modifier.weight(1f))
+      }
+        Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             val filtering = filter != null && CollectionFilter.normalize(filter.query).isNotEmpty()
             val meta = when {
@@ -568,6 +591,44 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listM
         }
     }
 }
+
+/**
+ * 缝里的一段说明文字（Folia BravaisSeamBlurb 手机版）：歌手简介 / 集合描述共用。收起时 [BLURB_COLLAPSED_LINES] 行截断
+ * （Folia 海报版缝两行；手机竖屏缝高宝贵，取两行），点一下就地展开 / 收起，没有过渡、不弹浮层；展开封顶 14em
+ * （13sp × 14 ≈ 182dp），再长就在这一块里滚动。纯文本、保留换行。换了一段文字回到收起（remember(text)）。
+ * 触控：整块可点，最小 48dp 高（两行 20sp 行高 = 40dp，补到 48）。
+ */
+@Composable
+private fun SeamBlurb(text: String, ink: Color) {
+    var open by remember(text) { mutableStateOf(false) }
+    val scroll = rememberScrollState()
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClickLabel = if (open) "收起" else "展开") { open = !open }
+            .semantics { stateDescription = if (open) "已展开" else "已收起" },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text,
+            color = ink.copy(alpha = 0.66f),
+            fontSize = 13.sp,
+            lineHeight = 20.sp,
+            letterSpacing = 0.1.sp,
+            maxLines = if (open) Int.MAX_VALUE else BLURB_COLLAPSED_LINES,
+            overflow = if (open) TextOverflow.Clip else TextOverflow.Ellipsis,
+            modifier = if (open) Modifier.heightIn(max = BLURB_OPEN_MAX_DP.dp).verticalScroll(scroll) else Modifier,
+        )
+    }
+}
+
+/** Folia 海报版缝的简介两行截断（BravaisSeamPoster 注释「简介两行截断」）。 */
+internal const val BLURB_COLLAPSED_LINES = 2
+
+/** 展开封顶 14em（Folia bravais.css .bravais-seam-blurb.is-open max-height: 14em），13sp 下约 182dp。 */
+internal const val BLURB_OPEN_MAX_DP = 182
 
 /** 缝里过滤输入位的状态（Folia BravaisSeamFilter 子集）。 */
 data class SeamFilter(

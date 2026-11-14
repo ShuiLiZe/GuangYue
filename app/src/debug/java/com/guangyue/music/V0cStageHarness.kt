@@ -270,7 +270,7 @@ fun V0cStage(
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
         // 2026-11-12：町景（machi）3D 舞台起步，只在取证页（未进歌词样式列表）。
-        if (style == "collection" || style == "collectionfilter" || style == "collectionwall" || style == "artistwall" || style == "artistlist" || style == "artistalbums") {
+        if (style == "collection" || style == "collectionfilter" || style == "collectionwall" || style == "artistwall" || style == "artistlist" || style == "artistalbums" || style == "artistbio") {
             // 2026-11-14：集合层过滤取证（缝里「过滤当前页」）。collection = 列表无过滤；collectionfilter = 列表 + 过滤词「周」；
             // collectionwall = 墙 + 过滤词「beat」。
             val names = listOf(
@@ -285,7 +285,7 @@ fun V0cStage(
             }
             // 2026-11-14：artistalbums = 歌手页墙，只留 3 首热门，好让专辑块进首屏取证。
             // artistwall / artistlist = 歌手页（热门歌曲在前、专辑在后，Folia projectArtistItems）。
-            val artist = style == "artistwall" || style == "artistlist" || style == "artistalbums"
+            val artist = style == "artistwall" || style == "artistlist" || style == "artistalbums" || style == "artistbio"
             val albums = listOf("叶惠美" to "2003", "七里香" to "2004", "十一月的萧邦" to "2005", "范特西" to "2001", "魔杰座" to "2008").mapIndexed { i, (t, y) ->
                 com.guangyue.feature.library.home.HomeTile("album:p:qq:$i", t, y, kind = com.guangyue.feature.library.home.HomeTileKind.ALBUM)
             }
@@ -300,6 +300,8 @@ fun V0cStage(
                 collection = com.guangyue.music.ui.home.SeamCollection(
                     name = if (artist) "周杰伦" else "我喜欢的音乐", kindLabel = if (artist) "歌手 · 1000万 粉丝" else "歌单", count = tiles.size, loading = false, failed = false,
                     onBack = {}, onPlayAll = {}, onShuffle = {}, onRetry = {},
+                    // artistbio：带一段长简介（收起两行截断）。
+                    description = if (style == "artistbio") "周杰伦，华语流行乐男歌手、音乐人、演员、导演。2000 年发行首张个人专辑《Jay》，融合 R&B、嘻哈与中国风，开创了华语乐坛的「周氏风格」。\n代表作有《七里香》《晴天》《稻香》《夜曲》等。" else null,
                 ),
                 initialListMode = style != "collectionwall" && style != "artistwall" && style != "artistalbums",
                 initialFilterQuery = when (style) { "collectionfilter" -> "周"; "collectionwall" -> "beat"; else -> "" },
