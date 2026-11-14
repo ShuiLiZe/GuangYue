@@ -724,3 +724,80 @@ private fun ProviderMark(label: String?, iconUrl: String?, letterSize: androidx.
         else Icon(GuangYueIcons.Plug, null, tint = Color.White, modifier = Modifier.size(iconSize))
     }
 }
+
+
+/**
+ * Folia SwitcherPill 的平台切换：点右下角平台按钮弹出，列出可用音源（点了直接切），末行「音源与登录…」进插件页。
+ * [options] = (id, 名称, 图标地址)，第一项之外按插件页顺序；[currentId] 打勾。
+ */
+@Composable
+fun ProviderSwitcher(
+    label: String?,
+    iconUrl: String?,
+    dark: Boolean,
+    currentId: String?,
+    options: List<Triple<String, String, String?>>,
+    onPick: (String) -> Unit,
+    onManage: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        ProviderPill(label = label, dark = dark, onClick = { open = true }, iconUrl = iconUrl)
+        if (open) {
+            val menu = if (dark) Color(0xFF1F1F22) else Color.White
+            val ink = if (dark) Color.White else Color.Black
+            val density = LocalDensity.current
+            androidx.compose.ui.window.Popup(
+                alignment = Alignment.BottomEnd,
+                offset = with(density) { androidx.compose.ui.unit.IntOffset(0, -(52.dp).roundToPx()) },
+                onDismissRequest = { open = false },
+                properties = androidx.compose.ui.window.PopupProperties(focusable = true),
+            ) {
+                Column(
+                    Modifier
+                        .widthIn(min = 200.dp, max = 260.dp)
+                        .shadow(12.dp, RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(menu)
+                        .border(1.dp, ink.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                        .padding(4.dp),
+                ) {
+                    Text(
+                        "切换音源", color = ink.copy(alpha = 0.45f), fontSize = 11.sp,
+                        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp),
+                    )
+                    options.forEach { (id, name, icon) ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { open = false; if (id != currentId) onPick(id) }
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.size(24.dp).clip(CircleShape).background(Color(0xFFE5312B)), contentAlignment = Alignment.Center) {
+                                ProviderMark(name, icon, 11.sp, 14.dp)
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Text(name, color = ink.copy(alpha = 0.9f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            if (id == currentId) Icon(GuangYueIcons.Check, null, tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp).background(ink.copy(alpha = 0.08f)))
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { open = false; onManage() }
+                            .padding(horizontal = 8.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(GuangYueIcons.Plug, null, tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text("音源与登录…", color = ink.copy(alpha = 0.9f), fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+    }
+}

@@ -257,11 +257,21 @@ fun GuangYueNavHost(
                             },
                             providerButton = {
                                 val src by vm.currentSource.collectAsStateWithLifecycle()
-                                com.guangyue.music.ui.home.ProviderPill(
+                                // Folia SwitcherPill：点开是平台切换（可用音源，点了直接切）+「音源与登录…」。
+                                val pluginVm: com.guangyue.feature.library.viewmodel.PluginViewModel = hiltViewModel()
+                                val all by pluginVm.plugins.collectAsStateWithLifecycle()
+                                val usable = remember(all, src) {
+                                    val ok = all.filter { it.error == null && it.health == com.guangyue.core.plugin.PluginHealth.OK }
+                                    (listOfNotNull(src) + ok).distinctBy { it.id }.take(7)
+                                }
+                                com.guangyue.music.ui.home.ProviderSwitcher(
                                     label = src?.name,
                                     iconUrl = src?.let { com.guangyue.core.plugin.PluginPlatformIcons.candidatesFor(it).firstOrNull() },
                                     dark = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() < 0.5f,
-                                    onClick = { navController.navigate(Routes.PLUGINS) },
+                                    currentId = src?.id,
+                                    options = usable.map { Triple(it.id, it.displayName, com.guangyue.core.plugin.PluginPlatformIcons.candidatesFor(it).firstOrNull()) },
+                                    onPick = { id -> pluginVm.selectSource(id) },
+                                    onManage = { navController.navigate(Routes.PLUGINS) },
                                 )
                             },
 
