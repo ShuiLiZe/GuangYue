@@ -310,7 +310,7 @@ fun StagePanelHost(
                     downloads.isDownloaded(current.key) -> "这首已经下载过了"
                     else -> "这首已在下载队列里"
                 }
-                android.widget.Toast.makeText(ctx, text, android.widget.Toast.LENGTH_SHORT).show()
+                com.guangyue.feature.library.design.StatusToasts.show(text)
             }
         },
         // 2026-11-12：长按下载键 → 选音质（按播放时插件回报的档位列，没回报按 MusicFree 四档）。
@@ -330,7 +330,7 @@ fun StagePanelHost(
                     downloads.isDownloaded(current.key) -> "这首已经下载过了"
                     else -> "这首已在下载队列里"
                 }
-                android.widget.Toast.makeText(ctx, text, android.widget.Toast.LENGTH_SHORT).show()
+                com.guangyue.feature.library.design.StatusToasts.show(text)
             }
         },
     )

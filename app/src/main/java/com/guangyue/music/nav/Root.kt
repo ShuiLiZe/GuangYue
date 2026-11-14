@@ -82,6 +82,8 @@ fun GuangYueRoot(
                     null
                 },
             )
+            // 2026-11-14：App 内提示改用 Folia 顶部胶囊（StatusToast），不再用系统 Toast。
+            com.guangyue.feature.library.design.StatusToastHost(dark = darkMode)
         }
     }
 }

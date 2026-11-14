@@ -1,6 +1,5 @@
 package com.guangyue.music.nav
 
-import android.widget.Toast
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -19,7 +18,6 @@ import com.guangyue.feature.player.screen.DownloadQualitySheet
 @Composable
 internal fun TrackDownloadPick(tracks: List<TrackEntity>?, vm: HomeViewModel, onClose: () -> Unit) {
     if (tracks.isNullOrEmpty()) return
-    val ctx = LocalContext.current
     val options = remember(tracks) { vm.downloadOptionsFor(tracks.first()) }
     val def = remember(options) { DownloadQualityPick.defaultOf(options, vm.defaultDownloadQuality) }
     DownloadQualitySheet(
@@ -30,7 +28,7 @@ internal fun TrackDownloadPick(tracks: List<TrackEntity>?, vm: HomeViewModel, on
         subtitle = if (tracks.size == 1) tracks.first().title else "${tracks.size} 首",
         onPick = { q ->
             val (added, skipped) = vm.downloadTracks(tracks, q, pinQuality = true)
-            Toast.makeText(ctx, downloadToastText(tracks, added, skipped, q), Toast.LENGTH_SHORT).show()
+            com.guangyue.feature.library.design.StatusToasts.show(downloadToastText(tracks, added, skipped, q))
             onClose()
         },
         onDismiss = onClose,

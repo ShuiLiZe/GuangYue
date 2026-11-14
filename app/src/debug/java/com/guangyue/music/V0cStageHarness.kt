@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -272,7 +273,31 @@ fun V0cStage(
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
         // 2026-11-12：町景（machi）3D 舞台起步，只在取证页（未进歌词样式列表）。
-        if (style == "playlistpick" || style == "playlistnew") {
+        if (style == "toast") {
+            // 2026-11-14：顶部提示胶囊取证（Folia StatusToast 手机档）。上半深色、下半浅色，各三种类型 + 一条长文案。
+            val conf = androidx.compose.ui.platform.LocalConfiguration.current
+            val w = com.guangyue.feature.library.design.toastMaxWidthForHarness(conf.screenWidthDp, conf.screenHeightDp)
+            val samples = listOf(
+                com.guangyue.feature.library.design.StatusToastItem("已加入「开车听」", com.guangyue.feature.library.design.StatusToastType.SUCCESS),
+                com.guangyue.feature.library.design.StatusToastItem("取链失败：该来源暂时不可用", com.guangyue.feature.library.design.StatusToastType.ERROR),
+                com.guangyue.feature.library.design.StatusToastItem("正在为 12 首歌匹配歌词和封面…", com.guangyue.feature.library.design.StatusToastType.INFO),
+                com.guangyue.feature.library.design.StatusToastItem("已加入下载队列 8 首，另有 3 首已在队列或已下载，跳过", com.guangyue.feature.library.design.StatusToastType.SUCCESS),
+            )
+            androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+                listOf(true, false).forEach { dk ->
+                    androidx.compose.foundation.layout.Column(
+                        Modifier.weight(1f).fillMaxSize()
+                            .background(if (dk) Color(0xFF3A2A28) else Color(0xFFE7E1DA))
+                            .statusBarsPadding()
+                            .padding(top = 18.dp),
+                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
+                    ) {
+                        samples.forEach { com.guangyue.feature.library.design.StatusToastPill(it, dk, w / 2) }
+                    }
+                }
+            }
+        } else         if (style == "playlistpick" || style == "playlistnew") {
             // 2026-11-14：「添加到歌单」弹层取证（Folia PlaylistSelectionDialog；playlistnew = 新建页）。
             androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(Color(0xFF3A2A28))) {
                 com.guangyue.feature.player.screen.PlaylistSelectionSheet(

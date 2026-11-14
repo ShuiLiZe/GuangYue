@@ -206,7 +206,7 @@ fun GuangYueNavHost(
                                 vm.tracksForDownload(tile) { ts ->
                                     if (ts.isNotEmpty()) {
                                         val (added, skipped) = vm.downloadTracks(ts, vm.defaultDownloadQuality)
-                                        android.widget.Toast.makeText(homeCtx, downloadToastText(ts, added, skipped), android.widget.Toast.LENGTH_SHORT).show()
+                                        com.guangyue.feature.library.design.StatusToasts.show(downloadToastText(ts, added, skipped))
                                     }
                                 }
                             },
@@ -349,7 +349,7 @@ fun GuangYueNavHost(
                     added > 0 -> if (picked.size == 1) "已加入下载：${picked[0].title}" else "已加入下载 $added 首"
                     else -> if (picked.size == 1) "这首已经下载过或正在下载" else "这些歌都已下载或正在下载"
                 }
-                android.widget.Toast.makeText(collectionCtx, msg, android.widget.Toast.LENGTH_SHORT).show()
+                com.guangyue.feature.library.design.StatusToasts.show(msg)
             }
             ShellColumn(
                 content = {
@@ -438,7 +438,7 @@ fun GuangYueNavHost(
                             onFillMeta = if (isLib) ({
                                 if (list.isNotEmpty() && !fillingMeta) {
                                     fillingMeta = true
-                                    android.widget.Toast.makeText(collectionCtx, "正在为 ${list.size} 首歌匹配歌词和封面…", android.widget.Toast.LENGTH_SHORT).show()
+                                    com.guangyue.feature.library.design.StatusToasts.show("正在为 ${list.size} 首歌匹配歌词和封面…")
                                     vm.fillMeta(list) { filled, missed ->
                                         fillingMeta = false
                                         attempt++
@@ -447,7 +447,7 @@ fun GuangYueNavHost(
                                             missed == 0 -> "已补全 $filled 首"
                                             else -> "已补全 $filled 首，$missed 首没找到匹配"
                                         }
-                                        android.widget.Toast.makeText(collectionCtx, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                        com.guangyue.feature.library.design.StatusToasts.show(msg)
                                     }
                                 }
                             }) else null,
@@ -475,7 +475,7 @@ fun GuangYueNavHost(
             val searchCtx = androidx.compose.ui.platform.LocalContext.current
             androidx.compose.runtime.LaunchedEffect(state.message) {
                 state.message?.let {
-                    android.widget.Toast.makeText(searchCtx, it, android.widget.Toast.LENGTH_SHORT).show()
+                    com.guangyue.feature.library.design.StatusToasts.show(it)
                     vm.clearMessage()
                 }
             }
@@ -930,13 +930,13 @@ fun GuangYueNavHost(
                             val row = song?.toCachedTrack() ?: return@PlaylistSelectionSheet
                             playlistRepo.addTracks(id, listOf(row))
                             val name = sheets.firstOrNull { it.id == id }?.name.orEmpty()
-                            android.widget.Toast.makeText(lyricContext, "已加入「$name」", android.widget.Toast.LENGTH_SHORT).show()
+                            com.guangyue.feature.library.design.StatusToasts.show("已加入「$name」")
                         },
                         onCreate = { name ->
                             val row = song?.toCachedTrack() ?: return@PlaylistSelectionSheet
                             val id = playlistRepo.create(name)
                             playlistRepo.addTracks(id, listOf(row))
-                            android.widget.Toast.makeText(lyricContext, "已新建「$name」并加入", android.widget.Toast.LENGTH_SHORT).show()
+                            com.guangyue.feature.library.design.StatusToasts.show("已新建「$name」并加入")
                         },
                         onDismiss = { addToPlaylistOpen = false },
                     )
