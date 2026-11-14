@@ -30,6 +30,24 @@ object ArtistTiles {
         )
     }
 
+    /** 翻页上限（Folia 后台分页到底；手机上先封顶，免得一个歌手拉几千首）。 */
+    const val MAX_PAGES = 5
+
+    /**
+     * 歌手作品翻页合并：新一页按 key 去重接在后面；返回 (合并后, 还要不要翻下一页)。
+     * 停的条件：插件说 isEnd、这一页空了、这一页全是已有的（插件不认 page 时反复回第 1 页）、到了 [MAX_PAGES]。
+     */
+    fun <T> mergePage(acc: List<T>, page: List<T>, isEnd: Boolean?, pageNo: Int, keyOf: (T) -> String): Pair<List<T>, Boolean> {
+        val seen = acc.mapTo(HashSet()) { keyOf(it) }
+        val fresh = page.filter { seen.add(keyOf(it)) }
+        val more = isEnd != true && fresh.isNotEmpty() && pageNo < MAX_PAGES
+        return (acc + fresh) to more
+    }
+
+    /** 集合层信息条的类别：「歌手 · N 粉丝」（Folia 歌手统计附注的手机子集），不知道粉丝数时只写「歌手」。 */
+    fun kindLabel(tile: HomeTile): String =
+        if (tile.subtitle.endsWith(" 粉丝")) "歌手 · ${tile.subtitle}" else "歌手"
+
     /** key → (插件 id, 歌手)。没登记过时从 key 拆出插件 / 平台 / id，名字用 [fallbackName]。 */
     fun artistOf(key: String, fallbackName: String = ""): Pair<String, ArtistItem>? {
         known[key]?.let { return it }

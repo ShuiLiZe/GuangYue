@@ -12,6 +12,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.coroutines.async
@@ -242,6 +243,34 @@ class MusicPluginBridge @Inject constructor(
                 info to songs
             }.getOrNull()
         }
+
+    /** 一页歌手作品 + 插件给的 isEnd（MusicFree 契约 `{ isEnd, data }`；没给时为 null）。 */
+    data class ArtistWorksPage(val music: List<MusicItem>, val albums: List<AlbumItem>, val isEnd: Boolean?)
+
+    suspend fun getArtistWorksPage(
+        pluginId: String,
+        artist: ArtistItem,
+        page: Int = 1,
+        type: String = SearchType.MUSIC,
+    ): ArtistWorksPage? = withContext(Dispatchers.IO) {
+        val payload = artist.raw ?: buildJsonObject {
+            put("platform", artist.platform); put("id", artist.id); put("name", artist.name)
+        }
+        runCatching {
+            val raw = invoke(pluginId) {
+                call("getArtistWorks", payload, JsonPrimitive(page), JsonPrimitive(type))
+            }
+            val o = raw.asObj() ?: return@runCatching null
+            val isEnd = (o["isEnd"] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull()
+            if (type == SearchType.ALBUM) {
+                val albums = (o["data"] ?: o["albumList"]).asArr()?.mapNotNull { AlbumItem.from(it.asObj(), artist.platform) } ?: emptyList()
+                ArtistWorksPage(emptyList(), albums, isEnd)
+            } else {
+                val music = MusicItem.list(o["data"] ?: o["musicList"] ?: o, artist.platform)
+                ArtistWorksPage(music, emptyList(), isEnd)
+            }
+        }.getOrNull()
+    }
 
     suspend fun getArtistWorks(
         pluginId: String,

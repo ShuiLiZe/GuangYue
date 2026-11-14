@@ -535,12 +535,21 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
-     * 2026-11-14 歌手页：插件 getArtistWorks（第 1 页，歌曲）。插件没有这个函数或调用失败时抛出，集合层显示「加载失败，点此重试」。
+     * 2026-11-14 歌手页：插件 getArtistWorks（歌曲）。第 1 页失败时抛出，集合层显示「加载失败，点此重试」；
+     * 之后按 isEnd 往下翻（ArtistTiles.mergePage：去重、到底 / 空页 / 重复页 / MAX_PAGES 停），后面的页失败就停在已到的。
      */
     private suspend fun tracksOfArtist(tile: HomeTile): List<TrackEntity> {
         val (pluginId, artist) = ArtistTiles.artistOf(tile.key, tile.title) ?: error("unknown artist tile ${tile.key}")
-        val works = bridge.getArtistWorks(pluginId, artist, 1, SearchType.MUSIC) ?: error("getArtistWorks failed for ${tile.key}")
-        return works.first.map { it.toEntity() }
+        val first = bridge.getArtistWorksPage(pluginId, artist, 1, SearchType.MUSIC) ?: error("getArtistWorks failed for ${tile.key}")
+        var (acc, more) = ArtistTiles.mergePage(emptyList(), first.music, first.isEnd, 1) { "${it.platform}:${it.id}" }
+        var page = 1
+        while (more) {
+            page += 1
+            val next = bridge.getArtistWorksPage(pluginId, artist, page, SearchType.MUSIC) ?: break
+            val r = ArtistTiles.mergePage(acc, next.music, next.isEnd, page) { "${it.platform}:${it.id}" }
+            acc = r.first; more = r.second
+        }
+        return acc.map { it.toEntity() }
     }
 
     private fun MusicItem.toEntity() = TrackEntity(

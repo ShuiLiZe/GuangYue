@@ -38,4 +38,22 @@ class CollectionLayoutArtistTest {
     @Test fun `无粉丝数时副标题是歌手`() {
         assertEquals("歌手", ArtistTiles.tile("p", ArtistItem("qq", "1", "A")).subtitle)
     }
+
+    @Test fun `歌手作品翻页：去重、isEnd、空页、重复页、上限`() {
+        val k: (String) -> String = { it }
+        val (a1, m1) = ArtistTiles.mergePage(emptyList(), listOf("a", "b"), null, 1, k)
+        assertEquals(listOf("a", "b"), a1); assertTrue(m1)
+        val (a2, m2) = ArtistTiles.mergePage(a1, listOf("b", "c"), false, 2, k)
+        assertEquals(listOf("a", "b", "c"), a2); assertTrue(m2)
+        assertFalse(ArtistTiles.mergePage(a2, listOf("d"), true, 3, k).second)
+        assertFalse(ArtistTiles.mergePage(a2, emptyList(), null, 3, k).second)
+        assertFalse(ArtistTiles.mergePage(a2, listOf("a", "b"), false, 3, k).second)
+        assertFalse(ArtistTiles.mergePage(a2, listOf("z"), false, ArtistTiles.MAX_PAGES, k).second)
+    }
+
+    @Test fun `歌手信息条类别带粉丝数`() {
+        val t = ArtistTiles.tile("p", ArtistItem(platform = "qq", id = "1", name = "x", fans = "12万"))
+        assertEquals("歌手 · 12万 粉丝", ArtistTiles.kindLabel(t))
+        assertEquals("歌手", ArtistTiles.kindLabel(ArtistTiles.tile("p", ArtistItem(platform = "qq", id = "2", name = "y"))))
+    }
 }

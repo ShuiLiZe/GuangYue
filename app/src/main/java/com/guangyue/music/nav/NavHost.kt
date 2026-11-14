@@ -319,7 +319,7 @@ fun GuangYueNavHost(
             }
             val kindLabel = when {
                 isLib -> "曲库"
-                com.guangyue.feature.library.viewmodel.ArtistTiles.isArtist(tile.key) -> "歌手"
+                com.guangyue.feature.library.viewmodel.ArtistTiles.isArtist(tile.key) -> com.guangyue.feature.library.viewmodel.ArtistTiles.kindLabel(tile)
                 else -> when (tile.kind) {
                 com.guangyue.feature.library.home.HomeTileKind.STATION -> "榜单"
                 else -> "歌单"
