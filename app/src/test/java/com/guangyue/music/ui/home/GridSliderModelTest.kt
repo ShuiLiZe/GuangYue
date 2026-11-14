@@ -48,7 +48,7 @@ class GridSliderModelTest {
         assertTrue(c * 1.12f + 2 * GridSliderModel.COMPACT_PAD_DP <= 230f + 0.5f)
         // 再矮也不小于 64；高度量不到退回上限。
         assertEquals(64f, GridSliderModel.coverSize(true, 800f, 80f, true), 0f)
-        assertEquals(192f, GridSliderModel.coverSize(true, 800f, 0f, true), 0f)
+        assertEquals(208f, GridSliderModel.coverSize(true, 800f, 0f, true), 0f) // 横屏 800dp 宽 ≥ 768：上限 208
     }
 
     @Test fun `竖屏手机：上限 192，屏宽 62 以内`() {

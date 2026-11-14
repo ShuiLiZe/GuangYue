@@ -373,7 +373,7 @@ private fun SliderCard(
         Box(
             Modifier
                 .size(cover.dp)
-                .shadow(16.dp, shape)
+                .shadow(if (focused) 16.dp else 0.dp, shape)
                 .clip(shape)
                 .border(if (focused) 2.dp else 1.dp, Color.White.copy(alpha = if (focused) 0.30f else 0.10f), shape)
                 .clickable(onClick = onClick)
@@ -386,7 +386,8 @@ private fun SliderCard(
     Column(
         Modifier
             .width(cover.dp)
-            .shadow(8.dp, shape)
+            // 投影只给居中卡：邻卡带着半透明缩小后，投影会在浅色底上露成一圈方形灰边。
+            .shadow(if (focused) 8.dp else 0.dp, shape)
             .clip(shape)
             .background(mixColor(ground, ink, 0.03f))
             .border(1.dp, ink.copy(alpha = if (focused) 0.18f else 0.05f), shape)
