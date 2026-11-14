@@ -218,7 +218,7 @@ fun V0cStage(
         val window = (view.context as? android.app.Activity)?.window ?: return@SideEffect
         WindowCompat.getInsetsController(window, view).apply {
             // B0：暗场样式（雾笺/花火/绘光）一律浅色图标，与 LyricFlowScreen 的外壳规则一致。
-            val barsDark = dark || style == "nebbia" || style == "hanabi" || style == "hanabiprobe" || style == "lumiere" || style.startsWith("machi") || style.startsWith("dioramaprobe")
+            val barsDark = dark || style == "nebbia" || style == "hanabi" || style == "hanabiprobe" || style == "lumiere" || style.startsWith("machi") || style.startsWith("diorama")
             isAppearanceLightStatusBars = !barsDark
             isAppearanceLightNavigationBars = !barsDark
             // hanabiprobe：Folia 探针是整屏无系统栏，对照时把状态栏 / 导航栏藏掉。
@@ -270,7 +270,19 @@ fun V0cStage(
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
         // 2026-11-12：町景（machi）3D 舞台起步，只在取证页（未进歌词样式列表）。
-        if (style == "dioramaprobe" || style == "dioramaprobeclouds") {
+        if (style == "dioramastage" || style == "dioramastageclouds") {
+            // 2026-11-14：镜台舞台取证（粒子 + 背景尘埃 + 邻行 + 当前行逐单元），DEFAULT_THEME 四色、seed probe-0、静止位。
+            com.guangyue.feature.player.lyrics.visualizer.DioramaStagePreview(
+                lines = kernel,
+                timeSeconds = positionMs / 1000.0,
+                corridor = style == "dioramastage",
+                backgroundColor = Color(0xFF09090B),
+                primaryColor = Color(0xFFF4F4F5),
+                accentColor = Color(0xFFF4F4F5),
+                secondaryColor = Color(0xFF71717A),
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (style == "dioramaprobe" || style == "dioramaprobeclouds") {
             // 2026-11-14：镜台粒子层取证（隧道 / 点云），DEFAULT_THEME 四色、seed probe-0、镜头停在当前行静止位。
             com.guangyue.feature.player.lyrics.visualizer.DioramaParticlePreview(
                 lines = kernel,
