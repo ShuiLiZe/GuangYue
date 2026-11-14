@@ -270,7 +270,21 @@ fun V0cStage(
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
         // 2026-11-12：町景（machi）3D 舞台起步，只在取证页（未进歌词样式列表）。
-        if (style == "dioramastage" || style == "dioramastageclouds" || style == "dioramarig") {
+        if (style == "dioramaswitch") {
+            // 2026-11-14：镜台换歌一镜到底取证：2 秒后换种子（= 换歌），新走廊在雾外偏移处生成，镜头飞过去。
+            val switchSeed = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("probe-0") }
+            androidx.compose.runtime.LaunchedEffect(Unit) { kotlinx.coroutines.delay(2000); switchSeed.value = "probe-1" }
+            com.guangyue.feature.player.lyrics.visualizer.DioramaStage(
+                lines = kernel,
+                timeSeconds = { positionMs / 1000.0 },
+                backgroundColor = Color(0xFF09090B),
+                primaryColor = Color(0xFFF4F4F5),
+                accentColor = Color(0xFFF4F4F5),
+                secondaryColor = Color(0xFF71717A),
+                seed = switchSeed.value,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (style == "dioramastage" || style == "dioramastageclouds" || style == "dioramarig") {
             // 2026-11-14：镜台舞台取证（粒子 + 背景尘埃 + 邻行 + 当前行逐单元），DEFAULT_THEME 四色、seed probe-0、静止位。
             com.guangyue.feature.player.lyrics.visualizer.DioramaStagePreview(
                 lines = kernel,

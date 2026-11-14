@@ -1,7 +1,8 @@
 // 镜台舞台（取证版）：把粒子层（DioramaParticleLayer 两层）、背景尘埃（DioramaScene.tsx <points> + PointsMaterial）、
 // 邻行整行平面、当前行逐单元三层平面（DioramaActiveUnitPlanes.tsx）放进同一个 GLSurfaceView，镜头停在当前行静止位。
 // 每帧写入走 DioramaSceneFrame.kt（recycleDioramaMoteWindow / updateDioramaNeighborLines / updateDioramaActiveUnits），
-// 雾 = Fog(bg, 12, 30)。运镜（DioramaCameraRig）与换歌转场下一步接；取证页 dioramastage / dioramastageclouds。
+// 雾 = Fog(bg, 12, 30)。运镜 DioramaCameraRig；换歌 / 单曲循环照 VisualizerDiorama.tsx 状态机（新走廊雾外偏移、离场窗口留到飞行结束）。
+// 取证页 dioramastage / dioramastageclouds / dioramarig，播放页 LyricStyle.DIORAMA。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import android.opengl.GLES30
@@ -20,6 +21,7 @@ import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -110,19 +112,15 @@ private class DioramaMoteLayer {
     }
 }
 
-/** 舞台的歌词走廊（主线程建好交给 GL 线程）：一首歌一条走廊。 */
-private class DioramaStageSetup(
-    val sequencer: DioramaSequencerState,
-    val lines: List<Line>,
-    val total: Int,
-    val seed: String,
-    val corridor: Boolean,
-    val density: Double,
-)
+/** Compose → GL 线程的输入：当前歌的歌词与种子（换歌时整体换掉，渲染线程每帧读一次）。 */
+private class DioramaStageSong(val lines: List<Line>, val seed: String)
 
-/** 某一行当前时的挂载内容：可见行、当前行单元、粒子缓冲、静止位镜头。 */
+private class DioramaStageInput(@Volatile var song: DioramaStageSong)
+
+/** 挂载窗口：当前行（与转场中离场行）的可见行、当前行单元、粒子缓冲、静止位镜头。 */
 private class DioramaStageWindow(
     val globalIndex: Int,
+    val outgoingIndex: Int?,
     val visible: List<DioramaVisibleLine>,
     val units: List<DioramaLyricUnit>,
     val particles: DioramaParticleGeometryData,
@@ -133,30 +131,34 @@ private class DioramaStageWindow(
 
 private val stageMotion = resolveDioramaMotionParams()
 
-private fun buildDioramaStageWindow(s: DioramaStageSetup, idx: Int): DioramaStageWindow {
-    val vis = DioramaGeometryVisibility(mode = if (s.corridor) DioramaGeometryMode.CORRIDOR else DioramaGeometryMode.CLOUDS)
-    val mounted = resolveDioramaMountedIndices(idx, null, s.total)
-    val spans = buildDioramaCorridorSpans(s.sequencer, idx, null, vis)
-    val clusters = buildDioramaParticleClusters(s.sequencer, mounted, stageMotion, vis, 1.0)
-    val (data, k) = buildDioramaParticleBuffer(s.corridor, clusters, spans, s.density)
-    val frame = dioramaResolveGlobal(s.sequencer, idx)!!.frame
+/** VisualizerDiorama.tsx：PRUNE_MARGIN_BEHIND / LOOP_RESTART_MAX_INDEX。 */
+private const val DIORAMA_PRUNE_MARGIN_BEHIND = 4
+private const val DIORAMA_LOOP_RESTART_MAX_INDEX = 1
+
+private fun buildDioramaStageWindow(sq: DioramaSequencerState, idx: Int, outgoing: Int?, corridor: Boolean, density: Double): DioramaStageWindow {
+    val total = dioramaTotalGlobalLines(sq)
+    val vis = DioramaGeometryVisibility(mode = if (corridor) DioramaGeometryMode.CORRIDOR else DioramaGeometryMode.CLOUDS)
+    val mounted = resolveDioramaMountedIndices(idx, outgoing, total)
+    val spans = buildDioramaCorridorSpans(sq, idx, outgoing, vis)
+    val clusters = buildDioramaParticleClusters(sq, mounted, stageMotion, vis, 1.0)
+    val (data, k) = buildDioramaParticleBuffer(corridor, clusters, spans, density)
+    val resolved = dioramaResolveGlobal(sq, idx)!!
+    val frame = resolved.frame
     val eye = DioramaVec(
         frame.position.x - frame.forward.x * DIORAMA_HERO_DISTANCE + frame.up.x * DIORAMA_CAMERA_LIFT,
         frame.position.y - frame.forward.y * DIORAMA_HERO_DISTANCE + frame.up.y * DIORAMA_CAMERA_LIFT,
         frame.position.z - frame.forward.z * DIORAMA_HERO_DISTANCE + frame.up.z * DIORAMA_CAMERA_LIFT,
     )
-    val visible = buildDioramaVisibleLines(s.sequencer, mounted, idx, null, stageMotion.weaveScale)
-    val activeLine = s.lines.getOrNull(idx)
+    val visible = buildDioramaVisibleLines(sq, mounted, idx, outgoing, stageMotion.weaveScale)
+    val activeLine = resolved.line
     val units = if (activeLine == null) emptyList() else splitDioramaLyricUnits(activeLine, GraphemeTimings.buildDenseLineGraphemeTimeline(activeLine))
-    return DioramaStageWindow(idx, visible, units, data, k, eye, frame)
+    return DioramaStageWindow(idx, outgoing, visible, units, data, k, eye, frame)
 }
 
-/** 当前行 = 开始时间已过的最后一行（间奏停在上一行，开头停在第 0 行）。 */
-private fun dioramaStageIndex(lines: List<Line>, t: Double, total: Int): Int =
-    lines.indexOfLast { it.startTime <= t }.coerceIn(0, (total - 1).coerceAtLeast(0))
-
 private class DioramaStageRenderer(
-    private val s: DioramaStageSetup,
+    private val input: DioramaStageInput,
+    private val corridor: Boolean,
+    private val density: Double,
     private val particleColors: DioramaParticleColors,
     private val damped: DioramaDampedColors,
     private val background: Color,
@@ -188,6 +190,15 @@ private class DioramaStageRenderer(
     private var powerEnv = 0.0
 
     private var w: DioramaStageWindow? = null
+
+    // ── VisualizerDiorama.tsx 换歌状态机：一首歌一段走廊，新歌在雾外偏移处生成，镜头一镜到底飞过去 ──
+    private val seq = DioramaSequencerState()
+    private var song: DioramaStageSong? = null
+    private var lastLocalIndex = 0
+    private var lastActiveKey: String? = null
+    private var transitionEpoch = 0
+    private var transitionOutgoing: Int? = null
+    private var transitionStart = 0.0
     private val lineRasters = HashMap<Int, DioramaLineRaster>()
     private val lineTextures = HashMap<Int, DioramaGlTexture>()
     private var placed: List<DioramaPlacedUnit> = emptyList()
@@ -209,9 +220,10 @@ private class DioramaStageRenderer(
         w = null
     }
 
-    /** 换行：粒子缓冲换窗口；邻行栅格按行号复用、离窗的释放；当前行单元重栅格化、逐单元状态清零。 */
-    private fun enter(idx: Int) {
-        val nw = buildDioramaStageWindow(s, idx)
+    /** 换行 / 转场起止：粒子缓冲换窗口；邻行栅格按全局行号复用、离窗的释放；当前行单元重栅格化、逐单元状态清零。 */
+    private fun enter(idx: Int, outgoing: Int?) {
+        val prevIdx = w?.globalIndex
+        val nw = buildDioramaStageWindow(seq, idx, outgoing, corridor, density)
         w = nw
         contrast.upload(nw.particles); glow.upload(nw.particles)
         val keep = nw.visible.filter { it.index != idx && it.line.fullText.isNotEmpty() }.map { it.index }.toSet()
@@ -222,6 +234,7 @@ private class DioramaStageRenderer(
             lineRasters[v.index] = r
             lineTextures[v.index] = DioramaGlTexture(r.bitmap)
         }
+        if (prevIdx == idx && placed.isNotEmpty()) return
         unitBase.forEach { it.release() }; unitGlow.forEach { it.release() }
         placed.forEach { it.raster.recycle() }
         unitBase.clear(); unitGlow.clear(); looks.clear(); placed = emptyList(); lineWidth = 0.0
@@ -231,6 +244,51 @@ private class DioramaStageRenderer(
             p.forEach { unitBase += DioramaGlTexture(it.raster.base); unitGlow += DioramaGlTexture(it.raster.glow); looks += DioramaUnitLook() }
         }
         lightVals = FloatArray(placed.size); soulVals = FloatArray(placed.size)
+    }
+
+    /** 每帧：按 Folia 规则判换歌 / 单曲循环，算全局行号、离场行，过期段剪掉。 */
+    private fun resolveGlobal(t: Double): Int {
+        val cur = input.song
+        val outgoingSeg = seq.segments.lastOrNull()
+        val outgoingLocal = if (outgoingSeg != null) min(max(lastLocalIndex, 0), outgoingSeg.span - 1) else 0
+        val outgoingGlobal = if (outgoingSeg != null) outgoingSeg.globalStart + outgoingLocal else 0
+        val isNewSong = outgoingSeg == null || outgoingSeg.seed != cur.seed
+        val lyricsChanged = !isNewSong && song !== cur && outgoingSeg!!.lines != cur.lines
+        val lineIndex = cur.lines.indexOfLast { it.startTime <= t }
+        val isLoopRestart = outgoingSeg != null && !isNewSong && lineIndex in 0..DIORAMA_LOOP_RESTART_MAX_INDEX && lastLocalIndex > lineIndex
+        song = cur
+        if (isNewSong) {
+            var origin = DioramaVec(0.0, 0.0, 0.0)
+            if (outgoingSeg != null) {
+                val anchor = dioramaGetFrame(outgoingSeg.frames, outgoingLocal).position
+                val off = dioramaPickTransitionOffset(cur.seed, transitionEpoch + 1)
+                origin = DioramaVec(anchor.x + off.x, anchor.y + off.y, anchor.z + off.z)
+            }
+            dioramaAppendSegment(seq, cur.seed, cur.lines, 0, origin)
+        } else if (lyricsChanged) {
+            dioramaUpdateActiveSegmentLines(seq, cur.lines)
+        }
+        val activeSeg = seq.segments.last()
+        val keyChanged = activeSeg.key != lastActiveKey
+        val hadPrevious = lastActiveKey != null
+        if (keyChanged) { lastActiveKey = activeSeg.key; lastLocalIndex = 0; moteWritten.fill(Int.MIN_VALUE) }
+        if (isLoopRestart) lastLocalIndex = 0
+        val starting = (keyChanged && hadPrevious) || isLoopRestart
+        if (starting) {
+            transitionEpoch += 1
+            transitionOutgoing = outgoingGlobal
+            transitionStart = elapsed
+        } else if (transitionOutgoing != null && elapsed - transitionStart >= DIORAMA_TRANSITION_DURATION) {
+            transitionOutgoing = null
+        }
+        if (lineIndex >= 0) lastLocalIndex = lineIndex
+        val rawLocal = if (lineIndex >= 0) lineIndex else lastLocalIndex
+        val local = min(max(rawLocal, 0), max(activeSeg.span - 1, 0))
+        val g = activeSeg.globalStart + local
+        val out = transitionOutgoing
+        val pruneFrom = if (out != null) min(g, out) else g
+        dioramaPruneSegments(seq, pruneFrom - DIORAMA_PRUNE_MARGIN_BEHIND)
+        return g
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -247,8 +305,8 @@ private class DioramaStageRenderer(
         lastNanos = nowNanos
         elapsed += delta
         val t = timeSeconds()
-        val idx = dioramaStageIndex(s.lines, t, s.total)
-        if (w?.globalIndex != idx) enter(idx)
+        val idx = resolveGlobal(t)
+        if (w?.globalIndex != idx || w?.outgoingIndex != transitionOutgoing) enter(idx, transitionOutgoing)
         val win = w ?: return
         val aspect = width.toDouble() / height.coerceAtLeast(1)
         // 还没有真实频谱：按 0.5 s 一拍的合成底鼓 / 中频 / 高频（与 DioramaParticlePreview 同一套），让涟漪与辉光可见。
@@ -259,7 +317,7 @@ private class DioramaStageRenderer(
         powerEnv = dioramaStepEnvelope(powerEnv, min(1.0, power / 255), 18.0, 3.5, delta)
         stepDioramaParticleField(
             field,
-            DioramaParticleFrameInput(delta, bands, 1.0, t, s.corridor, idx, false, height.toDouble(), win.waveNumberMax, particleColors),
+            DioramaParticleFrameInput(delta, bands, 1.0, t, corridor, idx, transitionOutgoing != null, height.toDouble(), win.waveNumberMax, particleColors),
             listOf(contrastU, glowU),
         )
         val eye: DioramaVec
@@ -272,7 +330,7 @@ private class DioramaStageRenderer(
             )
         } else {
             // CameraRig.tsx：读头跟字横移、13 种运镜、漂移、收束；相机矩阵取逆即视图矩阵。
-            rig.step(t, delta, elapsed, s.sequencer, idx, activeLineWorldWidth, stageMotion, 0, 55.0, aspect)
+            rig.step(t, delta, elapsed, seq, idx, activeLineWorldWidth, stageMotion, transitionEpoch, 55.0, aspect)
             eye = rig.cameraPosition
             dioramaComposeMatrix(eye, rig.cameraQuaternion, 1.0, camWorld)
             Matrix.invertM(view, 0, camWorld, 0)
@@ -282,7 +340,7 @@ private class DioramaStageRenderer(
         val cam = floatArrayOf(eye.x.toFloat(), eye.y.toFloat(), eye.z.toFloat())
 
         // 背景尘埃：窗口回收 + 轻微漂移；大小随高频、透明度随整体能量、颜色 secondary→accent 30%。
-        if (recycleDioramaMoteWindow(moteWritten, motePositions, s.sequencer, idx, s.total, moteCirc, moteRadial, s.seed)) {
+        if (recycleDioramaMoteWindow(moteWritten, motePositions, seq, idx, dioramaTotalGlobalLines(seq), moteCirc, moteRadial, seq.segments.last().seed)) {
             motes.upload(motePositions, DIORAMA_MOTE_WINDOW_LINES * moteCirc * moteRadial * 3)
         }
         val moteModel = FloatArray(16).also {
@@ -300,7 +358,7 @@ private class DioramaStageRenderer(
         // 邻行（renderOrder 0，透明物体按离镜头远→近）。
         val draws = ArrayList<Pair<Double, DioramaTextDraw>>()
         val metrics = lineRasters.mapValues { DioramaRasterMetrics(it.value.advancePx, it.value.fontPx) }
-        val nb = updateDioramaNeighborLines(win.visible, idx, null, metrics, eye, 55.0, aspect, 1.0, damped)
+        val nb = updateDioramaNeighborLines(win.visible, idx, transitionOutgoing, metrics, eye, 55.0, aspect, 1.0, damped)
         for (look in nb) {
             val v = win.visible.first { it.index == look.index }
             val r = lineRasters[look.index] ?: continue
@@ -368,23 +426,24 @@ fun DioramaStage(
     density: Double = 768.0,
     modifier: Modifier = Modifier,
 ) {
-    val setup = remember(lines, corridor, seed, density) {
-        val sq = DioramaSequencerState()
-        dioramaAppendSegment(sq, seed, lines, 0, DioramaVec(0.0, 0.0, 0.0))
-        DioramaStageSetup(sq, lines, dioramaTotalGlobalLines(sq), seed, corridor, density)
+    // 换歌不重建 GLSurfaceView：同一个渲染器里走 Folia 的换歌状态机（新走廊在雾外偏移处生成，镜头一镜到底飞过去）。
+    val input = remember { DioramaStageInput(DioramaStageSong(lines, seed)) }
+    androidx.compose.runtime.SideEffect {
+        val cur = input.song
+        if (cur.lines !== lines || cur.seed != seed) input.song = DioramaStageSong(lines, seed)
     }
     val colors = remember(primaryColor, accentColor, secondaryColor, backgroundColor) {
         val p = dioramaColorFromHex(stageHex(primaryColor)); val a = dioramaColorFromHex(stageHex(accentColor))
         val sc = dioramaColorFromHex(stageHex(secondaryColor)); val bg = dioramaColorFromHex(stageHex(backgroundColor))
         resolveDioramaParticleContrastColors(DioramaParticleColors(p, a, sc), bg) to DioramaDampedColors(p, a, sc, bg)
     }
-    androidx.compose.runtime.key(setup, colors, restCamera) {
+    androidx.compose.runtime.key(colors, restCamera, corridor, density) {
         AndroidView(
             modifier = modifier,
             factory = { ctx ->
                 GLSurfaceView(ctx).apply {
                     setEGLContextClientVersion(3)
-                    setRenderer(DioramaStageRenderer(setup, colors.first, colors.second, backgroundColor, restCamera, timeSeconds))
+                    setRenderer(DioramaStageRenderer(input, corridor, density, colors.first, colors.second, backgroundColor, restCamera, timeSeconds))
                     renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                 }
             },
