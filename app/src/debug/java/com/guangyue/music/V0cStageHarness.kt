@@ -309,8 +309,12 @@ fun V0cStage(
                 )
                 com.guangyue.feature.library.design.StatusToastHost(dark = true)
                 androidx.compose.runtime.LaunchedEffect(Unit) {
-                    kotlinx.coroutines.delay(1000)
-                    com.guangyue.feature.library.design.StatusToasts.show("已加入「开车听」")
+                    // 截图时机不定：每 2 秒补一条，保证任何时刻都有提示在屏上。
+                    while (true) {
+                        kotlinx.coroutines.delay(800)
+                        com.guangyue.feature.library.design.StatusToasts.show("已加入「开车听」")
+                        kotlinx.coroutines.delay(1200)
+                    }
                 }
             }
         } else         if (style == "playlistpick" || style == "playlistnew") {
