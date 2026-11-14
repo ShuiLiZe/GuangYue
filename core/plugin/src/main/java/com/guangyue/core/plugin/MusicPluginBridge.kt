@@ -439,7 +439,15 @@ class MusicPluginBridge @Inject constructor(
 
     /** 插件声明的用户变量（没声明 = 这个平台不需要登录）。 */
     suspend fun declaredUserVariables(pluginId: String): List<com.guangyue.core.plugin.runtime.PluginUserVariable> =
-        runCatching { invoke(pluginId) { declaredUserVariables() } }.getOrDefault(emptyList())
+        withContext(Dispatchers.IO) {
+            manager.load()
+            val meta = resolveMeta(pluginId) ?: return@withContext emptyList()
+            if (meta.enabled) return@withContext runCatching { invoke(pluginId) { declaredUserVariables() } }.getOrDefault(emptyList())
+            // 没启用的插件也要能先登录：临时起一个运行时读完就关。
+            val code = readCode(meta.id) ?: return@withContext emptyList()
+            val rt = PluginRuntime(meta, code, http, preludeProvider)
+            try { rt.install(); rt.declaredUserVariables() } catch (_: Throwable) { emptyList() } finally { runCatching { rt.close() } }
+        }
 
     fun releaseAll() {
         synchronized(runtimes) {

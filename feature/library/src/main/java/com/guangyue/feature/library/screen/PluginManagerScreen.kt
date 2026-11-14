@@ -676,7 +676,7 @@ private fun AccountDialog(
             when {
                 st == null -> Text("正在读取插件…", fontSize = 13.sp, color = Gyp.t2, fontFamily = GuangYueDesign.Sans)
                 st.first.isEmpty() -> Text(
-                    "这个音源没有需要填写的账号信息，直接就能用。" + if (!plugin.enabled) "（插件未启用时读不到，先在列表里选中它再试。）" else "",
+                    "这个音源没有需要填写的账号信息，直接就能用。",
                     fontSize = 13.sp, color = Gyp.t2, fontFamily = GuangYueDesign.Sans,
                 )
                 else -> st.first.forEach { v ->
