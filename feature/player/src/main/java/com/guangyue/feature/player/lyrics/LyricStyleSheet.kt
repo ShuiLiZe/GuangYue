@@ -235,6 +235,10 @@ fun LyricStyleSheet(
     onCladdaghTuning: (CladdaghTuning) -> Unit = {},
     dioramaTuning: DioramaTuning = DioramaTuning.DEFAULT,
     onDioramaTuning: (DioramaTuning) -> Unit = {},
+    subtitle: com.guangyue.core.lyrics.SubtitleSettings = com.guangyue.core.lyrics.SubtitleSettings.DEFAULT,
+    onSubtitle: ((com.guangyue.core.lyrics.SubtitleSettings) -> Unit)? = null,
+    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕）。 */
+    initialSection: Int = 0,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -268,6 +272,8 @@ fun LyricStyleSheet(
             onCladdaghTuning = onCladdaghTuning,
             dioramaTuning = dioramaTuning,
             onDioramaTuning = onDioramaTuning,
+            subtitle = subtitle,
+            onSubtitle = onSubtitle,
         )
     }
 }
@@ -299,6 +305,10 @@ private fun LyricStylePanelContent(
     onCladdaghTuning: (CladdaghTuning) -> Unit = {},
     dioramaTuning: DioramaTuning = DioramaTuning.DEFAULT,
     onDioramaTuning: (DioramaTuning) -> Unit = {},
+    subtitle: com.guangyue.core.lyrics.SubtitleSettings = com.guangyue.core.lyrics.SubtitleSettings.DEFAULT,
+    onSubtitle: ((com.guangyue.core.lyrics.SubtitleSettings) -> Unit)? = null,
+    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕）。 */
+    initialSection: Int = 0,
 ) {
     // Folia `index.css:163-168` `.theme-glass-panel`：`--bg-color` 85% 底 + `--text-primary` 12% 描边。
     // 面板改用 `--st-card` 一族（与弹层其它行同源），透明度取 85%，透出身后的封面调色板。
@@ -350,121 +360,135 @@ private fun LyricStylePanelContent(
                 modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
             )
 
-            // 样式列表：按 Folia registry 的 order 排（classic 30 → cadenza 40 → partita 50 → fume 60
-            // → tilt 70 → claddagh 80 → still 130）。一行 = 左样式名、右选中标记；点击只切样式、不关弹层。
-            // 文案 id 现取现用：这里拿的是 NavHost 已解析好的中文，绝不把 id 当字符串显示。
-            val styleRows = listOf(
-                LyricStyle.CLASSIC to styleName,
-                LyricStyle.CADENZA to (if (strings.cadenza != 0) str(strings.cadenza) else ""),
-                LyricStyle.PARTITA to partitaName,
-                // fumeName 缺失（老调用点 / 只传 styleName）时退回 classic 名，避免空行。
-                LyricStyle.FUME to fumeName.ifBlank { styleName },
-                LyricStyle.TILT to (if (strings.tilt != 0) str(strings.tilt) else ""),
-                LyricStyle.CLADDAGH to (if (strings.claddagh != 0) str(strings.claddagh) else ""),
-                LyricStyle.MONET to (if (strings.monet != 0) str(strings.monet) else ""),
-                LyricStyle.PENDOLO to (if (strings.pendolo != 0) str(strings.pendolo) else ""),
-                LyricStyle.NEBBIA to (if (strings.nebbia != 0) str(strings.nebbia) else ""),
-                LyricStyle.SONNET to (if (strings.sonnet != 0) str(strings.sonnet) else ""),
-                LyricStyle.HANABI to (if (strings.hanabi != 0) str(strings.hanabi) else ""),
-                LyricStyle.TEMPERA to (if (strings.tempera != 0) str(strings.tempera) else ""),
-                LyricStyle.LUMIERE to (if (strings.lumiere != 0) str(strings.lumiere) else ""),
-                LyricStyle.MACHI to (if (strings.machi != 0) str(strings.machi) else ""),
-                LyricStyle.DIORAMA to (if (strings.diorama != 0) str(strings.diorama) else ""),
-                LyricStyle.STILL to (if (strings.still != 0) str(strings.still) else ""),
-            )
-            styleRows.forEach { (rowStyle, rowName) ->
-                if (rowName.isNotBlank()) {
-                    StyleRow(
-                        name = rowName,
-                        selected = style == rowStyle,
+            // Folia 歌词样式窗口右栏分页（SECTION_OPTIONS）：手机上只放「歌词动画」「字幕」两页，顶部分段切换。
+            var section by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initialSection) }
+            if (onSubtitle != null) {
+                SheetSectionTabs(
+                    labels = listOf("歌词动画", "字幕"),
+                    selected = section,
+                    onSelect = { section = it },
+                )
+            }
+            if (section == 1 && onSubtitle != null) {
+                SubtitleSettingsRows(subtitle, accent, onSubtitle)
+                ResetRow(str(strings.reset), accent) { onSubtitle(com.guangyue.core.lyrics.SubtitleSettings.DEFAULT) }
+            } else {
+                // 样式列表：按 Folia registry 的 order 排（classic 30 → cadenza 40 → partita 50 → fume 60
+                // → tilt 70 → claddagh 80 → still 130）。一行 = 左样式名、右选中标记；点击只切样式、不关弹层。
+                // 文案 id 现取现用：这里拿的是 NavHost 已解析好的中文，绝不把 id 当字符串显示。
+                val styleRows = listOf(
+                    LyricStyle.CLASSIC to styleName,
+                    LyricStyle.CADENZA to (if (strings.cadenza != 0) str(strings.cadenza) else ""),
+                    LyricStyle.PARTITA to partitaName,
+                    // fumeName 缺失（老调用点 / 只传 styleName）时退回 classic 名，避免空行。
+                    LyricStyle.FUME to fumeName.ifBlank { styleName },
+                    LyricStyle.TILT to (if (strings.tilt != 0) str(strings.tilt) else ""),
+                    LyricStyle.CLADDAGH to (if (strings.claddagh != 0) str(strings.claddagh) else ""),
+                    LyricStyle.MONET to (if (strings.monet != 0) str(strings.monet) else ""),
+                    LyricStyle.PENDOLO to (if (strings.pendolo != 0) str(strings.pendolo) else ""),
+                    LyricStyle.NEBBIA to (if (strings.nebbia != 0) str(strings.nebbia) else ""),
+                    LyricStyle.SONNET to (if (strings.sonnet != 0) str(strings.sonnet) else ""),
+                    LyricStyle.HANABI to (if (strings.hanabi != 0) str(strings.hanabi) else ""),
+                    LyricStyle.TEMPERA to (if (strings.tempera != 0) str(strings.tempera) else ""),
+                    LyricStyle.LUMIERE to (if (strings.lumiere != 0) str(strings.lumiere) else ""),
+                    LyricStyle.MACHI to (if (strings.machi != 0) str(strings.machi) else ""),
+                    LyricStyle.DIORAMA to (if (strings.diorama != 0) str(strings.diorama) else ""),
+                    LyricStyle.STILL to (if (strings.still != 0) str(strings.still) else ""),
+                )
+                styleRows.forEach { (rowStyle, rowName) ->
+                    if (rowName.isNotBlank()) {
+                        StyleRow(
+                            name = rowName,
+                            selected = style == rowStyle,
+                            accent = accent,
+                            onClick = { onStyle(rowStyle) },
+                        )
+                    }
+                }
+
+                Box(Modifier.height(GySpace.s))
+
+                // Folia kit/Row.tsx：一行 = 左标签、右控件（`flex min-h-14 items-center`，标签在左、控件在右）。
+                // 原来开关单独一行、标签在下一行（两行错位），这里合成同一行。
+                if (style == LyricStyle.FUME) {
+                    FumeTuningRows(
+                        tuning = fumeTuning,
+                        strings = strings,
                         accent = accent,
-                        onClick = { onStyle(rowStyle) },
+                        onTuning = onFumeTuning,
+                    )
+                } else if (style == LyricStyle.CADENZA || style == LyricStyle.STILL || style == LyricStyle.MONET || style == LyricStyle.PENDOLO || style == LyricStyle.NEBBIA || style == LyricStyle.SONNET || style == LyricStyle.HANABI || style == LyricStyle.TEMPERA || style == LyricStyle.LUMIERE || style == LyricStyle.MACHI) {
+                    // Folia cadenza/entry.tsx 没有 renderSettingsPanel：窗口里显示「这个样式没有参数」。
+                    Text(
+                        text = str(strings.noOptions),
+                        fontSize = 13.sp,
+                        color = Gyp.t2,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    )
+                } else if (style == LyricStyle.DIORAMA) {
+                    DioramaTuningRows(tuning = dioramaTuning, strings = strings, accent = accent, onTuning = onDioramaTuning)
+                } else if (style == LyricStyle.CLADDAGH) {
+                    CladdaghTuningRows(tuning = claddaghTuning, strings = strings, accent = accent, onTuning = onCladdaghTuning)
+                } else if (style == LyricStyle.TILT) {
+                    TiltTuningRows(tuning = tiltTuning, strings = strings, accent = accent, onTuning = onTiltTuning)
+                } else if (style == LyricStyle.PARTITA) {
+                    PartitaTuningRows(
+                        tuning = partitaTuning,
+                        strings = strings,
+                        accent = accent,
+                        onTuning = onPartitaTuning,
+                    )
+                } else {
+                    ToggleRow(
+                        label = str(strings.rotation),
+                        checked = tuning.enableWordRotation,
+                        accent = accent,
+                        onChange = { onTuning(tuning.copy(enableWordRotation = it)) },
+                    )
+
+                    TuningSliderRow(
+                        label = str(strings.breathing),
+                        value = tuning.breathingFloatMultiplier.toFloat(),
+                        accent = accent,
+                        onChange = { onTuning(tuning.copy(breathingFloatMultiplier = it.toDouble())) },
+                    )
+                    TuningSliderRow(
+                        label = str(strings.spacing),
+                        value = tuning.wordSpacing.toFloat(),
+                        accent = accent,
+                        onChange = { onTuning(tuning.copy(wordSpacing = it.toDouble())) },
                     )
                 }
-            }
 
-            Box(Modifier.height(GySpace.s))
-
-            // Folia kit/Row.tsx：一行 = 左标签、右控件（`flex min-h-14 items-center`，标签在左、控件在右）。
-            // 原来开关单独一行、标签在下一行（两行错位），这里合成同一行。
-            if (style == LyricStyle.FUME) {
-                FumeTuningRows(
-                    tuning = fumeTuning,
-                    strings = strings,
-                    accent = accent,
-                    onTuning = onFumeTuning,
-                )
-            } else if (style == LyricStyle.CADENZA || style == LyricStyle.STILL || style == LyricStyle.MONET || style == LyricStyle.PENDOLO || style == LyricStyle.NEBBIA || style == LyricStyle.SONNET || style == LyricStyle.HANABI || style == LyricStyle.TEMPERA || style == LyricStyle.LUMIERE || style == LyricStyle.MACHI) {
-                // Folia cadenza/entry.tsx 没有 renderSettingsPanel：窗口里显示「这个样式没有参数」。
-                Text(
-                    text = str(strings.noOptions),
-                    fontSize = 13.sp,
-                    color = Gyp.t2,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                )
-            } else if (style == LyricStyle.DIORAMA) {
-                DioramaTuningRows(tuning = dioramaTuning, strings = strings, accent = accent, onTuning = onDioramaTuning)
-            } else if (style == LyricStyle.CLADDAGH) {
-                CladdaghTuningRows(tuning = claddaghTuning, strings = strings, accent = accent, onTuning = onCladdaghTuning)
-            } else if (style == LyricStyle.TILT) {
-                TiltTuningRows(tuning = tiltTuning, strings = strings, accent = accent, onTuning = onTiltTuning)
-            } else if (style == LyricStyle.PARTITA) {
-                PartitaTuningRows(
-                    tuning = partitaTuning,
-                    strings = strings,
-                    accent = accent,
-                    onTuning = onPartitaTuning,
-                )
-            } else {
-                ToggleRow(
-                    label = str(strings.rotation),
-                    checked = tuning.enableWordRotation,
-                    accent = accent,
-                    onChange = { onTuning(tuning.copy(enableWordRotation = it)) },
-                )
-
-                TuningSliderRow(
-                    label = str(strings.breathing),
-                    value = tuning.breathingFloatMultiplier.toFloat(),
-                    accent = accent,
-                    onChange = { onTuning(tuning.copy(breathingFloatMultiplier = it.toDouble())) },
-                )
-                TuningSliderRow(
-                    label = str(strings.spacing),
-                    value = tuning.wordSpacing.toFloat(),
-                    accent = accent,
-                    onChange = { onTuning(tuning.copy(wordSpacing = it.toDouble())) },
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .clickableNoRipple {
-                        // 恢复默认只作用于当前样式（Folia 各模式各自的 handleReset*Tuning）。
-                        when (style) {
-                            LyricStyle.CADENZA, LyricStyle.STILL, LyricStyle.MONET, LyricStyle.PENDOLO, LyricStyle.NEBBIA, LyricStyle.SONNET, LyricStyle.HANABI, LyricStyle.TEMPERA, LyricStyle.LUMIERE, LyricStyle.MACHI -> Unit
-                            LyricStyle.DIORAMA -> onDioramaTuning(DioramaTuning.DEFAULT)
-                            LyricStyle.TILT -> onTiltTuning(TiltTuning.DEFAULT)
-                            LyricStyle.CLADDAGH -> onCladdaghTuning(CladdaghTuning.DEFAULT)
-                            LyricStyle.FUME -> onFumeTuning(FumeTuning.DEFAULT)
-                            LyricStyle.PARTITA -> onPartitaTuning(PartitaTuning.DEFAULT)
-                            else -> onTuning(ClassicTuning())
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clickableNoRipple {
+                            // 恢复默认只作用于当前样式（Folia 各模式各自的 handleReset*Tuning）。
+                            when (style) {
+                                LyricStyle.CADENZA, LyricStyle.STILL, LyricStyle.MONET, LyricStyle.PENDOLO, LyricStyle.NEBBIA, LyricStyle.SONNET, LyricStyle.HANABI, LyricStyle.TEMPERA, LyricStyle.LUMIERE, LyricStyle.MACHI -> Unit
+                                LyricStyle.DIORAMA -> onDioramaTuning(DioramaTuning.DEFAULT)
+                                LyricStyle.TILT -> onTiltTuning(TiltTuning.DEFAULT)
+                                LyricStyle.CLADDAGH -> onCladdaghTuning(CladdaghTuning.DEFAULT)
+                                LyricStyle.FUME -> onFumeTuning(FumeTuning.DEFAULT)
+                                LyricStyle.PARTITA -> onPartitaTuning(PartitaTuning.DEFAULT)
+                                else -> onTuning(ClassicTuning())
+                            }
                         }
+                        .padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = GuangYueIcons.RotateCcw,
+                            contentDescription = null,
+                            tint = accent,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Box(Modifier.width(8.dp))
+                        Text(str(strings.reset), fontSize = 13.sp, color = accent)
                     }
-                    .padding(horizontal = 14.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = GuangYueIcons.RotateCcw,
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Box(Modifier.width(8.dp))
-                    Text(str(strings.reset), fontSize = 13.sp, color = accent)
                 }
             }
             Box(Modifier.height(GySpace.m))
@@ -903,6 +927,10 @@ fun LyricStyleSheetPreview(
     onCladdaghTuning: (CladdaghTuning) -> Unit = {},
     dioramaTuning: DioramaTuning = DioramaTuning.DEFAULT,
     onDioramaTuning: (DioramaTuning) -> Unit = {},
+    subtitle: com.guangyue.core.lyrics.SubtitleSettings = com.guangyue.core.lyrics.SubtitleSettings.DEFAULT,
+    onSubtitle: ((com.guangyue.core.lyrics.SubtitleSettings) -> Unit)? = null,
+    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕）。 */
+    initialSection: Int = 0,
 ) {
     LyricStylePanelContent(
         tuning = tuning,
@@ -924,6 +952,9 @@ fun LyricStyleSheetPreview(
         onCladdaghTuning = onCladdaghTuning,
         dioramaTuning = dioramaTuning,
         onDioramaTuning = onDioramaTuning,
+        subtitle = subtitle,
+        onSubtitle = onSubtitle,
+        initialSection = initialSection,
     )
 }
 
@@ -1315,5 +1346,122 @@ private fun DioramaTuningRows(
             min = 1f, max = 4f, step = 1f, format = { it.roundToInt().toString() },
             onChange = { emit(tuning.copy(backgroundParticleRadial = it.roundToInt())) },
         )
+    }
+}
+
+
+/**
+ * 「字幕」页，逐行照 Folia：隐藏底部字幕层 → 底部字幕行数（单行 / 双行 / 三行）→ 第一行（单行时可选当前句 / 翻译，
+ * 多行固定当前句）→ 第二、三行（下一句 / 翻译）→ 字幕透明度 20%–100% → 字幕背景 → 下一句歌词添加模糊效果。
+ * 广乐没有罗马音，相关选项不出现。
+ */
+@Composable
+private fun SubtitleSettingsRows(
+    s: com.guangyue.core.lyrics.SubtitleSettings,
+    accent: Color,
+    onChange: (com.guangyue.core.lyrics.SubtitleSettings) -> Unit,
+) {
+    val L = com.guangyue.core.lyrics.SubtitleLayout
+    val names = mapOf(L.CURRENT to "当前句", L.NEXT to "下一句", L.TRANSLATION to "翻译")
+    Text(
+        text = "字幕",
+        fontSize = 15.sp,
+        fontWeight = FontWeight.Bold,
+        color = Gyp.ink,
+        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp),
+    )
+    ToggleRow(label = "隐藏底部字幕层", checked = s.hidden, accent = accent, onChange = { onChange(s.copy(hidden = it)) })
+    if (s.hidden) return
+    SegmentedRow(
+        label = "底部字幕行数",
+        options = listOf(1 to "单行", 2 to "双行", 3 to "三行"),
+        selected = s.layout.size,
+        onChange = { n -> onChange(s.copy(layout = L.withRowCount(s.layout, n))) },
+    )
+    Text(
+        text = "双行和三行的第一行固定是当前句，后面每行可选下一句或翻译。",
+        fontSize = 12.sp,
+        lineHeight = 17.sp,
+        color = Gyp.t2,
+        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 4.dp),
+    )
+    if (s.layout.size == 1) {
+        SegmentedRow(
+            label = "第一行",
+            options = L.SINGLE_ROWS.map { it to names.getValue(it) },
+            selected = s.layout[0],
+            onChange = { v -> onChange(s.copy(layout = L.withRow(s.layout, 0, v))) },
+        )
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("第一行", fontSize = 14.sp, color = Gyp.ink, modifier = Modifier.weight(1f))
+            Text("当前句", fontSize = 13.sp, color = Gyp.t2)
+        }
+    }
+    for (i in 1 until s.layout.size) {
+        SegmentedRow(
+            label = if (i == 1) "第二行" else "第三行",
+            options = L.FOLLOW_ROWS.map { it to names.getValue(it) },
+            selected = s.layout[i],
+            onChange = { v -> onChange(s.copy(layout = L.withRow(s.layout, i, v))) },
+        )
+    }
+    TuningSliderRow(
+        label = "字幕透明度",
+        value = s.opacity.toFloat(),
+        accent = accent,
+        onChange = { onChange(s.copy(opacity = it.toDouble())) },
+        min = 0.2f,
+        max = 1f,
+        step = 0.05f,
+        format = ::formatPercent,
+    )
+    ToggleRow(label = "字幕背景", checked = s.background, accent = accent, onChange = { onChange(s.copy(background = it)) })
+    ToggleRow(label = "下一句歌词添加模糊效果", checked = s.upcomingBlur, accent = accent, onChange = { onChange(s.copy(upcomingBlur = it)) })
+}
+
+
+/** 分页切换：整行等分，每格 48dp 高（触控 ≥48dp），选中格 raise 底 + 阴影，与 [SegmentedRow] 同一套外观。 */
+@Composable
+private fun SheetSectionTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Gyp.tint)
+            .padding(3.dp),
+    ) {
+        labels.forEachIndexed { i, text ->
+            val isSel = i == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(42.dp)
+                    .then(if (isSel) Modifier.shadow(1.dp, RoundedCornerShape(10.dp)).background(Gyp.raise, RoundedCornerShape(10.dp)) else Modifier)
+                    .clickableNoRipple { if (!isSel) onSelect(i) }
+                    .semantics { contentDescription = text },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text, fontSize = 14.sp, fontWeight = if (isSel) FontWeight.Medium else FontWeight.Normal, color = if (isSel) Gyp.ink else Gyp.t2, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResetRow(label: String, accent: Color, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxWidth().height(48.dp).clickableNoRipple(onClick).padding(horizontal = 14.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(imageVector = GuangYueIcons.RotateCcw, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
+            Box(Modifier.width(8.dp))
+            Text(label, fontSize = 13.sp, color = accent)
+        }
     }
 }

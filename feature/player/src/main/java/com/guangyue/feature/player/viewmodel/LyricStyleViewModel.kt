@@ -70,6 +70,16 @@ class LyricStyleViewModel @Inject constructor(
     private val _dioramaTuning = MutableStateFlow(preferences.dioramaTuning)
     val dioramaTuning: StateFlow<DioramaTuning> = _dioramaTuning.asStateFlow()
 
+    /** 底部字幕设置（Folia 歌词样式窗口「字幕」页）。 */
+    private val _subtitle = MutableStateFlow(preferences.subtitleSettings)
+    val subtitle: StateFlow<com.guangyue.core.lyrics.SubtitleSettings> = _subtitle.asStateFlow()
+
+    fun updateSubtitle(s: com.guangyue.core.lyrics.SubtitleSettings) {
+        val safe = com.guangyue.core.lyrics.SubtitleSettings.sanitize(s)
+        _subtitle.value = safe
+        viewModelScope.launch { preferences.subtitleSettings = safe }
+    }
+
     fun updateDiorama(t: DioramaTuning) {
         val safe = DioramaTuning.sanitize(t)
         _dioramaTuning.value = safe

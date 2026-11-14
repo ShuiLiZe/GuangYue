@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -181,6 +182,12 @@ internal fun LyricSubtitleOverlay(
     viewportWidthDp: Float,
     fontFamily: FontFamily,
     modifier: Modifier = Modifier,
+    /** Folia subtitleOverlayOpacity（0.2–1，默认 0.6）。 */
+    opacity: Float = SUBTITLE_OVERLAY_OPACITY,
+    /** Folia subtitleOverlayBackground：字幕背后的扩散光晕。 */
+    background: Boolean = true,
+    /** Folia subtitleUpcomingLyricsBlur：下一句（预告 / next 行）加 1px 模糊。 */
+    upcomingBlur: Boolean = true,
 ) {
     if (!content.visible || (content.rows.isEmpty() && content.previews.isEmpty())) return
 
@@ -208,7 +215,9 @@ internal fun LyricSubtitleOverlay(
     // V0e-fix2：整层透明度只作为「系数」参与，不再用 graphicsLayer/Modifier.alpha 做节点级 alpha 图层。
     // alpha < 1 的图层会把节点离屏合成、并裁剪到节点边界，drawBehind 里超出节点的上下外扩被切掉，
     // 暗区上下就成了两条直线（左右方向因为节点还有余量，看起来是渐隐）。
-    val overlayAlpha = enter.value.coerceIn(0f, 1f) * SUBTITLE_OVERLAY_OPACITY
+    val overlayAlpha = enter.value.coerceIn(0f, 1f) * opacity.coerceIn(0.2f, 1f)
+    // Folia getUpcomingLyricsClassName：blur-[1px]。只模糊单个文字节点（Unbounded 不裁边），不碰背景层。
+    val upcomingMod = if (upcomingBlur) Modifier.blur(1.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded) else Modifier
     val enterShiftY = with(LocalDensity.current) { (1f - enter.value) * 20.dp.toPx() }
 
     Box(
@@ -230,7 +239,7 @@ internal fun LyricSubtitleOverlay(
                 val textHeight = if (contentHeightPx > 0) contentHeightPx.toFloat() else size.height
                 val boxWidth = textWidth + padX * 2f
                 val boxHeight = textHeight + padY * 2f
-                translate(top = enterShiftY) {
+                if (background) translate(top = enterShiftY) {
                     drawEllipseScrim(
                         color = scrimColor,
                         width = boxWidth,
@@ -255,6 +264,8 @@ internal fun LyricSubtitleOverlay(
             if (content.rows.isNotEmpty()) {
                 content.rows.forEachIndexed { index, row ->
                     val secondary = index > 0
+                    // Folia：next 行单行截断并吃下一句模糊，其余行可换行。
+                    val upcomingRow = row.source == SubtitleRowSource.Next
                     Text(
                         text = row.text,
                         color = secondaryColor.copy(
@@ -266,9 +277,9 @@ internal fun LyricSubtitleOverlay(
                         textAlign = TextAlign.Center,
                         // 不加文字阴影：Shadow 会在字形外按 blurRadius 铺一层近似矩形，就是审图里的「硬边方块」。
                         style = TextStyle(),
-                        maxLines = 2,
+                        maxLines = if (upcomingRow) 1 else 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = if (secondary) SUBTITLE_SECONDARY_GAP else 0.dp),
+                        modifier = Modifier.padding(top = if (secondary) SUBTITLE_SECONDARY_GAP else 0.dp).then(if (upcomingRow) upcomingMod else Modifier),
                     )
                 }
             } else {
@@ -284,6 +295,7 @@ internal fun LyricSubtitleOverlay(
                         style = TextStyle(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = upcomingMod,
                     )
                 }
             }

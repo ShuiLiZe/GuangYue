@@ -171,6 +171,8 @@ fun LyricFlowScreen(
     claddaghTuning: com.guangyue.core.lyrics.CladdaghTuning = com.guangyue.core.lyrics.CladdaghTuning.DEFAULT,
     /** 「镜台」调参（Folia diorama/tuning.ts）。 */
     dioramaTuning: com.guangyue.core.lyrics.DioramaTuning = com.guangyue.core.lyrics.DioramaTuning.DEFAULT,
+    /** 底部字幕设置（Folia 歌词样式窗口「字幕」页）。 */
+    subtitleSettings: com.guangyue.core.lyrics.SubtitleSettings = com.guangyue.core.lyrics.SubtitleSettings.DEFAULT,
     /** V2d：「倾诉」调参（Folia tilt/tuning.ts）。 */
     tiltTuning: com.guangyue.core.lyrics.TiltTuning = com.guangyue.core.lyrics.TiltTuning.DEFAULT,
     /** V2a：「云阶」调参（Folia partita/tuning.ts）。 */
@@ -206,11 +208,19 @@ fun LyricFlowScreen(
     // 浮名不画字幕层：Folia 的浮名把整首歌的每一行都排进文章里自己打印，
     // 当前句若再让字幕层画一遍，就是同一句话在屏上出现两遍、且字幕层是居中小字，
     // 会和镜头里的放大正文抢视觉（实拍里表现为「浮名画了一遍、居中又画了一遍」）。
-    val subtitleContent = remember(activeLine, kernelLines, currentIndex, emptyKind, lyricStyle) {
+    val subtitleContent = remember(activeLine, kernelLines, currentIndex, emptyKind, lyricStyle, subtitleSettings.hidden, subtitleSettings.layout) {
         resolveSubtitleOverlayContent(
             activeLine = activeLine,
             nextLines = kernelLines.drop(currentIndex.coerceAtLeast(0) + 1),
-            showText = emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET && lyricStyle != LyricStyle.PENDOLO && lyricStyle != LyricStyle.NEBBIA && lyricStyle != LyricStyle.HANABI && lyricStyle != LyricStyle.TEMPERA,
+            layout = subtitleSettings.layout.map { r ->
+                when (r) {
+                    com.guangyue.core.lyrics.SubtitleLayout.CURRENT -> SubtitleRowSource.Current
+                    com.guangyue.core.lyrics.SubtitleLayout.NEXT -> SubtitleRowSource.Next
+                    else -> SubtitleRowSource.Translation
+                }
+            },
+            // Folia hideTranslationSubtitle：隐藏底部字幕层。
+            showText = !subtitleSettings.hidden && emptyKind == null && lyricStyle != LyricStyle.FUME && lyricStyle != LyricStyle.STILL && lyricStyle != LyricStyle.MONET && lyricStyle != LyricStyle.PENDOLO && lyricStyle != LyricStyle.NEBBIA && lyricStyle != LyricStyle.HANABI && lyricStyle != LyricStyle.TEMPERA,
             // R5：绘光画译文（Folia VisualizerSubtitleOverlay 在绘光上照常显示，基准图里是「translation 12」）。
         )
     }
@@ -833,6 +843,9 @@ fun LyricFlowScreen(
                 scrimColor = theme.background,
                 viewportWidthDp = LocalConfiguration.current.screenWidthDp.toFloat(),
                 fontFamily = GuangYueDesign.Sans,
+                opacity = subtitleSettings.opacity.toFloat(),
+                background = subtitleSettings.background,
+                upcomingBlur = subtitleSettings.upcomingBlur,
                 // 横屏屏高只有 ~400dp，竖屏那套 136dp 预留会把字幕顶到屏幕正中、压在正文上（用户 11-10 实拍）；
                 // 横屏照 Folia subtitleBottomPx 紧贴底栏之上。
                 modifier = Modifier.padding(bottom = if (immersiveLandscape) 4.dp else SUBTITLE_BAR_RESERVE + SUBTITLE_STAGE_RESERVE),

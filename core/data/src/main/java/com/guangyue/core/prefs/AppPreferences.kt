@@ -134,6 +134,28 @@ class AppPreferences @Inject constructor(
                 .apply()
         }
 
+    /** 底部字幕（Folia subtitle_overlay_layout / 透明度 / 背景 / 下一句模糊 / 隐藏底部字幕层）。 */
+    var subtitleSettings: com.guangyue.core.lyrics.SubtitleSettings
+        get() = com.guangyue.core.lyrics.SubtitleSettings.sanitize(
+            com.guangyue.core.lyrics.SubtitleSettings(
+                hidden = prefs.getBoolean(KEY_SUBTITLE_HIDDEN, false),
+                layout = com.guangyue.core.lyrics.SubtitleLayout.decode(prefs.getString(KEY_SUBTITLE_LAYOUT, null)),
+                opacity = prefs.getFloat(KEY_SUBTITLE_OPACITY, 0.6f).toDouble(),
+                background = prefs.getBoolean(KEY_SUBTITLE_BACKGROUND, true),
+                upcomingBlur = prefs.getBoolean(KEY_SUBTITLE_UPCOMING_BLUR, true),
+            ),
+        )
+        set(v) {
+            val s = com.guangyue.core.lyrics.SubtitleSettings.sanitize(v)
+            prefs.edit()
+                .putBoolean(KEY_SUBTITLE_HIDDEN, s.hidden)
+                .putString(KEY_SUBTITLE_LAYOUT, com.guangyue.core.lyrics.SubtitleLayout.encode(s.layout))
+                .putFloat(KEY_SUBTITLE_OPACITY, s.opacity.toFloat())
+                .putBoolean(KEY_SUBTITLE_BACKGROUND, s.background)
+                .putBoolean(KEY_SUBTITLE_UPCOMING_BLUR, s.upcomingBlur)
+                .apply()
+        }
+
     /** 「镜台」调参（Folia diorama/tuning.ts storage.key = 'diorama_tuning'）：整组存一个串，读回夹范围。 */
     var dioramaTuning: DioramaTuning
         get() = DioramaTuning.decode(prefs.getString(KEY_DIORAMA_TUNING, null))
@@ -240,6 +262,11 @@ class AppPreferences @Inject constructor(
         const val KEY_CLASSIC_SPACING = "classic_tuning_spacing"
 
         const val KEY_DIORAMA_TUNING = "diorama_tuning"
+        const val KEY_SUBTITLE_HIDDEN = "hide_player_translation_subtitle"
+        const val KEY_SUBTITLE_LAYOUT = "subtitle_overlay_layout"
+        const val KEY_SUBTITLE_OPACITY = "subtitle_overlay_opacity"
+        const val KEY_SUBTITLE_BACKGROUND = "subtitle_overlay_background"
+        const val KEY_SUBTITLE_UPCOMING_BLUR = "subtitle_upcoming_lyrics_blur"
         const val KEY_CL_FOCUS = "claddagh_tuning_focus"
         const val KEY_CL_RADIUS = "claddagh_tuning_radius"
         const val KEY_CL_TILT = "claddagh_tuning_tilt"

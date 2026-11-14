@@ -373,9 +373,12 @@ fun V0cStage(
                 scene = when (style) { "machikonbini" -> "konbini"; "machistation" -> "station"; else -> "kowloon" },
                 modifier = Modifier.fillMaxSize(),
             )
-        } else if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama") {
+        } else if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama" || style == "sheetsubtitle") {
+            val subtitleProbe = remember {
+                androidx.compose.runtime.mutableStateOf(com.guangyue.core.lyrics.SubtitleSettings(layout = listOf("current", "next")))
+            }
             CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
-                if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama") {
+                if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama" || style == "sheetsubtitle") {
                     LyricFlowScreen(
                         lyrics = remember { parseLrc(LRC) },
                         currentIndex = 1,
@@ -395,7 +398,9 @@ fun V0cStage(
                         classicTuning = ClassicTuning(),
                         coverUrl = null,
                         glowStrengthOverride = V0dGlowOverride,
-                        lyricStyle = LyricStyle.FUME,
+                        // 2026-11-14 sheetsubtitle：底下流光 + 双行字幕（当前句 + 下一句），对照「字幕」页设置。
+                        lyricStyle = if (style == "sheetsubtitle") LyricStyle.CLASSIC else LyricStyle.FUME,
+                        subtitleSettings = if (style == "sheetsubtitle") subtitleProbe.value else com.guangyue.core.lyrics.SubtitleSettings.DEFAULT,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -422,6 +427,9 @@ fun V0cStage(
                         },
                         fumeName = v0cString(R.string.lyrics_style_fume),
                         partitaName = v0cString(R.string.lyrics_style_partita),
+                        subtitle = subtitleProbe.value,
+                        onSubtitle = if (style == "sheetsubtitle") ({ v -> subtitleProbe.value = v }) else null,
+                        initialSection = if (style == "sheetsubtitle") 1 else 0,
                     )
                 }
             }
