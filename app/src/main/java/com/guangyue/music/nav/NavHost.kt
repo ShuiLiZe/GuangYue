@@ -100,6 +100,7 @@ fun GuangYueNavHost(
     // 0.0.27：首页样式（封面墙 / 3D 滑卡）。取外壳的 ShellViewModel（这里还在 NavHost 外，作用域是 Activity，与 MainActivity 同一个）。
     val shellVm: com.guangyue.music.ShellViewModel = androidx.hilt.navigation.compose.hiltViewModel()
     val homeStyle by shellVm.homeStyle.collectAsStateWithLifecycle()
+    val gridCardStyle by shellVm.gridCardStyle.collectAsStateWithLifecycle()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val playbackState by playback.state.collectAsStateWithLifecycle()
 
@@ -201,6 +202,7 @@ fun GuangYueNavHost(
                         // 0.0.27：第二种首页样式「网格」（Folia 网格首页 Grid3DSlider：3D 滑卡），数据与回调同封面墙。
                         com.guangyue.music.ui.home.GridSliderHome(
                             sections = wallSections,
+                            polaroid = gridCardStyle != com.guangyue.core.prefs.GridCardStyles.IMAGE,
                             title = "广乐",
                             inkColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
                             groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
@@ -897,6 +899,14 @@ fun GuangYueNavHost(
                     shellVm.setHomeStyle(id)
                     // Folia notifications.homeLayoutGrid「首页布局已切换为…」。
                     com.guangyue.feature.library.design.StatusToasts.show("已切换为" + (HOME_STYLE_OPTIONS.firstOrNull { it.id == id }?.title ?: "") + "首页")
+                },
+                gridCardStyle = gridCardStyle.takeIf { homeStyle == com.guangyue.core.prefs.HomeStyles.GRID },
+                onPickGridCardStyle = { id ->
+                    shellVm.setGridCardStyle(id)
+                    // Folia notifications.cardStyleImage / cardStyleCard。
+                    com.guangyue.feature.library.design.StatusToasts.show(
+                        if (id == com.guangyue.core.prefs.GridCardStyles.IMAGE) "卡片样式已切换为纯图片封面" else "卡片样式已切换为拍立得卡片",
+                    )
                 },
                 versionName = com.guangyue.music.BuildConfig.VERSION_NAME,
             )

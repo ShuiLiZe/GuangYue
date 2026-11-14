@@ -253,7 +253,16 @@ class AppPreferences @Inject constructor(
         get() = prefs.getString(KEY_HOME_STYLE, HomeStyles.DEFAULT)?.takeIf { it == HomeStyles.WALL || it == HomeStyles.GRID } ?: HomeStyles.DEFAULT
         set(value) = prefs.edit().putString(KEY_HOME_STYLE, if (value == HomeStyles.WALL) HomeStyles.WALL else HomeStyles.GRID).apply()
 
+    /**
+     * 0.0.28：网格首页的卡片样式（Folia grid3dCardStyle，设置键 grid3d_card_style）：
+     * "card" = 拍立得卡片（默认，同 Folia）、"image" = 纯图片封面。
+     */
+    var gridCardStyle: String
+        get() = if (prefs.getString(KEY_GRID_CARD_STYLE, GridCardStyles.CARD) == GridCardStyles.IMAGE) GridCardStyles.IMAGE else GridCardStyles.CARD
+        set(value) = prefs.edit().putString(KEY_GRID_CARD_STYLE, if (value == GridCardStyles.IMAGE) GridCardStyles.IMAGE else GridCardStyles.CARD).apply()
+
     private companion object {
+        const val KEY_GRID_CARD_STYLE = "grid3d_card_style"
         const val KEY_VIS_BACKGROUND = "visualizer_background_mode"
         const val KEY_HOME_STYLE = "library_home_style"
         const val FILE = "guangyue_prefs"
@@ -314,4 +323,12 @@ object HomeStyles {
     const val GRID = "grid"
     /** 与 Folia / folia-sonnet 的 DEFAULT_LIBRARY_SUITE_ID 一致。 */
     const val DEFAULT = GRID
+}
+
+/** 0.0.28：网格首页卡片样式的落盘取值（[AppPreferences.gridCardStyle]）。 */
+object GridCardStyles {
+    /** 拍立得卡片（默认）。 */
+    const val CARD = "card"
+    /** 纯图片封面。 */
+    const val IMAGE = "image"
 }

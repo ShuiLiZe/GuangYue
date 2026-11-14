@@ -45,4 +45,14 @@ class ShellViewModel @Inject constructor(
         preferences.homeStyleId = id
         _homeStyle.value = preferences.homeStyleId
     }
+
+    /** 0.0.28：网格首页卡片样式（[com.guangyue.core.prefs.GridCardStyles]）。 */
+    private val _gridCardStyle = MutableStateFlow(preferences.gridCardStyle)
+    val gridCardStyle: StateFlow<String> = _gridCardStyle.asStateFlow()
+
+    fun setGridCardStyle(id: String) {
+        if (_gridCardStyle.value == id) return
+        preferences.gridCardStyle = id
+        _gridCardStyle.value = preferences.gridCardStyle
+    }
 }

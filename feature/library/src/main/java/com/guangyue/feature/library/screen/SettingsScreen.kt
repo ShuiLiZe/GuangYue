@@ -79,6 +79,9 @@ fun SettingsScreen(
     homeStyles: List<HomeStyleOption> = emptyList(),
     homeStyle: String = "",
     onPickHomeStyle: (String) -> Unit = {},
+    /** 0.0.28：网格首页的歌单卡片样式（Folia grid3dCardStyle）；null 不显示（只在网格首页时显示，同 Folia GRID_ONLY）。 */
+    gridCardStyle: String? = null,
+    onPickGridCardStyle: (String) -> Unit = {},
 ) {
     var query by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
     var page by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(SettingsPage.APPEARANCE) }
@@ -98,6 +101,11 @@ fun SettingsScreen(
             // Folia「设置 → 界面设置 → 资料库界面」（options.librarySuite / librarySuiteDesc）；手机设置没有「界面设置」页，放在外观里。
             add(SettingItem(SettingsPage.APPEARANCE, "资料库", "资料库界面", "首页用哪套界面浏览。切换时保留播放队列。", icon(GuangYueIcons.LayoutGrid),
                 below = { HomeStylePicker(homeStyles, homeStyle, onPickHomeStyle) }))
+        }
+        if (gridCardStyle != null) {
+            // Folia「设置 → 首页 → 歌单卡片样式」（options.grid3dCardStyle / grid3dCardStyleDesc，选项顺序 image、card）。
+            add(SettingItem(SettingsPage.APPEARANCE, "资料库", "歌单卡片样式", "选择首页歌单卡片样式：纯图片封面或经典的拍立得文本卡片。", icon(GuangYueIcons.LayoutGrid),
+                below = { FlowStyleChips(listOf("image" to "纯图片封面", "card" to "拍立得卡片"), gridCardStyle, onPickGridCardStyle) }))
         }
         if (lyricStyles.isNotEmpty()) {
             add(SettingItem(SettingsPage.PLAYER, "歌词动画", "歌词样式", "播放舞台上的歌词画法；各样式的参数在舞台的样式弹层里调", icon(GuangYueIcons.Sparkles),
