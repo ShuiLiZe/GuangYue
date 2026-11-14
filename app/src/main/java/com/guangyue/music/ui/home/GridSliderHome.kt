@@ -598,7 +598,6 @@ private fun GridCaption(
             )
             Text(
                 GridSliderModel.secondary(tile), color = ink.copy(alpha = 0.5f), fontSize = 12.sp, maxLines = 1,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                 overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp),
             )
         }

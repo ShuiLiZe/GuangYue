@@ -321,9 +321,8 @@ fun GuangYueNavHost(
                     },
                     miniPlayer = miniPlayer,
                     // 网格首页照 folia-sonnet 手机版不挂底栏，只让出系统导航条的高度。
-                    bottomBar = if (homeStyle == com.guangyue.core.prefs.HomeStyles.GRID) {
-                        { androidx.compose.foundation.layout.Spacer(Modifier.fillMaxWidth().background(androidx.compose.material3.MaterialTheme.colorScheme.background).windowInsetsBottomHeight(androidx.compose.foundation.layout.WindowInsets.navigationBars)) }
-                    } else bottomBar,
+                    // 网格首页背景铺到系统导航条下面（Folia 整屏背景）；迷你条在时它自己让开导航条。
+                    bottomBar = if (homeStyle == com.guangyue.core.prefs.HomeStyles.GRID) null else bottomBar,
                 )
                 return@composable
             }
