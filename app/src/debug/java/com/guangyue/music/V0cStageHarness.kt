@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -270,7 +272,30 @@ fun V0cStage(
         // `v0c_style sheet` 时先铺 [LyricFlowScreen] 的浮名页（柔和渐变水面），再把弹层盖在上面；
         // `v0c_style sheetbare` 仍是旧的「只有弹层」形态。
         // 2026-11-12：町景（machi）3D 舞台起步，只在取证页（未进歌词样式列表）。
-        if (style == "collection" || style == "collectionfilter" || style == "collectionwall" || style == "artistwall" || style == "artistlist" || style == "artistalbums" || style == "artistbio") {
+        if (style == "minibar") {
+            // 2026-11-14：浮动胶囊取证（竖屏三行 / 横屏紧凑两行，folia-sonnet 横屏档）。底部对齐，同 ShellColumn 的左右 / 下边距。
+            androidx.compose.foundation.layout.Box(
+                Modifier.fillMaxSize().background(Color(0xFF18181B)).navigationBarsPadding(),
+                contentAlignment = androidx.compose.ui.Alignment.BottomCenter,
+            ) {
+                com.guangyue.feature.library.home.FoliaMiniPlayer(
+                    title = "晴天 - 周杰伦（一首名字很长很长的测试歌曲用来看截断）",
+                    subtitle = "周杰伦",
+                    artwork = null,
+                    progress = 0.37f,
+                    isPlaying = true,
+                    onTogglePlay = {},
+                    onOpen = {},
+                    onNext = {},
+                    positionMs = 99_000L,
+                    durationMs = 269_000L,
+                    modeIcon = com.guangyue.feature.library.design.icons.GuangYueIcons.ListMusic,
+                    modeLabel = "顺序播放",
+                    onCycleMode = {},
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                )
+            }
+        } else         if (style == "collection" || style == "collectionfilter" || style == "collectionwall" || style == "artistwall" || style == "artistlist" || style == "artistalbums" || style == "artistbio") {
             // 2026-11-14：集合层过滤取证（缝里「过滤当前页」）。collection = 列表无过滤；collectionfilter = 列表 + 过滤词「周」；
             // collectionwall = 墙 + 过滤词「beat」。
             val names = listOf(

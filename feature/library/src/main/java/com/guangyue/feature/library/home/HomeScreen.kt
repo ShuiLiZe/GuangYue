@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -83,6 +85,10 @@ fun FoliaMiniPlayer(
     modeLabel: String = "",
     onCycleMode: (() -> Unit)? = null,
 ) {
+    if (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < MINI_COMPACT_SCREEN_DP) {
+        FoliaMiniPlayerCompact(title, progress, isPlaying, onTogglePlay, onOpen, modifier, onNext, playLabel, pauseLabel, nextLabel, positionMs, durationMs, modeIcon, modeLabel, onCycleMode)
+        return
+    }
     val shape = RoundedCornerShape(30.dp)
     Column(
         modifier = modifier
@@ -151,10 +157,100 @@ fun FoliaMiniPlayer(
     }
 }
 
+/** 屏高低于此值（dp）时胶囊用横屏紧凑形态（360dp 宽机横屏约 336dp 高）。 */
+const val MINI_COMPACT_SCREEN_DP = 480
+
+/** 横屏胶囊宽度上限：folia-sonnet androidPhoneFit 横屏 `width: min(78vw, 26rem)`（26rem = 416px）。 */
+private const val MINI_COMPACT_MAX_WIDTH_DP = 416
+
+/**
+ * 横屏紧凑胶囊（2026-11-14，参照 folia-sonnet androidPhoneFit.css 横屏档）：手机横屏又宽又矮，竖屏那套三行胶囊
+ * 占去约四成屏高、还横贯整屏。改成居中、宽度封顶 min(78%, 416dp) 的两行：
+ * 第一行「模式槽 · 歌名（12→14sp，点进播放舞台）· 播放键 · 下一首」，第二行「时间 · 进度线 · 时长」；行距收到 0。
+ * 播放键视觉 40dp（Folia 横屏 34px 再放大到广乐触控规范），触控区仍 48dp。
+ */
 @Composable
-private fun SlotKey(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+private fun FoliaMiniPlayerCompact(
+    title: String,
+    progress: Float,
+    isPlaying: Boolean,
+    onTogglePlay: () -> Unit,
+    onOpen: () -> Unit,
+    modifier: Modifier,
+    onNext: (() -> Unit)?,
+    playLabel: String,
+    pauseLabel: String,
+    nextLabel: String,
+    positionMs: Long,
+    durationMs: Long,
+    modeIcon: androidx.compose.ui.graphics.vector.ImageVector?,
+    modeLabel: String,
+    onCycleMode: (() -> Unit)?,
+) {
+    val shape = RoundedCornerShape(28.dp)
+    val screenW = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+    val maxW = minOf(screenW * 0.78f, MINI_COMPACT_MAX_WIDTH_DP.toFloat()).dp
+    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier
+                .widthIn(max = maxW)
+                .fillMaxWidth()
+                .padding(vertical = GySpace.xs)
+                .androidxShadow(shape)
+                .clip(shape)
+                .glassPanel(corner = 28.dp)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+        ) {
+            Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (modeIcon != null && onCycleMode != null) SlotKey(modeIcon, modeLabel, onCycleMode, touch = 48.dp)
+                Text(
+                    text = title,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Gyp.ink,
+                    fontFamily = GuangYueDesign.Sans,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onOpen)
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .padding(horizontal = 6.dp),
+                )
+                Box(
+                    Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onTogglePlay),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(Modifier.size(40.dp).clip(CircleShape).background(Gyp.ink), contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (isPlaying) GuangYueIcons.Pause else GuangYueIcons.Play,
+                            contentDescription = if (isPlaying) pauseLabel else playLabel,
+                            tint = Gyp.page,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                }
+                if (onNext != null) SlotKey(GuangYueIcons.SkipForward, nextLabel, onNext, touch = 48.dp)
+            }
+            Row(Modifier.fillMaxWidth().height(16.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(miniTime(positionMs), fontSize = 11.sp, color = Gyp.ink.copy(alpha = 0.6f), fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                Spacer(Modifier.width(8.dp))
+                ProgressLine(progress = progress, modifier = Modifier.weight(1f), fill = Gyp.ink)
+                Spacer(Modifier.width(8.dp))
+                Text(miniTime(durationMs), fontSize = 11.sp, color = Gyp.ink.copy(alpha = 0.6f), fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SlotKey(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, touch: androidx.compose.ui.unit.Dp = 40.dp) {
     Box(
-        Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onClick),
+        Modifier.size(touch).clip(CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = label, tint = Gyp.ink.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
