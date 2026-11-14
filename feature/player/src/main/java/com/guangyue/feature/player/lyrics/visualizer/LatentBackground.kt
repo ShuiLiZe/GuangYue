@@ -53,6 +53,12 @@ internal object LatentTuning {
     const val DITHERING_SPEED = 0.1f
     const val DITHERING_SIZE = 2.5f
     const val DITHERING_OPACITY = 0.55f
+    /**
+     * 手机上实际用的点阵不透明度。2026-11-15 与模拟器上的 Folia 手机版（folia-sonnet）并排看：Folia 的点阵在手机上
+     * 只是隐约一层（WebView 里 soft-light 混合 + 画布再被放大一次，对比被吃掉不少），同样 0.55 在 AGSL 里
+     * 直接画到屏幕，方块明显得多（用户反馈「都是方块」）。按观感压到 0.28。
+     */
+    const val DITHERING_OPACITY_PHONE = 0.28f
     const val MESH_SPEED = 0.3f
     const val MESH_DISTORTION = 0.8f
     const val MESH_SWIRL = 0.1f
@@ -269,7 +275,7 @@ private fun LatentBackgroundImpl(
         dither.setFloatUniform("u_colorBack", back.red, back.green, back.blue, back.alpha)
         dither.setFloatUniform("u_colorFront", front.red, front.green, front.blue, front.alpha)
         scale(1.015f) {
-            drawRect(ditherBrush, alpha = LatentTuning.DITHERING_OPACITY, blendMode = BlendMode.Softlight)
+            drawRect(ditherBrush, alpha = LatentTuning.DITHERING_OPACITY_PHONE, blendMode = BlendMode.Softlight)
         }
 
         drawRect(blended[0], alpha = LatentTuning.OVERLAY_OPACITY)

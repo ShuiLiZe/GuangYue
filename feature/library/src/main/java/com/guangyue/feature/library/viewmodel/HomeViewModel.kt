@@ -637,9 +637,21 @@ class PluginViewModel @Inject constructor(
     private val manager: PluginManager,
     private val checker: com.guangyue.core.plugin.PluginHealthChecker,
     private val prefs: AppPreferences,
+    private val bridge: com.guangyue.core.plugin.MusicPluginBridge,
 ) : ViewModel() {
 
     val plugins: StateFlow<List<PluginMeta>> = manager.plugins
+
+    /** 插件「登录」：声明的用户变量 + 已保存的值（MusicFree userVariables / env.getUserVariables）。 */
+    suspend fun accountOf(plugin: PluginMeta): Pair<List<com.guangyue.core.plugin.runtime.PluginUserVariable>, Map<String, String>> =
+        bridge.declaredUserVariables(plugin.id) to bridge.readUserVariables(plugin.id)
+
+    fun saveAccount(plugin: PluginMeta, values: Map<String, String>) {
+        viewModelScope.launch {
+            bridge.saveUserVariables(plugin.id, values)
+            say(if (values.values.any { it.isNotBlank() }) "已保存 ${plugin.displayName} 的登录信息" else "已清除 ${plugin.displayName} 的登录信息")
+        }
+    }
 
     /** 已记录的订阅源。 */
     val subscriptions: StateFlow<List<com.guangyue.core.plugin.Subscription>> = manager.subscriptions

@@ -90,6 +90,8 @@ class MusicPluginBridge @Inject constructor(
             val code = readCode(meta.id) ?: throw PluginRuntimeException("插件文件缺失，请重新安装")
 
             val rt = PluginRuntime(meta, code, http, preludeProvider)
+            val varsId = meta.id
+            rt.userVariables = { readUserVariables(varsId) }
             rt.onLog = { level, msg -> onLog?.invoke(key, level, msg) }
             rt.install()
             runtimes[key] = rt
@@ -410,6 +412,34 @@ class MusicPluginBridge @Inject constructor(
         )
         builder.toString()
     }
+
+    // ------------------------------------------------------------------ 用户变量（插件「登录」）
+
+    private fun userVarsFile(id: String) = File(context.filesDir, "plugins/$id/uservars.json")
+
+    /** 已保存的用户变量（MusicFree env.getUserVariables 的值）。 */
+    fun readUserVariables(pluginId: String): Map<String, String> {
+        val id = resolveMeta(pluginId)?.id ?: pluginId
+        val f = userVarsFile(id)
+        if (!f.isFile) return emptyMap()
+        return runCatching {
+            Json2.parse(f.readText()).asObj()?.mapNotNull { (k, v) -> v.asStr()?.let { k to it } }?.toMap()
+        }.getOrNull() ?: emptyMap()
+    }
+
+    /** 保存用户变量；空值的键删掉。插件每次调用现取，清掉结果缓存即可生效。 */
+    suspend fun saveUserVariables(pluginId: String, values: Map<String, String>) = withContext(Dispatchers.IO) {
+        val id = resolveMeta(pluginId)?.id ?: pluginId
+        val f = userVarsFile(id)
+        f.parentFile?.mkdirs()
+        val kept = values.filterValues { it.isNotBlank() }
+        f.writeText(JsonObject(kept.mapValues { JsonPrimitive(it.value.trim()) }).toString())
+        cache.clear()
+    }
+
+    /** 插件声明的用户变量（没声明 = 这个平台不需要登录）。 */
+    suspend fun declaredUserVariables(pluginId: String): List<com.guangyue.core.plugin.runtime.PluginUserVariable> =
+        runCatching { invoke(pluginId) { declaredUserVariables() } }.getOrDefault(emptyList())
 
     fun releaseAll() {
         synchronized(runtimes) {

@@ -65,6 +65,12 @@ class PluginRuntime(
 
 
 
+    /**
+     * MusicFree `env.getUserVariables()`：插件声明的「用户变量」（多为 cookie / token / 账号，等于该平台的登录）。
+     * 每次调用现取，改完不必重建运行时。
+     */
+    var userVariables: () -> Map<String, String> = { emptyMap() }
+
     /** Called for anything the plugin logs through `console.*`. */
     var onLog: ((level: String, message: String) -> Unit)? = null
 
@@ -96,6 +102,10 @@ class PluginRuntime(
                 // `JS_ExecutePendingJob` 才能安全推进。若从普通 Kotlin 线程直接调 native
                 // （0.0.7 试过的方案），会永久卡在 `NonPI::MutexLockWithTimeout` 的 futex 上。
                 if (drainOneJob(runtime)) 1 else 0
+            }
+
+            runtime.function("__gy_uservars") { _ ->
+                JsonObject(runCatching { userVariables() }.getOrDefault(emptyMap()).mapValues { JsonPrimitive(it.value) }).toString()
             }
 
             runtime.function("__gy_log") { args ->
@@ -149,6 +159,15 @@ class PluginRuntime(
             val bootType = step("bridge-probe.js") { read(runtime, "typeof globalThis.__gy_boot", "bridge-probe.js") }
             if (bootType != "\"function\"") {
                 throw PluginRuntimeException("宿主桥未就绪：typeof __gy_boot = $bootType")
+            }
+            // MusicFree 宿主给插件的 env（getUserVariables / appVersion / os / lang），插件按自由变量 `env` 取。
+            step("env.js") {
+                exec(
+                    runtime,
+                    "globalThis.env = { getUserVariables: function () { try { return JSON.parse(__gy_uservars()) || {}; } catch (e) { return {}; } }, " +
+                        "appVersion: '0.7.0', os: 'android', lang: 'zh-CN' };",
+                    "env.js",
+                )
             }
 
         // 2) the shared prelude bundle (cheerio / crypto-js / dayjs / qs / he / big-integer)
@@ -233,6 +252,19 @@ class PluginRuntime(
         val text = (data as? JsonPrimitive)?.takeIf { it.isString }?.content
             ?: return data ?: JsonNull
         return Json2.parse(text) ?: JsonNull
+    }
+
+    /** 插件声明的用户变量（MusicFree `userVariables: [{ key, name, hint }]`）；没声明返回空表。 */
+    fun declaredUserVariables(): List<PluginUserVariable> {
+        val runtime = qjs ?: return emptyList()
+        val raw = runCatching {
+            read(runtime, "(function(){var v = globalThis.__plugin && globalThis.__plugin.userVariables; return Array.isArray(v) ? v : [];})()", "uservars.js")
+        }.getOrNull() ?: return emptyList()
+        return Json2.parse(raw).asArr()?.mapNotNull { el ->
+            val o = el.asObj() ?: return@mapNotNull null
+            val key = o["key"]?.asStr()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            PluginUserVariable(key, o["name"]?.asStr()?.takeIf { it.isNotBlank() } ?: key, o["hint"]?.asStr())
+        } ?: emptyList()
     }
 
     fun probeFunctions(): Set<String> {
@@ -852,3 +884,6 @@ class PluginRuntimeException(
     class Missing(val fn: String, message: String) : Exception(message)
 
 }
+
+/** 插件声明的一个用户变量（MusicFree IUserVariable）。 */
+data class PluginUserVariable(val key: String, val name: String, val hint: String? = null)

@@ -118,7 +118,11 @@ fun PluginManagerScreen(
     onToggleHideUnavailable: () -> Unit = {},
     /** 打开「取链源」（洛雪自定义源）管理页。 */
     onOpenLxSources: (() -> Unit)? = null,
+    /** 插件「登录」：读声明的用户变量与已存值；null = 不提供登录入口。 */
+    loadAccount: (suspend (PluginMeta) -> Pair<List<com.guangyue.core.plugin.runtime.PluginUserVariable>, Map<String, String>>)? = null,
+    onSaveAccount: (PluginMeta, Map<String, String>) -> Unit = { _, _ -> },
 ) {
+    var accountFor by remember { mutableStateOf<PluginMeta?>(null) }
     val picker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri -> if (uri != null) onInstallUri(uri) }
@@ -197,6 +201,7 @@ fun PluginManagerScreen(
                             canMoveDown = index < shown.lastIndex,
                             onSelect = { onSelectSource(plugin) },
                             onCheckUpdate = { onCheckUpdate(plugin) },
+                            onAccount = if (loadAccount != null) ({ accountFor = plugin }) else null,
                             onDelete = { onDelete(plugin) },
                             onMoveUp = { onMove(plugin, plugins.indexOfFirst { it.id == plugin.id } - 1) },
                             onMoveDown = { onMove(plugin, plugins.indexOfFirst { it.id == plugin.id } + 1) },
@@ -303,6 +308,16 @@ fun PluginManagerScreen(
         }
     }
 
+    val acc = accountFor
+    if (acc != null && loadAccount != null) {
+        AccountDialog(
+            plugin = acc,
+            load = loadAccount,
+            onSave = { values -> onSaveAccount(acc, values); accountFor = null },
+            onDismiss = { accountFor = null },
+        )
+    }
+
     if (urlDialog) {
         UrlDialog(
             text = urlText,
@@ -335,6 +350,7 @@ private fun SourceRow(
     onDelete: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
+    onAccount: (() -> Unit)? = null,
 ) {
     var menuOpen by remember(plugin.id) { mutableStateOf(false) }
     var detailOpen by remember(plugin.id) { mutableStateOf(false) }
@@ -422,6 +438,7 @@ private fun SourceRow(
                     expanded = menuOpen,
                     onDismiss = { menuOpen = false },
                     items = buildList {
+                        if (onAccount != null) add(FoliaMenuItem("登录 / 账号", onAccount, GuangYueIcons.User))
                         add(FoliaMenuItem("检查更新", onCheckUpdate, GuangYueIcons.RefreshCw))
                         if (canMoveUp) add(FoliaMenuItem("上移一位", onMoveUp, GuangYueIcons.ChevronUp))
                         if (canMoveDown) add(FoliaMenuItem("下移一位", onMoveDown, GuangYueIcons.ChevronDown))
@@ -615,6 +632,71 @@ private fun UrlDialog(
                 Spacer(Modifier.weight(1f))
                 FoliaButton(text = "取消", onClick = onDismiss, variant = FoliaButtonVariant.Quiet)
                 FoliaButton(text = "安装", onClick = onConfirm, variant = FoliaButtonVariant.Primary)
+            }
+        }
+    }
+}
+
+/**
+ * 插件「登录」弹层（MusicFree 的「用户变量」）：插件声明了哪些键（多为 cookie / token / 账号），就给哪几格。
+ * 没声明 = 这个平台不需要登录。值只存在本机（plugins/<id>/uservars.json），插件经 env.getUserVariables() 取。
+ */
+@Composable
+private fun AccountDialog(
+    plugin: PluginMeta,
+    load: suspend (PluginMeta) -> Pair<List<com.guangyue.core.plugin.runtime.PluginUserVariable>, Map<String, String>>,
+    onSave: (Map<String, String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var state by remember(plugin.id) { mutableStateOf<Pair<List<com.guangyue.core.plugin.runtime.PluginUserVariable>, Map<String, String>>?>(null) }
+    val values = remember(plugin.id) { androidx.compose.runtime.mutableStateMapOf<String, String>() }
+    androidx.compose.runtime.LaunchedEffect(plugin.id) {
+        val r = load(plugin)
+        values.putAll(r.second)
+        state = r
+    }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .widthIn(min = 280.dp)
+                .clip(RoundedCornerShape(GyRadius.card))
+                .background(Gyp.menu)
+                .padding(GySpace.pageH),
+            verticalArrangement = Arrangement.spacedBy(GySpace.m),
+        ) {
+            Text(
+                text = "登录 ${plugin.displayName}",
+                fontSize = GyText.title,
+                lineHeight = GyText.titleHeight,
+                fontWeight = FontWeight.SemiBold,
+                color = Gyp.ink,
+                fontFamily = GuangYueDesign.Sans,
+            )
+            val st = state
+            when {
+                st == null -> Text("正在读取插件…", fontSize = 13.sp, color = Gyp.t2, fontFamily = GuangYueDesign.Sans)
+                st.first.isEmpty() -> Text(
+                    "这个音源没有需要填写的账号信息，直接就能用。" + if (!plugin.enabled) "（插件未启用时读不到，先在列表里选中它再试。）" else "",
+                    fontSize = 13.sp, color = Gyp.t2, fontFamily = GuangYueDesign.Sans,
+                )
+                else -> st.first.forEach { v ->
+                    Column(verticalArrangement = Arrangement.spacedBy(GySpace.xxs)) {
+                        Text(v.name, fontSize = 13.sp, color = Gyp.ink, fontFamily = GuangYueDesign.Sans)
+                        FoliaTextField(
+                            value = values[v.key].orEmpty(),
+                            onValueChange = { values[v.key] = it },
+                            placeholder = v.hint ?: v.key,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(GySpace.s), modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.weight(1f))
+                FoliaButton(text = "取消", onClick = onDismiss, variant = FoliaButtonVariant.Quiet)
+                if (!st?.first.isNullOrEmpty()) {
+                    FoliaButton(text = "保存", onClick = { onSave(values.toMap()) }, variant = FoliaButtonVariant.Primary)
+                }
             }
         }
     }

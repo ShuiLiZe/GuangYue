@@ -805,6 +805,8 @@ fun GuangYueNavHost(
             val hideUnavailable by vm.hideUnavailable.collectAsStateWithLifecycle()
             val ctx = LocalContext.current
             PluginManagerScreen(
+                loadAccount = { p -> vm.accountOf(p) },
+                onSaveAccount = { p, values -> vm.saveAccount(p, values) },
                 plugins = plugins,
                 busy = busy,
                 message = message,
