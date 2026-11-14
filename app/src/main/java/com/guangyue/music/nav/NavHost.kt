@@ -757,6 +757,7 @@ fun GuangYueNavHost(
             val partitaTuning by styleVm.partitaTuning.collectAsStateWithLifecycle()
             val tiltTuning by styleVm.tiltTuning.collectAsStateWithLifecycle()
             val claddaghTuning by styleVm.claddaghTuning.collectAsStateWithLifecycle()
+            val dioramaTuning by styleVm.dioramaTuning.collectAsStateWithLifecycle()
             val lyricOffset by vm.offsetMs.collectAsStateWithLifecycle()
             // V1a：当前样式（流光 / 浮名），同一份 styleVm —— 播放页切好、这里直接生效。
             val style by styleVm.style.collectAsStateWithLifecycle()
@@ -821,6 +822,7 @@ fun GuangYueNavHost(
                     partitaTuning = partitaTuning,
                     tiltTuning = tiltTuning,
                     claddaghTuning = claddaghTuning,
+                    dioramaTuning = dioramaTuning,
                     latentBackground = visBackground == "latent",
                 )
                 StagePanelHost(
@@ -869,6 +871,8 @@ fun GuangYueNavHost(
                         onTiltTuning = styleVm::updateTilt,
                         claddaghTuning = claddaghTuning,
                         onCladdaghTuning = styleVm::updateCladdagh,
+                        dioramaTuning = dioramaTuning,
+                        onDioramaTuning = styleVm::updateDiorama,
                     )
                 }
             }
@@ -973,6 +977,30 @@ internal fun lyricStyleStrings(): LyricStyleStrings {
         diorama = R.string.lyrics_style_diorama,
         tilt = R.string.lyrics_style_tilt,
         claddagh = R.string.lyrics_style_claddagh,
+        dioramaCameraSpeed = R.string.lyrics_style_dio_camera_speed,
+        dioramaMotionAmount = R.string.lyrics_style_dio_motion_amount,
+        dioramaAudioReactivity = R.string.lyrics_style_dio_audio_reactivity,
+        dioramaGlowEffect = R.string.lyrics_style_dio_glow_effect,
+        dioramaSoulEffect = R.string.lyrics_style_dio_soul_effect,
+        dioramaSoulActiveEffect = R.string.lyrics_style_dio_soul_active_effect,
+        dioramaGradientEffect = R.string.lyrics_style_dio_gradient_effect,
+        dioramaEffectStrength = R.string.lyrics_style_dio_effect_strength,
+        dioramaKeywordColoring = R.string.lyrics_style_dio_keyword_coloring,
+        dioramaGeometry = R.string.lyrics_style_dio_geometry,
+        dioramaGeometryMode = R.string.lyrics_style_dio_geometry_mode,
+        dioramaGeometryModeClouds = R.string.lyrics_style_dio_geometry_mode_clouds,
+        dioramaGeometryModeCorridor = R.string.lyrics_style_dio_geometry_mode_corridor,
+        dioramaGeometryStrands = R.string.lyrics_style_dio_geometry_strands,
+        dioramaGeometryBlobs = R.string.lyrics_style_dio_geometry_blobs,
+        dioramaGeometryRibbons = R.string.lyrics_style_dio_geometry_ribbons,
+        dioramaGeometryRings = R.string.lyrics_style_dio_geometry_rings,
+        dioramaParticleDensity = R.string.lyrics_style_dio_particle_density,
+        dioramaParticleScale = R.string.lyrics_style_dio_particle_scale,
+        dioramaParticleGlow = R.string.lyrics_style_dio_particle_glow,
+        dioramaParticleGlowIntensity = R.string.lyrics_style_dio_particle_glow_intensity,
+        dioramaShowParticles = R.string.lyrics_style_dio_show_particles,
+        dioramaMoteCircumference = R.string.lyrics_style_dio_mote_circumference,
+        dioramaMoteRadial = R.string.lyrics_style_dio_mote_radial,
         claddaghFocusScaleRatio = R.string.lyrics_style_cl_focus,
         claddaghRadiusScale = R.string.lyrics_style_cl_radius,
         claddaghEllipseTiltDeg = R.string.lyrics_style_cl_tilt,

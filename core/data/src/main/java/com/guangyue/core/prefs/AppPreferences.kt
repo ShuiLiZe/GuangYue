@@ -6,6 +6,7 @@ import com.guangyue.core.lyrics.PartitaTuning
 import com.guangyue.core.lyrics.TiltColorScheme
 import com.guangyue.core.lyrics.TiltTuning
 import com.guangyue.core.lyrics.CladdaghTuning
+import com.guangyue.core.lyrics.DioramaTuning
 import com.guangyue.core.lyrics.fume.FumeCameraTrackingMode
 import com.guangyue.core.lyrics.fume.FumeTuning
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -133,6 +134,11 @@ class AppPreferences @Inject constructor(
                 .apply()
         }
 
+    /** 「镜台」调参（Folia diorama/tuning.ts storage.key = 'diorama_tuning'）：整组存一个串，读回夹范围。 */
+    var dioramaTuning: DioramaTuning
+        get() = DioramaTuning.decode(prefs.getString(KEY_DIORAMA_TUNING, null))
+        set(v) { prefs.edit().putString(KEY_DIORAMA_TUNING, DioramaTuning.sanitize(v).encode()).apply() }
+
     /** V2e：「回环」调参（Folia claddagh/tuning.ts storage.key = 'claddagh_tuning'）。 */
     var claddaghTuning: CladdaghTuning
         get() = CladdaghTuning.sanitize(
@@ -233,6 +239,7 @@ class AppPreferences @Inject constructor(
         const val KEY_CLASSIC_LEGACY = "classic_tuning_legacy"
         const val KEY_CLASSIC_SPACING = "classic_tuning_spacing"
 
+        const val KEY_DIORAMA_TUNING = "diorama_tuning"
         const val KEY_CL_FOCUS = "claddagh_tuning_focus"
         const val KEY_CL_RADIUS = "claddagh_tuning_radius"
         const val KEY_CL_TILT = "claddagh_tuning_tilt"

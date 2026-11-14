@@ -367,9 +367,9 @@ fun V0cStage(
                 scene = when (style) { "machikonbini" -> "konbini"; "machistation" -> "station"; else -> "kowloon" },
                 modifier = Modifier.fillMaxSize(),
             )
-        } else if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh") {
+        } else if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama") {
             CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
-                if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh") {
+                if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama") {
                     LyricFlowScreen(
                         lyrics = remember { parseLrc(LRC) },
                         currentIndex = 1,
@@ -410,6 +410,8 @@ fun V0cStage(
                             "sheetpartita" -> LyricStyle.PARTITA
                             "sheettilt" -> LyricStyle.TILT
                             "sheetcladdagh" -> LyricStyle.CLADDAGH
+                            // 2026-11-14：镜台参数面板（DioramaSettingsPanel 照译）。
+                            "sheetdiorama" -> LyricStyle.DIORAMA
                             else -> LyricStyle.FUME
                         },
                         fumeName = v0cString(R.string.lyrics_style_fume),

@@ -61,6 +61,7 @@ import com.guangyue.core.lyrics.PartitaTuning
 import com.guangyue.core.lyrics.TiltColorScheme
 import com.guangyue.core.lyrics.TiltTuning
 import com.guangyue.core.lyrics.CladdaghTuning
+import com.guangyue.core.lyrics.DioramaTuning
 import com.guangyue.core.lyrics.fume.FumeCameraTrackingMode
 import com.guangyue.core.lyrics.fume.FumeTuning
 import com.guangyue.feature.library.design.GyMotion
@@ -162,6 +163,31 @@ data class LyricStyleStrings(
     val diorama: Int = 0,
     /** V2d：「倾诉」与参数（Folia `ui.visualizerTilt` / `options.tilt*`）。 */
     val tilt: Int = 0,
+    /** 「镜台参数」（Folia `options.diorama*`，settingsPanels.tsx DioramaSettingsPanel）。 */
+    val dioramaCameraSpeed: Int = 0,
+    val dioramaMotionAmount: Int = 0,
+    val dioramaAudioReactivity: Int = 0,
+    val dioramaGlowEffect: Int = 0,
+    val dioramaSoulEffect: Int = 0,
+    val dioramaSoulActiveEffect: Int = 0,
+    val dioramaGradientEffect: Int = 0,
+    val dioramaEffectStrength: Int = 0,
+    val dioramaKeywordColoring: Int = 0,
+    val dioramaGeometry: Int = 0,
+    val dioramaGeometryMode: Int = 0,
+    val dioramaGeometryModeClouds: Int = 0,
+    val dioramaGeometryModeCorridor: Int = 0,
+    val dioramaGeometryStrands: Int = 0,
+    val dioramaGeometryBlobs: Int = 0,
+    val dioramaGeometryRibbons: Int = 0,
+    val dioramaGeometryRings: Int = 0,
+    val dioramaParticleDensity: Int = 0,
+    val dioramaParticleScale: Int = 0,
+    val dioramaParticleGlow: Int = 0,
+    val dioramaParticleGlowIntensity: Int = 0,
+    val dioramaShowParticles: Int = 0,
+    val dioramaMoteCircumference: Int = 0,
+    val dioramaMoteRadial: Int = 0,
     /** V2e：「回环」与参数（Folia `ui.visualizerCladdagh` / `options.claddagh*`）。 */
     val claddagh: Int = 0,
     val claddaghFocusScaleRatio: Int = 0,
@@ -207,6 +233,8 @@ fun LyricStyleSheet(
     onTiltTuning: (TiltTuning) -> Unit = {},
     claddaghTuning: CladdaghTuning = CladdaghTuning.DEFAULT,
     onCladdaghTuning: (CladdaghTuning) -> Unit = {},
+    dioramaTuning: DioramaTuning = DioramaTuning.DEFAULT,
+    onDioramaTuning: (DioramaTuning) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -238,6 +266,8 @@ fun LyricStyleSheet(
             onTiltTuning = onTiltTuning,
             claddaghTuning = claddaghTuning,
             onCladdaghTuning = onCladdaghTuning,
+            dioramaTuning = dioramaTuning,
+            onDioramaTuning = onDioramaTuning,
         )
     }
 }
@@ -267,6 +297,8 @@ private fun LyricStylePanelContent(
     onTiltTuning: (TiltTuning) -> Unit = {},
     claddaghTuning: CladdaghTuning = CladdaghTuning.DEFAULT,
     onCladdaghTuning: (CladdaghTuning) -> Unit = {},
+    dioramaTuning: DioramaTuning = DioramaTuning.DEFAULT,
+    onDioramaTuning: (DioramaTuning) -> Unit = {},
 ) {
     // Folia `index.css:163-168` `.theme-glass-panel`：`--bg-color` 85% 底 + `--text-primary` 12% 描边。
     // 面板改用 `--st-card` 一族（与弹层其它行同源），透明度取 85%，透出身后的封面调色板。
@@ -362,7 +394,7 @@ private fun LyricStylePanelContent(
                     accent = accent,
                     onTuning = onFumeTuning,
                 )
-            } else if (style == LyricStyle.CADENZA || style == LyricStyle.STILL || style == LyricStyle.MONET || style == LyricStyle.PENDOLO || style == LyricStyle.NEBBIA || style == LyricStyle.SONNET || style == LyricStyle.HANABI || style == LyricStyle.TEMPERA || style == LyricStyle.LUMIERE || style == LyricStyle.MACHI || style == LyricStyle.DIORAMA) {
+            } else if (style == LyricStyle.CADENZA || style == LyricStyle.STILL || style == LyricStyle.MONET || style == LyricStyle.PENDOLO || style == LyricStyle.NEBBIA || style == LyricStyle.SONNET || style == LyricStyle.HANABI || style == LyricStyle.TEMPERA || style == LyricStyle.LUMIERE || style == LyricStyle.MACHI) {
                 // Folia cadenza/entry.tsx 没有 renderSettingsPanel：窗口里显示「这个样式没有参数」。
                 Text(
                     text = str(strings.noOptions),
@@ -370,6 +402,8 @@ private fun LyricStylePanelContent(
                     color = Gyp.t2,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                 )
+            } else if (style == LyricStyle.DIORAMA) {
+                DioramaTuningRows(tuning = dioramaTuning, strings = strings, accent = accent, onTuning = onDioramaTuning)
             } else if (style == LyricStyle.CLADDAGH) {
                 CladdaghTuningRows(tuning = claddaghTuning, strings = strings, accent = accent, onTuning = onCladdaghTuning)
             } else if (style == LyricStyle.TILT) {
@@ -410,7 +444,8 @@ private fun LyricStylePanelContent(
                     .clickableNoRipple {
                         // 恢复默认只作用于当前样式（Folia 各模式各自的 handleReset*Tuning）。
                         when (style) {
-                            LyricStyle.CADENZA, LyricStyle.STILL, LyricStyle.MONET, LyricStyle.PENDOLO, LyricStyle.NEBBIA, LyricStyle.SONNET, LyricStyle.HANABI, LyricStyle.TEMPERA, LyricStyle.LUMIERE, LyricStyle.MACHI, LyricStyle.DIORAMA -> Unit
+                            LyricStyle.CADENZA, LyricStyle.STILL, LyricStyle.MONET, LyricStyle.PENDOLO, LyricStyle.NEBBIA, LyricStyle.SONNET, LyricStyle.HANABI, LyricStyle.TEMPERA, LyricStyle.LUMIERE, LyricStyle.MACHI -> Unit
+                            LyricStyle.DIORAMA -> onDioramaTuning(DioramaTuning.DEFAULT)
                             LyricStyle.TILT -> onTiltTuning(TiltTuning.DEFAULT)
                             LyricStyle.CLADDAGH -> onCladdaghTuning(CladdaghTuning.DEFAULT)
                             LyricStyle.FUME -> onFumeTuning(FumeTuning.DEFAULT)
@@ -866,6 +901,8 @@ fun LyricStyleSheetPreview(
     onTiltTuning: (TiltTuning) -> Unit = {},
     claddaghTuning: CladdaghTuning = CladdaghTuning.DEFAULT,
     onCladdaghTuning: (CladdaghTuning) -> Unit = {},
+    dioramaTuning: DioramaTuning = DioramaTuning.DEFAULT,
+    onDioramaTuning: (DioramaTuning) -> Unit = {},
 ) {
     LyricStylePanelContent(
         tuning = tuning,
@@ -885,6 +922,8 @@ fun LyricStyleSheetPreview(
         onTiltTuning = onTiltTuning,
         claddaghTuning = claddaghTuning,
         onCladdaghTuning = onCladdaghTuning,
+        dioramaTuning = dioramaTuning,
+        onDioramaTuning = onDioramaTuning,
     )
 }
 
@@ -1173,4 +1212,108 @@ private fun CladdaghTuningRows(
         min = -5f, max = 20f, step = 0.5f, format = { (if (it > 0) "+" else "") + "%.1fpx".format(it) },
         onChange = { emit(tuning.copy(letterSpacingOffset = it.toDouble())) },
     )
+}
+
+
+/**
+ * 「镜台参数」，照 Folia `DioramaSettingsPanel`：镜头速度 → 运动幅度 → 点云音频响应 → 三种跟唱（开关下折叠强度；
+ * 灵魂出窍下挂「当前字出窍」）→ 关键字着色 → 点云几何（总开关、点云 / 长廊、四族、密度、整体体积、点云整体辉光 + 强度）
+ * → 背景粒子（开关、圆周密度、径向密度）。
+ */
+@Composable
+private fun DioramaTuningRows(
+    tuning: DioramaTuning,
+    strings: LyricStyleStrings,
+    accent: Color,
+    onTuning: (DioramaTuning) -> Unit,
+) {
+    fun emit(t: DioramaTuning) = onTuning(DioramaTuning.sanitize(t))
+    TuningSliderRow(
+        label = str(strings.dioramaCameraSpeed), value = tuning.cameraSpeed.toFloat(), accent = accent,
+        min = 0.55f, max = 1.85f, step = 0.05f, format = ::formatTimes,
+        onChange = { emit(tuning.copy(cameraSpeed = it.toDouble())) },
+    )
+    TuningSliderRow(
+        label = str(strings.dioramaMotionAmount), value = tuning.motionAmount.toFloat(), accent = accent,
+        min = 0.4f, max = 1.6f, step = 0.05f, format = ::formatTimes,
+        onChange = { emit(tuning.copy(motionAmount = it.toDouble())) },
+    )
+    TuningSliderRow(
+        label = str(strings.dioramaAudioReactivity), value = tuning.audioReactivity.toFloat(), accent = accent,
+        min = 0f, max = 1.5f, step = 0.05f, format = ::formatPercent,
+        onChange = { emit(tuning.copy(audioReactivity = it.toDouble())) },
+    )
+    // DioramaEffectSettings：开关一行，开着时下面折出「强度」0.1–1.5。
+    ToggleRow(label = str(strings.dioramaGlowEffect), checked = tuning.glowEnabled, accent = accent, onChange = { emit(tuning.copy(glowEnabled = it)) })
+    if (tuning.glowEnabled) TuningSliderRow(
+        label = str(strings.dioramaEffectStrength), value = tuning.glowIntensity.toFloat(), accent = accent,
+        min = 0.1f, max = 1.5f, step = 0.05f, format = ::formatPercent,
+        onChange = { emit(tuning.copy(glowIntensity = it.toDouble())) },
+    )
+    ToggleRow(label = str(strings.dioramaSoulEffect), checked = tuning.soulEnabled, accent = accent, onChange = { emit(tuning.copy(soulEnabled = it)) })
+    if (tuning.soulEnabled) {
+        TuningSliderRow(
+            label = str(strings.dioramaEffectStrength), value = tuning.soulIntensity.toFloat(), accent = accent,
+            min = 0.1f, max = 1.5f, step = 0.05f, format = ::formatPercent,
+            onChange = { emit(tuning.copy(soulIntensity = it.toDouble())) },
+        )
+        ToggleRow(label = str(strings.dioramaSoulActiveEffect), checked = tuning.soulActiveEnabled, accent = accent, onChange = { emit(tuning.copy(soulActiveEnabled = it)) })
+    }
+    ToggleRow(label = str(strings.dioramaGradientEffect), checked = tuning.gradientEnabled, accent = accent, onChange = { emit(tuning.copy(gradientEnabled = it)) })
+    if (tuning.gradientEnabled) TuningSliderRow(
+        label = str(strings.dioramaEffectStrength), value = tuning.gradientIntensity.toFloat(), accent = accent,
+        min = 0.1f, max = 1.5f, step = 0.05f, format = ::formatPercent,
+        onChange = { emit(tuning.copy(gradientIntensity = it.toDouble())) },
+    )
+    // 关键字着色：颜色来自 AI 主题的关键词表（广乐暂无该来源，开关先存着，接上主题后生效）。
+    ToggleRow(label = str(strings.dioramaKeywordColoring), checked = tuning.keywordColoringEnabled, accent = accent, onChange = { emit(tuning.copy(keywordColoringEnabled = it)) })
+
+    // DioramaGeometrySettings：总开关 → 几何形态（点云 / 长廊）→ 点云时四族 → 密度 / 整体体积 / 整体辉光。
+    ToggleRow(label = str(strings.dioramaGeometry), checked = tuning.geometryEnabled, accent = accent, onChange = { emit(tuning.copy(geometryEnabled = it)) })
+    if (tuning.geometryEnabled) {
+        SegmentedRow(
+            label = str(strings.dioramaGeometryMode),
+            options = listOf(false to str(strings.dioramaGeometryModeClouds), true to str(strings.dioramaGeometryModeCorridor)),
+            selected = tuning.geometryCorridor,
+            onChange = { emit(tuning.copy(geometryCorridor = it)) },
+        )
+        if (!tuning.geometryCorridor) {
+            ToggleRow(label = str(strings.dioramaGeometryStrands), checked = tuning.strands, accent = accent, onChange = { emit(tuning.copy(strands = it)) })
+            ToggleRow(label = str(strings.dioramaGeometryBlobs), checked = tuning.blobs, accent = accent, onChange = { emit(tuning.copy(blobs = it)) })
+            ToggleRow(label = str(strings.dioramaGeometryRibbons), checked = tuning.ribbons, accent = accent, onChange = { emit(tuning.copy(ribbons = it)) })
+            ToggleRow(label = str(strings.dioramaGeometryRings), checked = tuning.rings, accent = accent, onChange = { emit(tuning.copy(rings = it)) })
+        }
+        TuningSliderRow(
+            label = str(strings.dioramaParticleDensity), value = tuning.particleDensity.toFloat(), accent = accent,
+            min = DioramaTuning.DENSITY_MIN.toFloat(), max = DioramaTuning.DENSITY_MAX.toFloat(), step = DioramaTuning.DENSITY_STEP.toFloat(),
+            format = { it.roundToInt().toString() },
+            onChange = { emit(tuning.copy(particleDensity = it.roundToInt())) },
+        )
+        TuningSliderRow(
+            label = str(strings.dioramaParticleScale), value = tuning.particleScale.toFloat(), accent = accent,
+            min = 0.65f, max = 1.6f, step = 0.05f, format = ::formatTimes,
+            onChange = { emit(tuning.copy(particleScale = it.toDouble())) },
+        )
+        ToggleRow(label = str(strings.dioramaParticleGlow), checked = tuning.particleGlowEnabled, accent = accent, onChange = { emit(tuning.copy(particleGlowEnabled = it)) })
+        if (tuning.particleGlowEnabled) TuningSliderRow(
+            label = str(strings.dioramaParticleGlowIntensity), value = tuning.particleGlowIntensity.toFloat(), accent = accent,
+            min = 0.1f, max = 1.5f, step = 0.05f, format = ::formatPercent,
+            onChange = { emit(tuning.copy(particleGlowIntensity = it.toDouble())) },
+        )
+    }
+
+    // DioramaBackgroundParticleSettings：开关 → 圆周密度 4–48 步 2 → 径向密度 1–4。
+    ToggleRow(label = str(strings.dioramaShowParticles), checked = tuning.showParticles, accent = accent, onChange = { emit(tuning.copy(showParticles = it)) })
+    if (tuning.showParticles) {
+        TuningSliderRow(
+            label = str(strings.dioramaMoteCircumference), value = tuning.backgroundParticleCircumference.toFloat(), accent = accent,
+            min = 4f, max = 48f, step = 2f, format = { it.roundToInt().toString() },
+            onChange = { emit(tuning.copy(backgroundParticleCircumference = it.roundToInt())) },
+        )
+        TuningSliderRow(
+            label = str(strings.dioramaMoteRadial), value = tuning.backgroundParticleRadial.toFloat(), accent = accent,
+            min = 1f, max = 4f, step = 1f, format = { it.roundToInt().toString() },
+            onChange = { emit(tuning.copy(backgroundParticleRadial = it.roundToInt())) },
+        )
+    }
 }

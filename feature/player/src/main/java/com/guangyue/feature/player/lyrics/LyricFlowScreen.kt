@@ -169,6 +169,8 @@ fun LyricFlowScreen(
     fumeTuning: FumeTuning = FumeTuning.DEFAULT,
     /** V2e：「回环」调参（Folia claddagh/tuning.ts）。 */
     claddaghTuning: com.guangyue.core.lyrics.CladdaghTuning = com.guangyue.core.lyrics.CladdaghTuning.DEFAULT,
+    /** 「镜台」调参（Folia diorama/tuning.ts）。 */
+    dioramaTuning: com.guangyue.core.lyrics.DioramaTuning = com.guangyue.core.lyrics.DioramaTuning.DEFAULT,
     /** V2d：「倾诉」调参（Folia tilt/tuning.ts）。 */
     tiltTuning: com.guangyue.core.lyrics.TiltTuning = com.guangyue.core.lyrics.TiltTuning.DEFAULT,
     /** V2a：「云阶」调参（Folia partita/tuning.ts）。 */
@@ -562,6 +564,7 @@ fun LyricFlowScreen(
                 secondaryColor = theme.secondary,
                 seed = playback.item?.key ?: "diorama",
                 modifier = Modifier.fillMaxSize(),
+                tuning = dioramaTuning,
             )
         }
         // R6 凝彩：Folia tempera 原版对译（段落→shot→构图色块 + 拼贴排版 + 文字反色），整屏铺满。

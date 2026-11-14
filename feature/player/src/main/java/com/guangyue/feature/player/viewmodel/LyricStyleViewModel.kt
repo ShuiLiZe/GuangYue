@@ -16,6 +16,7 @@ import com.guangyue.core.lyrics.fume.FumeTuning
 import com.guangyue.core.lyrics.PartitaTuning
 import com.guangyue.core.lyrics.TiltTuning
 import com.guangyue.core.lyrics.CladdaghTuning
+import com.guangyue.core.lyrics.DioramaTuning
 import com.guangyue.core.prefs.AppPreferences
 import com.guangyue.feature.player.lyrics.LyricStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -64,6 +65,16 @@ class LyricStyleViewModel @Inject constructor(
     /** V2e：「回环」调参（Folia `claddagh/tuning.ts`，storage.key = 'claddagh_tuning'）。 */
     private val _claddaghTuning = MutableStateFlow(preferences.claddaghTuning)
     val claddaghTuning: StateFlow<CladdaghTuning> = _claddaghTuning.asStateFlow()
+
+    /** 「镜台」调参（Folia `diorama/tuning.ts`，storage.key = 'diorama_tuning'）。 */
+    private val _dioramaTuning = MutableStateFlow(preferences.dioramaTuning)
+    val dioramaTuning: StateFlow<DioramaTuning> = _dioramaTuning.asStateFlow()
+
+    fun updateDiorama(t: DioramaTuning) {
+        val safe = DioramaTuning.sanitize(t)
+        _dioramaTuning.value = safe
+        viewModelScope.launch { preferences.dioramaTuning = safe }
+    }
 
     fun updateCladdagh(t: CladdaghTuning) {
         val safe = CladdaghTuning.sanitize(t.focusScaleRatio, t.radiusScale, t.ellipseTiltDeg, t.showAxisLine, t.letterSpacingOffset)

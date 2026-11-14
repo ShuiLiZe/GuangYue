@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
+import com.guangyue.core.lyrics.DioramaTuning
 import com.guangyue.core.lyrics.GraphemeTimings
 import com.guangyue.core.lyrics.Line
 import java.nio.ByteBuffer
@@ -116,7 +117,12 @@ private class DioramaMoteLayer {
 private class DioramaStageSong(val lines: List<Line>, val seed: String)
 
 /** colors = 主题目标色（particle 对比色版 + 原四色），渲染线程按 COLOR_DAMP_RATE 阻尼追过去。 */
-private class DioramaStageInput(@Volatile var song: DioramaStageSong, @Volatile var colors: Pair<DioramaParticleColors, DioramaDampedColors>)
+private class DioramaStageInput(
+    @Volatile var song: DioramaStageSong,
+    @Volatile var colors: Pair<DioramaParticleColors, DioramaDampedColors>,
+    /** 镜台参数里「每帧读」的部分（镜头 / 运动 / 音频、三种跟唱、点云辉光、背景粒子开关）；结构性的走 key 重建。 */
+    @Volatile var tuning: DioramaTuning,
+)
 
 /** 挂载窗口：当前行（与转场中离场行）的可见行、当前行单元、粒子缓冲、静止位镜头。 */
 private class DioramaStageWindow(
@@ -130,18 +136,19 @@ private class DioramaStageWindow(
     val frame: DioramaFrame,
 )
 
-private val stageMotion = resolveDioramaMotionParams()
-
 /** VisualizerDiorama.tsx：PRUNE_MARGIN_BEHIND / LOOP_RESTART_MAX_INDEX。 */
 private const val DIORAMA_PRUNE_MARGIN_BEHIND = 4
 private const val DIORAMA_LOOP_RESTART_MAX_INDEX = 1
 
-private fun buildDioramaStageWindow(sq: DioramaSequencerState, idx: Int, outgoing: Int?, corridor: Boolean, density: Double): DioramaStageWindow {
+private fun buildDioramaStageWindow(
+    sq: DioramaSequencerState, idx: Int, outgoing: Int?, vis: DioramaGeometryVisibility, density: Double,
+    stageMotion: DioramaMotionParams, particleScale: Double,
+): DioramaStageWindow {
+    val corridor = vis.mode == DioramaGeometryMode.CORRIDOR
     val total = dioramaTotalGlobalLines(sq)
-    val vis = DioramaGeometryVisibility(mode = if (corridor) DioramaGeometryMode.CORRIDOR else DioramaGeometryMode.CLOUDS)
     val mounted = resolveDioramaMountedIndices(idx, outgoing, total)
     val spans = buildDioramaCorridorSpans(sq, idx, outgoing, vis)
-    val clusters = buildDioramaParticleClusters(sq, mounted, stageMotion, vis, 1.0)
+    val clusters = buildDioramaParticleClusters(sq, mounted, stageMotion, vis, particleScale)
     val (data, k) = buildDioramaParticleBuffer(corridor, clusters, spans, density)
     val resolved = dioramaResolveGlobal(sq, idx)!!
     val frame = resolved.frame
@@ -158,8 +165,12 @@ private fun buildDioramaStageWindow(sq: DioramaSequencerState, idx: Int, outgoin
 
 private class DioramaStageRenderer(
     private val input: DioramaStageInput,
-    private val corridor: Boolean,
+    /** 结构性参数（点云几何 / 密度 / 体积 / 背景粒子圆周、径向）：变了整块重建。 */
+    private val vis: DioramaGeometryVisibility,
     private val density: Double,
+    private val particleScale: Double,
+    moteCircumference: Int,
+    moteRadialCount: Int,
     private val restCamera: Boolean,
     private val timeSeconds: () -> Double,
 ) : GLSurfaceView.Renderer {
@@ -182,8 +193,10 @@ private class DioramaStageRenderer(
     private var lastNanos = 0L
     private var elapsed = 0.0
 
-    private val moteCirc = resolveDioramaMoteCircumference(28.0)
-    private val moteRadial = resolveDioramaMoteRadial(2.0)
+    private val corridor = vis.mode == DioramaGeometryMode.CORRIDOR
+    private val moteCirc = resolveDioramaMoteCircumference(moteCircumference.toDouble())
+    private val moteRadial = resolveDioramaMoteRadial(moteRadialCount.toDouble())
+    private var stageMotion = motionOf(input.tuning)
     private val motePositions = FloatArray(DIORAMA_MOTE_MAX_POINTS * 3)
     private val moteWritten = newDioramaMoteWritten()
     private var trebleEnv = 0.0
@@ -223,7 +236,7 @@ private class DioramaStageRenderer(
     /** 换行 / 转场起止：粒子缓冲换窗口；邻行栅格按全局行号复用、离窗的释放；当前行单元重栅格化、逐单元状态清零。 */
     private fun enter(idx: Int, outgoing: Int?) {
         val prevIdx = w?.globalIndex
-        val nw = buildDioramaStageWindow(seq, idx, outgoing, corridor, density)
+        val nw = buildDioramaStageWindow(seq, idx, outgoing, vis, density, stageMotion, particleScale)
         w = nw
         contrast.upload(nw.particles); glow.upload(nw.particles)
         val keep = nw.visible.filter { it.index != idx && it.line.fullText.isNotEmpty() }.map { it.index }.toSet()
@@ -305,6 +318,9 @@ private class DioramaStageRenderer(
         lastNanos = nowNanos
         elapsed += delta
         val t = timeSeconds()
+        val tuning = input.tuning
+        stageMotion = motionOf(tuning)
+        glowU.glow = tuning.particleGlowIntensity.toFloat()
         val idx = resolveGlobal(t)
         if (w?.globalIndex != idx || w?.outgoingIndex != transitionOutgoing) enter(idx, transitionOutgoing)
         val win = w ?: return
@@ -323,7 +339,7 @@ private class DioramaStageRenderer(
         powerEnv = dioramaStepEnvelope(powerEnv, min(1.0, power / 255), 18.0, 3.5, delta)
         stepDioramaParticleField(
             field,
-            DioramaParticleFrameInput(delta, bands, 1.0, t, corridor, idx, transitionOutgoing != null, height.toDouble(), win.waveNumberMax, particleColors),
+            DioramaParticleFrameInput(delta, bands, stageMotion.audioLevel, t, corridor, idx, transitionOutgoing != null, height.toDouble(), win.waveNumberMax, particleColors),
             listOf(contrastU, glowU),
         )
         val eye: DioramaVec
@@ -346,19 +362,19 @@ private class DioramaStageRenderer(
         val cam = floatArrayOf(eye.x.toFloat(), eye.y.toFloat(), eye.z.toFloat())
 
         // 背景尘埃：窗口回收 + 轻微漂移；大小随高频、透明度随整体能量、颜色 secondary→accent 30%。
-        if (recycleDioramaMoteWindow(moteWritten, motePositions, seq, idx, dioramaTotalGlobalLines(seq), moteCirc, moteRadial, seq.segments.last().seed)) {
+        if (tuning.showParticles && recycleDioramaMoteWindow(moteWritten, motePositions, seq, idx, dioramaTotalGlobalLines(seq), moteCirc, moteRadial, seq.segments.last().seed)) {
             motes.upload(motePositions, DIORAMA_MOTE_WINDOW_LINES * moteCirc * moteRadial * 3)
         }
         val moteModel = FloatArray(16).also {
             Matrix.setIdentityM(it, 0)
             Matrix.translateM(it, 0, (sin(elapsed * 0.17) * 0.12).toFloat(), (sin(elapsed * 0.11 + 1.7) * 0.09).toFloat(), (cos(elapsed * 0.13) * 0.12).toFloat())
         }
-        motes.draw(
+        if (tuning.showParticles) motes.draw(
             DIORAMA_MOTE_WINDOW_LINES * moteCirc * moteRadial, moteModel, view, proj,
             (0.03 * (1 + 0.42 * trebleEnv)).toFloat(), height / 2f,
             damped.secondary.lerp(damped.accent, 0.3), (0.16 + 0.18 * powerEnv).toFloat(), damped.bg,
         )
-        glow.draw(glowU, view, proj, cam)
+        if (tuning.particleGlowEnabled) glow.draw(glowU, view, proj, cam)
         contrast.draw(contrastU, view, proj, cam)
 
         // 邻行（renderOrder 0，透明物体按离镜头远→近）。
@@ -386,7 +402,7 @@ private class DioramaStageRenderer(
             val group = dioramaComposeMatrix(active.position, active.quaternion, fit)
             val life = resolveDioramaTextLife(dist(active.position, eye))
             val breath = 0.9 + 0.1 * sin(elapsed * 1.9)
-            updateDioramaActiveUnits(win.units, looks, lightVals, soulVals, t, delta, life, breath, powerEnv, damped, emptyMap(), 1.0, 1.0, false, 0.0)
+            updateDioramaActiveUnits(win.units, looks, lightVals, soulVals, t, delta, life, breath, powerEnv, damped, emptyMap(), tuning.effectiveGlow, tuning.effectiveSoul, tuning.effectiveSoulActive, tuning.effectiveGradient)
             fun planeAt(x: Double, y: Double, z: Double, sc: Double): FloatArray {
                 val local = FloatArray(16); Matrix.setIdentityM(local, 0)
                 Matrix.translateM(local, 0, x.toFloat(), y.toFloat(), z.toFloat())
@@ -429,8 +445,10 @@ fun DioramaStage(
     seed: String = "probe-0",
     corridor: Boolean = false,
     restCamera: Boolean = false,
-    density: Double = 768.0,
+    /** null = 跟镜台参数（Folia DEFAULT_DIORAMA_TUNING.particleDensity = 576）。 */
+    density: Double? = null,
     modifier: Modifier = Modifier,
+    tuning: DioramaTuning = DioramaTuning.DEFAULT,
 ) {
     // 换歌不重建 GLSurfaceView：同一个渲染器里走 Folia 的换歌状态机（新走廊在雾外偏移处生成，镜头一镜到底飞过去）。
     val colors = remember(primaryColor, accentColor, secondaryColor, backgroundColor) {
@@ -439,19 +457,28 @@ fun DioramaStage(
         resolveDioramaParticleContrastColors(DioramaParticleColors(p, a, sc), bg) to DioramaDampedColors(p, a, sc, bg)
     }
     // 换歌、换主题都不重建 GLSurfaceView：渲染线程每帧读 input（换主题走颜色阻尼）。
-    val input = remember { DioramaStageInput(DioramaStageSong(lines, seed), colors) }
+    val input = remember { DioramaStageInput(DioramaStageSong(lines, seed), colors, tuning) }
     androidx.compose.runtime.SideEffect {
         val cur = input.song
         if (cur.lines !== lines || cur.seed != seed) input.song = DioramaStageSong(lines, seed)
         if (input.colors != colors) input.colors = colors
+        if (input.tuning != tuning) input.tuning = tuning
     }
-    androidx.compose.runtime.key(restCamera, corridor, density) {
+    // 结构性参数变了才重建（点云几何 / 密度 / 体积 / 背景粒子圆周、径向）；其余每帧读 input.tuning。
+    val vis = DioramaGeometryVisibility(
+        enabled = tuning.geometryEnabled,
+        mode = if (corridor || tuning.geometryCorridor) DioramaGeometryMode.CORRIDOR else DioramaGeometryMode.CLOUDS,
+        strands = tuning.strands, blobs = tuning.blobs, ribbons = tuning.ribbons, rings = tuning.rings,
+    )
+    val dens = density ?: tuning.particleDensity.toDouble()
+    val circ = tuning.backgroundParticleCircumference; val radial = tuning.backgroundParticleRadial; val pScale = tuning.particleScale
+    androidx.compose.runtime.key(restCamera, vis, dens, pScale, circ, radial) {
         AndroidView(
             modifier = modifier,
             factory = { ctx ->
                 GLSurfaceView(ctx).apply {
                     setEGLContextClientVersion(3)
-                    setRenderer(DioramaStageRenderer(input, corridor, density, restCamera, timeSeconds))
+                    setRenderer(DioramaStageRenderer(input, vis, dens, pScale, circ, radial, restCamera, timeSeconds))
                     renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                 }
             },
@@ -471,7 +498,11 @@ fun DioramaStagePreview(
     accentColor: Color,
     secondaryColor: Color,
     seed: String = "probe-0",
-    density: Double = 768.0,
+    density: Double? = null,
     restCamera: Boolean = true,
     modifier: Modifier = Modifier,
-) = DioramaStage(lines, { timeSeconds }, backgroundColor, primaryColor, accentColor, secondaryColor, seed, corridor, restCamera, density, modifier)
+    tuning: DioramaTuning = DioramaTuning.DEFAULT,
+) = DioramaStage(lines, { timeSeconds }, backgroundColor, primaryColor, accentColor, secondaryColor, seed, corridor, restCamera, density, modifier, tuning)
+
+/** 镜台参数 → 运镜参数（resolveDioramaMotionParams，主题动效强度暂按 normal）。 */
+private fun motionOf(t: DioramaTuning) = resolveDioramaMotionParams(t.cameraSpeed, t.motionAmount, t.audioReactivity)
