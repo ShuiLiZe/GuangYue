@@ -2,6 +2,7 @@
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -247,7 +248,11 @@ private class SettingItem(
     val below: (@Composable () -> Unit)? = null,
 )
 
-/** 选项多于分段放得下时用可换行的小胶囊（Folia kit Chips）。 */
+/**
+ * 选项多于分段放得下时用可换行的小胶囊（Folia kit/Chips.tsx）：每颗都是同一层弱填充（--st-fill），
+ * 选没选看左边 16dp 的小方框——选中是强调色实心 + 对勾，未选是 1.5dp 描边。
+ * （以前选中项用 --st-raise 白底，浅色模式白卡上看着像「没选」，未选的灰底反而像选中。）
+ */
 @Composable
 private fun FlowStyleChips(options: List<Pair<String, String>>, current: String, onPick: (String) -> Unit) {
     @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
@@ -257,17 +262,34 @@ private fun FlowStyleChips(options: List<Pair<String, String>>, current: String,
     ) {
         options.forEach { (id, name) ->
             val on = id == current
-            Text(
-                name,
-                fontSize = GyText.label,
-                fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
-                color = if (on) Gyp.ink else Gyp.t2,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(GyRadius.field))
-                    .background(if (on) Gyp.raise else Gyp.tint)
+            Row(
+                Modifier
+                    .heightIn(min = 32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Gyp.tint)
                     .clickableNoRipple { if (!on) onPick(id) }
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-            )
+                    .padding(start = 8.dp, end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .size(16.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .then(
+                            if (on) Modifier.background(Gyp.accent)
+                            else Modifier.border(1.5.dp, Gyp.t3, RoundedCornerShape(5.dp)),
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (on) Icon(GuangYueIcons.Check, null, tint = Gyp.onAccent, modifier = Modifier.size(12.dp))
+                }
+                Text(
+                    name,
+                    fontSize = 13.sp,
+                    color = if (on) Gyp.ink else Gyp.t2,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
         }
     }
 }
@@ -458,7 +480,8 @@ private fun HomeStylePicker(options: List<HomeStyleOption>, current: String, onP
                     .fillMaxWidth()
                     .androidxHeightInMin56()
                     .clip(RoundedCornerShape(GyRadius.field))
-                    .background(if (on) Gyp.raise else Gyp.tint)
+                    // 选中项弱填充 + 对勾，未选透明：浅色模式卡片本身是白的，用 --st-raise 白底标选中会看反。
+                    .background(if (on) Gyp.tint else androidx.compose.ui.graphics.Color.Transparent)
                     .clickableNoRipple { if (!on) onPick(o.id) }
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
