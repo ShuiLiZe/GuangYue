@@ -594,7 +594,8 @@ private fun SeamTopActions(c: SeamCollection, ink: Color) {
  */
 @Composable
 private fun SeamMoreMenu(items: List<SeamMenuItem>, ink: Color) {
-    var open by remember { mutableStateOf(LocalSeamMenuInitiallyOpen.current) }
+    val initiallyOpen = LocalSeamMenuInitiallyOpen.current
+    var open by remember { mutableStateOf(initiallyOpen) }
     Box {
         Box(
             Modifier
