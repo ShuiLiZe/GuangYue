@@ -707,21 +707,28 @@ fun ProviderLoginPill(label: String?, ink: Color, onClick: () -> Unit, iconUrl: 
 /** 平台标记：有站点图标就铺满圆（Folia 平台按钮是平台 logo），取不到回退音源名首字。 */
 @Composable
 private fun ProviderMark(label: String?, iconUrl: String?, letterSize: androidx.compose.ui.unit.TextUnit, iconSize: androidx.compose.ui.unit.Dp) {
-    var failed by remember(iconUrl) { mutableStateOf(iconUrl.isNullOrBlank()) }
-    if (!failed) {
-        Box(Modifier.fillMaxSize().background(Color.White), contentAlignment = Alignment.Center) {
-            AsyncImage(
-                model = iconUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                onError = { failed = true },
-                modifier = Modifier.fillMaxSize(0.72f),
-            )
-        }
-    } else {
+    // 先画首字，站点图标真正解码出来才盖上去（白底 + 图标）；favicon 取不到 / 解不出时一直是首字。
+    var loaded by remember(iconUrl) { mutableStateOf(false) }
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         val ch = label?.trim()?.firstOrNull()?.toString()
-        if (ch != null) Text(ch, color = Color.White, fontSize = letterSize, fontWeight = FontWeight.Bold)
-        else Icon(GuangYueIcons.Plug, null, tint = Color.White, modifier = Modifier.size(iconSize))
+        if (!loaded) {
+            if (ch != null) Text(ch, color = Color.White, fontSize = letterSize, fontWeight = FontWeight.Bold)
+            else Icon(GuangYueIcons.Plug, null, tint = Color.White, modifier = Modifier.size(iconSize))
+        }
+        if (!iconUrl.isNullOrBlank()) {
+            Box(
+                Modifier.fillMaxSize().then(if (loaded) Modifier.background(Color.White) else Modifier),
+                contentAlignment = Alignment.Center,
+            ) {
+                AsyncImage(
+                    model = iconUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    onSuccess = { st -> loaded = st.result.image.width > 1 },
+                    modifier = Modifier.fillMaxSize(0.72f),
+                )
+            }
+        }
     }
 }
 
