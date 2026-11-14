@@ -476,7 +476,8 @@ fun V0cStage(
                 lyrics = lines,
                 currentIndex = stageIndex,
                 strings = V0cStrings,
-                playback = if (isProbe) playing(positionMs, PROBE_LINE_COUNT * PROBE_LINE_MS, key = "probe-0") else playing(positionMs),
+                // 2026-11-14 nextup：剩 3 秒，卡片该翻成「接下来播放」。
+                playback = if (style == "nextup") playing(17_000L) else if (isProbe) playing(positionMs, PROBE_LINE_COUNT * PROBE_LINE_MS, key = "probe-0") else playing(positionMs),
                 accent = Folia.colors.accent,
                 onBack = {},
                 onSeekToLine = {},
@@ -516,6 +517,10 @@ fun V0cStage(
                 fumeSettleTimeSeconds = fumeAtClock,
                 fumeStillFrame = fumeSteps > 0,
                 fumeDebugFrames = debugFrames,
+                // 2026-11-14 取证 nowplaying / nextup：Folia NowPlayingToast 停在左上返回键下方。
+                showNowPlayingCard = style == "nowplaying" || style == "nextup",
+                nowPlayingNext = com.guangyue.feature.player.lyrics.NowPlayingCardSong("晴天", "周杰伦", null),
+                nowPlayingHold = style == "nowplaying",
                 modifier = Modifier.fillMaxSize(),
             )
         }

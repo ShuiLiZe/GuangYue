@@ -852,6 +852,13 @@ fun GuangYueNavHost(
                     kernelLines = kernelLines,
                     classicTuning = tuning,
                     coverUrl = playbackState.item?.artworkUri,
+                    // 2026-11-14：Folia NowPlayingToast（正在播放 / 接下来播放）。下一首按 nextUpIndex 推，推不出不预告。
+                    showNowPlayingCard = true,
+                    nowPlayingNext = remember(playbackState.index, playbackState.queueSize, playbackState.shuffle, playbackState.repeatMode, playbackState.item?.key) {
+                        com.guangyue.feature.player.lyrics.nextUpIndex(playbackState.queueSize, playbackState.index, playbackState.shuffle, playbackState.repeatMode)
+                            ?.let { playback.queueSnapshot().getOrNull(it) }
+                            ?.let { com.guangyue.feature.player.lyrics.NowPlayingCardSong(it.title, it.artist, it.artworkUri) }
+                    },
                     onOpenStyleSheet = { styleSheetOpen = true },
                     onOpenPanel = { panelOpen = !panelOpen },
                     panelOpen = panelOpen,

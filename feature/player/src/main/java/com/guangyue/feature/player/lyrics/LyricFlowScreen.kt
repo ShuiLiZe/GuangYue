@@ -185,6 +185,12 @@ fun LyricFlowScreen(
     fumeStillFrame: Boolean = false,
     /** V1a 自查：浮名舞台画块边界/对焦十字（取景用，正式界面不开）。 */
     fumeDebugFrames: Boolean = false,
+    /** Folia NowPlayingToast：舞台左上「正在播放 / 接下来播放」卡片；false 不画（截图用例默认关）。 */
+    showNowPlayingCard: Boolean = false,
+    /** 自然播完会接上的下一首（[nextUpIndex] 推得出时给）；null 不预告。 */
+    nowPlayingNext: NowPlayingCardSong? = null,
+    /** 截图用：卡片不按 10 秒隐藏。 */
+    nowPlayingHold: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     // B0 修：雾笺 / 花火 / 绘光自带固定暗场（Folia 外壳 #05070a / 夜空 / 暗场），与 App 深浅无关。
@@ -907,6 +913,33 @@ fun LyricFlowScreen(
                         }
                     }
                 }
+            }
+        }
+        // 2026-11-14：Folia NowPlayingToast（正在播放 / 接下来播放），手机上停在左上返回键下方
+        // （folia-sonnet androidPhoneFit：top 安全区 + 72px、left 12px）。
+        if (showNowPlayingCard) {
+            androidx.compose.foundation.layout.Box(
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(
+                        WindowInsets.statusBars
+                            .union(WindowInsets.displayCutout)
+                            .union(WindowInsets.navigationBars),
+                    ),
+            ) {
+                val item = playback.item
+                NowPlayingCard(
+                    song = item?.let { NowPlayingCardSong(it.title, it.artist, it.artworkUri ?: coverUrl) },
+                    trackKey = item?.key,
+                    nextUp = nowPlayingNext,
+                    isNextUp = nextUpCountdown(playback.positionMs, playback.durationMs),
+                    darkMode = darkMode,
+                    holdOpen = nowPlayingHold,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 12.dp, top = 72.dp)
+                        .alpha(chromeAlpha),
+                )
             }
         }
     }
