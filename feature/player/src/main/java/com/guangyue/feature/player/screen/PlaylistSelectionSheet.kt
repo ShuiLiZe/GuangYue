@@ -98,6 +98,9 @@ fun PlaylistSelectionSheet(
         onDismiss()
     }
 
+    // 横屏（屏高 < 480dp，与胶囊 / 样式面板同一门槛）：标题与说明并一行、间距收档、列表高度按剩余高度算。
+    val screenH = LocalConfiguration.current.screenHeightDp
+    val compact = screenH < 480
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -107,21 +110,23 @@ fun PlaylistSelectionSheet(
             Modifier
                 .testTag(PlaylistSelectionSheetTag)
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
+                .padding(bottom = if (compact) 12.dp else 24.dp),
         ) {
-            Text(
-                if (creating) "新建歌单" else "添加到歌单",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Gyp.ink,
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                if (creating) "输入歌单名称" else "歌单",
-                fontSize = 12.sp,
-                color = Gyp.inkSoft,
-            )
-            Spacer(Modifier.height(14.dp))
+            val title = if (creating) "新建歌单" else "添加到歌单"
+            val hint = if (creating) "输入歌单名称" else "歌单"
+            if (compact) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Gyp.ink)
+                    Spacer(Modifier.width(10.dp))
+                    Text(hint, fontSize = 12.sp, color = Gyp.inkSoft, modifier = Modifier.padding(bottom = 2.dp))
+                }
+                Spacer(Modifier.height(10.dp))
+            } else {
+                Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Gyp.ink)
+                Spacer(Modifier.height(2.dp))
+                Text(hint, fontSize = 12.sp, color = Gyp.inkSoft)
+                Spacer(Modifier.height(14.dp))
+            }
             if (creating) {
                 CreatePage(
                     busy = submitting != null,
@@ -148,14 +153,15 @@ fun PlaylistSelectionSheet(
                     Spacer(Modifier.width(8.dp))
                     Text("新建歌单", fontSize = 14.sp, color = Gyp.ink)
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(if (compact) 8.dp else 12.dp))
                 if (playlists.isEmpty()) {
                     Box(Modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
                         Text("还没有歌单", fontSize = 14.sp, color = Gyp.inkSoft)
                     }
                 } else {
-                    val conf = LocalConfiguration.current
-                    val maxList = (conf.screenHeightDp * 0.45f).dp.coerceAtLeast(120.dp)
+                    // 竖屏封顶屏高 45%；横屏扣掉拖拽条 + 标题 + 新建键 + 状态栏后的余量（约 360dp 屏高 → 140dp，2 行半露出可滚）。
+                    val maxList = if (compact) (screenH - 220).dp.coerceAtLeast(112.dp)
+                    else (screenH * 0.45f).dp.coerceAtLeast(120.dp)
                     LazyColumn(
                         Modifier
                             .fillMaxWidth()
