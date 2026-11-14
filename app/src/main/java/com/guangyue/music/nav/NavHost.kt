@@ -249,6 +249,7 @@ fun GuangYueNavHost(
                                     val src by vm.currentSource.collectAsStateWithLifecycle()
                                     com.guangyue.music.ui.home.ProviderLoginPill(
                                         label = src?.name,
+                                        iconUrl = src?.let { com.guangyue.core.plugin.PluginPlatformIcons.candidatesFor(it).firstOrNull() },
                                         ink = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
                                         onClick = { navController.navigate(Routes.PLUGINS) },
                                     )
@@ -258,6 +259,7 @@ fun GuangYueNavHost(
                                 val src by vm.currentSource.collectAsStateWithLifecycle()
                                 com.guangyue.music.ui.home.ProviderPill(
                                     label = src?.name,
+                                    iconUrl = src?.let { com.guangyue.core.plugin.PluginPlatformIcons.candidatesFor(it).firstOrNull() },
                                     dark = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() < 0.5f,
                                     onClick = { navController.navigate(Routes.PLUGINS) },
                                 )

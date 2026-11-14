@@ -646,7 +646,7 @@ private fun mixColor(a: Color, b: Color, t: Float): Color = Color(
  * 没有登录头像时显示当前音源名的首字。点开 = 音源 / 插件 / 登录管理（Folia 的平台切换器）。
  */
 @Composable
-fun ProviderPill(label: String?, dark: Boolean, onClick: () -> Unit) {
+fun ProviderPill(label: String?, dark: Boolean, onClick: () -> Unit, iconUrl: String? = null) {
     val menu = if (dark) Color(0xFF1F1F22) else Color(0xFFFFFFFF)
     Box(
         Modifier
@@ -664,12 +664,7 @@ fun ProviderPill(label: String?, dark: Boolean, onClick: () -> Unit) {
                 .semantics { contentDescription = "音源与登录" + (label?.let { "：$it" } ?: "") },
             contentAlignment = Alignment.Center,
         ) {
-            val ch = label?.trim()?.firstOrNull()?.toString()
-            if (ch != null) {
-                Text(ch, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            } else {
-                Icon(GuangYueIcons.Settings, null, tint = Color.White, modifier = Modifier.size(20.dp))
-            }
+            ProviderMark(label, iconUrl, 16.sp, 20.dp)
         }
     }
 }
@@ -679,7 +674,7 @@ fun ProviderPill(label: String?, dark: Boolean, onClick: () -> Unit) {
  * Folia OnlineProviderAccountlessPanel 的登录行：浅底胶囊「登录 平台」，点开 = 音源 / 插件 / 登录管理。
  */
 @Composable
-fun ProviderLoginPill(label: String?, ink: Color, onClick: () -> Unit) {
+fun ProviderLoginPill(label: String?, ink: Color, onClick: () -> Unit, iconUrl: String? = null) {
     val dark = ink.red + ink.green + ink.blue > 1.5f
     Row(
         Modifier
@@ -695,9 +690,7 @@ fun ProviderLoginPill(label: String?, ink: Color, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.size(28.dp).clip(CircleShape).background(Color(0xFFE5312B)), contentAlignment = Alignment.Center) {
-                val ch = label?.trim()?.firstOrNull()?.toString()
-                if (ch != null) Text(ch, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                else Icon(GuangYueIcons.Plug, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                ProviderMark(label, iconUrl, 13.sp, 16.dp)
             }
             Spacer(Modifier.width(10.dp))
             Text(if (label != null) "登录 $label" else "添加音源", color = ink.copy(alpha = 0.9f), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
@@ -707,5 +700,27 @@ fun ProviderLoginPill(label: String?, ink: Color, onClick: () -> Unit) {
             Icon(GuangYueIcons.Plug, null, tint = ink.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
         }
         Spacer(Modifier.width(4.dp))
+    }
+}
+
+
+/** 平台标记：有站点图标就铺满圆（Folia 平台按钮是平台 logo），取不到回退音源名首字。 */
+@Composable
+private fun ProviderMark(label: String?, iconUrl: String?, letterSize: androidx.compose.ui.unit.TextUnit, iconSize: androidx.compose.ui.unit.Dp) {
+    var failed by remember(iconUrl) { mutableStateOf(iconUrl.isNullOrBlank()) }
+    if (!failed) {
+        Box(Modifier.fillMaxSize().background(Color.White), contentAlignment = Alignment.Center) {
+            AsyncImage(
+                model = iconUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                onError = { failed = true },
+                modifier = Modifier.fillMaxSize(0.72f),
+            )
+        }
+    } else {
+        val ch = label?.trim()?.firstOrNull()?.toString()
+        if (ch != null) Text(ch, color = Color.White, fontSize = letterSize, fontWeight = FontWeight.Bold)
+        else Icon(GuangYueIcons.Plug, null, tint = Color.White, modifier = Modifier.size(iconSize))
     }
 }
