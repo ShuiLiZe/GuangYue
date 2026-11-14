@@ -1059,10 +1059,16 @@ private fun LyricBar(
         }
     }
     val shape = RoundedCornerShape(if (expanded) 30.dp else GyRadius.capsule)
+    // 2026-11-14：手机横屏（屏高 < 480dp）展开态照 folia-sonnet androidPhoneFit 横屏档：
+    // 宽 min(78vw, 26rem) 居中、两行（歌名 + 按钮一行，进度一行），不再整条铺满压住舞台。收起态不动。
+    val barConf = LocalConfiguration.current
+    val compact = barConf.screenHeightDp < BAR_COMPACT_SCREEN_DP
+    val compactW = minOf(barConf.screenWidthDp * 0.78f, BAR_COMPACT_MAX_WIDTH_DP.toFloat()).dp
+    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
     Column(
-        modifier
-            .fillMaxWidth()
-            .padding(vertical = GySpace.l)
+        Modifier
+            .then(if (expanded && compact) Modifier.width(compactW) else Modifier.fillMaxWidth())
+            .padding(vertical = if (expanded && compact) GySpace.s else GySpace.l)
             .clip(shape)
             .background(pill)
             .animateContentSize(),
@@ -1096,6 +1102,69 @@ private fun LyricBar(
                 }
                 Spacer(Modifier.width(GySpace.s))
                 Text(formatTime(durationMs), fontSize = 12.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+            }
+        } else if (compact) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    if (modeIcon != null && onCycleMode != null) {
+                        Box(
+                            Modifier.size(44.dp).clip(CircleShape).clickableNoRipple { onCycleMode(); touch++ }
+                                .semantics { contentDescription = modeLabel },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(modeIcon, null, tint = pillInk.copy(alpha = 0.8f), modifier = Modifier.size(16.dp)) }
+                    }
+                    // 播放键视觉 36dp（sonnet 34px），触控 48dp。
+                    Box(
+                        Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .clickableNoRipple { onTogglePlay(); touch++ }
+                            .semantics { contentDescription = if (playing) pauseLabel else playLabel },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(Modifier.size(36.dp).clip(CircleShape).background(pillInk), contentAlignment = Alignment.Center) {
+                            Icon(
+                                if (playing) GuangYueIcons.Pause else GuangYueIcons.Play,
+                                null,
+                                tint = if (dark) Color(0xFF17171A) else Color.White,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                    TitleArrow(GuangYueIcons.ChevronLeft, "上一首", pillInk, onPrevious) { touch++ }
+                    Text(
+                        title,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = pillInk,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f).clickableNoRipple { expanded = false },
+                    )
+                    TitleArrow(GuangYueIcons.ChevronRight, "下一首", pillInk, onNext) { touch++ }
+                }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(formatTime(positionMs), fontSize = 12.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+                    Spacer(Modifier.width(GySpace.s))
+                    Slider(
+                        value = progress.coerceIn(0f, 1f),
+                        onValueChange = { onScrub(it); onScrubPreview?.invoke(it); touch++ },
+                        onValueChangeFinished = onScrubEnd,
+                        thumb = {},
+                        track = { sliderState ->
+                            val fraction = sliderState.value.coerceIn(0f, 1f)
+                            Box(
+                                Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)).background(pillInk.copy(alpha = 0.22f)),
+                            ) {
+                                Box(Modifier.fillMaxWidth(fraction).height(2.dp).clip(RoundedCornerShape(1.dp)).background(pillInk.copy(alpha = 0.85f)))
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(28.dp).semantics { contentDescription = seekBarLabel },
+                    )
+                    Spacer(Modifier.width(GySpace.s))
+                    Text(formatTime(durationMs), fontSize = 12.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+                }
             }
         } else {
             Column(Modifier.fillMaxWidth().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1179,7 +1248,14 @@ private fun LyricBar(
             }
         }
     }
+    }
 }
+
+/** 横屏紧凑档门槛（与浮动胶囊 MINI_COMPACT_SCREEN_DP、歌词样式面板同一条线）。 */
+internal const val BAR_COMPACT_SCREEN_DP = 480
+
+/** sonnet `min(78vw, 26rem)` 的 26rem。 */
+internal const val BAR_COMPACT_MAX_WIDTH_DP = 416
 
 /** 展开胶囊歌名两侧的箭头；[onClick] 为 null 时只占位（保持歌名居中对称）。 */
 @Composable
