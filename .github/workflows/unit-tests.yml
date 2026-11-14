@@ -45,6 +45,8 @@ jobs:
         run: ./gradlew :feature:player:testDebugUnitTest --tests '*Hanabi*' --no-daemon --stacktrace
       - name: 町景纯逻辑单测（feature:player，只跑 Machi*，与 Folia 金标对拍）
         run: ./gradlew :feature:player:testDebugUnitTest --tests '*Machi*' --no-daemon --stacktrace
+      - name: 镜台纯逻辑单测（feature:player，只跑 Diorama*，与 Folia 金样对拍）
+        run: ./gradlew :feature:player:testDebugUnitTest --tests '*Diorama*' --no-daemon --stacktrace
       - name: 曲库规则单测（core:data：合并 / 本地扫描过滤 / 元数据匹配打分）
         run: ./gradlew :core:data:testDebugUnitTest --no-daemon --stacktrace
       - name: 下载音质选择单测（core:download，只跑 DownloadQualityPick*）
