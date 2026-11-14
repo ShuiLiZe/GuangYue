@@ -1,5 +1,7 @@
 package com.guangyue.music.nav
 
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.Box
@@ -280,7 +282,7 @@ fun GuangYueNavHost(
                     miniPlayer = miniPlayer,
                     // 网格首页照 folia-sonnet 手机版不挂底栏，只让出系统导航条的高度。
                     bottomBar = if (homeStyle == com.guangyue.core.prefs.HomeStyles.GRID) {
-                        { androidx.compose.foundation.layout.Spacer(Modifier.windowInsetsBottomHeight(androidx.compose.foundation.layout.WindowInsets.navigationBars)) }
+                        { androidx.compose.foundation.layout.Spacer(Modifier.fillMaxWidth().background(androidx.compose.material3.MaterialTheme.colorScheme.background).windowInsetsBottomHeight(androidx.compose.foundation.layout.WindowInsets.navigationBars)) }
                     } else bottomBar,
                 )
                 return@composable
