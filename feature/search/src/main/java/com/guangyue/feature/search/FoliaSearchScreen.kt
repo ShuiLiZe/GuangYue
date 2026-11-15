@@ -300,7 +300,6 @@ private fun SearchHeader(
                         .testTag(SearchTags.Field),
                 )
             }
-            }
         }
         Spacer(Modifier.width(GySpace.s))
         // Folia 手机版：输入框右侧独立的圆形关闭钮，点了回首页。

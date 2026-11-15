@@ -213,13 +213,16 @@ fun GuangYueNavHost(
             if (wallSections.isNotEmpty() || homeStyle == com.guangyue.core.prefs.HomeStyles.GRID) {
                 val homeCtx = androidx.compose.ui.platform.LocalContext.current
                 var homePick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<com.guangyue.core.data.model.TrackEntity>?>(null) }
+                // 提到外层：首页空态的「登录」胶囊与右下平台按钮共用同一个登录窗（Folia 两处都打开登录窗）。
+                var loginFor by remember { mutableStateOf<com.guangyue.core.plugin.PluginMeta?>(null) }
                 ShellColumn(
                     content = {
                         if (homeStyle == com.guangyue.core.prefs.HomeStyles.GRID) {
                         // 0.0.27：第二种首页样式「网格」（Folia 网格首页 Grid3DSlider：3D 滑卡），数据与回调同封面墙。
                         com.guangyue.music.ui.home.GridSliderHome(
                             sections = gridSections,
-                            initialTab = 1,
+                            // Folia 手机版首页默认落在「歌单」页签（未登录时即登录空态）。
+                            initialTab = 0,
                             emptyText = { label ->
                                 when (label) {
                                     "歌单" -> "先登录或搜几首歌。登录音源后，这里会显示你的歌单、收藏专辑和电台。"
@@ -251,7 +254,7 @@ fun GuangYueNavHost(
                                         label = src?.name,
                                         iconUrl = src?.let { com.guangyue.core.plugin.PluginPlatformIcons.candidatesFor(it).firstOrNull() },
                                         ink = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
-                                        onClick = { navController.navigate(Routes.PLUGINS) },
+                                        onClick = { if (src != null) loginFor = src else navController.navigate(Routes.PLUGINS) },
                                     )
                                 }
                             },
@@ -267,7 +270,6 @@ fun GuangYueNavHost(
                             }),
                             providerButton = {
                                 val src by vm.currentSource.collectAsStateWithLifecycle()
-                                var loginFor by remember { mutableStateOf<com.guangyue.core.plugin.PluginMeta?>(null) }
                                 // Folia SwitcherPill：点开是平台切换（可用音源，点了直接切）+「音源与登录…」。
                                 val pluginVm: com.guangyue.feature.library.viewmodel.PluginViewModel = hiltViewModel()
                                 val all by pluginVm.plugins.collectAsStateWithLifecycle()
