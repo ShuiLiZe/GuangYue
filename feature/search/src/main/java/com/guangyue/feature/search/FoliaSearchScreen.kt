@@ -1,57 +1,69 @@
-﻿package com.guangyue.feature.search
+package com.guangyue.feature.search
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,42 +71,23 @@ import coil3.compose.AsyncImage
 import com.guangyue.core.plugin.AlbumItem
 import com.guangyue.core.plugin.ArtistItem
 import com.guangyue.core.plugin.MusicItem
-import com.guangyue.core.plugin.PluginMeta
-import com.guangyue.feature.library.design.FlowChips
-import com.guangyue.feature.library.design.FoliaButton
-import com.guangyue.feature.library.design.FoliaButtonVariant
-import com.guangyue.feature.library.design.FoliaEmptyState
-import com.guangyue.feature.library.design.FoliaSectionTitle
-import com.guangyue.feature.library.design.FoliaSegmented
-import com.guangyue.feature.library.design.GuangYueDesign
-import com.guangyue.feature.library.design.GyRadius
-import com.guangyue.feature.library.design.GySpace
-import com.guangyue.feature.library.design.GyText
 import com.guangyue.feature.library.design.Gyp
-import com.guangyue.feature.library.design.clickableNoRipple
 import com.guangyue.feature.library.design.icons.GuangYueIcons
-import com.guangyue.feature.library.design.marbleBackground
 
 // ---------------------------------------------------------------------------------------------
-// U3 · 搜索页（Folia 样式）
+// 搜索页 · 照 Folia src/components/app/search（SearchWorkspace / SearchTabs / SearchResultRow / search.css）
 //
-// 视觉基准：`src/components/app/search/SearchWorkspace.tsx` + `SearchResultRow.tsx`
-// （手机档截图 `docs/port/baseline/screenshots/search-{idle,results,empty}-m412-light.png`）。
-//
-// 和 Folia 桌面的差别（手机适配，写在 docs/ui-u3/report.md §3）：
-//   - 顶部「Folia 顶栏 + 搜索框」→ 手机只留一行搜索框（顶栏让位给搜索框，Folia 桌面是侧栏 + 顶栏双栏）；
-//   - 回车提交 → 输入即搜（防抖 400ms，见 SearchPageState.kt）；
-//   - hover 才冒出的 ＋ / 播放浮层 → 常驻按下即播（触屏没有 hover）；
-//   - `rowHeight 76px` 结果行 → 一行一卡，卡片 12dp 圆角 + 100% 行可点，最小 64dp 高；
-//   - 键盘弹起：整页 imePadding，迷你条 / 底栏由 ShellColumn 的 collapseOnIme() 让位。
+// 2026-11-15 用户：旧页面（胶囊搜索框 + 圆角卡片列表 + 大理石底）完全不像 Folia。这里按 Folia 手机档重做：
+//  - 纸色底（暗 #08080a / 亮 #fafafa），墨色 = 主题字色，强调色 = 主题强调色；
+//  - 至上主义构图压在底下（手机 ≤640px：只留右上斜切色块、左下大空心圆、两条发丝线、竖排碎字，整体 0.35）；
+//  - 搜索框：左边强调色小方块（搜索中转菱形呼吸）+ 22sp 粗体输入 + 2dp 墨色下划线；右边 44dp 方框 ✕；
+//  - 来源页签：13sp 粗体，选中的下面 3dp 强调色条；种类页签：「01 单曲」18sp 900，选中前面 11dp 实心方块；
+//  - 状态行：等宽小字「来源 · N 条结果」+ 延伸的发丝线；
+//  - 列表平的：方角 48dp 封面、发丝分隔线、行尾三颗 30dp 按钮（收藏 / 加歌单 / 下载）；集合行 58dp 封面 + 后面错开的强调色影子；
+//  - 加载：方块、圆、横条三个形依次起落；空 / 失败：空心圆被一根强调色斜杠划过 + 方角描边按钮。
+// 手机差异：输入即搜（防抖）保留；行整行点击播放（没有 hover）。
 // ---------------------------------------------------------------------------------------------
 
-/**
- * 搜索页。
- *
- * 参数里的 [onSearch] 是「立即搜」（键盘搜索键 / 清空后点搜索字样）；输入变化走 [onQueryChange]，
- * 防抖与取消在 ViewModel 里（[SearchViewModel.onQueryChange]）。
- */
 @Composable
 fun FoliaSearchScreen(
     res: SearchStrings,
@@ -114,82 +107,48 @@ fun FoliaSearchScreen(
     miniPlayer: (@Composable () -> Unit)? = null,
     onRetry: () -> Unit = {},
     onOpenSourceManager: (() -> Unit)? = null,
+    onClose: (() -> Unit)? = null,
 ) {
     val phase = remember(state) { state.pagePhase() }
+    val dark = Gyp.page.luminance() < 0.5f
+    val paper = if (dark) Color(0xFF08080A) else Color(0xFFFAFAFA)
+    val ink = Gyp.ink
+    val accent = Gyp.accent
+    val c = SearchColors(paper, ink, ink.copy(alpha = 0.55f), ink.copy(alpha = 0.09f), accent)
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .marbleBackground()
-            .testTag(SearchTags.Root),
-    ) {
-        SearchHeader(
-            res = res,
-            query = state.query,
-            loading = phase == SearchPagePhase.Loading,
-            onQueryChange = onQueryChange,
-            onSearch = onSearch,
-            onClear = { onQueryChange("") },
-        )
-
-        if (state.available.isNotEmpty()) {
-            SourceRail(
-                available = state.available,
-                sourceId = state.sourceId,
-                onPickSource = onPickSource,
-            )
-        }
-
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            when (phase) {
-                SearchPagePhase.NoSource -> NoSourceState(res, onOpenSourceManager)
-                SearchPagePhase.Idle -> IdleBody(
-                    res = res,
-                    history = state.history,
-                    onPickHistory = onPickHistory,
-                    onPickKeyword = { keyword ->
-                        onQueryChange(keyword)
-                        onSearch()
-                    },
-                )
-                SearchPagePhase.Loading -> LoadingState(res, state.query)
-                SearchPagePhase.Failure -> FailureState(
-                    res = res,
-                    message = state.failure.orEmpty(),
-                    onRetry = onRetry,
-                )
-                SearchPagePhase.Empty -> EmptyState(
-                    res = res,
-                    keywords = state.history.ifEmpty { IdleKeywords },
-                    onPickKeyword = { keyword ->
-                        onQueryChange(keyword)
-                        onSearch()
-                    },
-                )
-                SearchPagePhase.Results -> ResultsBody(
-                    res = res,
-                    state = state,
-                    onPlay = onPlay,
-                    onDownload = onDownload,
-                    onAddToSheet = onAddToSheet,
-                    onOpenAlbum = onOpenAlbum,
-                    onOpenArtist = onOpenArtist,
-                    onTabChange = onTabChange,
-                    onRetry = onRetry,
-                )
+    Box(modifier.fillMaxSize().background(paper).testTag(SearchTags.Root)) {
+        SearchComposition(c, state.tab, if (state.searched) state.query else "")
+        Column(Modifier.fillMaxSize().statusBarsPadding().padding(top = 20.dp)) {
+            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                SearchField(res, c, state.query, phase == SearchPagePhase.Loading, onQueryChange, onSearch, onClose)
+                if (state.available.isNotEmpty() || state.availableTypes.size > 1) {
+                    SearchTabsRow(c, state, onPickSource, onTabChange)
+                }
+                SearchMeta(c, state, phase)
             }
-        }
-
-        // 迷你条 + 底栏是 Shell 的一行，不叠在内容上（ShellColumn，U2）；这里只负责在键盘弹起时
-        // 跟着 imePadding 一起上浮。
-        if (miniPlayer != null || bottomBar != null) {
-            Column(Modifier.fillMaxWidth()) {
-                miniPlayer?.invoke()
-                bottomBar?.invoke()
+            Box(
+                Modifier.padding(top = 12.dp).weight(1f).fillMaxWidth().background(paper.copy(alpha = 0.88f)),
+            ) {
+                when (phase) {
+                    SearchPagePhase.NoSource -> VoidState(c, stringResource(res.noSource), stringResource(res.openPlugins), onOpenSourceManager, SearchTags.NoSource)
+                    SearchPagePhase.Idle -> IdleBody(res, c, state.history, onPickHistory) { onQueryChange(it); onSearch() }
+                    SearchPagePhase.Loading -> Loader(c)
+                    SearchPagePhase.Failure -> VoidState(c, state.failure ?: "搜索失败", stringResource(res.retry), onRetry, SearchTags.Failure)
+                    SearchPagePhase.Empty -> VoidState(c, stringResource(res.noResults), null, null, SearchTags.Empty)
+                    SearchPagePhase.Results -> ResultsBody(res, c, state, onPlay, onDownload, onAddToSheet, onOpenAlbum, onOpenArtist, onRetry)
+                }
+            }
+            if (miniPlayer != null || bottomBar != null) {
+                Column(Modifier.fillMaxWidth()) {
+                    miniPlayer?.invoke()
+                    bottomBar?.invoke()
+                }
             }
         }
     }
 }
+
+internal data class SearchColors(val paper: Color, val ink: Color, val inkSoft: Color, val hairline: Color, val accent: Color)
 
 /** 截图 / 测试用的稳定锚点（避免测试去猜中文文案）。 */
 object SearchTags {
@@ -205,168 +164,183 @@ object SearchTags {
     const val Mini = "search-mini"
 }
 
-/** 初始态与空结果页共用的推荐关键词（Folia 桌面没有这一块，属于广乐自拟的「入口」。 */
+/** 初始态的推荐关键词（Folia 没有这一块，广乐自拟入口；样式按 Folia 列表做成平的行）。 */
 internal val IdleKeywords = listOf("热歌", "华语流行", "摇滚", "纯音乐", "粤语", "爵士", "OST")
 
 // ---------------------------------------------------------------------------------------------
-// 顶栏：一行搜索框（Folia SearchWorkspace.tsx:44-78）
+// 构图
 // ---------------------------------------------------------------------------------------------
 
-/**
- * 搜索框：`rounded-full bg-black/5 px-4` 的一个胶囊，左边放大镜、中间输入、右边 × 清除。
- *
- * Folia 原值：`rounded-2xl border` 高 52（`py-3.5 text-sm`）；手机改为 48dp 高胶囊
- * （U1 的 FoliaSearchField 同款高度，`kit/TextField.tsx:9-72` 32px → 48dp）。
- * 最小触控 48dp：× 按钮 48dp 方框装 20dp 图标（Folia 是 `p-3` 44px）。
- */
 @Composable
-private fun SearchHeader(
+private fun SearchComposition(c: SearchColors, tab: SearchTab, word: String) {
+    // 种类换站位（Folia data-search-kind）：专辑把色块挪到左下、圆到右上；歌单把色块拉成右边竖条。
+    val k = when (tab) { SearchTab.ALBUMS -> 1f; SearchTab.SHEETS -> 2f; else -> 0f }
+    val p by animateFloatAsState(k, tween(900, easing = FastOutSlowInEasing), label = "kind")
+    Box(Modifier.fillMaxSize().alpha(0.35f)) {
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val album = (1f - kotlin.math.abs(p - 1f)).coerceIn(0f, 1f)
+            val sheet = (p - 1f).coerceIn(0f, 1f)
+            // 斜切色块：右上，polygon(22% 0, 100% 0, 100% 64%, 48% 82%)。
+            val sw = minOf(w * 0.4f, 620.dp.toPx()).coerceAtLeast(w * 0.55f)
+            val sh = minOf(h * 0.52f, 520.dp.toPx()) * 0.7f
+            val left = w + w * 0.04f - sw
+            val top = -h * 0.06f
+            val dx = -w * 0.58f * album + w * 0.06f * sheet
+            val dy = h * 0.62f * album + h * 0.12f * sheet
+            val sx = 1f - 0.5f * sheet
+            val path = Path().apply {
+                moveTo(left + sw * 0.22f * sx, top)
+                lineTo(left + sw, top)
+                lineTo(left + sw, top + sh * 0.64f * (1f + 0.5f * sheet))
+                lineTo(left + sw * (1f - 0.52f * sx), top + sh * 0.82f * (1f + 0.5f * sheet))
+                close()
+            }
+            rotate(180f * album, Offset(left + sw / 2 + dx, top + sh / 2 + dy)) {
+                translate(dx, dy) { drawPath(path, c.accent.copy(alpha = 0.92f)) }
+            }
+            // 大空心圆：左下 56vh。
+            val d = h * 0.56f * (1f + 0.15f * album - 0.45f * sheet)
+            val cx = -h * 0.10f + d / 2 + (w - h * 0.3f) * album
+            val cy = h + h * 0.14f - d / 2 - h * 0.64f * album
+            drawCircle(c.ink.copy(alpha = 0.22f), d / 2, Offset(cx, cy), style = Stroke(1.5.dp.toPx()))
+            // 两条发丝线。
+            rotate(-9f * (1f - sheet), Offset(0f, h * 0.28f)) {
+                drawLine(c.ink.copy(alpha = 0.14f), Offset(-w * 0.1f, h * 0.28f), Offset(w * 1.1f, h * 0.28f), 1f)
+            }
+            rotate(4f * (1f - sheet), Offset(0f, h * 0.72f)) {
+                drawLine(c.ink.copy(alpha = 0.14f), Offset(-w * 0.1f, h * (0.72f - 0.06f * sheet)), Offset(w * 1.1f, h * (0.72f - 0.06f * sheet)), 1f)
+            }
+        }
+        if (word.isNotBlank()) {
+            // 竖排碎字：正在搜的词，极淡，贴左边（opacity 0.05；整体再 ×0.35 太淡，这里单独给 0.12）。
+            Column(Modifier.padding(start = 6.dp, top = 96.dp).alpha(0.4f)) {
+                word.take(8).forEach { ch ->
+                    Text(ch.toString(), color = c.ink.copy(alpha = 0.3f), fontSize = 84.sp, fontWeight = FontWeight.Black, lineHeight = 84.sp)
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// 搜索框
+// ---------------------------------------------------------------------------------------------
+
+@Composable
+private fun SearchField(
     res: SearchStrings,
+    c: SearchColors,
     query: String,
-    loading: Boolean,
+    busy: Boolean,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
-    onClear: () -> Unit,
+    onClose: (() -> Unit)?,
 ) {
-    val interaction = remember { MutableInteractionSource() }
-    val focused by interaction.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(percent = 50)
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            // 0.0.14 真机：搜索框顶到状态栏上了，这里自己让出状态栏高度。
-            .statusBarsPadding()
-            .padding(start = GySpace.pageH, end = GySpace.pageH, top = GySpace.m, bottom = GySpace.s),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(
-            modifier = Modifier
-                .weight(1f)
-                .height(48.dp)
-                .clip(shape)
-                .background(Gyp.tint)
-                .border(1.dp, if (focused) Gyp.accent else Color.Transparent, shape)
-                .padding(start = GySpace.pageH, end = GySpace.xxs),
+            Modifier.weight(1f).drawBottomLine(c.ink, 2.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            if (loading) {
-                // Folia：isSearching 时左侧图标换成转圈的 Loader2（SearchWorkspace.tsx:52-58）。
-                Spinner(size = 16.dp, color = Gyp.t3)
-            } else {
-                androidx.compose.material3.Icon(
-                    imageVector = GuangYueIcons.Search,
-                    contentDescription = null,
-                    tint = Gyp.t3,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-            Spacer(Modifier.width(GySpace.s))
-            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            FieldMark(c.accent, busy)
+            Box(Modifier.weight(1f).padding(vertical = 14.dp)) {
                 if (query.isEmpty()) {
-                    Text(
-                        text = stringResource(res.placeholder),
-                        fontSize = GyText.label,
-                        fontFamily = GuangYueDesign.Sans,
-                        color = Gyp.t3,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Text(stringResource(res.placeholder), color = c.inkSoft, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
                 BasicTextField(
                     value = query,
                     onValueChange = onQueryChange,
                     singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        fontSize = GyText.label,
-                        lineHeight = GyText.labelHeight,
-                        color = Gyp.ink,
-                        fontFamily = GuangYueDesign.Sans,
-                    ),
-                    cursorBrush = SolidColor(Gyp.accent),
-                    interactionSource = interaction,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    textStyle = TextStyle(color = c.ink, fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.2.sp),
+                    cursorBrush = SolidColor(c.accent),
+                    keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag(SearchTags.Field),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag(SearchTags.Field),
                 )
             }
-            if (query.isNotEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .testTag(SearchTags.Clear)
-                        .clickableNoRipple(onClear),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    androidx.compose.material3.Icon(
-                        imageVector = GuangYueIcons.X,
-                        contentDescription = stringResource(res.clear),
-                        tint = Gyp.t2,
-                        modifier = Modifier.size(18.dp),
-                    )
+        }
+        // 44dp 方框 ✕：有字时清空，没字时回首页（Folia：回首页）。
+        Box(
+            Modifier.size(44.dp).border(1.5.dp, c.ink).background(c.paper)
+                .clickable { if (query.isNotEmpty() || onClose == null) onQueryChange("") else onClose() }
+                .testTag(SearchTags.Clear),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.material3.Icon(GuangYueIcons.X, null, tint = c.ink, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+private fun Modifier.drawBottomLine(color: Color, width: androidx.compose.ui.unit.Dp) = this.drawBehind {
+    val px = width.toPx()
+    drawLine(color, Offset(0f, size.height - px / 2), Offset(size.width, size.height - px / 2), px)
+}
+
+@Composable
+private fun FieldMark(accent: Color, busy: Boolean) {
+    val t = rememberInfiniteTransition(label = "mark")
+    val a by t.animateFloat(0f, 1f, infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart), label = "a")
+    val rot = if (busy) 180f * a else 0f
+    val sc = if (busy) 1f - 0.3f * kotlin.math.sin(Math.PI * a).toFloat() else 1f
+    Box(Modifier.size(12.dp).rotate(rot).graphicsScale(sc).background(accent))
+}
+
+private fun Modifier.graphicsScale(s: Float) = this.graphicsLayer { scaleX = s; scaleY = s }
+
+// ---------------------------------------------------------------------------------------------
+// 来源 / 种类页签、状态行
+// ---------------------------------------------------------------------------------------------
+
+@Composable
+private fun SearchTabsRow(c: SearchColors, state: SearchUiState, onPickSource: (String) -> Unit, onTabChange: (SearchTab) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        if (state.available.isNotEmpty()) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+                state.available.forEach { p ->
+                    val on = p.id == state.sourceId
+                    Column(Modifier.clickable { if (!on) onPickSource(p.id) }.width(androidx.compose.foundation.layout.IntrinsicSize.Max)) {
+                        Text(
+                            platformLabelOf(p), color = if (on) c.ink else c.inkSoft, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp, modifier = Modifier.padding(top = 6.dp, bottom = 9.dp),
+                        )
+                        Box(Modifier.fillMaxWidth().height(3.dp).background(if (on) c.accent else Color.Transparent))
+                    }
+                }
+            }
+        }
+        if (state.availableTypes.size > 1) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Bottom) {
+                state.availableTypes.forEachIndexed { i, tab ->
+                    val on = tab == state.tab
+                    Box(Modifier.clickable { if (!on) onTabChange(tab) }.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)) {
+                        if (on) Box(Modifier.offset(x = (-16).dp, y = 9.dp).size(11.dp).background(c.accent))
+                        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                (i + 1).toString().padStart(2, '0'), color = (if (on) c.ink else c.inkSoft).copy(alpha = 0.7f),
+                                fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 2.dp),
+                            )
+                            Text(tab.label, color = if (on) c.ink else c.inkSoft, fontSize = 18.sp, fontWeight = FontWeight.Black, lineHeight = 18.sp)
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// 音源选择（Folia SearchWorkspace.tsx:79-95 的一排胶囊）
-// ---------------------------------------------------------------------------------------------
-
-/**
- * 音源胶囊：选中 = accent 实心 + onAccent 字（Folia 桌面就是主题色实心胶囊），未选中 = 浅底。
- *
- * 高度 36dp，但外层给 48dp 的触控高度（Folia `px-4 py-2 text-xs` 32px → 手机 36dp + 48dp 触摸区）。
- */
 @Composable
-private fun SourceRail(
-    available: List<PluginMeta>,
-    sourceId: String,
-    onPickSource: (String) -> Unit,
-) {
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = GySpace.pageH),
-        horizontalArrangement = Arrangement.spacedBy(GySpace.xs),
-    ) {
-        items(available, key = { it.id }) { plugin ->
-            SourceChip(
-                label = platformLabelOf(plugin),
-                selected = plugin.id == sourceId,
-                onClick = { onPickSource(plugin.id) },
-            )
+private fun SearchMeta(c: SearchColors, state: SearchUiState, phase: SearchPagePhase) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        val count = state.tabCounts.of(state.tab)
+        Text(state.sourceLabel.uppercase(), color = c.inkSoft, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, letterSpacing = 1.1.sp)
+        if (phase == SearchPagePhase.Results && count > 0) {
+            Text("$count 条结果", color = c.inkSoft, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, letterSpacing = 1.1.sp)
         }
-    }
-}
-
-@Composable
-private fun SourceChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .heightIn(min = 48.dp)
-            .clickableNoRipple(onClick),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            modifier = Modifier
-                .height(36.dp)
-                .clip(RoundedCornerShape(percent = 50))
-                .background(if (selected) Gyp.accent else Gyp.tint)
-                .padding(horizontal = GySpace.l),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = label,
-                fontSize = GyText.hint,
-                lineHeight = GyText.hintHeight,
-                color = if (selected) Gyp.onAccent else Gyp.t2,
-                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-                maxLines = 1,
-            )
-        }
+        Box(Modifier.weight(1f).height(1.dp).background(c.hairline))
     }
 }
 
@@ -377,564 +351,209 @@ private fun SourceChip(label: String, selected: Boolean, onClick: () -> Unit) {
 @Composable
 private fun ResultsBody(
     res: SearchStrings,
+    c: SearchColors,
     state: SearchUiState,
     onPlay: (Int) -> Unit,
     onDownload: (MusicItem) -> Unit,
     onAddToSheet: (MusicItem) -> Unit,
     onOpenAlbum: (MusicItem) -> Unit,
     onOpenArtist: (MusicItem) -> Unit,
-    onTabChange: (SearchTab) -> Unit,
     onRetry: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().testTag(SearchTags.Results)) {
-        if (state.availableTypes.size > 1) {
-            FoliaSegmented(
-                value = state.tab,
-                options = state.availableTypes.map { tab -> tab to "${tab.label} ${state.tabCounts.of(tab)}" },
-                onSelect = onTabChange,
-                modifier = Modifier.padding(horizontal = GySpace.pageH, vertical = GySpace.xs),
-            )
-        }
-        // 有结果但有错（Folia SearchWorkspace.tsx:112-120 的底部错误条）：不挡结果，给一个重试。
-        if (state.failure != null) {
-            FailureBanner(res = res, failure = state.failure, onRetry = onRetry)
-        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            when (state.tab) {
-                SearchTab.TRACKS -> TrackList(res, state.rows, onPlay, onDownload, onAddToSheet)
-                SearchTab.ALBUMS -> AlbumGrid(res, state.albums, onOpenAlbum)
-                SearchTab.SHEETS -> AlbumGrid(res, state.sheets, onOpenAlbum)
-                SearchTab.ARTISTS -> ArtistGrid(res, state.artists, onOpenArtist)
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                when (state.tab) {
+                    SearchTab.TRACKS -> itemsIndexed(state.rows, key = { _, r -> "${r.pluginId}:${r.item.id}" }) { i, r ->
+                        TrackRow(res, c, r.item, onClick = { onPlay(i) }, onOpenArtist = { onOpenArtist(r.item) }, onOpenAlbum = { onOpenAlbum(r.item) },
+                            onAddToSheet = { onAddToSheet(r.item) }, onDownload = { onDownload(r.item) })
+                    }
+                    SearchTab.ALBUMS -> itemsIndexed(state.albums, key = { _, a -> "${a.platform}:${a.id}" }) { _, a ->
+                        CollectionRow(c, a.title, a.artist, a.artwork, disc = true) { onOpenAlbum(a.asMusicItem()) }
+                    }
+                    SearchTab.SHEETS -> itemsIndexed(state.sheets, key = { _, a -> "${a.platform}:${a.id}" }) { _, a ->
+                        CollectionRow(c, a.title, a.artist, a.artwork, disc = false) { onOpenAlbum(a.asMusicItem()) }
+                    }
+                    SearchTab.ARTISTS -> itemsIndexed(state.artists, key = { _, a -> "${a.platform}:${a.id}" }) { _, a ->
+                        CollectionRow(c, a.name, a.fans?.let { "$it 粉丝" } ?: "歌手", a.avatar, disc = false, round = true) { onOpenArtist(a.asMusicItem()) }
+                    }
+                }
+            }
+        }
+        if (state.failure != null) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                Text(state.failure, color = c.ink.copy(alpha = 0.6f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Spacer(Modifier.width(16.dp))
+                FlatButton(c, stringResource(res.retry), onRetry)
             }
         }
     }
 }
 
-/**
- * 单曲结果列表。
- *
- * 一行一卡（`SearchResultRow.tsx:78-151`）：`rounded-2xl` 卡片、1dp 描边、48dp 圆角 12dp 封面、
- * 两行文字（歌名 16sp/600 一行省略 + 「歌手 · 专辑」12sp）、右侧常驻「加入歌单」按钮。
- * 整行点击 = 播放（Folia 是 hover 封面出播放键，触屏改成整行）。
- *
- * 触控：行最小高度 68dp；右侧按钮 48dp 见方。
- */
 @Composable
-private fun TrackList(
+private fun TrackRow(
     res: SearchStrings,
-    rows: List<SearchRow>,
-    onPlay: (Int) -> Unit,
-    onDownload: (MusicItem) -> Unit,
-    onAddToSheet: (MusicItem) -> Unit,
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = GySpace.pageH, end = GySpace.pageH, top = GySpace.xxs, bottom = GySpace.l),
-        verticalArrangement = Arrangement.spacedBy(GySpace.s),
-    ) {
-        itemsIndexed(rows, key = { _, row -> "${row.pluginId}:${row.item.id}" }) { index, row ->
-            ResultCard(
-                res = res,
-                row = row,
-                onClick = { onPlay(index) },
-                onDownload = { onDownload(row.item) },
-                onAddToSheet = { onAddToSheet(row.item) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun ResultCard(
-    res: SearchStrings,
-    row: SearchRow,
+    c: SearchColors,
+    item: MusicItem,
     onClick: () -> Unit,
-    onDownload: () -> Unit,
+    onOpenArtist: () -> Unit,
+    onOpenAlbum: () -> Unit,
     onAddToSheet: () -> Unit,
+    onDownload: () -> Unit,
 ) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val shape = RoundedCornerShape(GyRadius.card)
-    val item = row.item
-    val subtitle = listOfNotNull(
-        item.displayArtist.orEmpty().takeIf { it.isNotBlank() },
-        item.album?.takeIf { it.isNotBlank() && it != item.title },
-    ).joinToString(" · ")
-
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 68.dp)
-            .clip(shape)
-            .background(if (pressed) Gyp.fill2 else Gyp.card)
-            .border(1.dp, Gyp.cardRing, shape)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = GySpace.l, vertical = GySpace.s),
+        Modifier.fillMaxWidth().heightIn(min = 76.dp).clickable(onClick = onClick).drawBottomLine(c.hairline, 1.dp).padding(start = 18.dp, end = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(GySpace.l),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Cover(url = item.artwork, size = 48)
+        Box(Modifier.size(48.dp).background(c.ink.copy(alpha = 0.08f))) {
+            if (!item.artwork.isNullOrBlank()) AsyncImage(item.artwork, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        }
         Column(Modifier.weight(1f)) {
-            Text(
-                text = item.title,
-                fontSize = (GyText.row.value + 1).sp,
-                lineHeight = GyText.rowHeight,
-                fontWeight = FontWeight.SemiBold,
-                color = Gyp.ink,
-                // 中文长标题折两行再省略（Folia 桌面是 truncate 一行，手机放宽到两行）。
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = subtitle,
-                    fontSize = GyText.hint,
-                    lineHeight = GyText.hintHeight,
-                    color = Gyp.t2,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                Spacer(Modifier.width(GySpace.xs))
-                SourceBadge(label = row.platformLabel)
-            }
-        }
-        // Folia 的 ＋（加入播放队列）：触屏常驻，48dp 触控。
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .clickableNoRipple(onAddToSheet),
-            contentAlignment = Alignment.Center,
-        ) {
-            androidx.compose.material3.Icon(
-                imageVector = GuangYueIcons.Plus,
-                contentDescription = stringResource(res.addToPlaylist),
-                tint = Gyp.t2,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .clickableNoRipple(onDownload),
-            contentAlignment = Alignment.Center,
-        ) {
-            androidx.compose.material3.Icon(
-                imageVector = GuangYueIcons.Download,
-                contentDescription = stringResource(res.download),
-                tint = Gyp.t3,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
-}
-
-/** 来源角标：Folia `span rounded-full border border-current/10 px-2 py-0.5 text-[10px]`。手机 12sp 下限。 */
-@Composable
-private fun SourceBadge(label: String) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(percent = 50))
-            .background(Gyp.tint)
-            .padding(horizontal = GySpace.xs, vertical = 1.dp),
-    ) {
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            lineHeight = 14.sp,
-            color = Gyp.t3,
-            maxLines = 1,
-        )
-    }
-}
-
-@Composable
-private fun AlbumGrid(
-    res: SearchStrings,
-    albums: List<AlbumItem>,
-    onOpen: (MusicItem) -> Unit,
-) {
-    if (albums.isEmpty()) {
-        Box(
-            Modifier.fillMaxSize().padding(GySpace.xl),
-            contentAlignment = Alignment.TopCenter,
-        ) {
-            FoliaEmptyState(
-                title = stringResource(res.emptyCategory),
-                subtitle = stringResource(res.emptySubtitle),
-            )
-        }
-        return
-    }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = GySpace.pageH,
-            end = GySpace.pageH,
-            top = GySpace.xxs,
-            bottom = GySpace.l,
-        ),
-        verticalArrangement = Arrangement.spacedBy(GySpace.s),
-    ) {
-        items(albums, key = { "${it.platform}:${it.id}" }) { album ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 68.dp)
-                    .clip(RoundedCornerShape(GyRadius.card))
-                    .background(Gyp.card)
-                    .border(1.dp, Gyp.cardRing, RoundedCornerShape(GyRadius.card))
-                    .clickableNoRipple { onOpen(album.asMusicItem()) }
-                    .padding(horizontal = GySpace.l, vertical = GySpace.s),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(GySpace.l),
-            ) {
-                Cover(url = album.artwork, size = 48)
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = album.title,
-                        fontSize = (GyText.row.value + 1).sp,
-                        lineHeight = GyText.rowHeight,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Gyp.ink,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (album.artist.isNotBlank()) {
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = album.artist,
-                            fontSize = GyText.hint,
-                            lineHeight = GyText.hintHeight,
-                            color = Gyp.t2,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+            Text(item.title, color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(item.artist, color = c.inkSoft, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false).clickable(onClick = onOpenArtist))
+                if (!item.album.isNullOrBlank()) {
+                    Text("  /  ", color = c.inkSoft.copy(alpha = 0.6f), fontSize = 12.sp)
+                    Text(item.album, color = c.inkSoft, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false).clickable(onClick = onOpenAlbum))
                 }
             }
         }
+        RowAction(c, GuangYueIcons.Star, onAddToSheet)
+        RowAction(c, GuangYueIcons.Download, onDownload)
     }
 }
 
 @Composable
-private fun ArtistGrid(
-    res: SearchStrings,
-    artists: List<ArtistItem>,
-    onOpen: (MusicItem) -> Unit,
-) {
-    if (artists.isEmpty()) {
-        Box(Modifier.fillMaxSize().padding(GySpace.xl), contentAlignment = Alignment.TopCenter) {
-            FoliaEmptyState(
-                title = stringResource(res.emptyCategory),
-                subtitle = stringResource(res.emptySubtitle),
-            )
-        }
-        return
-    }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = GySpace.pageH,
-            end = GySpace.pageH,
-            top = GySpace.xxs,
-            bottom = GySpace.l,
-        ),
-        verticalArrangement = Arrangement.spacedBy(GySpace.s),
-    ) {
-        items(artists, key = { "${it.platform}:${it.id}" }) { artist ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 68.dp)
-                    .clip(RoundedCornerShape(GyRadius.card))
-                    .background(Gyp.card)
-                    .border(1.dp, Gyp.cardRing, RoundedCornerShape(GyRadius.card))
-                    .clickableNoRipple { onOpen(artist.asMusicItem()) }
-                    .padding(horizontal = GySpace.l, vertical = GySpace.s),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(GySpace.l),
-            ) {
-                Box(Modifier.size(48.dp).clip(CircleShape).background(Gyp.tint)) {
-                    if (artist.avatar != null) {
-                        AsyncImage(
-                            model = artist.avatar,
-                            contentDescription = null,
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        androidx.compose.material3.Icon(
-                            imageVector = GuangYueIcons.User,
-                            contentDescription = null,
-                            tint = Gyp.t3,
-                            modifier = Modifier.align(Alignment.Center).size(20.dp),
-                        )
-                    }
-                }
-                Text(
-                    text = artist.name,
-                    fontSize = (GyText.row.value + 1).sp,
-                    lineHeight = GyText.rowHeight,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Gyp.ink,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
+private fun RowAction(c: SearchColors, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    Box(Modifier.size(36.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        androidx.compose.material3.Icon(icon, null, tint = c.ink.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// 状态：初始 / 加载 / 空 / 失败 / 无音源
-// ---------------------------------------------------------------------------------------------
-
-/** 初始态：搜索历史 + 推荐搜索（Folia 桌面没有，广乐的入口区，沿用旧页面的两块）。 */
 @Composable
-private fun IdleBody(
-    res: SearchStrings,
-    history: List<String>,
-    onPickHistory: (String) -> Unit,
-    onPickKeyword: (String) -> Unit,
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().testTag(SearchTags.Idle),
-        contentPadding = PaddingValues(bottom = GySpace.l),
-    ) {
-        if (history.isNotEmpty()) {
-            item("history-title") { FoliaSectionTitle(stringResource(res.history)) }
-            item("history") { FlowChips(history, onPickHistory) }
-        }
-        item("suggest-title") { FoliaSectionTitle(stringResource(res.suggestions)) }
-        item("suggest") { FlowChips(IdleKeywords, onPickKeyword) }
-    }
-}
-
-/**
- * 加载中：Folia 是一个居中转圈的 Loader2（`h-9 w-9 opacity-45`）。
- * 手机额外给 3 条骨架行，让「正在搜」这件事在长列表里不至于只剩一个小圈。
- */
-@Composable
-private fun LoadingState(
-    res: SearchStrings,
-    query: String) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = GySpace.pageH).testTag(SearchTags.Loading),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(Modifier.height(GySpace.xl))
-        Spinner(size = 28.dp, color = Gyp.t3)
-        Spacer(Modifier.height(GySpace.s))
-        Text(
-            text = stringResource(res.searching),
-            fontSize = GyText.hint,
-            color = Gyp.t3,
-            fontFamily = GuangYueDesign.Sans,
-        )
-        Spacer(Modifier.height(GySpace.l))
-        repeat(3) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 68.dp)
-                    .clip(RoundedCornerShape(GyRadius.card))
-                    .background(Gyp.card)
-                    .padding(horizontal = GySpace.l, vertical = GySpace.s)
-                    .padding(bottom = GySpace.s),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(GySpace.l),
-            ) {
-                Box(Modifier.size(48.dp).clip(RoundedCornerShape(GyRadius.card)).background(Gyp.tint))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(GySpace.xs)) {
-                    Box(Modifier.fillMaxWidth(0.62f).height(12.dp).clip(RoundedCornerShape(6.dp)).background(Gyp.tint))
-                    Box(Modifier.fillMaxWidth(0.4f).height(10.dp).clip(RoundedCornerShape(5.dp)).background(Gyp.tint))
-                }
-            }
-            Spacer(Modifier.height(GySpace.s))
-        }
-    }
-}
-
-/** 空结果：Folia `home.noResults` 一句小字居中（SearchWorkspace.tsx:110），这里补一句可以点的推荐。 */
-@Composable
-private fun EmptyState(
-    res: SearchStrings,
-    keywords: List<String>,
-    onPickKeyword: (String) -> Unit,
-) {
-    Column(
-        Modifier.fillMaxSize().testTag(SearchTags.Empty),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(Modifier.height(GySpace.xl * 2))
-        FoliaEmptyState(
-            title = stringResource(res.noResults),
-            subtitle = stringResource(res.emptySubtitle),
-        )
-        Spacer(Modifier.height(GySpace.l))
-        FlowChips(keywords.take(4), onPickKeyword)
-    }
-}
-
-/** 失败：Folia `search.error` + 重试按钮（SearchWorkspace.tsx:99-108，居中、AlertCircle 32）。 */
-@Composable
-private fun FailureState(
-    res: SearchStrings,
-    message: String,
-    onRetry: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = GySpace.xl).testTag(SearchTags.Failure),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(Modifier.height(GySpace.xl * 2))
-        androidx.compose.material3.Icon(
-            imageVector = GuangYueIcons.AlertCircle,
-            contentDescription = null,
-            tint = Gyp.danger,
-            modifier = Modifier.size(28.dp),
-        )
-        Spacer(Modifier.height(GySpace.m))
-        Text(
-            text = message,
-            fontSize = GyText.label,
-            lineHeight = GyText.labelHeight,
-            color = Gyp.t2,
-            textAlign = TextAlign.Center,
-            fontFamily = GuangYueDesign.Sans,
-        )
-        Spacer(Modifier.height(GySpace.m))
-        FoliaButton(
-            text = stringResource(res.retry),
-            onClick = onRetry,
-            variant = FoliaButtonVariant.Fill,
-            icon = GuangYueIcons.RefreshCw,
-        )
-    }
-}
-
-/** 一个音源都没装：旧页面的空态 + 去插件管理的入口（旧页面只有一句话，没入口）。 */
-@Composable
-private fun NoSourceState(
-    res: SearchStrings,
-    onOpenSourceManager: (() -> Unit)?,
-) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = GySpace.xl).testTag(SearchTags.NoSource),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(Modifier.height(GySpace.xl * 2))
-        FoliaEmptyState(
-            title = stringResource(res.noSource),
-            subtitle = stringResource(res.noSourceHint),
-        )
-        if (onOpenSourceManager != null) {
-            Spacer(Modifier.height(GySpace.m))
-            FoliaButton(
-                text = stringResource(res.openPlugins),
-                onClick = onOpenSourceManager,
-                variant = FoliaButtonVariant.Fill,
-                icon = GuangYueIcons.Plug,
-            )
-        }
-    }
-}
-
-/** 有结果时的底部错误条（Folia SearchWorkspace.tsx:112-120 居中小字 + 重试）。 */
-@Composable
-internal fun FailureBanner(
-    res: SearchStrings,
-    failure: String,
-    onRetry: () -> Unit,
-) {
+private fun CollectionRow(c: SearchColors, title: String, sub: String, art: String?, disc: Boolean, round: Boolean = false, onClick: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = GySpace.pageH, vertical = GySpace.xxs)
-            .clip(RoundedCornerShape(GyRadius.field))
-            .background(Gyp.danger.copy(alpha = 0.12f))
-            .padding(horizontal = GySpace.m, vertical = GySpace.s),
+        Modifier.fillMaxWidth().heightIn(min = 84.dp).clickable(onClick = onClick).drawBottomLine(c.hairline, 1.dp).padding(start = 18.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(GySpace.s),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(
-            text = failure,
-            fontSize = GyText.hint,
-            lineHeight = GyText.hintHeight,
-            color = Gyp.danger,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        FoliaButton(
-            text = stringResource(res.retry),
-            onClick = onRetry,
-            variant = FoliaButtonVariant.Quiet,
-            icon = GuangYueIcons.RefreshCw,
-        )
+        Box(Modifier.size(64.dp)) {
+            if (disc) {
+                // 专辑封面后面藏一张唱片，露出一截。
+                Canvas(Modifier.offset(x = 12.dp, y = 3.dp).size(52.dp)) {
+                    drawCircle(c.ink.copy(alpha = 0.9f))
+                    for (r in 1..6) drawCircle(c.ink.copy(alpha = 0.7f), size.minDimension / 2 * (0.3f + r * 0.1f), style = Stroke(1f))
+                    drawCircle(c.accent, size.minDimension * 0.15f)
+                }
+            } else if (!round) {
+                Box(Modifier.offset(6.dp, 6.dp).size(58.dp).background(c.accent))
+            }
+            Box(Modifier.size(58.dp).then(if (round) Modifier.clip(CircleShape) else Modifier).background(c.ink.copy(alpha = 0.08f))) {
+                if (!art.isNullOrBlank()) AsyncImage(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (sub.isNotBlank()) Text(sub, color = c.inkSoft, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+        }
+        androidx.compose.material3.Icon(GuangYueIcons.ArrowUpRight, null, tint = c.ink.copy(alpha = 0.35f), modifier = Modifier.size(18.dp))
     }
 }
 
 // ---------------------------------------------------------------------------------------------
-// 小零件
+// 空闲、加载、空 / 失败
 // ---------------------------------------------------------------------------------------------
 
-/** 48dp 见方的封面：Folia `h-12 w-12 rounded-xl bg-zinc-500/15`。 */
 @Composable
-private fun Cover(url: String?, size: Int) {
-    val shape = RoundedCornerShape(GyRadius.row)
-    Box(Modifier.size(size.dp).clip(shape).background(Gyp.tint)) {
-        if (url.isNullOrBlank()) {
-            androidx.compose.material3.Icon(
-                imageVector = GuangYueIcons.Music,
-                contentDescription = null,
-                tint = Gyp.t3,
-                modifier = Modifier.align(Alignment.Center).size(20.dp),
-            )
-        } else {
-            AsyncImage(
-                model = url,
-                contentDescription = null,
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+private fun IdleBody(res: SearchStrings, c: SearchColors, history: List<String>, onPickHistory: (String) -> Unit, onPickKeyword: (String) -> Unit) {
+    LazyColumn(Modifier.fillMaxSize().testTag(SearchTags.Idle), contentPadding = PaddingValues(bottom = 24.dp)) {
+        fun section(title: String, words: List<String>, pick: (String) -> Unit) {
+            item("t-$title") {
+                Row(Modifier.padding(start = 18.dp, end = 16.dp, top = 18.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).background(c.accent))
+                    Spacer(Modifier.width(10.dp))
+                    Text(title, color = c.inkSoft, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, letterSpacing = 1.1.sp)
+                }
+            }
+            itemsIndexed(words, key = { _, w -> "$title-$w" }) { i, w ->
+                Row(
+                    Modifier.fillMaxWidth().height(52.dp).clickable { pick(w) }.drawBottomLine(c.hairline, 1.dp).padding(horizontal = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text((i + 1).toString().padStart(2, '0'), color = c.inkSoft, fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, modifier = Modifier.width(32.dp))
+                    Text(w, color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    androidx.compose.material3.Icon(GuangYueIcons.ArrowUpRight, null, tint = c.ink.copy(alpha = 0.35f), modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+        if (history.isNotEmpty()) section("最近搜索", history.take(8), onPickHistory)
+        section("试试这些", IdleKeywords, onPickKeyword)
+    }
+}
+
+@Composable
+private fun Loader(c: SearchColors) {
+    val t = rememberInfiniteTransition(label = "loader")
+    val a by t.animateFloat(0f, 1f, infiniteRepeatable(tween(1200, easing = LinearEasing)), label = "a")
+    fun lift(delay: Float): Pair<Float, Float> {
+        val x = ((a - delay) % 1f + 1f) % 1f
+        val k = if (x < 0.4f) x / 0.4f else (1f - (x - 0.4f) / 0.6f)
+        val e = kotlin.math.sin(k * Math.PI / 2).toFloat()
+        return -14f * e to (0.35f + 0.65f * e)
+    }
+    Box(Modifier.fillMaxSize().testTag(SearchTags.Loading), contentAlignment = Alignment.Center) {
+        Row(Modifier.height(36.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            val (y1, o1) = lift(0f); val (y2, o2) = lift(0.125f); val (y3, o3) = lift(0.25f)
+            Box(Modifier.offset(y = y1.dp).alpha(o1).size(18.dp).background(c.accent))
+            Box(Modifier.offset(y = y2.dp).alpha(o2).size(18.dp).clip(CircleShape).background(c.ink))
+            Box(Modifier.offset(y = y3.dp).alpha(o3).width(42.dp).height(6.dp).background(c.ink))
         }
     }
 }
 
-/** Folia 的 `Loader2 animate-spin`：一圈缺口环旋转（不用 Material 的转圈，保证截图可复现）。 */
 @Composable
-private fun Spinner(size: androidx.compose.ui.unit.Dp, color: Color) {
-    val transition = rememberInfiniteTransition(label = "spinner")
-    val angle by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 900, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "spinner-angle",
-    )
-    androidx.compose.foundation.Canvas(Modifier.size(size).rotate(angle)) {
-        drawArc(
-            color = color,
-            startAngle = 0f,
-            sweepAngle = 280f,
-            useCenter = false,
-            style = androidx.compose.ui.graphics.drawscope.Stroke(
-                width = this.size.minDimension / 8f,
-                cap = androidx.compose.ui.graphics.StrokeCap.Round,
-            ),
-        )
+private fun VoidState(c: SearchColors, text: String, action: String?, onAction: (() -> Unit)?, tag: String) {
+    Column(Modifier.fillMaxSize().testTag(tag).padding(horizontal = 32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Canvas(Modifier.size(88.dp)) {
+            drawCircle(c.ink.copy(alpha = 0.4f), size.minDimension / 2 - 1.dp.toPx(), style = Stroke(2.dp.toPx()))
+            rotate(-32f) {
+                drawLine(c.accent, Offset(-18.dp.toPx(), center.y), Offset(size.width + 18.dp.toPx(), center.y), 6.dp.toPx())
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+        Text(text, color = c.ink.copy(alpha = 0.65f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        if (action != null && onAction != null) {
+            Spacer(Modifier.height(24.dp))
+            FlatButton(c, action, onAction)
+        }
     }
 }
 
-// 状态里的 counts 快捷取法（U2 之前 SearchScreen 里的同名函数搬过来，保持旧用法可用）。
+@Composable
+private fun FlatButton(c: SearchColors, text: String, onClick: () -> Unit) {
+    Row(
+        Modifier.heightIn(min = 40.dp).border(1.5.dp, c.ink).clickable(onClick = onClick).padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(Modifier.size(8.dp).background(c.accent))
+        Text(text, color = c.ink, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+    }
+}
+
+/** 有旧结果时的错误条（测试与旧调用点还在用这个名字）。 */
+@Composable
+internal fun FailureBanner(res: SearchStrings, failure: String, onRetry: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Text(failure, color = Gyp.ink.copy(alpha = 0.6f), fontSize = 13.sp)
+        Spacer(Modifier.width(16.dp))
+        FlatButton(SearchColors(Gyp.page, Gyp.ink, Gyp.inkSoft, Gyp.ink.copy(alpha = 0.09f), Gyp.accent), stringResource(res.retry), onRetry)
+    }
+}
+
 internal fun TabCounts.of(tab: SearchTab): Int = when (tab) {
     SearchTab.TRACKS -> tracks
     SearchTab.ALBUMS -> albums
@@ -942,43 +561,10 @@ internal fun TabCounts.of(tab: SearchTab): Int = when (tab) {
     SearchTab.ARTISTS -> artists
 }
 
-// 保留旧页面的内部帮助函数（app 模块的旧截图测试还在用）。
 internal fun AlbumItem.asMusicItem(): MusicItem = MusicItem(
-    platform = platform,
-    id = id,
-    title = title,
-    artist = artist,
-    album = title,
-    artwork = artwork,
-    albumId = id,
-    type = "album",
+    platform = platform, id = id, title = title, artist = artist, album = title, artwork = artwork, albumId = id, type = "album",
 )
 
 internal fun ArtistItem.asMusicItem(): MusicItem = MusicItem(
-    platform = platform,
-    id = id,
-    title = name,
-    artist = name,
-    artwork = avatar,
-    artistId = id,
-    type = "artist",
+    platform = platform, id = id, title = name, artist = name, artwork = avatar, artistId = id, type = "artist",
 )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
