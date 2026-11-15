@@ -116,8 +116,15 @@ fun QrLoginDialog(
     plugins: List<PluginMeta>,
     declared: suspend (PluginMeta) -> List<PluginUserVariable>,
     save: (PluginMeta, Map<String, String>) -> Unit,
-    onSync: () -> Unit,
+    /** 「同步数据」：手动重读这个平台的账号（Folia syncAccountData）。 */
+    onSync: (QrPlatform) -> Unit,
     onDismiss: () -> Unit,
+    /** 扫码成功（Folia accountRead reason=sign-in：登录后自动读一次账号）。session.fields 带凭据。 */
+    onLoggedIn: (LoginSession) -> Unit = {},
+    /** 退出登录：清掉账号凭据与缓存的歌单。 */
+    onLoggedOut: (QrPlatform) -> Unit = {},
+    /** 正在读账号：「同步数据」换成「同步中...」（Folia account.syncing）。 */
+    syncing: Boolean = false,
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -150,6 +157,7 @@ fun QrLoginDialog(
                     }
                     LoginSessions.put(ctx, s.session)
                     session = LoginSessions.get(ctx, platform)
+                    onLoggedIn(s.session)
                     return@LaunchedEffect
                 }
                 QrState.Expired, is QrState.Failed -> return@LaunchedEffect
@@ -264,7 +272,7 @@ fun QrLoginDialog(
                 }
                 if (s != null) {
                     Row(Modifier.padding(start = 22.dp, top = 28.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Pill("同步数据") { onSync() }
+                        Pill(if (syncing) "同步中..." else "同步数据") { if (!syncing) onSync(platform) }
                         Pill("退出登录") {
                             scope.launch {
                                 for (p in pluginsOf(platform)) {
@@ -273,6 +281,7 @@ fun QrLoginDialog(
                                     if (keys.isNotEmpty()) save(p, keys.associateWith { "" })
                                 }
                                 LoginSessions.clear(ctx, platform)
+                                onLoggedOut(platform)
                                 session = null
                                 round++
                             }

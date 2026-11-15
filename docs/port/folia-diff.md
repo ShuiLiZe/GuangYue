@@ -41,3 +41,4 @@
   2. 扫码成功即自动同步（Folia reason=sign-in），「同步数据」手动重读并按 synced/ran-out/failed 提示（文案见 zh-CN status.dataSynced/loginExpired/syncFailed）。
   3. 歌单页签显示该平台账号歌单（我喜欢置顶），点开取曲目。
   4. 平台：先核对模拟器 Folia 手机版登录窗列出的平台，补齐能直连的（汽水、波点等），我们目前只有 QQ/网易云/酷狗三家。
+- 🔧 2026-11-15 QQ 音乐已接：core/data `account/QqAccount.kt`（纯函数：GetPlaylistByUin + CgiGetPlaylistFavInfo 读歌单、uniform_get_Dissinfo 读曲目，1000/104401 = 登录过期）+ `AccountLibrary`（凭据 uin/musickey、files/account 缓存）。扫码成功自动读、「同步数据」手动重读，提示照 Folia 文案；首页歌单页签先列账号歌单（我喜欢置顶），点开进集合层可播。❓ 待真机验证接口与取链。网易云 / 酷狗账号读取未做。

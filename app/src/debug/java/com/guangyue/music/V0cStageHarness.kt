@@ -362,6 +362,36 @@ fun V0cStage(
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
                 )
             }
+        } else if (style == "accountplaylists") {
+            // 2026-11-15：登录 QQ 音乐后首页「歌单」页签 = 账号歌单（我喜欢置顶 → 自建 → 收藏），再接本地歌单。
+            // 夹具照 QqAccountApi.parsePlaylists 的结果形状；无封面走占位色块。3000 = 浅色，其余深色。
+            val light = positionMs == 3_000L
+            val mine = com.guangyue.feature.library.viewmodel.AccountTiles.tiles(
+                listOf(
+                    com.guangyue.core.data.account.AccountPlaylist("7001", "我喜欢", trackCount = 326, dirId = 201, owned = true, liked = true),
+                    com.guangyue.core.data.account.AccountPlaylist("7002", "通勤路上", trackCount = 48, dirId = 1, owned = true),
+                    com.guangyue.core.data.account.AccountPlaylist("7003", "一张名字特别长特别长的自建歌单用来看会不会被裁切", trackCount = 12, dirId = 2, owned = true),
+                    com.guangyue.core.data.account.AccountPlaylist("8001", "华语经典 · 收藏", trackCount = 100, owned = false, creator = "QQ音乐官方"),
+                ),
+            ) + com.guangyue.feature.library.home.HomeTile("playlist:1", "睡前", "本地歌单")
+            FoliaTheme(dark = !light) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .background(if (light) Color(0xFFF4F4F5) else Color(0xFF09090B))
+                        .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars.only(androidx.compose.foundation.layout.WindowInsetsSides.Bottom)),
+                ) {
+                    com.guangyue.music.ui.home.GridSliderHome(
+                        sections = listOf("歌单" to mine, "电台" to emptyList(), "专辑" to emptyList(), "本地" to emptyList()),
+                        title = "广乐",
+                        inkColor = if (light) Color(0xFF18181B) else Color(0xFFF4F4F5),
+                        groundColor = if (light) Color(0xFFF4F4F5) else Color(0xFF09090B),
+                        onOpenTile = {},
+                        onOpenSearch = {},
+                        onEnterTile = {},
+                        initialFocus = if (positionMs == 14_000L) 3 else 0,
+                    )
+                }
+            }
         } else if (style == "gridhome") {
             // 0.0.27：首页第二种样式「网格」（3D 滑卡）取证。夹具 = 推荐 / 榜单 / 最近三段（无封面，走占位色块）。
             // 拍摄时刻借 v0c_ms 当变体：3000 = 浅色；14000 = 聚焦第 5 张且它正在播放（暂停 + 进入播放页）；

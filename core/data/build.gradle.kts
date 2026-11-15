@@ -27,6 +27,8 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    // 账号直连（QQ 音乐 musicu.fcg，AccountLibrary）。
+    implementation(libs.okhttp)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

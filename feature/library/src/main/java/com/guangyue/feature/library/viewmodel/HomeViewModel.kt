@@ -51,7 +51,58 @@ class HomeViewModel @Inject constructor(
     private val downloads: com.guangyue.core.download.DownloadManager,
     private val meta: com.guangyue.core.data.meta.TrackMetaService,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
+    private val account: com.guangyue.core.data.account.AccountLibrary,
 ) : ViewModel() {
+
+    // ———————— 2026-11-15：登录账号的歌单（Folia accountRead / syncAccountData） ————————
+
+    /** 首页「歌单」页签里的账号歌单（我喜欢置顶 → 自建 → 收藏），先出本地缓存。 */
+    val accountTiles: StateFlow<List<HomeTile>> = account.qqPlaylists
+        .map { AccountTiles.tiles(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccountTiles.tiles(account.qqPlaylists.value))
+
+    /** 正在读账号（登录窗「同步数据」显示「同步中...」）。 */
+    val accountSyncing: StateFlow<Boolean> = account.syncing
+
+    private var accountReadOnStart = false
+
+    /** 启动时有凭据就安静地读一次（Folia reason=startup：不弹提示，读不到就先用缓存）。 */
+    fun readAccountOnStart() {
+        if (accountReadOnStart) return
+        accountReadOnStart = true
+        viewModelScope.launch { runCatching { if (account.hasQqCredential()) account.syncQq() } }
+    }
+
+    /**
+     * 读账号并提示结果。[fields] 是刚扫码拿到的凭据（reason=sign-in），null 是「同步数据」手动重读。
+     * 目前只有 QQ 音乐能读账号；别的平台回 false，调用方照旧处理。
+     */
+    fun syncAccount(platform: com.guangyue.core.plugin.login.QrPlatform, fields: Map<String, String>? = null): Boolean {
+        if (platform != com.guangyue.core.plugin.login.QrPlatform.QQ) return false
+        if (fields != null) account.saveQqCredential(fields)
+        viewModelScope.launch {
+            val outcome = runCatching { account.syncQq() }.getOrDefault(com.guangyue.core.data.account.AccountSyncOutcome.FAILED)
+            val (text, type) = AccountTiles.toast(outcome)
+            com.guangyue.feature.library.design.StatusToasts.show(text, type)
+        }
+        return true
+    }
+
+    /** 退出登录：清掉这个平台的账号凭据与缓存的歌单。 */
+    fun signedOut(platform: com.guangyue.core.plugin.login.QrPlatform) {
+        if (platform == com.guangyue.core.plugin.login.QrPlatform.QQ) account.clearQq()
+    }
+
+    private suspend fun accountTracks(tile: HomeTile): List<TrackEntity> {
+        val id = AccountTiles.qqIdOf(tile.key) ?: return emptyList()
+        try {
+            return account.qqTracks(id)
+        } finally {
+            if (account.qqExpired.value) {
+                com.guangyue.feature.library.design.StatusToasts.show("登录状态已失效，请重新登录", com.guangyue.feature.library.design.StatusToastType.ERROR)
+            }
+        }
+    }
 
     /**
      * 0.0.19：歌单 / 榜单页「全部下载」与聚焦卡单曲下载。
@@ -467,6 +518,7 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun resolveTracks(tile: HomeTile): List<TrackEntity> {
         if (tile.key.startsWith(LibraryTiles.PREFIX)) return libraryTracks(tile.key)
+        if (AccountTiles.isAccount(tile.key)) return accountTracks(tile)
         if (ArtistTiles.isArtist(tile.key)) return tracksOfArtist(tile)
         if (AlbumTiles.isAlbum(tile.key)) return tracksOfAlbum(tile)
         run {

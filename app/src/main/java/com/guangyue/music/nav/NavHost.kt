@@ -201,9 +201,13 @@ fun GuangYueNavHost(
             // 网格首页照 Folia 手机版 APK 页签：歌单 / 电台 / 专辑 / 本地（11-15 用户：Folia 没有的界面不加，删推荐/探索）。
             val homeMine by vm.playlistsFlow.collectAsStateWithLifecycle()
             val homeLocal by vm.localTiles.collectAsStateWithLifecycle()
-            val gridSections = remember(homeMine, sheets, recent, charts, homeLocal) {
+            // 2026-11-15：歌单页签先列登录账号的歌单（我喜欢置顶，Folia 手机版），再接本地歌单。
+            val accountTiles by vm.accountTiles.collectAsStateWithLifecycle()
+            val accountSyncing by vm.accountSyncing.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { vm.readAccountOnStart() }
+            val gridSections = remember(accountTiles, homeMine, sheets, recent, charts, homeLocal) {
                 listOf(
-                    "歌单" to homeMine,
+                    "歌单" to (accountTiles + homeMine),
                     "电台" to vm.recommended(sheets, recent),
                     "专辑" to emptyList(),
                     "本地" to homeLocal,
@@ -296,7 +300,16 @@ fun GuangYueNavHost(
                                             plugins = all,
                                             declared = { p -> pluginVm.accountOf(p).first },
                                             save = { p, values -> pluginVm.saveAccount(p, values) },
-                                            onSync = { pluginVm.selectSource(acc.id); com.guangyue.feature.library.design.StatusToasts.show("正在同步") },
+                                            // 2026-11-15 真机反馈：以前「同步数据」只切音源 + 吐司，根本没读账号。现在照 Folia 读账号歌单
+                                            // （QQ 音乐直连 musicu），结果按 status.dataSynced / loginExpired / syncFailed 提示；别的平台暂时照旧。
+                                            onSync = { p ->
+                                                if (!vm.syncAccount(p)) { pluginVm.selectSource(acc.id); com.guangyue.feature.library.design.StatusToasts.show("正在同步") }
+                                            },
+                                            onLoggedIn = { s ->
+                                                com.guangyue.core.plugin.login.QrPlatform.of(s.platform)?.let { p -> vm.syncAccount(p, s.fields) }
+                                            },
+                                            onLoggedOut = { p -> vm.signedOut(p) },
+                                            syncing = accountSyncing,
                                             onDismiss = { loginFor = null },
                                         )
                                     } else {
