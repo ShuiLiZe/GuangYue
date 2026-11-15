@@ -53,6 +53,20 @@ class PluginProbeActivity : ComponentActivity() {
                                 (r?.albums?.map { it.title to it.artwork } ?: emptyList()) +
                                 (r?.artists?.map { it.name to it.avatar } ?: emptyList())
                             Log.w(TAG, "SEARCH ${p.displayName} $t n=${rows.size} err=${r?.error} " + rows.take(3).joinToString(" | ") { "${it.first} -> ${it.second}" })
+                            rows.firstNotNullOfOrNull { it.second }?.let { url ->
+                                // 图片通不通：OkHttp 直取一次（Coil 失败不打日志）。
+                                val res = runCatching {
+                                    okhttp3.OkHttpClient().newCall(okhttp3.Request.Builder().url(url).build()).execute().use { "${it.code} ${it.body?.contentLength()}" }
+                                }.getOrElse { e -> "EXC ${e.javaClass.simpleName} ${e.message}" }
+                                Log.w(TAG, "IMG $t $res")
+                                val coil = runCatching {
+                                    val req = coil3.request.ImageRequest.Builder(this@PluginProbeActivity).data(url).build()
+                                    coil3.SingletonImageLoader.get(this@PluginProbeActivity).execute(req).let { rr ->
+                                        if (rr is coil3.request.ErrorResult) "ERR ${rr.throwable}" else "OK"
+                                    }
+                                }.getOrElse { e -> "EXC $e" }
+                                Log.w(TAG, "COIL $t $coil")
+                            }
                         }
                     }
                     Log.w(TAG, "DONE")
