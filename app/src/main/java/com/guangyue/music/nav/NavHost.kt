@@ -225,7 +225,7 @@ fun GuangYueNavHost(
                             initialTab = 0,
                             emptyText = { label ->
                                 when (label) {
-                                    "歌单" -> "先登录或搜几首歌。登录音源后，这里会显示你的歌单、收藏专辑和电台。"
+                                    "歌单" -> "先搜几首喜欢的歌试试看。登录在线音乐平台，访问您的歌单、收藏专辑和电台。"
                                     "推荐" -> if (wallLoading) "正在加载推荐…" else if (wallFailed) "推荐加载失败，稍后再试。" else "当前音源没有推荐内容。"
                                     "探索" -> if (wallLoading) "正在加载…" else "当前音源暂不支持探索。"
                                     "专辑" -> "当前音源暂不支持专辑库。"
