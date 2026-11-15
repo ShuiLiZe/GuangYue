@@ -249,11 +249,15 @@ class SearchViewModel @Inject constructor(
         forgetLoaded()
         // 0.0.8：音源是全局单选——搜索页换音源要同时切换「当前音源」，
         // 这样首页榜单、插件页的单选圈、取链都跟着变。
-        viewModelScope.launch { manager.setCurrentSource(id) }
         // 已经搜过就立刻用新音源重搜，避免用户以为「换了音源没反应」；
         // U3：先撤掉待发的防抖，免得多发一次。
+        // 11-15 修：必须等 setCurrentSource 把插件启用完再搜——以前并发发出去，
+        // 点一个没启用的音源第一次必报「插件已禁用」。
         debounce.cancel()
-        if (_state.value.query.isNotBlank()) search()
+        viewModelScope.launch {
+            runCatching { manager.setCurrentSource(id) }
+            if (_state.value.sourceId == id && _state.value.query.isNotBlank()) search()
+        }
     }
 
     /** 供「我的」页展示最近搜索；与 [search] 共用同一份历史记录。 */

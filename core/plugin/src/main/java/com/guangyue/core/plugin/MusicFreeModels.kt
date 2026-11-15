@@ -165,7 +165,7 @@ data class MusicItem(
                 title = json.string("title", "name", "songname", "songName") ?: "未知歌曲",
                 artist = json.string("artist", "artists", "singer", "author") ?: "未知艺术家",
                 album = json.string("album", "albumName", "alname"),
-                artwork = json.string("artwork", "pic", "cover", "img", "albumPic"),
+                artwork = imageUrl(json.string("artwork", "pic", "cover", "img", "albumPic")),
                 durationMs = duration?.let { if (it in 1..100_000L) it * 1000L else it },
                 albumId = json.string("albumId", "albumMid", "albummid"),
                 artistId = json.string("artistId", "singerMid"),
@@ -201,7 +201,7 @@ data class AlbumItem(
                 id = id,
                 title = json.string("title", "name", "albumName") ?: "未知专辑",
                 artist = json.string("artist", "singer", "artists") ?: "未知艺术家",
-                artwork = json.string("artwork", "pic", "cover"),
+                artwork = imageUrl(json.string("artwork", "pic", "cover", "img", "coverImg")),
                 description = json.string("description", "desc"),
                 date = json.string("date", "publishTime", "year"),
                 raw = json,
@@ -227,7 +227,7 @@ data class ArtistItem(
                 platform = json.string("platform") ?: platform,
                 id = id,
                 name = json.string("name", "title", "artist") ?: "未知艺术家",
-                avatar = json.string("avatar", "artwork", "pic"),
+                avatar = imageUrl(json.string("avatar", "artwork", "pic")),
                 fans = json.string("fans", "fansCount"),
                 description = json.string("description", "desc"),
                 raw = json,
@@ -267,3 +267,14 @@ data class LyricSourceResult(
     val translation: String? = null,
 )
 
+
+
+/**
+ * 插件给的图片地址规整：酷狗等平台返回模板地址 `.../stdmusic/{size}/xxx.jpg`，原样交给 Coil 必然 404（搜索页专辑/歌单封面全空）。
+ * `{size}` 换成 400；`//` 开头补 https。
+ */
+internal fun imageUrl(raw: String?): String? {
+    val u = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val sized = u.replace("{size}", "400")
+    return if (sized.startsWith("//")) "https:$sized" else sized
+}
