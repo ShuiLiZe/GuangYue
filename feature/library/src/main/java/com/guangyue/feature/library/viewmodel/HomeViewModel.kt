@@ -57,9 +57,16 @@ class HomeViewModel @Inject constructor(
     // ———————— 2026-11-15：登录账号的歌单（Folia accountRead / syncAccountData） ————————
 
     /** 首页「歌单」页签里的账号歌单（我喜欢置顶 → 自建 → 收藏），先出本地缓存。 */
-    val accountTiles: StateFlow<List<HomeTile>> = account.qqPlaylists
-        .map { AccountTiles.tiles(it) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AccountTiles.tiles(account.qqPlaylists.value))
+    // lazy：currentSource 在下面才初始化。QQ / 网易云按当前音源取舍（AccountTiles.forHome，照 Folia 当前平台）。
+    val accountTiles: StateFlow<List<HomeTile>> by lazy {
+        fun platformOf(p: PluginMeta?) = com.guangyue.core.plugin.login.QrPlatform.of(p?.platform) ?: com.guangyue.core.plugin.login.QrPlatform.of(p?.name)
+        combine(account.qqPlaylists, account.neteasePlaylists, currentSource) { qq, ne, src -> AccountTiles.forHome(platformOf(src), qq, ne) }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                AccountTiles.forHome(platformOf(currentSource.value), account.qqPlaylists.value, account.neteasePlaylists.value),
+            )
+    }
 
     /** 正在读账号（登录窗「同步数据」显示「同步中...」）。 */
     val accountSyncing: StateFlow<Boolean> = account.syncing
@@ -70,18 +77,30 @@ class HomeViewModel @Inject constructor(
     fun readAccountOnStart() {
         if (accountReadOnStart) return
         accountReadOnStart = true
-        viewModelScope.launch { runCatching { if (account.hasQqCredential()) account.syncQq() } }
+        viewModelScope.launch {
+            runCatching { if (account.hasQqCredential()) account.syncQq() }
+            runCatching { if (account.hasNeteaseCredential()) account.syncNetease() }
+        }
     }
 
     /**
      * 读账号并提示结果。[fields] 是刚扫码拿到的凭据（reason=sign-in），null 是「同步数据」手动重读。
-     * 目前只有 QQ 音乐能读账号；别的平台回 false，调用方照旧处理。
+     * QQ 音乐与网易云能读账号；别的平台（酷狗）回 false，调用方照旧处理。
      */
     fun syncAccount(platform: com.guangyue.core.plugin.login.QrPlatform, fields: Map<String, String>? = null): Boolean {
-        if (platform != com.guangyue.core.plugin.login.QrPlatform.QQ) return false
-        if (fields != null) account.saveQqCredential(fields)
+        val read: suspend () -> com.guangyue.core.data.account.AccountSyncOutcome = when (platform) {
+            com.guangyue.core.plugin.login.QrPlatform.QQ -> {
+                if (fields != null) account.saveQqCredential(fields)
+                suspend { account.syncQq() }
+            }
+            com.guangyue.core.plugin.login.QrPlatform.NETEASE -> {
+                if (fields != null) account.saveNeteaseCredential(fields)
+                suspend { account.syncNetease() }
+            }
+            else -> return false
+        }
         viewModelScope.launch {
-            val outcome = runCatching { account.syncQq() }.getOrDefault(com.guangyue.core.data.account.AccountSyncOutcome.FAILED)
+            val outcome = runCatching { read() }.getOrDefault(com.guangyue.core.data.account.AccountSyncOutcome.FAILED)
             val (text, type) = AccountTiles.toast(outcome)
             com.guangyue.feature.library.design.StatusToasts.show(text, type)
         }
@@ -90,10 +109,23 @@ class HomeViewModel @Inject constructor(
 
     /** 退出登录：清掉这个平台的账号凭据与缓存的歌单。 */
     fun signedOut(platform: com.guangyue.core.plugin.login.QrPlatform) {
-        if (platform == com.guangyue.core.plugin.login.QrPlatform.QQ) account.clearQq()
+        when (platform) {
+            com.guangyue.core.plugin.login.QrPlatform.QQ -> account.clearQq()
+            com.guangyue.core.plugin.login.QrPlatform.NETEASE -> account.clearNetease()
+            else -> Unit
+        }
     }
 
     private suspend fun accountTracks(tile: HomeTile): List<TrackEntity> {
+        AccountTiles.neteaseIdOf(tile.key)?.let { id ->
+            try {
+                return account.neteaseTracks(id)
+            } finally {
+                if (account.neteaseExpired.value) {
+                    com.guangyue.feature.library.design.StatusToasts.show("登录状态已失效，请重新登录", com.guangyue.feature.library.design.StatusToastType.ERROR)
+                }
+            }
+        }
         val id = AccountTiles.qqIdOf(tile.key) ?: return emptyList()
         try {
             return account.qqTracks(id)

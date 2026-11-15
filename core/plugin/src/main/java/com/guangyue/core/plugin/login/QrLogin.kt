@@ -21,8 +21,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import javax.crypto.Cipher
-import javax.crypto.spec.SecretKeySpec
 
 /**
  * 扫码登录（照 Folia：QQ 音乐 / 网易云 / 酷狗各自的二维码登录）。Folia 走本机的 qq-music-api /
@@ -129,30 +127,19 @@ class QrLogin {
     }
 
     // ———————————————————————— 网易云（eapi） ————————————————————————
-    private val neDevice = (1..52).map { "0123456789ABCDEF".random() }.joinToString("")
-    private val neHeader: Map<String, String> get() = mapOf(
-        "os" to "pc", "appver" to "3.1.17.204416", "osver" to "Microsoft-Windows-10-Professional-build-19045-64bit",
-        "deviceId" to neDevice, "channel" to "netease", "requestId" to "${System.currentTimeMillis()}_0001", "__csrf" to (cookie("__csrf") ?: ""),
-    )
-
-    private fun eapiParams(path: String, body: String): String {
-        val digest = md5("nobody${path}use${body}md5forencrypt")
-        val msg = "$path-36cd479b6b5-$body-36cd479b6b5-$digest".toByteArray()
-        val c = Cipher.getInstance("AES/ECB/PKCS5Padding")
-        c.init(Cipher.ENCRYPT_MODE, SecretKeySpec("e82ckenh8dichen8".toByteArray(), "AES"))
-        return c.doFinal(msg).joinToString("") { "%02X".format(it) }
-    }
+    // 加密与请求拼装在 [NeteaseCrypto]（账号歌单读取也用它）。
+    private val neDevice = NeteaseCrypto.randomDeviceId()
+    private val neHeader: Map<String, String> get() =
+        NeteaseCrypto.desktopHeader(neDevice, cookie("__csrf") ?: "", "${System.currentTimeMillis()}_0001")
 
     private fun neCall(path: String, data: Map<String, JsonElement>): Pair<JsonObject, okhttp3.Headers> {
         val header = neHeader
-        val body = JsonObject(data + mapOf("header" to JsonObject(header.mapValues { JsonPrimitive(it.value) }), "e_r" to JsonPrimitive(false))).toString()
-        val url = "https://interface.music.163.com/eapi" + path.removePrefix("/api")
-        val cookieHeader = (header + listOfNotNull(cookie("MUSIC_U")?.let { "MUSIC_U" to it }).toMap()).entries.joinToString("; ") { "${it.key}=${it.value}" }
-        val req = Request.Builder().url(url)
-            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.17.204416 Safari/537.36")
-            .header("Referer", "https://music.163.com")
-            .header("Cookie", cookieHeader)
-            .post(FormBody.Builder().add("params", eapiParams(path, body)).build())
+        val body = NeteaseCrypto.eapiBody(data, header)
+        val req = Request.Builder().url(NeteaseCrypto.eapiUrl(path))
+            .header("User-Agent", NeteaseCrypto.USER_AGENT)
+            .header("Referer", NeteaseCrypto.REFERER)
+            .header("Cookie", NeteaseCrypto.cookieHeader(header, cookie("MUSIC_U")))
+            .post(FormBody.Builder().add("params", NeteaseCrypto.eapiParams(path, body)).build())
             .build()
         http.newCall(req).execute().use { r ->
             val text = r.body?.string().orEmpty()

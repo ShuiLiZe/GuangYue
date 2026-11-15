@@ -365,14 +365,26 @@ fun V0cStage(
         } else if (style == "accountplaylists") {
             // 2026-11-15：登录 QQ 音乐后首页「歌单」页签 = 账号歌单（我喜欢置顶 → 自建 → 收藏），再接本地歌单。
             // 夹具照 QqAccountApi.parsePlaylists 的结果形状；无封面走占位色块。3000 = 浅色，其余深色。
+            // 44000 = 当前音源网易云（AccountTiles.forHome）：网易云账号歌单（我喜欢的音乐置顶 → 自建 → 收藏）。
             val light = positionMs == 3_000L
-            val mine = com.guangyue.feature.library.viewmodel.AccountTiles.tiles(
-                listOf(
+            val qqFixture = listOf(
                     com.guangyue.core.data.account.AccountPlaylist("7001", "我喜欢", trackCount = 326, dirId = 201, owned = true, liked = true),
                     com.guangyue.core.data.account.AccountPlaylist("7002", "通勤路上", trackCount = 48, dirId = 1, owned = true),
                     com.guangyue.core.data.account.AccountPlaylist("7003", "一张名字特别长特别长的自建歌单用来看会不会被裁切", trackCount = 12, dirId = 2, owned = true),
                     com.guangyue.core.data.account.AccountPlaylist("8001", "华语经典 · 收藏", trackCount = 100, owned = false, creator = "QQ音乐官方"),
-                ),
+            )
+            val neFixture = listOf(
+                com.guangyue.core.data.account.AccountPlaylist("1001", "广乐测试的喜欢的音乐", trackCount = 512, owned = true, liked = true),
+                com.guangyue.core.data.account.AccountPlaylist("1002", "深夜写代码", trackCount = 87, owned = true),
+                com.guangyue.core.data.account.AccountPlaylist("1003", "空歌单", owned = true),
+                com.guangyue.core.data.account.AccountPlaylist("2001", "云音乐飙升榜 · 收藏", trackCount = 100, owned = false, creator = "网易云音乐"),
+            )
+            val mine = (
+                if (positionMs == 44_000L) {
+                    com.guangyue.feature.library.viewmodel.AccountTiles.forHome(com.guangyue.core.plugin.login.QrPlatform.NETEASE, qqFixture, neFixture)
+                } else {
+                    com.guangyue.feature.library.viewmodel.AccountTiles.tiles(qqFixture)
+                }
             ) + com.guangyue.feature.library.home.HomeTile("playlist:1", "睡前", "本地歌单")
             FoliaTheme(dark = !light) {
                 Box(
