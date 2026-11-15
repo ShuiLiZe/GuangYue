@@ -32,3 +32,12 @@
 
 ## 播放页 / 歌词 / 町景
 - ❓ 需要能出声的歌，模拟器网络失败，待真机。
+
+## 2026-11-15 20:25 真机反馈：登录后不同步（最高优先）
+- 现状：QQ 扫码 0.0.30 真机登录成功，但「同步数据」只调 `pluginVm.selectSource` + 吐司（NavHost.kt:299），**没有任何读取用户歌单的代码**；歌单页签只有本地歌单。
+- Folia 做法：`components/login/syncAccountData.ts` → `account.syncAccount(providerId)`；各平台自带直连客户端 `services/onlineMusic/<平台>/`（qq/netease/kugou/qishui/bodian/fnmusic/appleMusic/spotify/ytm），登录后自动读账号（accountRead.ts，reason=sign-in）。
+- 要做：
+  1. 新建 core 账号读取层（Kotlin 直连，不走插件）：QQ 用 musicu.fcg `GetPlaylistByUin`（自建+收藏，「我喜欢」= dirId 201，见 qq/qqNormalize.ts:314-360），网易云 `/api/user/playlist`，酷狗对应接口。
+  2. 扫码成功即自动同步（Folia reason=sign-in），「同步数据」手动重读并按 synced/ran-out/failed 提示（文案见 zh-CN status.dataSynced/loginExpired/syncFailed）。
+  3. 歌单页签显示该平台账号歌单（我喜欢置顶），点开取曲目。
+  4. 平台：先核对模拟器 Folia 手机版登录窗列出的平台，补齐能直连的（汽水、波点等），我们目前只有 QQ/网易云/酷狗三家。
