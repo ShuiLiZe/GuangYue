@@ -67,7 +67,8 @@ internal fun FoliaSettingsShell(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var help by rememberSaveable { mutableStateOf(false) }
+    // Folia APK：设置窗首次打开落在「帮助」页。
+    var help by rememberSaveable { mutableStateOf(true) }
     val dark = Gyp.page.luminance() < 0.5f
     val card = if (dark) Color(0xFF202023) else Color(0xFFFFFFFF)
     val ink = Gyp.ink
