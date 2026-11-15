@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.Dispatchers
@@ -82,6 +83,9 @@ val latentBackgroundSupported: Boolean by lazy {
  * Folia `resolveLatentShaderColors(coverColors, theme, 'cover-theme')`。
  * 返回 [ditheringBack, ditheringFront, mesh0..mesh5]。
  */
+/** 手机竖屏下 Folia 网页端 Latent 实际的 pixelRatio（sqrt(1280×720 / 360×800) ≈ 1.79）。 */
+private const val LATENT_WEB_PR = 1.79f
+
 internal fun latentShaderColors(cover: List<Color>, palette: CoverPalette): List<Color> {
     val primary = cover.getOrNull(0) ?: palette.secondaryColor
     val secondary = cover.getOrNull(1) ?: palette.primaryColor
@@ -237,7 +241,16 @@ private fun LatentBackgroundImpl(
         ColorFilter.colorMatrix(m)
     }
 
-    Canvas(modifier.fillMaxSize()) {
+    // 11-15：Folia 的点阵是 WebGL 以 pr≈1.8 渲染再由浏览器双线性放大到屏幕密度，边缘天然发柔；
+    // 我们按屏幕像素直接画，再叠一层亚像素级模糊（半径≈放大倍数×0.7px）模拟那次放大。
+    Canvas(
+        modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                val r = (density / LATENT_WEB_PR).coerceAtLeast(1f) * 0.7f
+                renderEffect = androidx.compose.ui.graphics.BlurEffect(r, r, androidx.compose.ui.graphics.TileMode.Clamp)
+            },
+    ) {
         val wDp = size.width / density
         val hDp = size.height / density
         if (wDp <= 0f || hDp <= 0f) return@Canvas
