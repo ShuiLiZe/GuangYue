@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -555,6 +556,8 @@ fun LyricFlowScreen(
         }
         // 町景：Folia machi 城寨夜景（GL 3D 舞台，歌词在楼面大屏上；天气 auto 按 seed，同 Folia 默认）。整屏铺满，字幕层照常画译文。
         if (lyricStyle == LyricStyle.MACHI && kernelLines.isNotEmpty() && emptyKind == null) {
+            val machiCtx = androidx.compose.ui.platform.LocalContext.current
+            val machi by com.guangyue.feature.player.lyrics.visualizer.MachiPrefs.flow(machiCtx).collectAsState()
             com.guangyue.feature.player.lyrics.visualizer.MachiStagePreview(
                 lines = kernelLines,
                 timeSeconds = { clock.seconds() },
@@ -565,11 +568,11 @@ fun LyricFlowScreen(
                 seed = playback.item?.key ?: "machi",
                 songTitle = playback.item?.title.orEmpty(),
                 artist = playback.item?.artist.orEmpty(),
-                weather = "auto",
-                timeOfDay = "auto",
+                weather = machi.weather,
+                timeOfDay = machi.timeOfDay,
                 paused = { !playback.isPlaying },
-                // Folia：三个场景（便利店街角 / 加油站 / 城寨酒吧）按歌自动选；播放页可拖动镜头。
-                scene = "auto",
+                // Folia：三个场景（便利店街角 / 加油站 / 城寨酒吧）默认按歌自动选，设置里可手动定；播放页可拖动镜头。
+                scene = machi.scene,
                 draggable = true,
                 modifier = Modifier.fillMaxSize(),
             )

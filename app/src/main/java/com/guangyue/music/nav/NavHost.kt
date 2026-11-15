@@ -980,6 +980,15 @@ fun GuangYueNavHost(
                 backgrounds = listOf("latent" to "隐现", "common" to "通用"),
                 background = styleVm.background.collectAsStateWithLifecycle().value,
                 onPickBackground = { styleVm.pickBackground(it) },
+                machiChoices = run {
+                    val mp = com.guangyue.feature.player.lyrics.visualizer.MachiPrefs
+                    val m by mp.flow(settingsCtx).collectAsStateWithLifecycle()
+                    listOf(
+                        com.guangyue.feature.library.screen.SettingChoice("町景场景", "町景歌词样式画哪个街景；按歌自动是每首歌固定挑一个", mp.SCENES, m.scene) { mp.set(settingsCtx, scene = it) },
+                        com.guangyue.feature.library.screen.SettingChoice("町景天气", "晴、雨（湿路面倒影）、雪", mp.WEATHERS, m.weather) { mp.set(settingsCtx, weather = it) },
+                        com.guangyue.feature.library.screen.SettingChoice("町景时段", "跟随时钟会按手机时间在白天、黄昏、夜晚之间过渡", mp.TIMES, m.timeOfDay) { mp.set(settingsCtx, timeOfDay = it) },
+                    )
+                },
                 lyricStyle = style.id,
                 onPickLyricStyle = { id -> styleVm.pickStyle(com.guangyue.feature.player.lyrics.LyricStyle.fromId(id)) },
                 playQualities = com.guangyue.core.player.Quality.entries.sortedBy { it.order }.map { it.wire to it.label },

@@ -69,6 +69,8 @@ fun SettingsScreen(
     backgrounds: List<Pair<String, String>> = emptyList(),
     background: String = "",
     onPickBackground: (String) -> Unit = {},
+    /** 町景三项（标题、说明、选项、当前、回调）；空列表不显示。 */
+    machiChoices: List<SettingChoice> = emptyList(),
     /** 默认播放音质（wire 到名字）。 */
     playQualities: List<Pair<String, String>> = emptyList(),
     playQuality: String = "",
@@ -117,6 +119,10 @@ fun SettingsScreen(
         if (backgrounds.isNotEmpty()) {
             add(SettingItem(SettingsPage.PLAYER, "背景", "背景类型", "歌词舞台的背景：隐现是封面色流体叠像素点阵（需 Android 13+），通用是流体加几何图形", icon(GuangYueIcons.Sparkles),
                 below = { FlowStyleChips(backgrounds, background, onPickBackground) }))
+        }
+        machiChoices.forEach { c ->
+            add(SettingItem(SettingsPage.PLAYER, "町景", c.title, c.desc, icon(GuangYueIcons.Aperture),
+                below = { FlowStyleChips(c.options, c.selected, c.onPick) }))
         }
         if (playQualities.isNotEmpty()) {
             add(SettingItem(SettingsPage.PLAYBACK, "音质", "默认播放音质", "新开始播放的歌按这一档取链；音源没有这一档时向下取", icon(GuangYueIcons.AudioLines),
@@ -508,3 +514,13 @@ private fun HomeStylePicker(options: List<HomeStyleOption>, current: String, onP
 }
 
 private fun Modifier.androidxHeightInMin56(): Modifier = this.then(Modifier.heightIn(min = 56.dp))
+
+
+/** 设置页一行「标题 + 说明 + 一排选项」。 */
+data class SettingChoice(
+    val title: String,
+    val desc: String,
+    val options: List<Pair<String, String>>,
+    val selected: String,
+    val onPick: (String) -> Unit,
+)
