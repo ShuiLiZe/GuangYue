@@ -58,7 +58,7 @@ internal object LatentTuning {
      * 只是隐约一层（WebView 里 soft-light 混合 + 画布再被放大一次，对比被吃掉不少），同样 0.55 在 AGSL 里
      * 直接画到屏幕，方块明显得多（用户反馈「都是方块」）。按观感压到 0.28。
      */
-    const val DITHERING_OPACITY_PHONE = 0.28f
+    const val DITHERING_OPACITY_PHONE = 0.2f
     const val MESH_SPEED = 0.3f
     const val MESH_DISTORTION = 0.8f
     const val MESH_SWIRL = 0.1f
@@ -376,12 +376,15 @@ float4 main(float2 fragCoord) {
   float shape = 0.15 / max(0.001, abs(sin(t - shapeUV.y - shapeUV.x)));
   shape = smoothstep(0.02, 1.0, shape);
 
-  float2 base = floor(fc - 0.5) + 0.5;
-  float2 f = fc - 0.5 - floor(fc - 0.5);
-  float r00 = step(0.5, shape + dithAt((float2(base.x, u_res.y - base.y) - 0.5 * u_res) / pxSize));
-  float r10 = step(0.5, shape + dithAt((float2(base.x + 1.0, u_res.y - base.y) - 0.5 * u_res) / pxSize));
-  float r01 = step(0.5, shape + dithAt((float2(base.x, u_res.y - base.y - 1.0) - 0.5 * u_res) / pxSize));
-  float r11 = step(0.5, shape + dithAt((float2(base.x + 1.0, u_res.y - base.y - 1.0) - 0.5 * u_res) / pxSize));
+  // 2026-11-15 用户：真机「方块感很重」，Folia 丝滑。在「点阵格」尺度上做平滑插值：每格先算出 0/1，
+  // 片元按它在格里的位置用 smoothstep 在相邻四格之间过渡，点变成柔边，不再是硬边方块。
+  float2 cc = (glc - 0.5 * u_res) / pxSize - 0.5;
+  float2 i0 = floor(cc);
+  float2 f = smoothstep(0.15, 0.85, cc - i0);
+  float r00 = step(0.5, shape + dithAt(i0 + float2(0.5, 0.5)));
+  float r10 = step(0.5, shape + dithAt(i0 + float2(1.5, 0.5)));
+  float r01 = step(0.5, shape + dithAt(i0 + float2(0.5, 1.5)));
+  float r11 = step(0.5, shape + dithAt(i0 + float2(1.5, 1.5)));
   float res = mix(mix(r00, r10, f.x), mix(r01, r11, f.x), f.y);
 
   float3 fg = u_colorFront.rgb * u_colorFront.a;

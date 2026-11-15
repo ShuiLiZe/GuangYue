@@ -288,12 +288,25 @@ fun GuangYueNavHost(
                                     onLogin = { loginFor = src },
                                 )
                                 loginFor?.let { acc ->
-                                    com.guangyue.feature.library.screen.AccountDialog(
-                                        plugin = acc,
-                                        load = { p -> pluginVm.accountOf(p) },
-                                        onSave = { values -> pluginVm.saveAccount(acc, values); loginFor = null },
-                                        onDismiss = { loginFor = null },
-                                    )
+                                    // 2026-11-15 用户：插件变量表单普通人用不了。照 Folia 换成扫码登录（QQ / 网易云 / 酷狗），
+                                    // 凭据自动写进该平台插件的账号；不是这三家的插件仍用原来的表单。
+                                    if (com.guangyue.core.plugin.login.QrPlatform.of(acc.platform) != null || com.guangyue.core.plugin.login.QrPlatform.of(acc.name) != null) {
+                                        com.guangyue.feature.library.screen.QrLoginDialog(
+                                            initial = acc,
+                                            plugins = all,
+                                            declared = { p -> pluginVm.accountOf(p).first },
+                                            save = { p, values -> pluginVm.saveAccount(p, values) },
+                                            onSync = { pluginVm.selectSource(acc.id); com.guangyue.feature.library.design.StatusToasts.show("正在同步") },
+                                            onDismiss = { loginFor = null },
+                                        )
+                                    } else {
+                                        com.guangyue.feature.library.screen.AccountDialog(
+                                            plugin = acc,
+                                            load = { p -> pluginVm.accountOf(p) },
+                                            onSave = { values -> pluginVm.saveAccount(acc, values); loginFor = null },
+                                            onDismiss = { loginFor = null },
+                                        )
+                                    }
                                 }
                             },
 
