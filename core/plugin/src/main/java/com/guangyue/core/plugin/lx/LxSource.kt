@@ -80,6 +80,12 @@ object LxPlatforms {
             p.contains("kugou") || p == "kg" -> "kg"
             p.contains("kuwo") || p == "kw" -> "kw"
             p.contains("migu") || p == "mg" -> "mg"
+            // 2026-11-15：账号歌单在没装对应插件时 platform 写的是中文名（「网易云」「酷狗」），也要认得。
+            p.contains("腾讯") -> "tx"
+            p.contains("网易") -> "wy"
+            p.contains("酷狗") -> "kg"
+            p.contains("酷我") -> "kw"
+            p.contains("咪咕") -> "mg"
             else -> null
         }
     }

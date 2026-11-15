@@ -365,7 +365,8 @@ fun V0cStage(
         } else if (style == "accountplaylists") {
             // 2026-11-15：登录 QQ 音乐后首页「歌单」页签 = 账号歌单（我喜欢置顶 → 自建 → 收藏），再接本地歌单。
             // 夹具照 QqAccountApi.parsePlaylists 的结果形状；无封面走占位色块。3000 = 浅色，其余深色。
-            // 44000 = 当前音源网易云（AccountTiles.forHome）：网易云账号歌单（我喜欢的音乐置顶 → 自建 → 收藏）。
+            // 2026-11-15 酷狗：44000 = 当前音源酷狗（AccountTiles.forHome）：酷狗账号歌单（我喜欢置顶 → 自建 → 收藏）；
+            // 37500（默认）= 当前音源不是三家：QQ、网易云、酷狗依次全列。
             val light = positionMs == 3_000L
             val qqFixture = listOf(
                     com.guangyue.core.data.account.AccountPlaylist("7001", "我喜欢", trackCount = 326, dirId = 201, owned = true, liked = true),
@@ -379,11 +380,16 @@ fun V0cStage(
                 com.guangyue.core.data.account.AccountPlaylist("1003", "空歌单", owned = true),
                 com.guangyue.core.data.account.AccountPlaylist("2001", "云音乐飙升榜 · 收藏", trackCount = 100, owned = false, creator = "网易云音乐"),
             )
+            val kgFixture = listOf(
+                com.guangyue.core.data.account.AccountPlaylist("collection_3_1_2_0", "我喜欢", trackCount = 233, dirId = 2, owned = true, liked = true),
+                com.guangyue.core.data.account.AccountPlaylist("collection_3_1_8_0", "酷狗 · 车载循环", trackCount = 64, dirId = 8, owned = true),
+                com.guangyue.core.data.account.AccountPlaylist("collection_3_888_5_0", "华语经典 · 酷狗收藏", trackCount = 100, dirId = 9, owned = false, creator = "酷狗音乐"),
+            )
             val mine = (
-                if (positionMs == 44_000L) {
-                    com.guangyue.feature.library.viewmodel.AccountTiles.forHome(com.guangyue.core.plugin.login.QrPlatform.NETEASE, qqFixture, neFixture)
-                } else {
-                    com.guangyue.feature.library.viewmodel.AccountTiles.tiles(qqFixture)
+                when (positionMs) {
+                    44_000L -> com.guangyue.feature.library.viewmodel.AccountTiles.forHome(com.guangyue.core.plugin.login.QrPlatform.KUGOU, qqFixture, neFixture, kgFixture)
+                    3_000L, 14_000L -> com.guangyue.feature.library.viewmodel.AccountTiles.tiles(qqFixture)
+                    else -> com.guangyue.feature.library.viewmodel.AccountTiles.forHome(null, qqFixture, neFixture, kgFixture)
                 }
             ) + com.guangyue.feature.library.home.HomeTile("playlist:1", "睡前", "本地歌单")
             FoliaTheme(dark = !light) {

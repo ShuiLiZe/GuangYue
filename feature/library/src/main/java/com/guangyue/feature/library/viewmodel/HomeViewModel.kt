@@ -57,14 +57,14 @@ class HomeViewModel @Inject constructor(
     // ———————— 2026-11-15：登录账号的歌单（Folia accountRead / syncAccountData） ————————
 
     /** 首页「歌单」页签里的账号歌单（我喜欢置顶 → 自建 → 收藏），先出本地缓存。 */
-    // lazy：currentSource 在下面才初始化。QQ / 网易云按当前音源取舍（AccountTiles.forHome，照 Folia 当前平台）。
+    // lazy：currentSource 在下面才初始化。QQ / 网易云 / 酷狗按当前音源取舍（AccountTiles.forHome，照 Folia 当前平台）。
     val accountTiles: StateFlow<List<HomeTile>> by lazy {
         fun platformOf(p: PluginMeta?) = com.guangyue.core.plugin.login.QrPlatform.of(p?.platform) ?: com.guangyue.core.plugin.login.QrPlatform.of(p?.name)
-        combine(account.qqPlaylists, account.neteasePlaylists, currentSource) { qq, ne, src -> AccountTiles.forHome(platformOf(src), qq, ne) }
+        combine(account.qqPlaylists, account.neteasePlaylists, account.kugouPlaylists, currentSource) { qq, ne, kg, src -> AccountTiles.forHome(platformOf(src), qq, ne, kg) }
             .stateIn(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(5_000),
-                AccountTiles.forHome(platformOf(currentSource.value), account.qqPlaylists.value, account.neteasePlaylists.value),
+                AccountTiles.forHome(platformOf(currentSource.value), account.qqPlaylists.value, account.neteasePlaylists.value, account.kugouPlaylists.value),
             )
     }
 
@@ -80,12 +80,13 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { if (account.hasQqCredential()) account.syncQq() }
             runCatching { if (account.hasNeteaseCredential()) account.syncNetease() }
+            runCatching { if (account.hasKugouCredential()) account.syncKugou() }
         }
     }
 
     /**
      * 读账号并提示结果。[fields] 是刚扫码拿到的凭据（reason=sign-in），null 是「同步数据」手动重读。
-     * QQ 音乐与网易云能读账号；别的平台（酷狗）回 false，调用方照旧处理。
+     * QQ 音乐、网易云、酷狗都能读账号；回 false 只在以后多出不认识的平台时，调用方照旧处理。
      */
     fun syncAccount(platform: com.guangyue.core.plugin.login.QrPlatform, fields: Map<String, String>? = null): Boolean {
         val read: suspend () -> com.guangyue.core.data.account.AccountSyncOutcome = when (platform) {
@@ -97,7 +98,10 @@ class HomeViewModel @Inject constructor(
                 if (fields != null) account.saveNeteaseCredential(fields)
                 suspend { account.syncNetease() }
             }
-            else -> return false
+            com.guangyue.core.plugin.login.QrPlatform.KUGOU -> {
+                if (fields != null) account.saveKugouCredential(fields)
+                suspend { account.syncKugou() }
+            }
         }
         viewModelScope.launch {
             val outcome = runCatching { read() }.getOrDefault(com.guangyue.core.data.account.AccountSyncOutcome.FAILED)
@@ -112,11 +116,20 @@ class HomeViewModel @Inject constructor(
         when (platform) {
             com.guangyue.core.plugin.login.QrPlatform.QQ -> account.clearQq()
             com.guangyue.core.plugin.login.QrPlatform.NETEASE -> account.clearNetease()
-            else -> Unit
+            com.guangyue.core.plugin.login.QrPlatform.KUGOU -> account.clearKugou()
         }
     }
 
     private suspend fun accountTracks(tile: HomeTile): List<TrackEntity> {
+        AccountTiles.kugouIdOf(tile.key)?.let { id ->
+            try {
+                return account.kugouTracks(id)
+            } finally {
+                if (account.kugouExpired.value) {
+                    com.guangyue.feature.library.design.StatusToasts.show("登录状态已失效，请重新登录", com.guangyue.feature.library.design.StatusToastType.ERROR)
+                }
+            }
+        }
         AccountTiles.neteaseIdOf(tile.key)?.let { id ->
             try {
                 return account.neteaseTracks(id)

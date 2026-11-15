@@ -20,6 +20,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import com.guangyue.core.plugin.login.NeteaseCrypto
 import okhttp3.FormBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -40,7 +41,7 @@ class AccountExpiredException : Exception("登录状态已失效，请重新登�
  * 扫码成功自动读一次（reason=sign-in）、「同步数据」手动重读、启动时有凭据就安静地读一次；
  * 读到的歌单整份落到 files/account/，重开 App 先显示缓存，不必等网络。
  *
- * QQ 音乐（musicu.fcg）与网易云（eapi）；酷狗的账号读取还没做（见 docs/port/folia-diff.md）。
+ * QQ 音乐（musicu.fcg）、网易云（eapi）与酷狗（gateway.kugou.com 安卓签名，见 [KugouAccountApi]）。
  */
 @Singleton
 class AccountLibrary @Inject constructor(
@@ -64,6 +65,10 @@ class AccountLibrary @Inject constructor(
     /** 网易云账号的歌单（我喜欢的音乐置顶 → 自建 → 收藏）；未登录或还没读过是空的。 */
     val neteasePlaylists: StateFlow<List<AccountPlaylist>> = _nePlaylists.asStateFlow()
 
+    private val _kgPlaylists = MutableStateFlow<List<AccountPlaylist>>(emptyList())
+    /** 酷狗账号的歌单（我喜欢置顶 → 自建 → 收藏）；未登录或还没读过是空的。 */
+    val kugouPlaylists: StateFlow<List<AccountPlaylist>> = _kgPlaylists.asStateFlow()
+
     private val _syncing = MutableStateFlow(false)
     val syncing: StateFlow<Boolean> = _syncing.asStateFlow()
 
@@ -79,11 +84,19 @@ class AccountLibrary @Inject constructor(
     @Serializable
     private data class NeTrackSnapshot(val songs: List<NeteaseSong> = emptyList())
 
+    @Serializable
+    private data class KgSnapshot(val userId: String = "", val syncedAt: Long = 0L, val playlists: List<AccountPlaylist> = emptyList())
+
+    @Serializable
+    private data class KgTrackSnapshot(val songs: List<KugouSong> = emptyList())
+
     private val dir get() = File(context.filesDir, "account").apply { mkdirs() }
     private val qqFile get() = File(dir, "qq_playlists.json")
     private fun qqTracksFile(id: String) = File(dir, "qq_tracks_" + id.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json")
     private val neFile get() = File(dir, "netease_playlists.json")
     private fun neTracksFile(id: String) = File(dir, "netease_tracks_" + id.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json")
+    private val kgFile get() = File(dir, "kugou_playlists.json")
+    private fun kgTracksFile(id: String) = File(dir, "kugou_tracks_" + id.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".json")
     private val prefs get() = context.getSharedPreferences("account_credentials", Context.MODE_PRIVATE)
 
     init {
@@ -92,6 +105,8 @@ class AccountLibrary @Inject constructor(
             if (snap != null && _qqPlaylists.value.isEmpty()) _qqPlaylists.value = snap.playlists
             val ne = runCatching { json.decodeFromString(NeSnapshot.serializer(), neFile.readText()) }.getOrNull()
             if (ne != null && _nePlaylists.value.isEmpty()) _nePlaylists.value = ne.playlists
+            val kg = runCatching { json.decodeFromString(KgSnapshot.serializer(), kgFile.readText()) }.getOrNull()
+            if (kg != null && _kgPlaylists.value.isEmpty()) _kgPlaylists.value = kg.playlists
         }
     }
 
@@ -385,6 +400,196 @@ class AccountLibrary @Inject constructor(
         }
         android.util.Log.w("GYACCOUNT", "netease tracks $id failed", fresh.exceptionOrNull())
         if (fresh.exceptionOrNull() is AccountExpiredException) _neExpired.value = true
+        cached?.map { it.toEntity(platform) } ?: throw (fresh.exceptionOrNull() ?: IllegalStateException("读取失败"))
+    }
+
+    // ———————————————————————— 酷狗 ————————————————————————
+
+    /** 扫码成功：把 userid / token 存下来（只存在本机私有目录）；换过的安卓 token 作废。 */
+    fun saveKugouCredential(fields: Map<String, String>) {
+        val c = KugouCredential.fromFields(fields) ?: return
+        prefs.edit().putString("kg_userid", c.userId).putString("kg_token", c.token)
+            .remove("kg_app_token").remove("kg_app_src").apply()
+    }
+
+    /** 退出登录：凭据、歌单、曲目缓存一起清掉。 */
+    fun clearKugou() {
+        prefs.edit().remove("kg_userid").remove("kg_token").remove("kg_app_token").remove("kg_app_src").apply()
+        _kgPlaylists.value = emptyList()
+        _kgExpired.value = false
+        scope.launch { dir.listFiles()?.filter { it.name.startsWith("kugou_") }?.forEach { it.delete() } }
+    }
+
+    private fun kgPluginsOrdered() = plugins.plugins.value
+        .filter { (QrPlatform.of(it.platform) ?: QrPlatform.of(it.name)) == QrPlatform.KUGOU }
+        .sortedByDescending { it.enabled && it.error == null }
+
+    /** 存下的 userid / token；0.0.30 及以前扫码只写进了酷狗插件的账号变量，这里回头认一次（认到就补存）。 */
+    private suspend fun kgCredential(): KugouCredential? {
+        val u = prefs.getString("kg_userid", null).orEmpty()
+        val t = prefs.getString("kg_token", null).orEmpty()
+        KugouCredential(u, t).takeIf { it.valid }?.let { return it }
+        runCatching { plugins.load() }
+        for (p in kgPluginsOrdered()) {
+            val vars = runCatching { bridge.readUserVariables(p.id) }.getOrDefault(emptyMap())
+            val c = KugouCredential.fromFields(vars) ?: continue
+            prefs.edit().putString("kg_userid", c.userId).putString("kg_token", c.token).apply()
+            return c
+        }
+        return null
+    }
+
+    suspend fun hasKugouCredential(): Boolean = withContext(Dispatchers.IO) { kgCredential() != null }
+
+    /** 播放这些歌用哪个音源：已装的酷狗插件的 platform（找不到时洛雪源按「酷狗」认 kg）。 */
+    fun kugouTrackPlatform(): String = kgPluginsOrdered().firstOrNull()?.platform?.takeIf { it.isNotBlank() } ?: "酷狗"
+
+    /** 本机的酷狗设备号（KuGouMusicApi：guid = md5(随机 GUID)，mid = calculateMid(guid)），装机后固定。 */
+    private val kgMid: String
+        get() = prefs.getString("kg_mid", null) ?: KugouAccountApi.mid(KugouAccountApi.md5(java.util.UUID.randomUUID().toString()))
+            .also { prefs.edit().putString("kg_mid", it).apply() }
+
+    /** 一次签名好的网关请求，回答原文。 */
+    private fun kgCall(r: KugouRequest): String {
+        val url = (KugouAccountApi.GATEWAY + r.path).toHttpUrl().newBuilder().apply {
+            r.query.forEach { (k, v) -> addQueryParameter(k, v) }
+        }.build()
+        val b = Request.Builder().url(url)
+        r.headers.forEach { (k, v) -> b.header(k, v) }
+        if (r.body.isEmpty()) b.get() else b.post(r.body.toRequestBody("application/json".toMediaType()))
+        http.newCall(b.build()).execute().use { resp ->
+            if (resp.code == 401 || resp.code == 403) throw AccountExpiredException()
+            if (!resp.isSuccessful) error("HTTP ${resp.code}")
+            return resp.body.string()
+        }
+    }
+
+    /** 扫码 token 换成的安卓 token（只认从当前这个扫码 token 换来的）；没换过回扫码 token 本身。 */
+    private fun kgEffective(c: KugouCredential): KugouCredential {
+        val app = prefs.getString("kg_app_token", null).orEmpty()
+        return if (app.isNotBlank() && prefs.getString("kg_app_src", null) == c.token) c.copy(token = app) else c
+    }
+
+    /** login_by_token：拿扫码 token 换一个安卓 token（Folia 手机版遇到 20017 的做法）。换不到回 null。 */
+    private fun kgRefresh(c: KugouCredential): KugouCredential? {
+        val temp = (1..16).map { "1234567890abcdefghijklmnopqrstuvwxyz".random() }.joinToString("")
+        val r = runCatching { KugouAccountApi.loginByTokenRequest(c, kgMid, System.currentTimeMillis(), temp) }.getOrNull() ?: return null
+        val got = runCatching { KugouAccountApi.parseLoginByToken(kgCall(r), temp) }
+            .onFailure { android.util.Log.w("GYACCOUNT", "kugou login_by_token failed", it) }
+            .getOrNull() ?: return null
+        if (got.userId != c.userId) return null
+        prefs.edit().putString("kg_app_token", got.token).putString("kg_app_src", c.token).apply()
+        android.util.Log.i("GYACCOUNT", "kugou app token refreshed")
+        return got
+    }
+
+    /**
+     * 读一页，酷狗拒了（不论码）且还没换过安卓 token 时，先 login_by_token 换一个再读一次（[tried] 记着换没换过）。
+     */
+    private fun <T> kgRead(c: KugouCredential, tried: BooleanArray, build: (KugouCredential) -> KugouRequest, parse: (String) -> QqRead<T>): QqRead<T> {
+        val eff = kgEffective(c)
+        val text = kgCall(build(eff))
+        val r = parse(text)
+        if (r is QqRead.Ok || tried[0] || eff.token != c.token) return r
+        tried[0] = true
+        android.util.Log.i("GYACCOUNT", "kugou refused with web token (code ${KugouAccountApi.errorCodeOf(text)}), trying login_by_token")
+        val app = kgRefresh(c) ?: return r
+        return parse(kgCall(build(app)))
+    }
+
+    private val _kgExpired = MutableStateFlow(false)
+    /** 最近一次读账号时酷狗说登录已失效（同步成功后复位）。 */
+    val kugouExpired: StateFlow<Boolean> = _kgExpired.asStateFlow()
+
+    /** 读一次酷狗账号歌单：翻 v7/get_all_list（一页 100）。失败时不动已有的歌单与缓存。 */
+    suspend fun syncKugou(): AccountSyncOutcome = withContext(Dispatchers.IO) {
+        lock.withLock {
+            val c = kgCredential() ?: return@withLock AccountSyncOutcome.NOT_SIGNED_IN
+            _syncing.value = true
+            try {
+                val outcome = runCatching {
+                    val tried = BooleanArray(1)
+                    val all = ArrayList<AccountPlaylist>()
+                    var page = 1
+                    var read = 0
+                    while (read < MAX_PLAYLISTS) {
+                        val r = kgRead(c, tried, { e -> KugouAccountApi.playlistsRequest(e, kgMid, System.currentTimeMillis() / 1000, page) }, KugouAccountApi::parsePlaylistPage)
+                        val p = when (r) {
+                            is QqRead.Ok -> r.value
+                            QqRead.Expired -> return@runCatching AccountSyncOutcome.EXPIRED
+                            is QqRead.Failed -> { android.util.Log.w("GYACCOUNT", "kugou playlists refused: ${r.reason}"); return@runCatching AccountSyncOutcome.FAILED }
+                        }
+                        all += p.playlists
+                        read += p.listed
+                        if (p.listed == 0 || !KugouAccountApi.hasMore(p, read)) break
+                        page++
+                    }
+                    val list = KugouAccountApi.order(all)
+                    _kgPlaylists.value = list
+                    runCatching { kgFile.writeText(json.encodeToString(KgSnapshot.serializer(), KgSnapshot(c.userId, System.currentTimeMillis(), list))) }
+                    android.util.Log.i("GYACCOUNT", "kugou playlists synced n=${list.size}")
+                    AccountSyncOutcome.SYNCED
+                }.getOrElse {
+                    android.util.Log.w("GYACCOUNT", "kugou playlists request failed", it)
+                    if (it is AccountExpiredException) AccountSyncOutcome.EXPIRED else AccountSyncOutcome.FAILED
+                }
+                _kgExpired.value = outcome == AccountSyncOutcome.EXPIRED
+                outcome
+            } finally {
+                _syncing.value = false
+            }
+        }
+    }
+
+    fun kugouPlaylist(id: String): AccountPlaylist? = _kgPlaylists.value.firstOrNull { it.id == id }
+
+    private fun KugouSong.toEntity(platform: String) = TrackEntity(
+        key = "$platform:$hash",
+        title = title,
+        artist = artist,
+        album = album,
+        artwork = cover,
+        durationMs = durationMs,
+        platform = platform,
+        songId = hash,
+        source = TrackEntity.SOURCE_PLUGIN,
+        rawJson = toRaw(platform).toString(),
+    )
+
+    /**
+     * 一张酷狗账号歌单的全部曲目（get_other_list_file_nofilt 一页 100 首往下翻，最多 [MAX_SONGS] 首）。
+     * 读不到时用上次缓存；也没有缓存就抛出（登录失效抛 [AccountExpiredException]）。
+     */
+    suspend fun kugouTracks(id: String): List<TrackEntity> = withContext(Dispatchers.IO) {
+        val platform = kugouTrackPlatform()
+        kugouPlaylist(id) ?: error("找不到这张歌单")
+        val cached = runCatching { json.decodeFromString(KgTrackSnapshot.serializer(), kgTracksFile(id).readText()).songs }.getOrNull()
+        val c = kgCredential()
+        if (c == null) _kgExpired.value = true
+        val fresh: Result<List<KugouSong>> = if (c == null) Result.failure(AccountExpiredException()) else runCatching {
+            val tried = BooleanArray(1)
+            val acc = ArrayList<KugouSong>()
+            var begin = 0
+            while (begin < MAX_SONGS) {
+                val start = begin
+                val page = when (val r = kgRead(c, tried, { e -> KugouAccountApi.tracksRequest(e, kgMid, System.currentTimeMillis() / 1000, id, start) }, { KugouAccountApi.parseSongPage(it) })) {
+                    is QqRead.Ok -> r.value
+                    QqRead.Expired -> throw AccountExpiredException()
+                    is QqRead.Failed -> error(r.reason)
+                }
+                acc += page.songs
+                begin += page.listed
+                if (page.listed == 0 || !KugouAccountApi.songsMore(page, begin)) break
+            }
+            acc.distinctBy { it.hash }
+        }
+        fresh.getOrNull()?.let { songs ->
+            _kgExpired.value = false
+            runCatching { kgTracksFile(id).writeText(json.encodeToString(KgTrackSnapshot.serializer(), KgTrackSnapshot(songs))) }
+            return@withContext songs.map { it.toEntity(platform) }
+        }
+        android.util.Log.w("GYACCOUNT", "kugou tracks $id failed", fresh.exceptionOrNull())
+        if (fresh.exceptionOrNull() is AccountExpiredException) _kgExpired.value = true
         cached?.map { it.toEntity(platform) } ?: throw (fresh.exceptionOrNull() ?: IllegalStateException("读取失败"))
     }
 
