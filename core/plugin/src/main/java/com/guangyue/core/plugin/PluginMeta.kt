@@ -64,8 +64,9 @@ data class PluginMeta(
     val healthAt: Long = 0L,
 ) {
     val hasSearch: Boolean get() = functions.isEmpty() || functions.contains("search")
-    val hasAlbumSearch: Boolean get() = functions.isEmpty() || functions.contains("searchAlbum")
-    val hasArtistSearch: Boolean get() = functions.isEmpty() || functions.contains("searchArtist")
+    // MusicFree 专辑 / 歌手搜索都走 search(query, page, type)，没有单独的函数。
+    val hasAlbumSearch: Boolean get() = functions.isEmpty() || functions.contains("search")
+    val hasArtistSearch: Boolean get() = functions.isEmpty() || functions.contains("search")
     val hasMediaSource: Boolean get() = functions.contains("getMediaSource")
     val hasLyric: Boolean get() = functions.contains("getLyric")
     val hasMusicInfo: Boolean get() = functions.contains("getMusicInfo")

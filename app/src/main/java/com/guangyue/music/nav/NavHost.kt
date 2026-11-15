@@ -267,6 +267,7 @@ fun GuangYueNavHost(
                             }),
                             providerButton = {
                                 val src by vm.currentSource.collectAsStateWithLifecycle()
+                                var loginFor by remember { mutableStateOf<com.guangyue.core.plugin.PluginMeta?>(null) }
                                 // Folia SwitcherPill：点开是平台切换（可用音源，点了直接切）+「音源与登录…」。
                                 val pluginVm: com.guangyue.feature.library.viewmodel.PluginViewModel = hiltViewModel()
                                 val all by pluginVm.plugins.collectAsStateWithLifecycle()
@@ -282,7 +283,16 @@ fun GuangYueNavHost(
                                     options = usable.map { Triple(it.id, it.displayName, com.guangyue.core.plugin.PluginPlatformIcons.candidatesFor(it).firstOrNull()) },
                                     onPick = { id -> pluginVm.selectSource(id) },
                                     onManage = { navController.navigate(Routes.PLUGINS) },
+                                    onLogin = { loginFor = src },
                                 )
+                                loginFor?.let { acc ->
+                                    com.guangyue.feature.library.screen.AccountDialog(
+                                        plugin = acc,
+                                        load = { p -> pluginVm.accountOf(p) },
+                                        onSave = { values -> pluginVm.saveAccount(acc, values); loginFor = null },
+                                        onDismiss = { loginFor = null },
+                                    )
+                                }
                             },
 
                             title = "广乐",

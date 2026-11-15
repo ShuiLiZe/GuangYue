@@ -639,10 +639,11 @@ private fun UrlDialog(
 
 /**
  * 插件「登录」弹层（MusicFree 的「用户变量」）：插件声明了哪些键（多为 cookie / token / 账号），就给哪几格。
- * 没声明 = 这个平台不需要登录。值只存在本机（plugins/<id>/uservars.json），插件经 env.getUserVariables() 取。
+ * 没声明 = 这个平台不需要登录。值只存在本机，**按平台存**（accounts/<platform>.json）：同平台的插件共用一份，
+ * 换插件 / 更新订阅不用重登；字段名不同时按 Cookie / Token 归类对上。插件经 env.getUserVariables() 取。
  */
 @Composable
-private fun AccountDialog(
+fun AccountDialog(
     plugin: PluginMeta,
     load: suspend (PluginMeta) -> Pair<List<com.guangyue.core.plugin.runtime.PluginUserVariable>, Map<String, String>>,
     onSave: (Map<String, String>) -> Unit,
@@ -665,7 +666,7 @@ private fun AccountDialog(
             verticalArrangement = Arrangement.spacedBy(GySpace.m),
         ) {
             Text(
-                text = "登录 ${plugin.displayName}",
+                text = "登录 ${plugin.platform.ifBlank { plugin.displayName }}",
                 fontSize = GyText.title,
                 lineHeight = GyText.titleHeight,
                 fontWeight = FontWeight.SemiBold,
@@ -679,7 +680,12 @@ private fun AccountDialog(
                     "这个音源没有需要填写的账号信息，直接就能用。",
                     fontSize = 13.sp, color = Gyp.t2, fontFamily = GuangYueDesign.Sans,
                 )
-                else -> st.first.forEach { v ->
+                else -> {
+                  Text(
+                    "账号存在平台上，同平台的其他插件也会用这份。",
+                    fontSize = 12.sp, color = Gyp.t2, fontFamily = GuangYueDesign.Sans,
+                  )
+                  st.first.forEach { v ->
                     Column(verticalArrangement = Arrangement.spacedBy(GySpace.xxs)) {
                         Text(v.name, fontSize = 13.sp, color = Gyp.ink, fontFamily = GuangYueDesign.Sans)
                         FoliaTextField(
@@ -689,6 +695,7 @@ private fun AccountDialog(
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
+                }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(GySpace.s), modifier = Modifier.fillMaxWidth()) {

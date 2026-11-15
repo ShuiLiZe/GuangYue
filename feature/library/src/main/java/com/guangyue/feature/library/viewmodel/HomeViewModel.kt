@@ -644,7 +644,7 @@ class PluginViewModel @Inject constructor(
 
     /** 插件「登录」：声明的用户变量 + 已保存的值（MusicFree userVariables / env.getUserVariables）。 */
     suspend fun accountOf(plugin: PluginMeta): Pair<List<com.guangyue.core.plugin.runtime.PluginUserVariable>, Map<String, String>> =
-        bridge.declaredUserVariables(plugin.id) to bridge.readUserVariables(plugin.id)
+        bridge.declaredUserVariables(plugin.id).let { d -> d to bridge.readUserVariables(plugin.id, d.map { it.key }) }
 
     fun saveAccount(plugin: PluginMeta, values: Map<String, String>) {
         viewModelScope.launch {

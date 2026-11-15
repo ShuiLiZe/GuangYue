@@ -91,9 +91,12 @@ class MusicPluginBridge @Inject constructor(
 
             val rt = PluginRuntime(meta, code, http, preludeProvider)
             val varsId = meta.id
-            rt.userVariables = { readUserVariables(varsId) }
+            // 账号按平台存（不跟插件走）；插件字段名各异，install 后读一次声明好做别名适配。
+            var declaredKeys: List<String> = emptyList()
+            rt.userVariables = { readUserVariables(varsId, declaredKeys) }
             rt.onLog = { level, msg -> onLog?.invoke(key, level, msg) }
             rt.install()
+            declaredKeys = runCatching { rt.declaredUserVariables().map { it.key } }.getOrDefault(emptyList())
             runtimes[key] = rt
             rt
         }
@@ -118,12 +121,9 @@ class MusicPluginBridge @Inject constructor(
             val cacheKey = "search|$pluginId|$type|$keyword|$page"
             cache.get(cacheKey)?.let { return@withContext it as SearchResult }
             val meta = resolveMeta(pluginId)
-            val fn = when (type) {
-                SearchType.ALBUM -> "searchAlbum"
-                SearchType.ARTIST -> "searchArtist"
-                SearchType.SHEET -> "searchSheet"
-                else -> "search"
-            }
+            // MusicFree 只有一个 search(query, page, type)，专辑 / 歌手 / 歌单都靠第三个参数区分。
+            // 以前按 searchAlbum / searchArtist / searchSheet 找函数 —— 插件里根本没有，于是这三类永远是空（用户 11-15 反馈）。
+            val fn = "search"
             if (meta != null && fn !in meta.functions && meta.functions.isNotEmpty()) {
                 return@withContext SearchResult(isEnd = true)
             }
@@ -161,12 +161,7 @@ class MusicPluginBridge @Inject constructor(
         manager.load()
         val targets = manager.enabled()
             .filter { plugin ->
-                when (type) {
-                    SearchType.MUSIC -> plugin.hasSearch
-                    SearchType.ALBUM -> plugin.hasAlbumSearch
-                    SearchType.ARTIST -> plugin.hasArtistSearch
-                    else -> plugin.hasSearch
-                }
+                plugin.hasSearch
             }
         val gate = Semaphore(SEARCH_CONCURRENCY)
         coroutineScope {
@@ -417,23 +412,58 @@ class MusicPluginBridge @Inject constructor(
 
     private fun userVarsFile(id: String) = File(context.filesDir, "plugins/$id/uservars.json")
 
-    /** 已保存的用户变量（MusicFree env.getUserVariables 的值）。 */
-    fun readUserVariables(pluginId: String): Map<String, String> {
-        val id = resolveMeta(pluginId)?.id ?: pluginId
-        val f = userVarsFile(id)
+    /**
+     * 账号按**平台**存：accounts/<platform>.json。登一次网易云，任何 platform=网易云 的插件都能用；
+     * 换插件、更新订阅（插件 id 变了）不用重登。旧的 plugins/<id>/uservars.json 读时并入（迁移）。
+     */
+    private fun accountFile(platform: String) =
+        File(context.filesDir, "accounts/" + platform.replace(Regex("[^\\p{L}\\p{N}._-]"), "_") + ".json")
+
+    private fun readJsonMap(f: File): Map<String, String> {
         if (!f.isFile) return emptyMap()
         return runCatching {
             Json2.parse(f.readText()).asObj()?.mapNotNull { (k, v) -> v.asStr()?.let { k to it } }?.toMap()
         }.getOrNull() ?: emptyMap()
     }
 
-    /** 保存用户变量；空值的键删掉。插件每次调用现取，清掉结果缓存即可生效。 */
+    /** 字段归类，跨插件对字段名：XX Cookie / MUSIC_U → cookie，xxToken → token。 */
+    private fun credentialKind(key: String): String? {
+        val k = key.lowercase()
+        return when {
+            "cookie" in k || k == "music_u" -> "cookie"
+            "token" in k -> "token"
+            else -> null
+        }
+    }
+
+    /** 已保存的用户变量（MusicFree env.getUserVariables 的值）。[declared] 给出时按归类补齐插件自己的字段名。 */
+    fun readUserVariables(pluginId: String, declared: List<String> = emptyList()): Map<String, String> {
+        val meta = resolveMeta(pluginId)
+        val id = meta?.id ?: pluginId
+        val platform = meta?.platform?.takeIf { it.isNotBlank() } ?: id
+        val stored = readJsonMap(userVarsFile(id)) + readJsonMap(accountFile(platform))
+        if (declared.isEmpty()) return stored
+        val out = stored.toMutableMap()
+        for (key in declared) {
+            if (!out[key].isNullOrBlank()) continue
+            val kind = credentialKind(key) ?: continue
+            stored.entries.firstOrNull { credentialKind(it.key) == kind && it.value.isNotBlank() }?.let { out[key] = it.value }
+        }
+        return out
+    }
+
+    /** 保存到平台账号；空值的键删掉。插件每次调用现取，清掉结果缓存即可生效。 */
     suspend fun saveUserVariables(pluginId: String, values: Map<String, String>) = withContext(Dispatchers.IO) {
-        val id = resolveMeta(pluginId)?.id ?: pluginId
-        val f = userVarsFile(id)
+        val meta = resolveMeta(pluginId)
+        val id = meta?.id ?: pluginId
+        val platform = meta?.platform?.takeIf { it.isNotBlank() } ?: id
+        val f = accountFile(platform)
         f.parentFile?.mkdirs()
-        val kept = values.filterValues { it.isNotBlank() }
-        f.writeText(JsonObject(kept.mapValues { JsonPrimitive(it.value.trim()) }).toString())
+        val merged = readJsonMap(f).toMutableMap()
+        for ((k, v) in values) if (v.isBlank()) merged.remove(k) else merged[k] = v.trim()
+        f.writeText(JsonObject(merged.mapValues { JsonPrimitive(it.value) }).toString())
+        // 旧的按插件存的那份删掉，免得清空后又从旧文件读回来。
+        userVarsFile(id).delete()
         cache.clear()
     }
 

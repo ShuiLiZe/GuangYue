@@ -764,6 +764,7 @@ fun ProviderSwitcher(
     options: List<Triple<String, String, String?>>,
     onPick: (String) -> Unit,
     onManage: () -> Unit,
+    onLogin: (() -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
@@ -809,6 +810,18 @@ fun ProviderSwitcher(
                         }
                     }
                     Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp).background(ink.copy(alpha = 0.08f)))
+                    if (onLogin != null && label != null) Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { open = false; onLogin() }
+                            .padding(horizontal = 8.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(GuangYueIcons.User, null, tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text("登录 $label", color = ink.copy(alpha = 0.9f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -819,7 +832,7 @@ fun ProviderSwitcher(
                     ) {
                         Icon(GuangYueIcons.Plug, null, tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(12.dp))
-                        Text("音源与登录…", color = ink.copy(alpha = 0.9f), fontSize = 14.sp)
+                        Text("音源管理…", color = ink.copy(alpha = 0.9f), fontSize = 14.sp)
                     }
                 }
             }
