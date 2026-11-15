@@ -57,6 +57,7 @@ import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -842,6 +843,7 @@ fun ProviderSwitcher(
                         "切换音源", color = ink.copy(alpha = 0.45f), fontSize = 11.sp,
                         modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp),
                     )
+                    Column(Modifier.heightIn(max = 336.dp).verticalScroll(rememberScrollState())) {
                     options.forEach { (id, name, icon) ->
                         Row(
                             Modifier
@@ -858,6 +860,7 @@ fun ProviderSwitcher(
                             Text(name, color = ink.copy(alpha = 0.9f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                             if (id == currentId) Icon(GuangYueIcons.Check, null, tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(16.dp))
                         }
+                    }
                     }
                     Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp).background(ink.copy(alpha = 0.08f)))
                     if (onLogin != null && label != null) Row(
