@@ -37,7 +37,8 @@ class ShellViewModel @Inject constructor(
     }
 
     /** 0.0.27：首页样式（[com.guangyue.core.prefs.HomeStyles]：wall = 封面墙，grid = 3D 滑卡）。首帧同步读。 */
-    private val _homeStyle = MutableStateFlow(preferences.homeStyleId)
+    // 11-15：Folia 手机版只有网格首页；旧设置里存成墙面的也一律回网格。
+    private val _homeStyle = MutableStateFlow(com.guangyue.core.prefs.HomeStyles.GRID)
     val homeStyle: StateFlow<String> = _homeStyle.asStateFlow()
 
     fun setHomeStyle(id: String) {

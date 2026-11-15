@@ -198,14 +198,13 @@ fun GuangYueNavHost(
             val wallSections = remember(sheets, recent, charts) {
                 listOf("推荐" to vm.recommended(sheets, recent), "榜单" to charts, "最近" to recent).filter { it.second.isNotEmpty() }
             }
-            // 网格首页照 Folia 页签：歌单 / 推荐 / 探索 / 专辑 / 本地（空的页签照样在，里面给空态说明）。
+            // 网格首页照 Folia 手机版 APK 页签：歌单 / 电台 / 专辑 / 本地（11-15 用户：Folia 没有的界面不加，删推荐/探索）。
             val homeMine by vm.playlistsFlow.collectAsStateWithLifecycle()
             val homeLocal by vm.localTiles.collectAsStateWithLifecycle()
             val gridSections = remember(homeMine, sheets, recent, charts, homeLocal) {
                 listOf(
                     "歌单" to homeMine,
-                    "推荐" to vm.recommended(sheets, recent),
-                    "探索" to charts,
+                    "电台" to vm.recommended(sheets, recent),
                     "专辑" to emptyList(),
                     "本地" to homeLocal,
                 )
@@ -226,8 +225,7 @@ fun GuangYueNavHost(
                             emptyText = { label ->
                                 when (label) {
                                     "歌单" -> "先搜几首喜欢的歌试试看。登录在线音乐平台，访问您的歌单、收藏专辑和电台。"
-                                    "推荐" -> if (wallLoading) "正在加载推荐…" else if (wallFailed) "推荐加载失败，稍后再试。" else "当前音源没有推荐内容。"
-                                    "探索" -> if (wallLoading) "正在加载…" else "当前音源暂不支持探索。"
+                                    "电台" -> if (wallLoading) "正在加载…" else if (wallFailed) "加载失败，稍后再试。" else "当前音源暂不支持电台。"
                                     "专辑" -> "当前音源暂不支持专辑库。"
                                     "本地" -> "暂无本地音乐。下载的歌会出现在这里。"
                                     else -> "这里还没有内容"
@@ -1016,7 +1014,8 @@ fun GuangYueNavHost(
                 },
                 onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
                 onOpenDownloads = { navController.navigate(Routes.DOWNLOAD_SETTINGS) },
-                homeStyles = HOME_STYLE_OPTIONS,
+                // 11-15 用户：Folia 手机版只有网格首页，墙面（无限）切过去回不来，去掉切换。
+                homeStyles = emptyList(),
                 homeStyle = homeStyle,
                 onPickHomeStyle = { id ->
                     shellVm.setHomeStyle(id)

@@ -97,6 +97,10 @@ class QrLogin {
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    private fun cookieAt(name: String, domain: String): String? = synchronized(store) {
+        store[domain]?.lastOrNull { it.name == name && it.value.isNotBlank() }?.value
+    }
+
     private fun cookie(name: String): String? = synchronized(store) {
         store.values.flatten().lastOrNull { it.name == name && it.value.isNotBlank() }?.value
     }
@@ -225,27 +229,30 @@ class QrLogin {
 
     private fun qqFinish(checkSig: String): QrState {
         if (checkSig.isBlank()) return QrState.Failed("QQ 没有返回登录地址")
-        // check_sig 一路 302，收下 p_skey / uin。
-        var next: String? = checkSig
-        var hops = 0
-        while (next != null && hops < 5) {
-            val n = next
-            next = http.newCall(Request.Builder().url(n).build()).execute().use { r -> r.header("Location")?.let { r.request.url.resolve(it)?.toString() } }
-            hops++
-        }
-        val pSkey = cookie("p_skey") ?: return QrState.Failed("QQ 没有返回 p_skey")
+        // check_sig 只请求一次（不跟后续跳转，跟了会落到 login_jump 页把会话冲掉），收下 graph.qq.com 的 p_skey / uin。
+        http.newCall(Request.Builder().url(checkSig).header("Referer", "https://xui.ptlogin2.qq.com/").build()).execute().close()
+        val pSkey = cookieAt("p_skey", "graph.qq.com") ?: cookie("p_skey") ?: return QrState.Failed("QQ 没有返回 p_skey")
         val gtk = hash33(pSkey, 5381)
-        val form = FormBody.Builder()
-            .add("response_type", "code").add("client_id", qq3rd)
-            .add("redirect_uri", "https://y.qq.com/portal/wx_redirect.html?login_type=1&surl=https://y.qq.com/")
-            .add("scope", "get_user_info,get_app_friends").add("state", "state").add("switch", "")
-            .add("from_ptlogin", "1").add("src", "1").add("update_auth", "1").add("openapi", "1010_1030")
-            .add("g_tk", gtk.toString()).add("auth_time", System.currentTimeMillis().toString())
-            .add("ui", UUID.randomUUID().toString().uppercase())
-            .build()
-        val loc = http.newCall(Request.Builder().url("https://graph.qq.com/oauth2.0/authorize").header("Referer", "https://graph.qq.com/").post(form).build())
-            .execute().use { it.header("Location").orEmpty() }
-        val code = Regex("[?&]code=([^&]+)").find(loc)?.groupValues?.get(1) ?: return QrState.Failed("QQ 授权没有返回 code")
+        fun authorize(): Pair<Int, String> {
+            val form = FormBody.Builder()
+                .add("response_type", "code").add("client_id", qq3rd)
+                .add("redirect_uri", "https://y.qq.com/portal/wx_redirect.html?login_type=1&surl=https://y.qq.com/")
+                .add("scope", "get_user_info,get_app_friends").add("state", "state").add("switch", "")
+                .add("from_ptlogin", "1").add("src", "1").add("update_auth", "1").add("openapi", "1010_1030")
+                .add("g_tk", gtk.toString()).add("auth_time", System.currentTimeMillis().toString())
+                .add("ui", UUID.randomUUID().toString())
+                .build()
+            return http.newCall(
+                Request.Builder().url("https://graph.qq.com/oauth2.0/authorize")
+                    .header("Referer", "https://graph.qq.com/oauth2.0/show?which=Login&display=pc&response_type=code&client_id=$qq3rd")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+                    .post(form).build(),
+            ).execute().use { r -> r.code to (r.header("Location") ?: r.body?.string().orEmpty()) }
+        }
+        var (status, loc) = authorize()
+        var code = Regex("[?&]code=([^&\"'\\s]+)").find(loc)?.groupValues?.get(1)
+        if (code == null) { val again = authorize(); status = again.first; loc = again.second; code = Regex("[?&]code=([^&\"'\\s]+)").find(loc)?.groupValues?.get(1) }
+        if (code == null) return QrState.Failed("QQ 授权没有返回 code（HTTP $status${if (loc.isBlank()) "" else "，" + loc.take(60)}）")
         val body = """{"comm":{"g_tk":$gtk,"platform":"yqq","ct":24,"cv":0},"req":{"module":"QQConnectLogin.LoginServer","method":"QQLogin","param":{"code":"$code"}}}"""
         val text = http.newCall(
             Request.Builder().url("https://u.y.qq.com/cgi-bin/musicu.fcg").header("Referer", "https://y.qq.com/")
