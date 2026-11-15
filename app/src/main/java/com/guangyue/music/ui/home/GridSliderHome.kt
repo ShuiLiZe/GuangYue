@@ -427,11 +427,6 @@ fun GridSliderHome(
             Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
         }
     }
-    if (mapOpen && tiles.isNotEmpty()) {
-        GridMapSheet(tiles = tiles, ink = inkColor, ground = groundColor, onClose = { mapOpen = false }) { i ->
-            jumpTo = i; mapOpen = false
-        }
-    }
     if (playbackBar != null) {
         // Folia 手机版：底部居中的播放胶囊，右边留出平台按钮的位置。
         Box(
@@ -449,6 +444,12 @@ fun GridSliderHome(
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
                 .padding(16.dp),
         ) { providerButton() }
+    }
+    // 盖在平台按钮之上。
+    if (mapOpen && tiles.isNotEmpty()) {
+        GridMapSheet(tiles = tiles, ink = inkColor, ground = groundColor, onClose = { mapOpen = false }) { i ->
+            jumpTo = i; mapOpen = false
+        }
     }
     }
 }
@@ -953,7 +954,7 @@ fun HomePlaybackBar(
 private fun GridMapSheet(tiles: List<HomeTile>, ink: Color, ground: Color, onClose: () -> Unit, onPick: (Int) -> Unit) {
     androidx.activity.compose.BackHandler(onBack = onClose)
     Column(
-        Modifier.fillMaxSize().background(ground.copy(alpha = 0.96f))
+        Modifier.fillMaxSize().background(ground)
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) {},
     ) {
@@ -981,7 +982,7 @@ private fun GridMapSheet(tiles: List<HomeTile>, ink: Color, ground: Color, onClo
                         contentAlignment = Alignment.Center,
                     ) {
                         if (t.artwork != null) AsyncImage(model = t.artwork, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                        else Icon(GuangYueIcons.Music, null, tint = ink.copy(alpha = 0.3f), modifier = Modifier.size(22.dp))
+                        else Text(t.title.trim().take(1), color = ink.copy(alpha = 0.5f), fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(t.title, color = ink.copy(alpha = 0.9f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
