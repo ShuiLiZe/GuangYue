@@ -79,15 +79,19 @@ class QrLogin {
     private val jar = object : CookieJar {
         override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
             synchronized(store) {
+                val now = System.currentTimeMillis()
                 for (c in cookies) {
                     val list = store.getOrPut(c.domain) { mutableListOf() }
                     list.removeAll { it.name == c.name && it.path == c.path }
-                    list.add(c)
+                    // 过期 / 空值的是服务端在「删」cookie（QQ check_sig 会给 .qq.com 下发空 p_skey），不能存，
+                    // 否则请求 graph.qq.com 时会带上空的同名 cookie，授权被当成未登录弹回 show?which=Login。
+                    if (c.expiresAt > now && c.value.isNotBlank()) list.add(c)
                 }
             }
         }
         override fun loadForRequest(url: HttpUrl): List<Cookie> = synchronized(store) {
-            store.values.flatten().filter { it.matches(url) }
+            val now = System.currentTimeMillis()
+            store.values.flatten().filter { it.expiresAt > now && it.matches(url) }
         }
     }
     private val http = OkHttpClient.Builder()
