@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -240,6 +241,9 @@ fun GridSliderHome(
 
     // folia-sonnet 首页背后是一层当前焦点封面的大模糊（gridBackdrop / backdrop-blur），手机版同样保留。
     var backdrop by remember { mutableStateOf<Any?>(null) }
+    // Folia「全部」（GridMap）：一屏看完当前页签所有卡，点哪张跳到哪张。
+    var mapOpen by remember { mutableStateOf(false) }
+    var jumpTo by remember { mutableStateOf<Int?>(null) }
     val darkInk = inkColor.red + inkColor.green + inkColor.blue > 1.5f
     Box(modifier.fillMaxSize().background(groundColor)) {
     if (background != null) {
@@ -303,6 +307,25 @@ fun GridSliderHome(
             }
             return@Column
         }
+        if (!compact && tiles.size > 1) {
+            // Folia DesktopGrid3DSurface 的「全部」胶囊（MapIcon 13 + 文字），页签下方居中，点开 GridMap。
+            Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.Center) {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(inkColor.copy(alpha = 0.08f))
+                        .border(1.dp, inkColor.copy(alpha = 0.06f), RoundedCornerShape(50))
+                        .clickable { mapOpen = true }
+                        .semantics { contentDescription = "全部，共 ${tiles.size} 项" }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(GuangYueIcons.Map, null, tint = inkColor.copy(alpha = 0.7f), modifier = Modifier.size(13.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("全部", color = inkColor.copy(alpha = 0.75f), fontSize = 11.sp)
+                }
+            }
+        }
         // 换页签 = 换一份列表：焦点回到开头（Folia 列表变化走 'none' 直接跳）。
         key(tab) {
             val pager = rememberPagerState(
@@ -313,6 +336,9 @@ fun GridSliderHome(
             val focus = GridSliderModel.clampFocus(pager.currentPage, tiles.size)
             val focused = tiles[focus]
             androidx.compose.runtime.LaunchedEffect(focused.artwork) { backdrop = focused.artwork }
+            androidx.compose.runtime.LaunchedEffect(jumpTo) {
+                jumpTo?.let { pager.scrollToPage(GridSliderModel.clampFocus(it, tiles.size)); jumpTo = null }
+            }
             fun select(t: HomeTile) {
                 val enter = onEnterTile?.takeIf { GridSliderModel.opensCollection(t) }
                 (enter ?: onOpenTile)(t)
@@ -360,6 +386,25 @@ fun GridSliderHome(
                         }
                     }
                 }
+                if (!compact && tiles.size > 1) {
+                    // Folia 滑卡下方那条细滚动条（custom-scrollbar）：滑块宽 = 视口 / 内容宽，位置跟焦点走。
+                    val content = (tiles.size - 1) * pitch + w
+                    val thumb = (w / content).coerceIn(0.08f, 1f)
+                    val pos = ((pager.currentPage + pager.currentPageOffsetFraction) / (tiles.size - 1)).coerceIn(0f, 1f)
+                    Box(
+                        Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp)
+                            .background(inkColor.copy(alpha = 0.08f)),
+                    ) {
+                        Box(
+                            Modifier
+                                .offset(x = (w * (1f - thumb) * pos).dp)
+                                .width((w * thumb).dp)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(50))
+                                .background(inkColor.copy(alpha = 0.3f)),
+                        )
+                    }
+                }
             }
             GridCaption(
                 tile = focused,
@@ -379,6 +424,11 @@ fun GridSliderHome(
             // 给底部悬浮播放条 / 平台按钮让位（Folia 卡片标题在播放条上方）。
             Spacer(Modifier.height(if (playbackBar != null) 84.dp else 16.dp))
             Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+        }
+    }
+    if (mapOpen && tiles.isNotEmpty()) {
+        GridMapSheet(tiles = tiles, ink = inkColor, ground = groundColor, onClose = { mapOpen = false }) { i ->
+            jumpTo = i; mapOpen = false
         }
     }
     if (playbackBar != null) {
@@ -887,6 +937,53 @@ fun HomePlaybackBar(
             contentAlignment = Alignment.Center,
         ) {
             Icon(if (playing) GuangYueIcons.Pause else GuangYueIcons.Play, null, tint = Color.Black, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+
+/**
+ * Folia GridMap 的手机版：Folia 是蜂窝排布（桌面宽屏），手机上改成三列方格更好点，信息一样——封面 + 标题，
+ * 点一张关掉并让滑卡直接跳到那张。返回键 / 左上返回关闭。
+ */
+@Composable
+private fun GridMapSheet(tiles: List<HomeTile>, ink: Color, ground: Color, onClose: () -> Unit, onPick: (Int) -> Unit) {
+    androidx.activity.compose.BackHandler(onBack = onClose)
+    Column(
+        Modifier.fillMaxSize().background(ground.copy(alpha = 0.96f))
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) {},
+    ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onClose).semantics { contentDescription = "返回" },
+                contentAlignment = Alignment.Center,
+            ) { Icon(GuangYueIcons.ChevronLeft, null, tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(20.dp)) }
+            Text("全部", color = ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.width(8.dp))
+            Text("${tiles.size}", color = ink.copy(alpha = 0.45f), fontSize = 13.sp)
+        }
+        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+            columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            items(tiles.size) { i ->
+                val t = tiles[i]
+                Column(Modifier.clip(RoundedCornerShape(12.dp)).clickable { onPick(i) }) {
+                    Box(
+                        Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)).background(ink.copy(alpha = 0.08f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (t.artwork != null) AsyncImage(model = t.artwork, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        else Icon(GuangYueIcons.Music, null, tint = ink.copy(alpha = 0.3f), modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(t.title, color = ink.copy(alpha = 0.9f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
         }
     }
 }

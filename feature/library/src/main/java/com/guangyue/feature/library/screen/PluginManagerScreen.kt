@@ -666,7 +666,7 @@ fun AccountDialog(
             verticalArrangement = Arrangement.spacedBy(GySpace.m),
         ) {
             Text(
-                text = "登录 ${plugin.platform.ifBlank { plugin.displayName }}",
+                text = "登录 ${plugin.displayName}",
                 fontSize = GyText.title,
                 lineHeight = GyText.titleHeight,
                 fontWeight = FontWeight.SemiBold,

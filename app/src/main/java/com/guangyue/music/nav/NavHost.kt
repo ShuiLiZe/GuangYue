@@ -272,7 +272,9 @@ fun GuangYueNavHost(
                                 val pluginVm: com.guangyue.feature.library.viewmodel.PluginViewModel = hiltViewModel()
                                 val all by pluginVm.plugins.collectAsStateWithLifecycle()
                                 val usable = remember(all, src) {
-                                    val ok = all.filter { it.error == null && it.health == com.guangyue.core.plugin.PluginHealth.OK }
+                                    // 按插件页的顺序（用户自己排的）取前 7 个没坏的；以前只收体检 OK 的，
+                                    // 网络一抖（体检失败）常用的网易云就从切换里消失了。
+                                    val ok = all.filter { it.error == null && it.hasSearch }
                                     (listOfNotNull(src) + ok).distinctBy { it.id }.take(7)
                                 }
                                 com.guangyue.music.ui.home.ProviderSwitcher(
