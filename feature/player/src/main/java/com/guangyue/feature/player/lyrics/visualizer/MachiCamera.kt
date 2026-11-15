@@ -137,6 +137,22 @@ internal class MachiCameraRig(private val points: List<MachiVec3>, private val h
 
     private fun offAmount() = kotlin.math.abs(dAz) + kotlin.math.abs(dEl) + kotlin.math.abs(dZoom - 1) + kotlin.math.abs(dPanX) + kotlin.math.abs(dPanZ)
 
+    /** Folia 自定义视角（camera = custom）：固定后不再闲置回正，停在用户拖好的位置。 */
+    @Volatile var pinned = false
+
+    /** 当前相对默认构图的偏移：转角、俯仰、缩放倍数、左右、前后。 */
+    fun offsets() = doubleArrayOf(dAz, dEl, dZoom, dPanX, dPanZ)
+
+    fun applyOffsets(a: DoubleArray) {
+        if (a.size < 5) return
+        dAz = a[0]; dEl = a[1]; dZoom = a[2]; dPanX = a[3]; dPanZ = a[4]; returning = false; idleMs = -1
+    }
+
+    /** 复位：平滑回到默认构图（取消固定）。 */
+    fun resetView() { pinned = false; returning = offAmount() > 1e-3; idleMs = -1 }
+
+    fun isOff() = offAmount() > 1e-3
+
     fun beginDrag() { interacting = true; returning = false; idleMs = -1; gate = 0.0 }
 
     fun endDrag(nowMs: Long) { interacting = false; idleMs = nowMs }
@@ -171,13 +187,13 @@ internal class MachiCameraRig(private val points: List<MachiVec3>, private val h
 
     /** 每帧推进闲置回正与运镜闸门；返回运镜幅度的乘数。 */
     fun step(realDelta: Double, nowMs: Long): Double {
-        if (!interacting && idleMs > 0 && nowMs - idleMs > 8000) { returning = offAmount() > 1e-3; idleMs = -1 }
+        if (!pinned && !interacting && idleMs > 0 && nowMs - idleMs > 8000) { returning = offAmount() > 1e-3; idleMs = -1 }
         if (returning) {
             val k = 1 - kotlin.math.exp(-realDelta * 1.6)
             dAz -= dAz * k; dEl -= dEl * k; dZoom += (1 - dZoom) * k; dPanX -= dPanX * k; dPanZ -= dPanZ * k
             if (offAmount() < 2e-3) { dAz = 0.0; dEl = 0.0; dZoom = 1.0; dPanX = 0.0; dPanZ = 0.0; returning = false }
         }
-        val still = !interacting && !returning && idleMs < 0
+        val still = !interacting && !returning && (idleMs < 0 || pinned)
         gate = if (still) min(1.0, gate + realDelta / 4.0) else 0.0
         return gate
     }

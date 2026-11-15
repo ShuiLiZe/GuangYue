@@ -21,6 +21,17 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import com.guangyue.core.lyrics.Line
@@ -941,6 +952,21 @@ fun MachiStagePreview(
         }
     }
     val rig = remember(setup) { MachiCameraRig(setup.framing, setup.view) }
+    // 固定视角（Folia 自定义视角，按场景各存一份）：拖完出一颗「固定这个视角」，固定后显示「复位」。
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val viewPrefs = remember { ctx.getSharedPreferences("machi_view", android.content.Context.MODE_PRIVATE) }
+    var pinned by androidx.compose.runtime.remember(rig) { androidx.compose.runtime.mutableStateOf(false) }
+    var offerPin by androidx.compose.runtime.remember(rig) { androidx.compose.runtime.mutableStateOf(0L) }
+    androidx.compose.runtime.LaunchedEffect(rig, draggable) {
+        val saved = viewPrefs.getString(sceneId, null)?.split(',')?.mapNotNull { it.toDoubleOrNull() }
+        if (draggable && saved != null && saved.size == 5) {
+            synchronized(rig) { rig.applyOffsets(saved.toDoubleArray()); rig.pinned = true }
+            pinned = true
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(offerPin) {
+        if (offerPin > 0L) { kotlinx.coroutines.delay(7000); if (!pinned) offerPin = 0L }
+    }
     Box(modifier) {
       // 换歌（seed）、换主题（palette → light / signs）时整块 GLSurfaceView 重建：factory 只跑一次，渲染器拿的是建时的模型。
       androidx.compose.runtime.key(setup, light, lines, restCamera) {
@@ -1000,10 +1026,44 @@ fun MachiStagePreview(
                         prevCentroid = centroid; prevSpan = span; prevCount = pressed.size
                         ev.changes.forEach { it.consume() }
                     }
-                    if (dragging) synchronized(rig) { rig.endDrag(System.currentTimeMillis()) }
+                    if (dragging) {
+                        synchronized(rig) { rig.endDrag(System.currentTimeMillis()) }
+                        if (pinned) {
+                            // 已固定：拖完直接存新的视角。
+                            viewPrefs.edit().putString(sceneId, synchronized(rig) { rig.offsets() }.joinToString(",")).apply()
+                        } else offerPin = System.currentTimeMillis()
+                    }
                 }
             },
         )
+        if (pinned || offerPin > 0L) {
+            Box(
+                Modifier.align(Alignment.TopCenter)
+                    .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.statusBars)
+                    .padding(top = 56.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .background(Color(0xBF121214))
+                    .border(1.dp, Color.White.copy(alpha = 0.1f), androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .clickable {
+                        if (pinned) {
+                            synchronized(rig) { rig.resetView() }
+                            viewPrefs.edit().remove(sceneId).apply()
+                            pinned = false; offerPin = 0L
+                        } else {
+                            synchronized(rig) { rig.pinned = true }
+                            viewPrefs.edit().putString(sceneId, synchronized(rig) { rig.offsets() }.joinToString(",")).apply()
+                            pinned = true; offerPin = 0L
+                        }
+                    }
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
+            ) {
+                androidx.compose.material3.Text(
+                    if (pinned) "已固定视角 · 复位" else "固定这个视角",
+                    color = Color(0xFFF4F4F5),
+                    fontSize = 12.sp,
+                )
+            }
+        }
       }
     }
 }
