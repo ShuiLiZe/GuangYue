@@ -22,6 +22,7 @@ import javax.inject.Inject
 class PluginProbeActivity : ComponentActivity() {
     @Inject lateinit var manager: PluginManager
     @Inject lateinit var checker: PluginHealthChecker
+    @Inject lateinit var bridge: com.guangyue.core.plugin.MusicPluginBridge
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,6 +42,22 @@ class PluginProbeActivity : ComponentActivity() {
                         (sub.isNullOrBlank() || (p.source.contains("padao") || (p.srcUrl ?: "").contains("padao")) || only != null)
                 }
                 Log.w(TAG, "targets=${targets.map { it.displayName + "@" + it.version }}")
+                val kw = intent?.getStringExtra("kw")
+                if (kw != null) {
+                    // 搜索取证：--es kw <词> --es only <平台>，四类各打前 3 条名称 + 图片地址。
+                    for (p in targets.take(1)) {
+                        manager.setCurrentSource(p.id)
+                        for (t in listOf("music", "album", "sheet", "artist")) {
+                            val r = runCatching { bridge.search(p.id, kw, 1, t) }.getOrNull()
+                            val rows = (r?.items?.map { it.title to it.artwork } ?: emptyList()) +
+                                (r?.albums?.map { it.title to it.artwork } ?: emptyList()) +
+                                (r?.artists?.map { it.name to it.avatar } ?: emptyList())
+                            Log.w(TAG, "SEARCH ${p.displayName} $t n=${rows.size} err=${r?.error} " + rows.take(3).joinToString(" | ") { "${it.first} -> ${it.second}" })
+                        }
+                    }
+                    Log.w(TAG, "DONE")
+                    return@runCatching
+                }
                 for (p in targets) {
                     manager.setCurrentSource(p.id)
                     val rep = checker.check(p.id)
