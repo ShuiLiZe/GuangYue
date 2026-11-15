@@ -144,106 +144,28 @@ fun SettingsScreen(
     val shown = if (q.isEmpty()) items.filter { it.page == page }
     else items.filter { it.label.contains(q, true) || (it.hint?.contains(q, true) == true) || it.group.contains(q, true) || it.page.label.contains(q, true) }
 
-    Box(modifier.fillMaxSize().marbleBackground()) {
-        Column(Modifier.fillMaxSize()) {
-            FoliaTopBar(title = "设置", onBack = onBack)
-            Column(Modifier.padding(horizontal = GySpace.pageH)) {
-                FoliaTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    placeholder = "搜索设置",
-                    leading = { Icon(GuangYueIcons.Search, null, tint = Gyp.t3, modifier = Modifier.size(16.dp)) },
-                    trailing = if (query.isNotEmpty()) {
-                        { Icon(GuangYueIcons.X, "清空", tint = Gyp.t3, modifier = Modifier.size(16.dp).clip(RoundedCornerShape(8.dp)).clickableNoRipple { query = "" }) }
-                    } else null,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (q.isEmpty()) {
-                    Spacer(Modifier.height(GySpace.m))
-                    // 分类：横滑分段（Folia Tabs 的选中块 = raise + 投影）。
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .horizontalScrollCompat()
-                            .clip(RoundedCornerShape(GyRadius.row))
-                            .background(Gyp.tint, RoundedCornerShape(GyRadius.row))
-                            .padding(GySpace.hairlinePad),
-                    ) {
-                        pages.forEach { p ->
-                            val on = p == page
-                            Box(
-                                Modifier
-                                    .height(32.dp)
-                                    .clip(RoundedCornerShape(GyRadius.field))
-                                    .background(if (on) Gyp.raise else androidx.compose.ui.graphics.Color.Transparent)
-                                    .clickableNoRipple { page = p }
-                                    .padding(horizontal = 12.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    p.label,
-                                    fontSize = GyText.label,
-                                    fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
-                                    color = if (on) Gyp.ink else Gyp.t2,
-                                    maxLines = 1,
-                                )
-                            }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(GySpace.l))
-            }
-            LazyColumn(
-                contentPadding = PaddingValues(start = GySpace.pageH, end = GySpace.pageH, bottom = 40.dp),
-                verticalArrangement = Arrangement.spacedBy(GySpace.group),
-            ) {
-                if (shown.isEmpty()) {
-                    item(key = "none") {
-                        Text(
-                            "没有找到「$q」相关的设置",
-                            fontSize = GyText.row,
-                            color = Gyp.t3,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        )
-                    }
-                }
-                // 搜索时按「分类 · 组」分组，否则按组。
-                val grouped = shown.groupBy { if (q.isEmpty()) it.group else "${it.page.label} · ${it.group}" }
-                grouped.forEach { (title, rows) ->
-                    item(key = "g-$title") {
-                        FoliaGroup(title = title) {
-                            rows.forEachIndexed { i, it ->
-                                FoliaRow(
-                                    label = it.label,
-                                    hint = it.hint,
-                                    first = i == 0,
-                                    leading = it.leading,
-                                    trailing = it.trailing,
-                                    onClick = it.onClick,
-                                )
-                                it.below?.let { below ->
-                                    Box(Modifier.fillMaxWidth().padding(start = GySpace.pageH, end = GySpace.pageH, bottom = GySpace.m)) { below() }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // 2026-11-15 用户：设置页不像 Folia。照 Folia SettingsModal 手机版：圆角大窗、「帮助 / 选项」大页签、
+    // 带图标的分类胶囊、页头（标题 + 说明）、带图标的分组小标题、分组卡片里的行（标题 + 说明 + 右侧控件）。
+    FoliaSettingsShell(
+        items = items,
+        pages = pages.filter { it != SettingsPage.ABOUT },
+        page = if (page == SettingsPage.ABOUT) SettingsPage.APPEARANCE else page,
+        onPage = { page = it },
+        onClose = onBack,
+        modifier = modifier,
+    )
 }
 
 /** 设置分类（Folia settingsNavModel 的手机子集，名字取 zh-CN options.settingsPage*）。 */
-enum class SettingsPage(val label: String) {
-    APPEARANCE("外观"),
-    PLAYER("播放页"),
-    PLAYBACK("播放控制"),
-    STORAGE("存储与备份"),
+enum class SettingsPage(val label: String, val desc: String = "") {
+    APPEARANCE("外观", "主题、资料库界面与卡片样式。"),
+    PLAYER("播放页", "歌词动画、背景与町景。"),
+    PLAYBACK("播放控制", "音质、取链源与音源插件。"),
+    STORAGE("存储与备份", "下载与本机存储。"),
     ABOUT("关于"),
 }
 
-private class SettingItem(
+internal class SettingItem(
     val page: SettingsPage,
     val group: String,
     val label: String,

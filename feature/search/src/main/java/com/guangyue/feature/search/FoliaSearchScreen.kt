@@ -126,8 +126,9 @@ fun FoliaSearchScreen(
                 }
                 SearchMeta(c, state, phase)
             }
+            // Folia search-plane：max-w-5xl 的纸色平面，手机上左右各留 16dp，几何形从四周露出来。
             Box(
-                Modifier.padding(top = 12.dp).weight(1f).fillMaxWidth().background(paper.copy(alpha = 0.88f)),
+                Modifier.padding(top = 12.dp, start = 16.dp, end = 16.dp).weight(1f).fillMaxWidth().background(paper.copy(alpha = 0.88f)),
             ) {
                 when (phase) {
                     SearchPagePhase.NoSource -> VoidState(c, stringResource(res.noSource), stringResource(res.openPlugins), onOpenSourceManager, SearchTags.NoSource)
@@ -183,8 +184,8 @@ private fun SearchComposition(c: SearchColors, tab: SearchTab, word: String) {
             val album = (1f - kotlin.math.abs(p - 1f)).coerceIn(0f, 1f)
             val sheet = (p - 1f).coerceIn(0f, 1f)
             // 斜切色块：右上，polygon(22% 0, 100% 0, 100% 64%, 48% 82%)。
-            val sw = minOf(w * 0.4f, 620.dp.toPx()).coerceAtLeast(w * 0.55f)
-            val sh = minOf(h * 0.52f, 520.dp.toPx()) * 0.7f
+            val sw = minOf(w * 0.4f, 620.dp.toPx())
+            val sh = minOf(h * 0.52f, 520.dp.toPx())
             val left = w + w * 0.04f - sw
             val top = -h * 0.06f
             val dx = -w * 0.58f * album + w * 0.06f * sheet
@@ -338,7 +339,7 @@ private fun SearchMeta(c: SearchColors, state: SearchUiState, phase: SearchPageP
         val count = state.tabCounts.of(state.tab)
         Text(state.sourceLabel.uppercase(), color = c.inkSoft, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, letterSpacing = 1.1.sp)
         if (phase == SearchPagePhase.Results && count > 0) {
-            Text("$count 条结果", color = c.inkSoft, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, letterSpacing = 1.1.sp)
+            Text("共 ${if (count >= 20) "20+" else count.toString()} 条", color = c.inkSoft, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, letterSpacing = 1.1.sp)
         }
         Box(Modifier.weight(1f).height(1.dp).background(c.hairline))
     }
@@ -402,7 +403,7 @@ private fun TrackRow(
     onDownload: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 76.dp).clickable(onClick = onClick).drawBottomLine(c.hairline, 1.dp).padding(start = 18.dp, end = 10.dp),
+        Modifier.fillMaxWidth().heightIn(min = 76.dp).clickable(onClick = onClick).drawBottomLine(c.hairline, 1.dp).padding(start = 18.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -430,8 +431,8 @@ private fun TrackRow(
 
 @Composable
 private fun RowAction(c: SearchColors, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    Box(Modifier.size(36.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        androidx.compose.material3.Icon(icon, null, tint = c.ink.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+    Box(Modifier.size(40.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        androidx.compose.material3.Icon(icon, null, tint = c.ink.copy(alpha = 0.7f), modifier = Modifier.size(19.dp))
     }
 }
 
