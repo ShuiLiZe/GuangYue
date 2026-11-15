@@ -407,16 +407,18 @@ private fun TrackRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(Modifier.size(48.dp).background(c.ink.copy(alpha = 0.08f))) {
-            if (!item.artwork.isNullOrBlank()) AsyncImage(item.artwork, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            val art = item.artwork
+            if (!art.isNullOrBlank()) AsyncImage(art, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         }
         Column(Modifier.weight(1f)) {
             Text(item.title, color = c.ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(item.artist, color = c.inkSoft, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false).clickable(onClick = onOpenArtist))
-                if (!item.album.isNullOrBlank()) {
+                val album = item.album
+                if (!album.isNullOrBlank()) {
                     Text("  /  ", color = c.inkSoft.copy(alpha = 0.6f), fontSize = 12.sp)
-                    Text(item.album, color = c.inkSoft, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    Text(album, color = c.inkSoft, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false).clickable(onClick = onOpenAlbum))
                 }
             }
