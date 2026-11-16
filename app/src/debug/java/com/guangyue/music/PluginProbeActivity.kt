@@ -74,6 +74,16 @@ class PluginProbeActivity : ComponentActivity() {
                         Log.w(TAG, "SYNCED $synced")
                         val ms = runCatching { bridge.getMediaSource(p.id, synced, null, "standard") }
                         Log.w(TAG, "MS synced url=${ms.getOrNull()?.url?.take(100)} exc=${ms.exceptionOrNull()?.message?.take(200)}")
+                        val J = { v: String -> kotlinx.serialization.json.JsonPrimitive(v) }
+                        val mm = Regex("\"mediaMid\":\"([^\"]+)\"").find(r0.toString())?.groupValues?.get(1).orEmpty()
+                        val v2 = kotlinx.serialization.json.JsonObject(synced + mapOf("strMediaMid" to J(mm)))
+                        val ms2 = runCatching { bridge.getMediaSource(p.id, v2, null, "standard") }
+                        Log.w(TAG, "MS synced+strMediaMid url=${ms2.getOrNull()?.url?.take(100)} exc=${ms2.exceptionOrNull()?.message?.take(200)}")
+                        val v3 = kotlinx.serialization.json.JsonObject(v2 + mapOf("mediaMid" to J(mm), "primaryKey" to J(s("songmid")),
+                            "_src" to kotlinx.serialization.json.buildJsonObject { put("qq", kotlinx.serialization.json.buildJsonObject { put("mid", J(s("songmid"))); put("mediaMid", J(mm)) }) },
+                            "_srcOrder" to kotlinx.serialization.json.JsonArray(listOf(J("qq")))))
+                        val ms3 = runCatching { bridge.getMediaSource(p.id, v3, null, "standard") }
+                        Log.w(TAG, "MS synced+_src url=${ms3.getOrNull()?.url?.take(100)} exc=${ms3.exceptionOrNull()?.message?.take(200)}")
                     }
                     Log.w(TAG, "DONE")
                     return@runCatching
