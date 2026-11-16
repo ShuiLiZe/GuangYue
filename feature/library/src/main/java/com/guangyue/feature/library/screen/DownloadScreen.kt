@@ -1,6 +1,16 @@
 package com.guangyue.feature.library.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,366 +62,301 @@ import com.guangyue.feature.library.design.marbleBackground
 import com.guangyue.feature.library.viewmodel.DownloadViewModel
 
 /**
- * 下载管理。
+ * 下载列表（0.0.33 照 Folia 手机版的页面语言重做；Folia 本身没有下载页）。
  *
- * 三个区块，顺序按「正在发生 → 出错了 → 已归档」排：
- * 1. **进行中**：排队 / 解析直链 / 传输 / 写标签 / 抓歌词 / 刷新媒体库，带实时速度与进度条；
- * 2. **失败**：可重试（复用已写入的 .part 续传）或删除记录；
- * 3. **已完成**：来自落盘索引，卸载重装后依然在，长按/按钮可删除本地文件。
+ * 外观同搜索页 / 网格集合页：纯深色整页、左上 40dp 圆返回钮 + 粗标题、右侧胶囊动作；
+ * 一条页签胶囊切「进行中 / 需要处理 / 已完成」（选中白底黑字，同首页页签）；
+ * 行 = Folia 搜索结果卡（圆角卡 + 细描边 + 48dp 封面 + 两行字 + 48dp 圆钮）。
  */
 @Composable
 fun DownloadScreen(
     onBack: () -> Unit,
     onPlayLocal: (String) -> Unit = {},
-    // 0.0.16 真机：只传 uri 时播放页标题变成 MediaStore 编号、也匹配不到歌词。带上整条记录。
-    // 0.0.18：交给 ViewModel 先在后台备好本地封面 / 歌词，再把完整曲目行交出去。
     onPlayDownloaded: ((com.guangyue.core.data.model.TrackEntity) -> Unit)? = null,
-    /** 顶栏「设置」→ 下载设置。 */
+    /** 右上「设置」→ 下载设置。 */
     onOpenSettings: (() -> Unit)? = null,
     vm: DownloadViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val toast by vm.message.collectAsStateWithLifecycle()
+    // 默认落在有东西的那一栏：先进行中，其次需要处理，否则已完成。
+    var tab by rememberSaveable { mutableStateOf(-1) }
+    val shownTab = if (tab >= 0) tab else when {
+        state.active.isNotEmpty() -> 0
+        state.failed.isNotEmpty() -> 1
+        else -> 2
+    }
 
-    Surface(color = Color.Transparent, modifier = Modifier.fillMaxSize().marbleBackground()) {
-        Column(Modifier.fillMaxSize()) {
-            // ---- 顶栏：Folia PageHeader（标题 20/32 semibold + 摘要 13px）
-            FoliaTopBar(
-                title = "下载管理",
-                onBack = onBack,
-                actions = {
-                    if (onOpenSettings != null) {
-                        TextAction("设置") { onOpenSettings() }
-                    }
-                    if (state.active.isNotEmpty()) {
-                        TextAction("全部暂停") { vm.cancelAll() }
-                    }
-                    if (state.failed.isNotEmpty()) {
-                        TextAction("清理") { vm.clearFinished() }
-                    }
-                },
-            )
-            Text(
-                text = buildString {
-                    val running = state.active.count { it.stage == com.guangyue.core.download.DownloadStage.DOWNLOADING }
-                    if (running > 0) append("$running 个任务下载中")
-                    if (state.speedText.isNotBlank() && state.speedText != "0 B") {
-                        if (isNotEmpty()) append(" · ")
-                        append(state.speedText).append("/s")
-                    }
-                    if (isEmpty()) append("已完成 ").append(state.done.size).append(" 首 · ").append(state.totalSizeText)
-                },
-                fontSize = GyText.label,
-                lineHeight = GyText.labelHeight,
-                color = Gyp.inkSoft,
-                fontFamily = GuangYueDesign.Sans,
-                modifier = Modifier.padding(
-                    start = GySpace.pageH + GySpace.xxs,
-                    bottom = GySpace.s,
-                ),
-            )
-
-            if (toast != null) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Gyp.page)
+            .statusBarsPadding(),
+    ) {
+        // ---- 头部：圆返回钮 + 标题 + 胶囊动作
+        Row(
+            Modifier.fillMaxWidth().padding(start = 12.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier.size(40.dp).clip(CircleShape).background(Gyp.tint).clickable(onClick = onBack),
+                contentAlignment = Alignment.Center,
+            ) { Icon(GuangYueIcons.ChevronLeft, "返回", tint = Gyp.ink, modifier = Modifier.size(20.dp)) }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("下载", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Gyp.ink, maxLines = 1)
+                Text(
+                    buildString {
+                        val running = state.active.count { it.stage == com.guangyue.core.download.DownloadStage.DOWNLOADING }
+                        if (running > 0) append("$running 首下载中")
+                        if (state.speedText.isNotBlank() && state.speedText != "0 B") {
+                            if (isNotEmpty()) append(" · ")
+                            append(state.speedText).append("/s")
+                        }
+                        if (isEmpty()) append("已下载 ").append(state.done.size).append(" 首 · ").append(state.totalSizeText)
+                    },
+                    fontSize = 12.sp, color = Gyp.t3, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (state.active.isNotEmpty()) Pill("全部停止") { vm.cancelAll() }
+            if (state.failed.isNotEmpty() && shownTab == 1) Pill("清理") { vm.clearFinished() }
+            if (onOpenSettings != null) {
+                Spacer(Modifier.width(6.dp))
                 Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                        .background(Gyp.tint, GyRadius.fieldShape())
-                        .clickable { vm.clearMessage() }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                ) {
-                    Text(toast.orEmpty(), fontSize = 12.sp, color = Gyp.ink)
-                }
+                    Modifier.size(40.dp).clip(CircleShape).background(Gyp.tint).clickable { onOpenSettings() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(GuangYueIcons.Settings, "下载设置", tint = Gyp.t2, modifier = Modifier.size(18.dp)) }
             }
+        }
 
-            if (state.isEmpty) {
-                EmptyDownloads()
-                return@Column
-            }
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 4.dp, bottom = 32.dp,
-                ),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        // ---- 页签胶囊（同首页 GridHomeHeader 第二行）
+        Box(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Gyp.tint)
+                    .padding(4.dp)
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (state.active.isNotEmpty()) {
-                    item { SectionTitle("进行中", state.active.size) }
-                    items(state.active, key = { "a-" + it.key }) { p ->
-                        ActiveRow(
-                            progress = p,
-                            onPause = { vm.cancel(p.key) },
-                        )
+                listOf("进行中" to state.active.size, "需要处理" to state.failed.size, "已完成" to state.done.size)
+                    .forEachIndexed { i, (label, n) ->
+                        val on = i == shownTab
+                        Box(
+                            Modifier
+                                .heightIn(min = 30.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(if (on) Color.White else Color.Transparent)
+                                .clickable { tab = i }
+                                .padding(horizontal = 16.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                if (n > 0) "$label $n" else label,
+                                fontSize = 12.sp,
+                                color = if (on) Color.Black else Gyp.ink.copy(alpha = 0.6f),
+                                fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1,
+                            )
+                        }
                     }
+            }
+        }
+
+        if (toast != null) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Gyp.tint)
+                    .clickable { vm.clearMessage() }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            ) { Text(toast.orEmpty(), fontSize = 12.sp, color = Gyp.ink) }
+        }
+
+        val empty = when (shownTab) { 0 -> state.active.isEmpty(); 1 -> state.failed.isEmpty(); else -> state.done.isEmpty() }
+        if (empty) {
+            EmptyDownloads(
+                when (shownTab) {
+                    0 -> "没有正在下载的歌"
+                    1 -> "没有需要处理的任务"
+                    else -> "还没有下载过歌"
+                },
+            )
+            return@Column
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            when (shownTab) {
+                0 -> items(state.active, key = { "a-" + it.key }) { p -> ActiveRow(p) { vm.cancel(p.key) } }
+                1 -> items(state.failed, key = { "f-" + it.key }) { p ->
+                    FailedRow(p, onRetry = { vm.retry(p.key) }, onRemove = { vm.remove(p.key) })
                 }
-                if (state.failed.isNotEmpty()) {
-                    item { SectionTitle("需要处理", state.failed.size) }
-                    items(state.failed, key = { "f-" + it.key }) { p ->
-                        FailedRow(
-                            progress = p,
-                            onRetry = { vm.retry(p.key) },
-                            onRemove = { vm.remove(p.key) },
-                        )
-                    }
-                }
-                if (state.done.isNotEmpty()) {
-                    item { SectionTitle("已完成", state.done.size) }
-                    items(state.done, key = { "d-" + it.key }) { t ->
-                        DoneRow(
-                            track = t,
-                            onPlay = {
-                                val cb = onPlayDownloaded
-                                if (cb != null) vm.preparePlay(t, cb) else onPlayLocal(t.uri)
-                            },
-                            onRemove = { vm.remove(t.key) },
-                        )
-                    }
+                else -> items(state.done, key = { "d-" + it.key }) { t ->
+                    DoneRow(
+                        track = t,
+                        onPlay = {
+                            val cb = onPlayDownloaded
+                            if (cb != null) vm.preparePlay(t, cb) else onPlayLocal(t.uri)
+                        },
+                        onRemove = { vm.remove(t.key) },
+                    )
                 }
             }
         }
     }
 }
 
-// ------------------------------------------------------------------ 区块
+// ------------------------------------------------------------------ 行（Folia 搜索结果卡）
 
 @Composable
-private fun SectionTitle(text: String, count: Int) {
+private fun RowCard(onClick: (() -> Unit)? = null, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    val shape = RoundedCornerShape(GyRadius.card)
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(top = 10.dp, bottom = 2.dp),
+            .heightIn(min = 68.dp)
+            .clip(shape)
+            .background(Gyp.card)
+            .border(1.dp, Gyp.cardRing, shape)
+            .then(if (onClick != null) Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick) else Modifier)
+            .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
+
+@Composable
+private fun Cover(url: String?) {
+    Box(
+        Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(Gyp.tint),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Gyp.ink,
-        )
-        Spacer(Modifier.width(6.dp))
-        Text("$count", fontSize = 11.sp, color = Gyp.inkSoft)
+        Icon(GuangYueIcons.Music, null, tint = Gyp.t3, modifier = Modifier.size(20.dp))
+        if (!url.isNullOrBlank()) {
+            coil3.compose.AsyncImage(
+                model = url, contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
 
 @Composable
-private fun ActiveRow(progress: DownloadProgress, onPause: () -> Unit) {
-    Card {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(40.dp)
-                    .background(Gyp.tint, GyRadius.fieldShape()),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(GuangYueIcons.Music, null, tint = Gyp.accent, modifier = Modifier.size(20.dp))
+private fun RoundAction(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, tint: Color = Gyp.t2, onClick: () -> Unit) {
+    Box(
+        Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, desc, tint = tint, modifier = Modifier.size(19.dp)) }
+}
+
+@Composable
+private fun Titles(title: String, sub: String, subColor: Color = Gyp.t2, modifier: Modifier) {
+    Column(modifier) {
+        Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Gyp.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(2.dp))
+        Text(sub, fontSize = 12.sp, color = subColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun ActiveRow(progress: DownloadProgress, onStop: () -> Unit) {
+    RowCard {
+        Cover(null)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Titles(progress.title.ifBlank { "未命名任务" }, progress.artist.ifBlank { "未知艺术家" }, modifier = Modifier)
+            Spacer(Modifier.height(6.dp))
+            val f = progress.fraction
+            val bar = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(50))
+            if (f in 0f..1f && progress.stage == com.guangyue.core.download.DownloadStage.DOWNLOADING) {
+                LinearProgressIndicator(progress = { f }, modifier = bar, color = Gyp.ink, trackColor = Gyp.tint)
+            } else {
+                LinearProgressIndicator(modifier = bar, color = Gyp.ink, trackColor = Gyp.tint)
             }
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    progress.title.ifBlank { "未命名任务" },
-                    fontSize = 14.sp,
-                    color = Gyp.ink,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    progress.artist.ifBlank { "未知艺术家" },
-                    fontSize = 11.sp,
-                    color = Gyp.inkSoft,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(6.dp))
-                val fraction = progress.fraction
-                if (fraction in 0f..1f && progress.stage == com.guangyue.core.download.DownloadStage.DOWNLOADING) {
-                    LinearProgressIndicator(
-                        progress = { fraction },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(3.dp),
-                        color = Gyp.accent,
-                        trackColor = Gyp.tint,
-                    )
-                } else {
-                    LinearProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(3.dp),
-                        color = Gyp.accent,
-                        trackColor = Gyp.tint,
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    progress.stageText() + if (progress.bytesTotal > 0) " · " + progress.progressText() else "",
-                    fontSize = 10.sp,
-                    color = Gyp.inkSoft,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            IconButton(onClick = onPause) {
-                Icon(GuangYueIcons.Pause, "暂停", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
-            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                progress.stageText() + if (progress.bytesTotal > 0) " · " + progress.progressText() else "",
+                fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Gyp.t3, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
         }
+        RoundAction(GuangYueIcons.X, "停止", onClick = onStop)
     }
 }
 
 @Composable
 private fun FailedRow(progress: DownloadProgress, onRetry: () -> Unit, onRemove: () -> Unit) {
-    Card {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                GuangYueIcons.AlertCircle,
-                null,
-                tint = Gyp.danger,
-                modifier = Modifier.size(22.dp),
-            )
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    progress.title.ifBlank { "未命名任务" },
-                    fontSize = 14.sp,
-                    color = Gyp.ink,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    progress.error ?: progress.stageText(),
-                    fontSize = 11.sp,
-                    color = Gyp.danger,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            IconButton(onClick = onRetry) {
-                Icon(GuangYueIcons.RefreshCw, "重试", tint = Gyp.accent, modifier = Modifier.size(18.dp))
-            }
-            IconButton(onClick = onRemove) {
-                Icon(GuangYueIcons.Trash2, "删除", tint = Gyp.inkSoft, modifier = Modifier.size(18.dp))
-            }
-        }
+    RowCard {
+        Cover(null)
+        Spacer(Modifier.width(12.dp))
+        Titles(progress.title.ifBlank { "未命名任务" }, progress.error ?: progress.stageText(), subColor = Gyp.danger, modifier = Modifier.weight(1f))
+        RoundAction(GuangYueIcons.RefreshCw, "重试", tint = Gyp.ink, onClick = onRetry)
+        RoundAction(GuangYueIcons.Trash2, "删除", tint = Gyp.t3, onClick = onRemove)
     }
 }
 
 @Composable
 private fun DoneRow(track: DownloadedTrack, onPlay: () -> Unit, onRemove: () -> Unit) {
-    Card(onClick = onPlay) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(40.dp)
-                    .clip(GyRadius.fieldShape())
-                    .background(Gyp.tint, GyRadius.fieldShape()),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(GuangYueIcons.Music, null, tint = Gyp.accent, modifier = Modifier.size(20.dp))
-                if (!track.artwork.isNullOrBlank()) {
-                    coil3.compose.AsyncImage(
-                        model = track.artwork,
-                        contentDescription = track.title,
-                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+    RowCard(onClick = onPlay) {
+        Cover(track.artwork)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(track.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Gyp.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    listOf(track.artist.ifBlank { "未知艺术家" }, track.album ?: "").filter { it.isNotBlank() }.joinToString(" · "),
+                    fontSize = 12.sp, color = Gyp.t2, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Spacer(Modifier.width(6.dp))
+                Box(
+                    Modifier.clip(RoundedCornerShape(50)).background(Gyp.tint).padding(horizontal = 6.dp, vertical = 1.dp),
+                ) {
+                    Text(
+                        listOf(track.quality.uppercase(), track.sizeText.uppercase()).filter { it.isNotBlank() }.joinToString(" · "),
+                        fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Gyp.t3, maxLines = 1,
                     )
                 }
             }
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    track.title,
-                    fontSize = 14.sp,
-                    color = Gyp.ink,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    listOf(track.artist.ifBlank { "未知艺术家" }, track.album ?: "", track.sizeText.uppercase())
-                        .filter { it.isNotBlank() }
-                        .joinToString(" · "),
-                    fontSize = 11.sp,
-                    color = Gyp.inkSoft,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Box(
-                Modifier
-                    .background(Gyp.tint, GyRadius.capsuleShape())
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-            ) {
-                Text(
-                    track.quality.uppercase(),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Gyp.inkSoft,
-                )
-            }
-            IconButton(onClick = onRemove) {
-                Icon(GuangYueIcons.Trash2, "删除本地文件", tint = Gyp.inkSoft, modifier = Modifier.size(17.dp))
-            }
         }
+        RoundAction(GuangYueIcons.Trash2, "删除本地文件", tint = Gyp.t3, onClick = onRemove)
     }
 }
 
 @Composable
-private fun EmptyDownloads() {
+private fun EmptyDownloads(text: String) {
     Column(
-        Modifier
-            .fillMaxSize()
-            .padding(bottom = 80.dp),
+        Modifier.fillMaxSize().padding(bottom = 96.dp, start = 32.dp, end = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Box(
-            Modifier
-                .size(72.dp)
-                .background(Gyp.card, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(GuangYueIcons.Download, null, tint = Gyp.accent, modifier = Modifier.size(30.dp))
-        }
-        Spacer(Modifier.height(14.dp))
-        Text(
-            "还没有下载任务",
-            fontSize = 15.sp,
-            fontFamily = FontFamily.Serif,
-            color = Gyp.ink,
-        )
+        Icon(GuangYueIcons.Download, null, tint = Gyp.t3, modifier = Modifier.size(32.dp))
+        Spacer(Modifier.height(12.dp))
+        Text(text, fontSize = 14.sp, color = Gyp.t2)
         Spacer(Modifier.height(4.dp))
         Text(
-            "在搜索结果或播放器里点「下载」，\n文件会存进 音乐/GuangYue/ 并写入 ID3 标签",
-            fontSize = 11.sp,
-            color = Gyp.inkSoft,
+            "在歌单或搜索结果里点下载，歌会存进 音乐/GuangYue/。",
+            fontSize = 12.sp, color = Gyp.t3,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
 }
 
-// ------------------------------------------------------------------ 小组件
-
 @Composable
-private fun Card(
-    onClick: (() -> Unit)? = null,
-    content: @Composable () -> Unit,
-) {
-    val base = Modifier
-        .fillMaxWidth()
-        .background(Gyp.cardTranslucent, GyRadius.rowShape())
-        .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
-        .padding(horizontal = 12.dp, vertical = 10.dp)
-    Box(base) { content() }
-}
-
-@Composable
-private fun TextAction(text: String, onClick: () -> Unit) {
+private fun Pill(text: String, onClick: () -> Unit) {
     Box(
         Modifier
-            .padding(end = 8.dp)
-            .background(Gyp.tint, GyRadius.fieldShape())
+            .padding(start = 6.dp)
+            .clip(RoundedCornerShape(50))
+            .background(Gyp.tint)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-    ) {
-        Text(text, fontSize = 11.sp, color = Gyp.accentText)
-    }
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    ) { Text(text, fontSize = 12.sp, color = Gyp.ink, maxLines = 1) }
 }

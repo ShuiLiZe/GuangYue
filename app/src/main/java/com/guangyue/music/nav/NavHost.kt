@@ -106,6 +106,7 @@ fun GuangYueNavHost(
     val shellVm: com.guangyue.music.ShellViewModel = androidx.hilt.navigation.compose.hiltViewModel()
     val homeStyle by shellVm.homeStyle.collectAsStateWithLifecycle()
     val gridCardStyle by shellVm.gridCardStyle.collectAsStateWithLifecycle()
+    val collectionStyle by shellVm.collectionStyle.collectAsStateWithLifecycle()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val playbackState by playback.state.collectAsStateWithLifecycle()
 
@@ -239,6 +240,7 @@ fun GuangYueNavHost(
                             polaroid = gridCardStyle != com.guangyue.core.prefs.GridCardStyles.IMAGE,
                             // folia-sonnet 手机版首页：没有底栏，标题旁齿轮进设置，页签胶囊末尾带「去别处」的页签。
                             onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                            onOpenDownloads = { navController.navigate(Routes.DOWNLOADS) { launchSingleTop = true } },
                             // Folia 手机版：首页背后跑的是播放页同一层可视化背景（不暂停），右下角是平台按钮。
                             background = {
                                 val homeStyleVm: LyricStyleViewModel = hiltViewModel()
@@ -523,7 +525,8 @@ fun GuangYueNavHost(
             ShellColumn(
                 content = {
                     // 2026-11-16 用户：歌单详情要和 Folia 一样 → 照 Folia 网格集合页（GridView tracks）。歌手页仍走墙面（有专辑段）。
-                    if (!isArtistPage) {
+                    // 0.0.33 用户：歌单详情有两套（Folia 资料库界面：网格 / 墙面），设置里切。
+                    if (!isArtistPage && collectionStyle == com.guangyue.core.prefs.HomeStyles.GRID) {
                         val playAllNow = {
                             if (list.isNotEmpty()) {
                                 playback.setShuffle(false)
@@ -1080,12 +1083,12 @@ fun GuangYueNavHost(
                 onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
                 onOpenDownloads = { navController.navigate(Routes.DOWNLOAD_SETTINGS) },
                 // 11-15 用户：Folia 手机版只有网格首页，墙面（无限）切过去回不来，去掉切换。
-                homeStyles = emptyList(),
-                homeStyle = homeStyle,
+                // 0.0.33：首页固定网格；「资料库界面」只切歌单详情（网格集合页 / 墙面）。
+                homeStyles = HOME_STYLE_OPTIONS,
+                homeStyle = collectionStyle,
                 onPickHomeStyle = { id ->
-                    shellVm.setHomeStyle(id)
-                    // Folia notifications.homeLayoutGrid「首页布局已切换为…」。
-                    com.guangyue.feature.library.design.StatusToasts.show("已切换为" + (HOME_STYLE_OPTIONS.firstOrNull { it.id == id }?.title ?: "") + "首页")
+                    shellVm.setCollectionStyle(id)
+                    com.guangyue.feature.library.design.StatusToasts.show("歌单详情已切换为" + (HOME_STYLE_OPTIONS.firstOrNull { it.id == id }?.title ?: ""))
                 },
                 gridCardStyle = gridCardStyle.takeIf { homeStyle == com.guangyue.core.prefs.HomeStyles.GRID },
                 onPickGridCardStyle = { id ->
@@ -1494,12 +1497,12 @@ internal val HOME_STYLE_OPTIONS = listOf(
         id = com.guangyue.core.prefs.HomeStyles.WALL,
         title = "墙面",
         tag = "无限",
-        description = "一整面没有尽头的磁贴墙，拖动着浏览；点一块展开，再点进入或播放。",
+        description = "歌单里的歌铺成一整面磁贴墙，拖动着浏览；点一块展开，再点播放。",
     ),
     com.guangyue.feature.library.screen.HomeStyleOption(
         id = com.guangyue.core.prefs.HomeStyles.GRID,
         title = "网格",
         tag = "经典",
-        description = "卡片一字排开，左右滑动挑选；点居中的卡片进入歌单或播放。",
+        description = "歌单里的歌是一张张拍立得卡，蜂窝排开随手拖；点卡居中，再点播放。",
     ),
 )

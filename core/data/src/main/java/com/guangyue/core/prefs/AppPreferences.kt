@@ -254,6 +254,14 @@ class AppPreferences @Inject constructor(
         set(value) = prefs.edit().putString(KEY_HOME_STYLE, if (value == HomeStyles.WALL) HomeStyles.WALL else HomeStyles.GRID).apply()
 
     /**
+     * 0.0.33：歌单详情（集合页）用哪套资料库界面（Folia librarySuite：grid = 网格集合页 GridView，wall = bravais 墙面）。
+     * 首页固定网格（Folia 手机版首页），只有集合页跟这个选项走。默认网格。
+     */
+    var collectionStyleId: String
+        get() = if (prefs.getString(KEY_COLLECTION_STYLE, HomeStyles.GRID) == HomeStyles.WALL) HomeStyles.WALL else HomeStyles.GRID
+        set(value) = prefs.edit().putString(KEY_COLLECTION_STYLE, if (value == HomeStyles.WALL) HomeStyles.WALL else HomeStyles.GRID).apply()
+
+    /**
      * 0.0.28：网格首页的卡片样式（Folia grid3dCardStyle，设置键 grid3d_card_style）：
      * "card" = 拍立得卡片（默认，同 Folia）、"image" = 纯图片封面。
      */
@@ -265,6 +273,7 @@ class AppPreferences @Inject constructor(
         const val KEY_GRID_CARD_STYLE = "grid3d_card_style"
         const val KEY_VIS_BACKGROUND = "visualizer_background_mode"
         const val KEY_HOME_STYLE = "library_home_style"
+        const val KEY_COLLECTION_STYLE = "library_collection_style"
         const val FILE = "guangyue_prefs"
         const val KEY_DARK = "ui_dark_mode"
         const val KEY_LAST_SOURCE = "search_last_source"

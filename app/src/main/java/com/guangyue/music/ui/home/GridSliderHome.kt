@@ -216,6 +216,8 @@ fun GridSliderHome(
     emptyText: (String) -> String = { "这里还没有内容" },
     /** folia-sonnet 首页头部标题旁的齿轮（onOpenSettings）；null 不显示。 */
     onOpenSettings: (() -> Unit)? = null,
+    /** 0.0.33：齿轮旁的下载按钮 → 下载列表；null 不显示。 */
+    onOpenDownloads: (() -> Unit)? = null,
     /** 页签胶囊末尾的「去别处」页签（Folia extraTabs）：点了直接跳页，不切换本页列表。 */
     extraTabs: List<Pair<String, () -> Unit>> = emptyList(),
     /** 搜索框占位（Folia home.searchDatabase）。 */
@@ -271,7 +273,7 @@ fun GridSliderHome(
         GridHomeHeader(
             title, tabs, tab, inkColor, compact,
             onSelect = { tab = it }, onOpenSearch = onOpenSearch,
-            onOpenSettings = onOpenSettings, extraTabs = extraTabs, searchHint = searchHint,
+            onOpenSettings = onOpenSettings, onOpenDownloads = onOpenDownloads, extraTabs = extraTabs, searchHint = searchHint,
         )
         if (tiles.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -465,6 +467,7 @@ private fun GridHomeHeader(
     title: String, tabs: List<String>, active: Int, ink: Color, compact: Boolean,
     onSelect: (Int) -> Unit, onOpenSearch: () -> Unit,
     onOpenSettings: (() -> Unit)?, extraTabs: List<Pair<String, () -> Unit>>, searchHint: String,
+    onOpenDownloads: (() -> Unit)? = null,
 ) {
     val dark = ink.red + ink.green + ink.blue > 1.5f
     Column(
@@ -485,6 +488,15 @@ private fun GridHomeHeader(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(GuangYueIcons.Settings, null, tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(22.dp))
+                    }
+                }
+                if (onOpenDownloads != null) {
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onOpenDownloads)
+                            .semantics { contentDescription = "下载" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(GuangYueIcons.Download, null, tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(21.dp))
                     }
                 }
             }
