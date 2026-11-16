@@ -522,6 +522,57 @@ fun GuangYueNavHost(
             }
             ShellColumn(
                 content = {
+                    // 2026-11-16 用户：歌单详情要和 Folia 一样 → 照 Folia 网格集合页（GridView tracks）。歌手页仍走墙面（有专辑段）。
+                    if (!isArtistPage) {
+                        val playAllNow = {
+                            if (list.isNotEmpty()) {
+                                playback.setShuffle(false)
+                                playback.setQueueFromTracks(list, 0, true)
+                                navController.navigate(Routes.LYRIC_FLOW)
+                            }
+                        }
+                        com.guangyue.music.ui.collection.GridCollectionView(
+                            title = shownName,
+                            subtitle = tile.subtitle.takeIf { s -> s.isNotBlank() && s != kindLabel } ?: "",
+                            coverUrl = tile.artwork ?: list.firstOrNull { t -> t.artwork != null }?.artwork,
+                            cards = remember(list) { list.map { t -> com.guangyue.music.ui.collection.GridTrackCard(t.key, t.title, t.artist, t.album, t.durationMs, t.artwork) } },
+                            loading = tracks == null && !failed,
+                            failed = tracks == null && failed,
+                            ink = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
+                            ground = androidx.compose.material3.MaterialTheme.colorScheme.background,
+                            countLabel = tracks?.let { l -> "${l.size} 首 · $kindLabel" } ?: kindLabel,
+                            isCurrent = { i -> list.getOrNull(i)?.key == playbackState.item?.key },
+                            playing = playbackState.isPlaying,
+                            onBack = { navController.popBackStack() },
+                            onRetry = { attempt++ },
+                            onPlay = { i ->
+                                playback.setQueueFromTracks(list, i, true)
+                                navController.navigate(Routes.LYRIC_FLOW)
+                            },
+                            onTogglePlayback = { playback.toggle() },
+                            onEnqueue = { i ->
+                                list.getOrNull(i)?.let { t ->
+                                    playback.appendTracks(listOf(t))
+                                    com.guangyue.feature.library.design.StatusToasts.show("已加入播放队列：${t.title}")
+                                }
+                            },
+                            onLongPress = { i -> list.getOrNull(i)?.let { t -> collectionPick = listOf(t) } },
+                            panelActions = buildList {
+                                add(com.guangyue.music.ui.collection.GridPanelAction("播放全部", primary = true, enabled = list.isNotEmpty()) { playAllNow() })
+                                add(com.guangyue.music.ui.collection.GridPanelAction("加入播放队列", enabled = list.isNotEmpty()) {
+                                    playback.appendTracks(list)
+                                    com.guangyue.feature.library.design.StatusToasts.show("已加入播放队列 ${list.size} 首")
+                                })
+                                add(com.guangyue.music.ui.collection.GridPanelAction("添加到歌单", enabled = list.isNotEmpty()) { seamPick = true })
+                                add(com.guangyue.music.ui.collection.GridPanelAction("全部下载", enabled = list.isNotEmpty()) { downloadSome(list) })
+                                if (!isLib && localPlaylistId == null) add(com.guangyue.music.ui.collection.GridPanelAction("重新加载") { attempt++ })
+                                if (localPlaylistId != null) {
+                                    add(com.guangyue.music.ui.collection.GridPanelAction("改名") { seamRename = true })
+                                    add(com.guangyue.music.ui.collection.GridPanelAction("删除歌单", danger = true) { seamDelete = true })
+                                }
+                            },
+                        )
+                    } else
                     com.guangyue.music.ui.home.BravaisWall(
                         sections = if (albumTiles.isEmpty()) listOf("曲目" to trackTiles) else listOf("曲目" to trackTiles, "专辑" to albumTiles),
                         title = "广乐",
