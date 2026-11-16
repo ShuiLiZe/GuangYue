@@ -180,6 +180,7 @@ fun FoliaSearchScreen(
                     onOpenArtist = onOpenArtist,
                     onTabChange = onTabChange,
                     onRetry = onRetry,
+                    onLoadMore = onLoadMore,
                 )
             }
         }
@@ -395,6 +396,7 @@ private fun ResultsBody(
     onOpenArtist: (MusicItem) -> Unit,
     onTabChange: (SearchTab) -> Unit,
     onRetry: () -> Unit,
+    onLoadMore: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxSize().testTag(SearchTags.Results)) {
         if (state.availableTypes.size > 1) {
