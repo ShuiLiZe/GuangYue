@@ -780,6 +780,7 @@ fun GuangYueNavHost(
                         onQueryChange = vm::onQueryChange,
                         onSearch = vm::searchNow,
                         onClose = { navController.popBackStack() },
+                        onLoadMore = { vm.loadMore() },
                         // 0.0.7：音源单选，只用用户选中的那一个插件搜
                         onPickSource = { id -> vm.selectSource(id) },
                         onPlay = { index ->

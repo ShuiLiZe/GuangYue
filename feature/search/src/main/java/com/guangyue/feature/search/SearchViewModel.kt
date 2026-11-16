@@ -87,6 +87,10 @@ data class SearchUiState(
     val searched: Boolean = false,
     val history: List<String> = emptyList(),
     val message: String? = null,
+    /** 0.0.34：单曲翻页（插件一页常只给 10 首）：已加载到第几页 / 是否到底 / 是否在加载下一页。 */
+    val musicPage: Int = 1,
+    val musicEnd: Boolean = false,
+    val loadingMore: Boolean = false,
 ) {
     /** 当前选中的音源。 */
     val selected: PluginMeta? get() = available.firstOrNull { it.id == sourceId }
@@ -334,6 +338,9 @@ class SearchViewModel @Inject constructor(
                 )
             }
             _state.value = _state.value.copy(
+                musicPage = if (type == SearchType.MUSIC) 1 else _state.value.musicPage,
+                musicEnd = if (type == SearchType.MUSIC) (result?.isEnd == true || items.isEmpty()) else _state.value.musicEnd,
+                loadingMore = false,
                 loading = false,
                 rows = if (type == SearchType.MUSIC) rows else _state.value.rows,
                 albums = if (type == SearchType.ALBUM) albums else _state.value.albums,
@@ -341,6 +348,33 @@ class SearchViewModel @Inject constructor(
                 sheets = if (type == SearchType.SHEET) albums else _state.value.sheets,
                 failure = failure,
                 searched = true,
+            )
+        }
+    }
+
+    /** 0.0.34：单曲列表滑到底时取下一页（插件 search(page=n)），去重后接在后面。 */
+    fun loadMore() {
+        val st = _state.value
+        if (st.tab != SearchTab.TRACKS || st.loading || st.loadingMore || st.musicEnd || st.rows.isEmpty()) return
+        val plugin = st.selected ?: return
+        val query = st.query.trim()
+        if (query.isEmpty()) return
+        val next = st.musicPage + 1
+        _state.value = st.copy(loadingMore = true)
+        viewModelScope.launch {
+            val result = runCatching { bridge.search(plugin.id, query, next, SearchType.MUSIC) }.getOrNull()
+            val cur = _state.value
+            if (cur.query.trim() != query || cur.sourceId != plugin.id) return@launch
+            val seen = cur.rows.map { it.item.id }.toHashSet()
+            val fresh = result?.items.orEmpty().filter { seen.add(it.id) }
+            if (fresh.isNotEmpty()) runCatching { tracks.cache(fresh) }
+            val label = platformLabelOf(plugin)
+            _state.value = cur.copy(
+                loadingMore = false,
+                musicPage = if (result?.error == null) next else cur.musicPage,
+                // 出错 / 没新东西 / 插件说到底了，都当到底，免得一直转。
+                musicEnd = result == null || result.error != null || result.isEnd || fresh.isEmpty(),
+                rows = cur.rows + fresh.map { SearchRow(pluginId = plugin.id, pluginName = plugin.displayName, platformLabel = label, item = it) },
             )
         }
     }

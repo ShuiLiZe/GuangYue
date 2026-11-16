@@ -43,6 +43,41 @@ class PluginProbeActivity : ComponentActivity() {
                 }
                 Log.w(TAG, "targets=${targets.map { it.displayName + "@" + it.version }}")
                 val kw = intent?.getStringExtra("kw")
+                if (kw != null && intent?.getStringExtra("play") != null) {
+                    // 0.0.34 取证：翻页 + 搜索结果取链 + 「账号同步形状」的原始对象取链（--es play 1）。
+                    val p = targets.first()
+                    manager.setCurrentSource(p.id)
+                    for (pg in 1..3) {
+                        val r = runCatching { bridge.search(p.id, kw, pg, "music") }.getOrNull()
+                        Log.w(TAG, "PAGE $pg n=${r?.items?.size} end=${r?.isEnd} err=${r?.error?.take(120)}")
+                    }
+                    val first = bridge.search(p.id, kw, 1, "music").items.firstOrNull()
+                    Log.w(TAG, "RAW ${first?.raw.toString().take(900)}")
+                    for (q in listOf("standard", "high")) {
+                        val ms = runCatching { bridge.getMediaSource(p.id, first?.raw, first, q) }
+                        Log.w(TAG, "MS search $q url=${ms.getOrNull()?.url?.take(100)} exc=${ms.exceptionOrNull()?.message?.take(200)}")
+                    }
+                    val r0 = first?.raw
+                    if (r0 != null) {
+                        fun s(k: String) = (r0[k] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+                        val synced = kotlinx.serialization.json.buildJsonObject {
+                            put("platform", kotlinx.serialization.json.JsonPrimitive(p.platform))
+                            put("id", kotlinx.serialization.json.JsonPrimitive(s("songid").ifBlank { s("id") }))
+                            put("songid", kotlinx.serialization.json.JsonPrimitive(s("songid").ifBlank { s("id") }))
+                            put("songmid", kotlinx.serialization.json.JsonPrimitive(s("songmid")))
+                            put("mid", kotlinx.serialization.json.JsonPrimitive(s("songmid")))
+                            put("title", kotlinx.serialization.json.JsonPrimitive(s("title")))
+                            put("artist", kotlinx.serialization.json.JsonPrimitive(s("artist")))
+                            put("album", kotlinx.serialization.json.JsonPrimitive(s("album")))
+                            put("albummid", kotlinx.serialization.json.JsonPrimitive(s("albummid")))
+                        }
+                        Log.w(TAG, "SYNCED $synced")
+                        val ms = runCatching { bridge.getMediaSource(p.id, synced, null, "standard") }
+                        Log.w(TAG, "MS synced url=${ms.getOrNull()?.url?.take(100)} exc=${ms.exceptionOrNull()?.message?.take(200)}")
+                    }
+                    Log.w(TAG, "DONE")
+                    return@runCatching
+                }
                 if (kw != null) {
                     // 搜索取证：--es kw <词> --es only <平台>，四类各打前 3 条名称 + 图片地址。
                     for (p in targets.take(1)) {

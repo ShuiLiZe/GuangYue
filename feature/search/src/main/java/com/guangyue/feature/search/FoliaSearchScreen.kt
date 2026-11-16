@@ -115,6 +115,7 @@ fun FoliaSearchScreen(
     onRetry: () -> Unit = {},
     onOpenSourceManager: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
+    onLoadMore: () -> Unit = {},
 ) {
     val phase = remember(state) { state.pagePhase() }
 
@@ -410,7 +411,7 @@ private fun ResultsBody(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (state.tab) {
-                SearchTab.TRACKS -> TrackList(res, state.rows, onPlay, onDownload, onAddToSheet)
+                SearchTab.TRACKS -> TrackList(res, state.rows, onPlay, onDownload, onAddToSheet, state.loadingMore, state.musicEnd, onLoadMore)
                 SearchTab.ALBUMS -> AlbumGrid(res, state.albums, onOpenAlbum)
                 SearchTab.SHEETS -> AlbumGrid(res, state.sheets, onOpenAlbum)
                 SearchTab.ARTISTS -> ArtistGrid(res, state.artists, onOpenArtist)
@@ -435,8 +436,20 @@ private fun TrackList(
     onPlay: (Int) -> Unit,
     onDownload: (MusicItem) -> Unit,
     onAddToSheet: (MusicItem) -> Unit,
+    loadingMore: Boolean = false,
+    end: Boolean = true,
+    onLoadMore: () -> Unit = {},
 ) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val nearEnd by remember(rows.size) {
+        androidx.compose.runtime.derivedStateOf {
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            rows.isNotEmpty() && last >= rows.size - 3
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(nearEnd, end, rows.size) { if (nearEnd && !end) onLoadMore() }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = GySpace.pageH, end = GySpace.pageH, top = GySpace.xxs, bottom = GySpace.l),
         verticalArrangement = Arrangement.spacedBy(GySpace.s),
@@ -449,6 +462,13 @@ private fun TrackList(
                 onDownload = { onDownload(row.item) },
                 onAddToSheet = { onAddToSheet(row.item) },
             )
+        }
+        if (rows.isNotEmpty() && (loadingMore || !end)) {
+            item(key = "more") {
+                Box(Modifier.fillMaxWidth().padding(vertical = GySpace.m), contentAlignment = Alignment.Center) {
+                    Spinner(18.dp, Gyp.t3)
+                }
+            }
         }
     }
 }
