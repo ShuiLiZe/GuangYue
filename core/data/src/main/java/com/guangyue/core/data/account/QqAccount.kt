@@ -110,7 +110,19 @@ data class AccountSong(
         put("artist", artist)
         put("album", album)
         put("albummid", albumMid)
-        if (mediaMid.isNotBlank()) put("strMediaMid", mediaMid)
+        // QQ 插件取链读搜索结果的形状：_src.qq.{mid,mediaMid} + primaryKey（模拟器取证 11-16：
+        // 只给 songmid/mid 时 getMediaSource 返回空）。三种写法都给，插件和洛雪源各取所需。
+        val media = mediaMid.ifBlank { songMid }
+        put("strMediaMid", media)
+        put("mediaMid", media)
+        put("primaryKey", songMid)
+        put("_src", buildJsonObject {
+            put("qq", buildJsonObject {
+                put("mid", songMid)
+                put("mediaMid", media)
+            })
+        })
+        put("_srcOrder", kotlinx.serialization.json.JsonArray(listOf(kotlinx.serialization.json.JsonPrimitive("qq"))))
         artwork?.let { put("artwork", it) }
         if (durationSec > 0) put("duration", durationSec)
     }
