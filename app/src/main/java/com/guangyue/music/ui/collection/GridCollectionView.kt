@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -440,7 +441,7 @@ private fun PolaroidCard(
             .background(ground.copy(alpha = 0.95f))
             .border(1.dp, ink.copy(alpha = if (current) 0.32f else 0.05f), shape)
             .pointerInput(card.key) {
-                androidx.compose.foundation.gestures.detectTapGestures(onTap = { onTap() }, onLongPress = { onLong() })
+                detectTapGestures(onTap = { onTap() }, onLongPress = { onLong() })
             }
             .padding(12.dp),
     ) {
