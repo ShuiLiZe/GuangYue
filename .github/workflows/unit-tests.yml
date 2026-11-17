@@ -57,6 +57,8 @@ jobs:
         run: ./gradlew :app:testDebugUnitTest --tests '*GridSlider*' --no-daemon --stacktrace
       - name: 本地搜索拼音单测（feature:search，只跑 LocalSongMatch*）
         run: ./gradlew :feature:search:testDebugUnitTest --tests '*LocalSongMatch*' --no-daemon --stacktrace
+      - name: 平台图标单测（feature:library，只跑 ProviderLogos*）
+        run: ./gradlew :feature:library:testDebugUnitTest --tests '*ProviderLogos*' --no-daemon --stacktrace
       - name: 编译 debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
       - name: 上传 debug APK

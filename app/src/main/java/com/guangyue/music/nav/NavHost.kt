@@ -1215,6 +1215,17 @@ fun GuangYueNavHost(
                 },
                 globalLyricOffsetMs = com.guangyue.feature.player.lyrics.visualizer.MotionPrefs.flow(settingsCtx).collectAsStateWithLifecycle().value.globalLyricOffsetMs,
                 onGlobalLyricOffset = { v -> com.guangyue.feature.player.lyrics.visualizer.MotionPrefs.update(settingsCtx) { it.copy(globalLyricOffsetMs = v) } },
+                lyricFilter = run {
+                    val mp = com.guangyue.feature.player.lyrics.visualizer.MotionPrefs
+                    val f = mp.flow(settingsCtx).collectAsStateWithLifecycle().value.lyricFilter
+                    com.guangyue.feature.library.screen.LyricFilterUi(
+                        copyright = f.copyright, onCopyright = { v -> mp.update(settingsCtx) { it.copy(lyricFilter = it.lyricFilter.copy(copyright = v)) } },
+                        lyricSource = f.lyricSource, onLyricSource = { v -> mp.update(settingsCtx) { it.copy(lyricFilter = it.lyricFilter.copy(lyricSource = v)) } },
+                        words = f.containsWords, onWords = { v -> mp.update(settingsCtx) { it.copy(lyricFilter = it.lyricFilter.copy(containsWords = v)) } },
+                        written = f.written, onWritten = { v -> mp.update(settingsCtx) { it.copy(lyricFilter = it.lyricFilter.copy(written = v)) } },
+                        writtenError = com.guangyue.core.data.lyrics.LyricLineRules.writtenError(f.written),
+                    )
+                },
                 gridFalloff = shellVm.gridFalloff.collectAsStateWithLifecycle().value,
                 gridCardShape = shellVm.gridCardShape.collectAsStateWithLifecycle().value,
                 onGridCardShape = { b, sq -> shellVm.setGridCardShape(b, sq) },

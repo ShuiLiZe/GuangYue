@@ -538,6 +538,10 @@ fun V0cStage(
                         followSystem = true, onFollowSystem = {}, systemReducing = false,
                     ),
                     globalLyricOffsetMs = 120L,
+                    lyricFilter = com.guangyue.feature.library.screen.LyricFilterUi(
+                        copyright = true, onCopyright = {}, lyricSource = false, onLyricSource = {},
+                        words = "OP：、SP：", onWords = {}, written = "(作词", onWritten = {}, writtenError = "Unclosed group",
+                    ),
                     modifier = Modifier.navigationBarsPadding(),
                 )
             }

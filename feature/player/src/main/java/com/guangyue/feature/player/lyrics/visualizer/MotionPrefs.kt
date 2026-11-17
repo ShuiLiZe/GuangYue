@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
  * - homeBackgroundOff：Folia disableHomeDynamicBackground（「关闭主页动态背景」）。首页背景停在静帧。
  * - followSystem：Folia useMotionSettingsStore.followSystemReducedMotion（「跟随系统设置」）。
  *   ✋ Folia 默认关；广乐默认开：Android「移除动画」是无障碍开关，0.0.x 起一直跟随它（ReduceMotion.kt），不悄悄改掉老行为。
+ * - lyricFilter：Folia「歌词过滤」的手机子集（core/data LyricLineRules），显示时套用，改了立刻重排当前歌词。
  * - globalLyricOffsetMs：Folia globalLyricTimelineOffsetMs（「全局时间偏移」，±2000ms），与每首歌自己的偏移相加。
  */
 object MotionPrefs {
@@ -20,6 +21,8 @@ object MotionPrefs {
         val homeBackgroundOff: Boolean = false,
         val followSystem: Boolean = true,
         val globalLyricOffsetMs: Long = 0L,
+        /** Folia「歌词 → 歌词过滤」（LyricLineRules）。 */
+        val lyricFilter: com.guangyue.core.data.lyrics.LyricFilterSettings = com.guangyue.core.data.lyrics.LyricFilterSettings(),
     )
 
     const val GLOBAL_OFFSET_LIMIT_MS = 2000L
@@ -36,6 +39,12 @@ object MotionPrefs {
                 homeBackgroundOff = p.getBoolean("disable_home_dynamic_background", false),
                 followSystem = p.getBoolean("reduce_motion_follow_system", true),
                 globalLyricOffsetMs = clampOffset(p.getLong("global_lyric_timeline_offset_ms", 0L)),
+                lyricFilter = com.guangyue.core.data.lyrics.LyricFilterSettings(
+                    copyright = p.getBoolean("lyric_filter_copyright", false),
+                    lyricSource = p.getBoolean("lyric_filter_source", false),
+                    containsWords = p.getString("lyric_filter_words", "").orEmpty(),
+                    written = p.getString("lyric_filter_written", "").orEmpty(),
+                ),
             )
             loaded = true
         }
@@ -53,6 +62,10 @@ object MotionPrefs {
             .putBoolean("disable_home_dynamic_background", next.homeBackgroundOff)
             .putBoolean("reduce_motion_follow_system", next.followSystem)
             .putLong("global_lyric_timeline_offset_ms", next.globalLyricOffsetMs)
+            .putBoolean("lyric_filter_copyright", next.lyricFilter.copyright)
+            .putBoolean("lyric_filter_source", next.lyricFilter.lyricSource)
+            .putString("lyric_filter_words", next.lyricFilter.containsWords)
+            .putString("lyric_filter_written", next.lyricFilter.written)
             .apply()
     }
 }

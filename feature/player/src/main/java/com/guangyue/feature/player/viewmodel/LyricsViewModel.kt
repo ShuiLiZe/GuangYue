@@ -16,6 +16,9 @@ import com.guangyue.core.plugin.MusicItem
 import com.guangyue.core.plugin.MusicPluginBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,6 +56,9 @@ class LyricsViewModel @Inject constructor(
     /** 11-18：Folia「歌词 → 全局时间偏移」（设备级，与每首歌的偏移相加：effective = 每首 + 全局）。 */
     private val motionPrefs = com.guangyue.feature.player.lyrics.visualizer.MotionPrefs.flow(context)
     private fun totalOffset(): Long = _offsetMs.value + motionPrefs.value.globalLyricOffsetMs
+
+    /** 过滤前的这首歌词（规则改了就从它重排）。 */
+    private var unfiltered: Lyric = Lyric.EMPTY
     private val _offsetMs = MutableStateFlow(0L)
     val offsetMs: StateFlow<Long> = _offsetMs.asStateFlow()
 
@@ -86,6 +92,18 @@ class LyricsViewModel @Inject constructor(
     private var lastKey: String? = null
 
     init {
+        // 11-18：设置里改了歌词过滤，当前这首立刻重排（Folia：规则改了不必重新取歌词）。
+        viewModelScope.launch {
+            motionPrefs.map { it.lyricFilter }.distinctUntilChanged().drop(1).collect { rules ->
+                val base = unfiltered
+                if (base.lines.isEmpty()) return@collect
+                val shown = com.guangyue.core.data.lyrics.LyricLineRules.apply(base, rules)
+                _lyric.value = shown
+                sync.setLyric(shown)
+                sync.onPosition(playback.state.value.positionMs - totalOffset(), System.currentTimeMillis())
+                _syncState.value = sync.state.value
+            }
+        }
         viewModelScope.launch {
             playback.state.collect { state ->
                 val current = state.item
@@ -124,6 +142,7 @@ class LyricsViewModel @Inject constructor(
     private fun loadLyrics(item: QueueItem) {
         lyricJob?.cancel()
         _lyric.value = Lyric.EMPTY
+        unfiltered = Lyric.EMPTY
         sync.clear()
         _syncState.value = sync.state.value
 
@@ -186,8 +205,11 @@ class LyricsViewModel @Inject constructor(
                 }
                 var parsed = LrcParser.parse(raw)
                 source?.translation?.let { parsed = LrcParser.mergeTranslation(parsed, it) }
-                _lyric.value = parsed
-                sync.setLyric(parsed)
+                unfiltered = parsed
+                // 11-18：Folia「歌词过滤」只在显示时套用（缓存 / 解析结果不动）。
+                val shown = com.guangyue.core.data.lyrics.LyricLineRules.apply(parsed, motionPrefs.value.lyricFilter)
+                _lyric.value = shown
+                sync.setLyric(shown)
                 _syncState.value = sync.state.value
             } catch (t: kotlinx.coroutines.CancellationException) {
                 throw t

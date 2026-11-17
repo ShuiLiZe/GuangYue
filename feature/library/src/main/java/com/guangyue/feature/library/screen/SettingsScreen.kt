@@ -112,6 +112,8 @@ fun SettingsScreen(
     /** 11-18：Folia「歌词 → 时间与过滤 → 全局时间偏移」（毫秒，±2000）；null 不显示。 */
     globalLyricOffsetMs: Long? = null,
     onGlobalLyricOffset: (Long) -> Unit = {},
+    /** 11-18：Folia「歌词过滤」手机子集；null 不显示。 */
+    lyricFilter: LyricFilterUi? = null,
     /** 打开时先显示的分类（取证用；正常进入是「外观」）。 */
     initialPage: SettingsPage = SettingsPage.APPEARANCE,
 ) {
@@ -215,6 +217,17 @@ fun SettingsScreen(
             add(SettingItem(SettingsPage.LYRICS, "时间与过滤", "全局时间偏移", "整体平移歌词时间轴，补偿蓝牙等输出延迟。", icon(GuangYueIcons.Timer),
                 trailing = { Text("${if (globalLyricOffsetMs > 0) "+" else ""}$globalLyricOffsetMs ms", color = Gyp.t2, fontSize = 13.sp, style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")) },
                 below = { OffsetStepper(globalLyricOffsetMs, onGlobalLyricOffset) }))
+        }
+        if (lyricFilter != null) {
+            // Folia LyricFilterSettingsModal 的「过滤规则」：常用预设两条 + 按文字添加（包含）+ 手写规则（高级）。
+            add(SettingItem(SettingsPage.LYRICS, "歌词过滤", "版权声明", "如「未经许可不得翻唱」「版权所有」", icon(GuangYueIcons.Filter),
+                trailing = { FoliaToggle(checked = lyricFilter.copyright, onChange = lyricFilter.onCopyright) }))
+            add(SettingItem(SettingsPage.LYRICS, "歌词过滤", "歌词来源说明", "如「歌词贡献者」「翻译贡献者」", icon(GuangYueIcons.Filter),
+                trailing = { FoliaToggle(checked = lyricFilter.lyricSource, onChange = lyricFilter.onLyricSource) }))
+            add(SettingItem(SettingsPage.LYRICS, "歌词过滤", "包含这些文字的行", "多个文字用逗号或顿号隔开，含其中任一个的行会被删掉（不分大小写、全半角）。", icon(GuangYueIcons.Filter),
+                below = { FoliaTextField(value = lyricFilter.words, onValueChange = lyricFilter.onWords, placeholder = "输入文字", modifier = Modifier.fillMaxWidth()) }))
+            add(SettingItem(SettingsPage.LYRICS, "歌词过滤", "手写规则（高级）", lyricFilter.writtenError?.let { "规则格式有误，未删除任何行：$it" } ?: "输入正则表达式，命中的行会被删掉。示例：^(作词|作曲)\\s*[:：]", icon(GuangYueIcons.Filter),
+                below = { FoliaTextField(value = lyricFilter.written, onValueChange = lyricFilter.onWritten, placeholder = "输入正则表达式", modifier = Modifier.fillMaxWidth()) }))
         }
         if (playQualities.isNotEmpty()) {
             add(SettingItem(SettingsPage.PLAYBACK, "音质", "默认播放音质", "新开始播放的歌按这一档取链；音源没有这一档时向下取", icon(GuangYueIcons.AudioLines),
@@ -615,3 +628,17 @@ private fun StepChip(text: String, onClick: () -> Unit) {
         Text(text, color = Gyp.ink.copy(alpha = 0.85f), fontSize = 13.sp, style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
     }
 }
+
+
+/** Folia「歌词过滤」手机子集的值与回调（core/data LyricLineRules）。 */
+class LyricFilterUi(
+    val copyright: Boolean,
+    val onCopyright: (Boolean) -> Unit,
+    val lyricSource: Boolean,
+    val onLyricSource: (Boolean) -> Unit,
+    val words: String,
+    val onWords: (String) -> Unit,
+    val written: String,
+    val onWritten: (String) -> Unit,
+    val writtenError: String? = null,
+)
