@@ -420,6 +420,8 @@ private fun LyricStylePanelContent(
                     accent = accent,
                     title = "歌词样式",
                     onPick = onStyle,
+                    // ✋ 手机横屏（矮屏）用 Folia 宽窗的 7 列（SHELF_COLUMNS.wide），4 列的画框太大、把参数挤出屏。
+                    columns = if (compact) 7 else 4,
                 )
 
                 Box(Modifier.height(GySpace.s))
