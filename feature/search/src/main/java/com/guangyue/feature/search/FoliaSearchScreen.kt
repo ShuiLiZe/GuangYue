@@ -599,51 +599,19 @@ private fun AlbumGrid(
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = GySpace.pageH,
-            end = GySpace.pageH,
-            top = GySpace.xxs,
-            bottom = GySpace.l,
-        ),
-        verticalArrangement = Arrangement.spacedBy(GySpace.s),
+        contentPadding = PaddingValues(top = GySpace.xxs, bottom = GySpace.l),
     ) {
         items(albums, key = { "${it.platform}:${it.id}" }) { album ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 68.dp)
-                    .clip(RoundedCornerShape(GyRadius.card))
-                    .background(Gyp.card)
-                    .border(1.dp, Gyp.cardRing, RoundedCornerShape(GyRadius.card))
-                    .clickableNoRipple { onOpen(album.asMusicItem()) }
-                    .padding(horizontal = GySpace.l, vertical = GySpace.s),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(GySpace.l),
-            ) {
-                Cover(url = album.artwork, size = 48)
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = album.title,
-                        fontSize = (GyText.row.value + 1).sp,
-                        lineHeight = GyText.rowHeight,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Gyp.ink,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (album.artist.isNotBlank()) {
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = album.artist,
-                            fontSize = GyText.hint,
-                            lineHeight = GyText.hintHeight,
-                            color = Gyp.t2,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
+            // 11-18：照 folia-sonnet SearchCollectionRow（专辑）：「歌手 / 年份」。
+            val year = album.date?.let { Regex("(19|20)\\d{2}").find(it)?.value }
+            CollectionRow(
+                name = album.title,
+                byline = listOfNotNull(album.artist.takeIf { it.isNotBlank() }, year),
+                coverUrl = album.artwork,
+                placeholder = GuangYueIcons.Disc,
+                round = false,
+                onClick = { onOpen(album.asMusicItem()) },
+            )
         }
     }
 }
@@ -665,56 +633,75 @@ private fun ArtistGrid(
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = GySpace.pageH,
-            end = GySpace.pageH,
-            top = GySpace.xxs,
-            bottom = GySpace.l,
-        ),
-        verticalArrangement = Arrangement.spacedBy(GySpace.s),
+        contentPadding = PaddingValues(top = GySpace.xxs, bottom = GySpace.l),
     ) {
         items(artists, key = { "${it.platform}:${it.id}" }) { artist ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 68.dp)
-                    .clip(RoundedCornerShape(GyRadius.card))
-                    .background(Gyp.card)
-                    .border(1.dp, Gyp.cardRing, RoundedCornerShape(GyRadius.card))
-                    .clickableNoRipple { onOpen(artist.asMusicItem()) }
-                    .padding(horizontal = GySpace.l, vertical = GySpace.s),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(GySpace.l),
-            ) {
-                Box(Modifier.size(48.dp).clip(CircleShape).background(Gyp.tint)) {
-                    if (artist.avatar != null) {
-                        AsyncImage(
-                            model = artist.avatar,
-                            contentDescription = null,
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        androidx.compose.material3.Icon(
-                            imageVector = GuangYueIcons.User,
-                            contentDescription = null,
-                            tint = Gyp.t3,
-                            modifier = Modifier.align(Alignment.Center).size(20.dp),
+            // ✋ Folia 搜索没有歌手页签；广乐保留，行样式同集合行，头像圆形。
+            CollectionRow(
+                name = artist.name,
+                byline = listOfNotNull(artist.fans?.takeIf { it.isNotBlank() }),
+                coverUrl = artist.avatar,
+                placeholder = GuangYueIcons.User,
+                round = true,
+                onClick = { onOpen(artist.asMusicItem()) },
+            )
+        }
+    }
+}
+
+/**
+ * 11-18：folia-sonnet SearchCollectionRow + search.css（.search-row / .search-collection-art）：平铺行 84dp、下沿发丝线、
+ * 左 18 右 14、间距 10；58 方角封面（专辑背后的唱片、歌单背后的主题色影子只在悬停时露出，触屏不画）；
+ * 名字 15 粗体一行，第二行 12sp 用「 / 」隔开（40% 透明），行尾 ArrowUpRight 18、35% 透明。窄屏不显示序号与曲目数。
+ */
+@Composable
+private fun CollectionRow(
+    name: String,
+    byline: List<String>,
+    coverUrl: String?,
+    placeholder: androidx.compose.ui.graphics.vector.ImageVector,
+    round: Boolean,
+    onClick: () -> Unit,
+) {
+    val hairline = Gyp.ink.copy(alpha = 0.09f)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 84.dp)
+            .drawBehind {
+                drawRect(hairline, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - 1.dp.toPx()), size = androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx()))
+            }
+            .clickableNoRipple(onClick)
+            .padding(start = 18.dp, end = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            Modifier.size(58.dp).clip(if (round) CircleShape else androidx.compose.ui.graphics.RectangleShape).background(Gyp.ink.copy(alpha = 0.08f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (coverUrl.isNullOrBlank()) {
+                androidx.compose.material3.Icon(placeholder, null, tint = Gyp.ink.copy(alpha = 0.3f), modifier = Modifier.size(22.dp))
+            } else {
+                AsyncImage(model = coverUrl, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(name, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Gyp.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (byline.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    byline.forEachIndexed { i, part ->
+                        if (i > 0) Text(" / ", fontSize = 12.sp, lineHeight = 16.sp, color = Gyp.t2.copy(alpha = 0.4f))
+                        Text(
+                            part, fontSize = 12.sp, lineHeight = 16.sp, color = Gyp.t2, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = if (i == 0) Modifier.weight(1f, fill = false) else Modifier,
                         )
                     }
                 }
-                Text(
-                    text = artist.name,
-                    fontSize = (GyText.row.value + 1).sp,
-                    lineHeight = GyText.rowHeight,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Gyp.ink,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
             }
         }
+        androidx.compose.material3.Icon(GuangYueIcons.ArrowUpRight, null, tint = Gyp.ink.copy(alpha = 0.35f), modifier = Modifier.size(18.dp))
     }
 }
 
