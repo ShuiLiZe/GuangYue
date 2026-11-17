@@ -139,6 +139,7 @@ fun FoliaSearchScreen(
             onSearch = onSearch,
             onClear = { onQueryChange("") },
             onClose = onClose ?: { onQueryChange("") },
+            autoFocus = !state.searched,
         )
 
         // Folia 手机版：音源条最后是「本地」（从首页本地页签进来时选中它）。
@@ -241,11 +242,13 @@ private fun SearchHeader(
     onSearch: () -> Unit,
     onClear: () -> Unit,
     onClose: () -> Unit,
+    /** 11-18：已有结果（返回本页 / 横屏）时不自动弹键盘，免得键盘盖住结果；空页进来仍聚焦。 */
+    autoFocus: Boolean = true,
 ) {
     val interaction = remember { MutableInteractionSource() }
     // 进页即聚焦，避免首字被吞（11-15 模拟器打 jay 只进了 ay）。
     val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
-    androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
+    androidx.compose.runtime.LaunchedEffect(Unit) { if (autoFocus) runCatching { focusRequester.requestFocus() } }
     val focused by interaction.collectIsFocusedAsState()
     val shape = RoundedCornerShape(percent = 50)
 
