@@ -15,6 +15,7 @@ import android.os.Looper
 import android.provider.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,5 +55,10 @@ fun rememberReduceMotion(): Boolean {
         scale = readAnimatorScale(context)
         onDispose { context.contentResolver.unregisterContentObserver(observer) }
     }
-    return scale == 0f
+    // 11-18：Folia「动画与性能 → 降低动态效果 → 跟随系统设置」关掉时不再跟随系统（见 MotionPrefs）。
+    val follow = MotionPrefs.flow(context).collectAsState().value.followSystem
+    return follow && scale == 0f
 }
+
+/** 系统此刻是否要求减少动态效果（不看「跟随系统设置」开关；设置页的提示行用）。 */
+fun systemPrefersReducedMotion(context: Context): Boolean = readAnimatorScale(context) == 0f

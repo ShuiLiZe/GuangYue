@@ -369,6 +369,9 @@ fun LyricFlowScreen(
             .testTag(LyricRootTag),
     ) {
         // Folia backgrounds/common：通用几何背景（静止不画背景；浮名按自己的「通用几何图形」开关）。
+        // 11-18：Folia「动画与性能 → 静态模式」：隐现背景停在静帧，通用几何背景不画（MotionPrefs）。
+        val motionPrefs = com.guangyue.feature.player.lyrics.visualizer.MotionPrefs.flow(androidx.compose.ui.platform.LocalContext.current)
+            .collectAsState().value
         if (lyricStyle != LyricStyle.STILL && !(lyricStyle == LyricStyle.FUME && fumeTuning.disableGeometricBackground)) {
             if (latentBackground && com.guangyue.feature.player.lyrics.visualizer.latentBackgroundSupported) {
                 // Folia 默认背景「隐现」（DEFAULT_VISUALIZER_BACKGROUND_MODE = 'latent'）。
@@ -376,9 +379,9 @@ fun LyricFlowScreen(
                     coverUrl = coverUrl,
                     palette = palette,
                     paused = !playback.isPlaying,
-                    staticMode = reduceMotion,
+                    staticMode = reduceMotion || motionPrefs.staticMode,
                 )
-            } else com.guangyue.feature.player.lyrics.visualizer.GeometricBackgroundLayer(
+            } else if (!motionPrefs.staticMode) com.guangyue.feature.player.lyrics.visualizer.GeometricBackgroundLayer(
                 seed = (coverUrl ?: "").hashCode().toLong(),
                 secondaryColor = theme.secondary,
                 accentColor = lyricAccent,

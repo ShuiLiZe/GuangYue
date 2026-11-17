@@ -517,6 +517,30 @@ fun V0cStage(
                     squareCards = bleed && light,
                 )
             }
+        } else if (style == "settingsgraphics") {
+            // 11-18：Folia「动画与性能」「歌词」「连接与集成」三页。3000 = 浅色·歌词页；14000 = 深色·连接与集成；其余 = 深色·动画与性能。
+            val light = positionMs == 3_000L
+            FoliaTheme(dark = !light) {
+                com.guangyue.feature.library.screen.SettingsScreen(
+                    darkMode = !light,
+                    onDarkModeChange = {},
+                    onOpenLicenses = {},
+                    onBack = {},
+                    versionName = "0.0.39",
+                    onOpenPlugins = {},
+                    initialPage = when (positionMs) {
+                        3_000L -> com.guangyue.feature.library.screen.SettingsPage.LYRICS
+                        14_000L -> com.guangyue.feature.library.screen.SettingsPage.INTEGRATION
+                        else -> com.guangyue.feature.library.screen.SettingsPage.GRAPHICS
+                    },
+                    motion = com.guangyue.feature.library.screen.MotionSettingsUi(
+                        staticMode = false, onStaticMode = {}, homeBackgroundOff = true, onHomeBackgroundOff = {},
+                        followSystem = true, onFollowSystem = {}, systemReducing = false,
+                    ),
+                    globalLyricOffsetMs = 120L,
+                    modifier = Modifier.navigationBarsPadding(),
+                )
+            }
         } else if (style == "gridhomeswitch") {
             // 0.0.27：切换入口取证 = 设置 → 主页与歌单（11-17 起，原在外观） → 资料库界面（Folia「设置 → 界面设置 → 资料库界面」）。
             // 3000 = 浅色、选中「网格」；其余 = 深色、默认「墙面」。

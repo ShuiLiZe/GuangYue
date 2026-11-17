@@ -2,6 +2,7 @@ package com.guangyue.feature.player.lyrics.visualizer
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 
@@ -33,6 +34,9 @@ fun HomeVisualizerBackground(
         )
     }
     val reduceMotion = rememberReduceMotion()
+    // 11-18：Folia「关闭主页动态背景」/「静态模式」（MotionPrefs）。
+    val motion = MotionPrefs.flow(androidx.compose.ui.platform.LocalContext.current).collectAsState().value
+    val still = reduceMotion || motion.homeBackgroundOff || motion.staticMode
     VisualizerBackdrop(
         palette = palette,
         source = if (hasCover) source else null,
@@ -44,14 +48,14 @@ fun HomeVisualizerBackground(
                 coverUrl = coverUrl,
                 palette = palette,
                 paused = false,
-                staticMode = reduceMotion,
+                staticMode = still,
             )
-        } else {
+        } else if (!motion.staticMode) {
             GeometricBackgroundLayer(
                 seed = (coverUrl ?: "").hashCode().toLong(),
                 secondaryColor = theme.secondary,
                 accentColor = theme.emphasis,
-                paused = !playing || reduceMotion,
+                paused = !playing || still,
             )
         }
     }

@@ -51,6 +51,9 @@ private fun pageIcon(p: SettingsPage): ImageVector = when (p) {
     SettingsPage.PLAYER -> GuangYueIcons.Sparkles
     SettingsPage.PLAYBACK -> GuangYueIcons.AudioLines
     SettingsPage.STORAGE -> GuangYueIcons.Database
+    SettingsPage.GRAPHICS -> GuangYueIcons.Gauge
+    SettingsPage.LYRICS -> GuangYueIcons.TextAlignStart
+    SettingsPage.INTEGRATION -> GuangYueIcons.Link2
     SettingsPage.ABOUT -> GuangYueIcons.CircleHelp
 }
 

@@ -49,6 +49,10 @@ class LyricsViewModel @Inject constructor(
      * 正数让歌词更晚出现（歌词时间 = 播放时间 - 偏移）。
      */
     private val offsets = context.getSharedPreferences("lyric_offsets", Context.MODE_PRIVATE)
+
+    /** 11-18：Folia「歌词 → 全局时间偏移」（设备级，与每首歌的偏移相加：effective = 每首 + 全局）。 */
+    private val motionPrefs = com.guangyue.feature.player.lyrics.visualizer.MotionPrefs.flow(context)
+    private fun totalOffset(): Long = _offsetMs.value + motionPrefs.value.globalLyricOffsetMs
     private val _offsetMs = MutableStateFlow(0L)
     val offsetMs: StateFlow<Long> = _offsetMs.asStateFlow()
 
@@ -57,7 +61,7 @@ class LyricsViewModel @Inject constructor(
         _offsetMs.value = v
         lastKey?.let { k -> offsets.edit().apply { if (v == 0L) remove(k) else putLong(k, v) }.apply() }
         val pos = playback.state.value.positionMs
-        sync.onPosition(pos - v, System.currentTimeMillis())
+        sync.onPosition(pos - v - motionPrefs.value.globalLyricOffsetMs, System.currentTimeMillis())
         _syncState.value = sync.state.value
     }
 
@@ -91,7 +95,7 @@ class LyricsViewModel @Inject constructor(
                     _offsetMs.value = offsets.getLong(key, 0L)
                     loadLyrics(current)
                 }
-                sync.onPosition(state.positionMs - _offsetMs.value, System.currentTimeMillis())
+                sync.onPosition(state.positionMs - totalOffset(), System.currentTimeMillis())
                 _syncState.value = sync.state.value
             }
         }

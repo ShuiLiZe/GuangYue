@@ -107,6 +107,11 @@ fun SettingsScreen(
     gridCardShape: Pair<Boolean, Boolean>? = null,
     onGridCardShape: (Boolean, Boolean) -> Unit = { _, _ -> },
     onGridFalloff: (Float, Float) -> Unit = { _, _ -> },
+    /** 11-18：Folia「动画与性能」：静态模式 / 关闭主页动态背景 / 降低动态效果·跟随系统设置；null 不显示。 */
+    motion: MotionSettingsUi? = null,
+    /** 11-18：Folia「歌词 → 时间与过滤 → 全局时间偏移」（毫秒，±2000）；null 不显示。 */
+    globalLyricOffsetMs: Long? = null,
+    onGlobalLyricOffset: (Long) -> Unit = {},
     /** 打开时先显示的分类（取证用；正常进入是「外观」）。 */
     initialPage: SettingsPage = SettingsPage.APPEARANCE,
 ) {
@@ -193,14 +198,33 @@ fun SettingsScreen(
             add(SettingItem(SettingsPage.PLAYER, "町景", c.title, c.desc, icon(GuangYueIcons.Aperture),
                 below = { FlowStyleChips(c.options, c.selected, c.onPick) }))
         }
+        if (motion != null) {
+            // Folia GraphicsPage：「性能与背景」组（options.labPerformanceSection）。
+            add(SettingItem(SettingsPage.GRAPHICS, "性能与背景", "静态模式", "禁用几何背景以节省资源", icon(GuangYueIcons.Gauge),
+                trailing = { FoliaToggle(checked = motion.staticMode, onChange = motion.onStaticMode) }))
+            add(SettingItem(SettingsPage.GRAPHICS, "性能与背景", "关闭主页动态背景", "主页不再播放背景动画，降低 GPU 占用", icon(GuangYueIcons.Images),
+                trailing = { FoliaToggle(checked = motion.homeBackgroundOff, onChange = motion.onHomeBackgroundOff) }))
+            // Folia「降低动态效果」组（options.reduceMotionSection*）。各分区开关（队列拼贴 / 混音过渡 / 歌单展开转场 / Monet 背景漂移 / 界面微动效 / 设置页平滑滚动）广乐没有对应动效，不列。
+            add(SettingItem(SettingsPage.GRAPHICS, "降低动态效果", "跟随系统设置",
+                "由系统的动画设置决定全部动效" + if (motion.followSystem && motion.systemReducing) "。系统正在要求减少动态效果，播放页与主页的动效都已降低" else "",
+                icon(GuangYueIcons.Sparkles),
+                trailing = { FoliaToggle(checked = motion.followSystem, onChange = motion.onFollowSystem) }))
+        }
+        if (globalLyricOffsetMs != null) {
+            // Folia LyricsPage「时间与过滤」组 → 全局时间偏移（GlobalLyricOffsetModal 的 ±50 / ±10 步进，±2000ms）。
+            add(SettingItem(SettingsPage.LYRICS, "时间与过滤", "全局时间偏移", "整体平移歌词时间轴，补偿蓝牙等输出延迟。", icon(GuangYueIcons.Timer),
+                trailing = { Text("${if (globalLyricOffsetMs > 0) "+" else ""}$globalLyricOffsetMs ms", color = Gyp.t2, fontSize = 13.sp, style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")) },
+                below = { OffsetStepper(globalLyricOffsetMs, onGlobalLyricOffset) }))
+        }
         if (playQualities.isNotEmpty()) {
             add(SettingItem(SettingsPage.PLAYBACK, "音质", "默认播放音质", "新开始播放的歌按这一档取链；音源没有这一档时向下取", icon(GuangYueIcons.AudioLines),
                 below = { FlowStyleChips(playQualities, playQuality, onPickPlayQuality) }))
         }
-        add(SettingItem(SettingsPage.PLAYBACK, "取链源", "取链源默认音质", "插件取不到播放地址时，按这里选的音质问取链源；播放器切到无损就按无损问", icon(GuangYueIcons.Route),
+        // 11-18：取链源、音源插件照 Folia 归到「连接与集成」（Folia 外接音乐服务 Navidrome 等都在这一页）。
+        add(SettingItem(SettingsPage.INTEGRATION, "取链源", "取链源默认音质", "插件取不到播放地址时，按这里选的音质问取链源；播放器切到无损就按无损问", icon(GuangYueIcons.Route),
             below = { FoliaSegmented(value = lxQuality, options = LxQualityOptions, onSelect = onPickLxQuality) }))
         if (onOpenPlugins != null) {
-            add(SettingItem(SettingsPage.PLAYBACK, "音源", "音源插件管理", "装音源、选当前音源、看体检结果", icon(GuangYueIcons.Puzzle), trailing = chevron, onClick = onOpenPlugins))
+            add(SettingItem(SettingsPage.INTEGRATION, "音源", "音源插件管理", "装音源、选当前音源、看体检结果", icon(GuangYueIcons.Puzzle), trailing = chevron, onClick = onOpenPlugins))
         }
         if (onOpenDownloads != null) {
             add(SettingItem(SettingsPage.STORAGE, "下载", "下载设置", "下载音质、歌词、同时下载数、存储与暂存", icon(GuangYueIcons.Download), trailing = chevron, onClick = onOpenDownloads))
@@ -232,8 +256,11 @@ enum class SettingsPage(val label: String, val desc: String = "") {
     APPEARANCE("外观", "主题与深浅色。"),
     PLAYER("播放页", "播放后进入的视图、歌词动画、背景与町景。"),
     HOME("主页与歌单", "资料库界面、卡片样式、顶部胶囊入口与卡片位置。"),
-    PLAYBACK("播放控制", "音质、取链源与音源插件。"),
+    GRAPHICS("动画与性能", "背景动画与动态效果。"),
+    PLAYBACK("播放控制", "默认播放音质。"),
+    LYRICS("歌词", "歌词时间轴。"),
     GENERAL("通用", "思索等通用行为。"),
+    INTEGRATION("连接与集成", "音源插件与取链源。"),
     STORAGE("存储与备份", "下载与本机存储。"),
     ABOUT("关于"),
 }
@@ -542,5 +569,49 @@ private fun PercentSlider(value: Float, range: ClosedFloatingPointRange<Float>, 
             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
             modifier = Modifier.padding(start = 10.dp).widthIn(min = 44.dp),
         )
+    }
+}
+
+
+/** Folia「动画与性能」页广乐能落地的三项（值 + 回调）。 */
+class MotionSettingsUi(
+    val staticMode: Boolean,
+    val onStaticMode: (Boolean) -> Unit,
+    val homeBackgroundOff: Boolean,
+    val onHomeBackgroundOff: (Boolean) -> Unit,
+    val followSystem: Boolean,
+    val onFollowSystem: (Boolean) -> Unit,
+    /** 系统此刻是否要求减少动态效果（Folia reduceMotionForcedNotice）。 */
+    val systemReducing: Boolean = false,
+)
+
+/** 全局时间偏移步进（Folia GlobalLyricOffsetModal：-50 / -10 … +10 / +50，另有归零）。 */
+@Composable
+private fun OffsetStepper(value: Long, onChange: (Long) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf(-50L, -10L, 10L, 50L).forEach { step ->
+            StepChip(if (step > 0) "+$step" else "$step") { onChange((value + step).coerceIn(-2000L, 2000L)) }
+        }
+        if (value != 0L) StepChip("归零") { onChange(0L) }
+    }
+}
+
+@Composable
+private fun StepChip(text: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .heightIn(min = 40.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Gyp.ink.copy(alpha = 0.06f))
+            .border(1.dp, Gyp.ink.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+            .clickableNoRipple(onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, color = Gyp.ink.copy(alpha = 0.85f), fontSize = 13.sp, style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
     }
 }

@@ -1198,6 +1198,22 @@ fun GuangYueNavHost(
                 onPickPlaybackEntryView = { shellVm.setPlaybackEntryView(it) },
                 ponderTouchButton = shellVm.ponderTouchButton.collectAsStateWithLifecycle().value,
                 onPonderTouchButton = { shellVm.setPonderTouchButton(it) },
+                // 11-18：Folia「动画与性能」「歌词 → 全局时间偏移」（MotionPrefs，播放页 / 首页背景 / 歌词同步共用）。
+                motion = run {
+                    val mp = com.guangyue.feature.player.lyrics.visualizer.MotionPrefs
+                    val m by mp.flow(settingsCtx).collectAsStateWithLifecycle()
+                    com.guangyue.feature.library.screen.MotionSettingsUi(
+                        staticMode = m.staticMode,
+                        onStaticMode = { v -> mp.update(settingsCtx) { it.copy(staticMode = v) }; com.guangyue.feature.library.design.StatusToasts.show(if (v) "静态模式已开启" else "静态模式已关闭") },
+                        homeBackgroundOff = m.homeBackgroundOff,
+                        onHomeBackgroundOff = { v -> mp.update(settingsCtx) { it.copy(homeBackgroundOff = v) } },
+                        followSystem = m.followSystem,
+                        onFollowSystem = { v -> mp.update(settingsCtx) { it.copy(followSystem = v) } },
+                        systemReducing = com.guangyue.feature.player.lyrics.visualizer.systemPrefersReducedMotion(settingsCtx),
+                    )
+                },
+                globalLyricOffsetMs = com.guangyue.feature.player.lyrics.visualizer.MotionPrefs.flow(settingsCtx).collectAsStateWithLifecycle().value.globalLyricOffsetMs,
+                onGlobalLyricOffset = { v -> com.guangyue.feature.player.lyrics.visualizer.MotionPrefs.update(settingsCtx) { it.copy(globalLyricOffsetMs = v) } },
                 gridFalloff = shellVm.gridFalloff.collectAsStateWithLifecycle().value,
                 gridCardShape = shellVm.gridCardShape.collectAsStateWithLifecycle().value,
                 onGridCardShape = { b, sq -> shellVm.setGridCardShape(b, sq) },
