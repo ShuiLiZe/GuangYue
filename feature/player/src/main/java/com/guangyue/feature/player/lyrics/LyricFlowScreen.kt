@@ -678,27 +678,8 @@ fun LyricFlowScreen(
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // 11-18：照 folia-sonnet usePlayerChrome 返回键：40 圆、bg-black/20、text-white/60、Chevron 20（两种明暗都一样）；
-                // 命中仍 48dp（触屏）。Folia 平时藏起、鼠标进左上热区才出现，触屏常驻（手机上没有悬停）。
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clickableNoRipple(onBack)
-                        .semantics { contentDescription = backLabel },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        Modifier.size(40.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            GuangYueIcons.ChevronLeft,
-                            null,
-                            tint = Color.White.copy(alpha = 0.6f),
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
+                // 11-18：返回键挪到顶栏外按 Folia 位置绝对定位（见下方覆盖层）；这里留同宽空位，歌名不动。
+                Spacer(Modifier.size(48.dp))
                 Spacer(Modifier.width(GySpace.l))
                 Column(Modifier.weight(1f).alpha(if (lyricStyle == LyricStyle.MONET && kernelLines.isNotEmpty() && emptyKind == null) 0f else 1f)) {
                     // P1a：舞台成了播放主视图，顶栏写歌名（Folia 舞台左上衬线标题），没有歌时退回「歌词」。
@@ -973,6 +954,37 @@ fun LyricFlowScreen(
                 }
             }
             }
+        }
+        // 11-18：播放页返回键位置照 Folia（Folia `top-6 left-6` 再让 安全区 + 6px：圆顶 = 安全区 + 30dp、左 24dp；40 圆的外沿对齐，48dp 命中向外各让 4dp）。
+        // 只改位置：顶栏歌名 / 横竖屏键 / 样式键不动。
+        androidx.compose.foundation.layout.Box(
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout)),
+        ) {
+                // 11-18：照 folia-sonnet usePlayerChrome 返回键：40 圆、bg-black/20、text-white/60、Chevron 20（两种明暗都一样）；
+                // 命中仍 48dp（触屏）。Folia 平时藏起、鼠标进左上热区才出现，触屏常驻（手机上没有悬停）。
+                Box(
+                    modifier = Modifier
+                        .offset(x = 20.dp, y = 26.dp)
+                        .size(48.dp)
+                        .alpha(chromeAlpha)
+                        .clickableNoRipple(onBack)
+                        .semantics { contentDescription = backLabel },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            GuangYueIcons.ChevronLeft,
+                            null,
+                            tint = Color.White.copy(alpha = 0.6f),
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
         }
         // 2026-11-14：Folia NowPlayingToast（正在播放 / 接下来播放），手机上停在左上返回键下方
         // （folia-sonnet androidPhoneFit：top 安全区 + 72px、left 12px）。
