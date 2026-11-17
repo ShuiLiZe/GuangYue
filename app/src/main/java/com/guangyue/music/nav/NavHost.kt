@@ -506,6 +506,8 @@ fun GuangYueNavHost(
                 }
             }
             val kindLabel = when {
+                // 11-17：Folia 手机版「全部歌曲」与各文件夹的类型都写 Folder（文件夹）。
+                isLib && (tile.key == com.guangyue.feature.library.viewmodel.LibraryTiles.ALL || tile.key.startsWith(com.guangyue.feature.library.viewmodel.LibraryTiles.FOLDER)) -> "文件夹"
                 isLib -> "曲库"
                 com.guangyue.feature.library.viewmodel.ArtistTiles.isArtist(tile.key) -> com.guangyue.feature.library.viewmodel.ArtistTiles.kindLabel(tile)
                 com.guangyue.feature.library.viewmodel.AlbumTiles.isAlbum(tile.key) -> "专辑"
@@ -589,7 +591,7 @@ fun GuangYueNavHost(
                     } else
                     com.guangyue.music.ui.home.BravaisWall(
                         sections = if (albumTiles.isEmpty()) listOf("曲目" to trackTiles) else listOf("曲目" to trackTiles, "专辑" to albumTiles),
-                        title = "广乐",
+                        title = "资料库",
                         inkColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
                         groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
                         onOpenSearch = { navController.navigate(Routes.SEARCH) },

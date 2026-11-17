@@ -585,6 +585,16 @@ private fun SeamCollectionColumn(c: SeamCollection, root: String, ink: Color, st
         Text("\u201D", color = ink.copy(alpha = 0.5f), fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.CenterStart) {
             val len = maxHeight
+            // Folia 竖排 vertical-rl：中文字直立一个个往下排，西文整段转 90°。
+            val cjk = c.name.any { Character.UnicodeScript.of(it.code) in setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA, Character.UnicodeScript.HANGUL) }
+            if (cjk) {
+                val fs = minOf(30f, (len.value - 8f) / c.name.length.coerceAtLeast(1) / 1.12f).coerceAtLeast(14f)
+                Text(
+                    c.name.toList().joinToString("\n"), color = ink, fontSize = fs.sp, lineHeight = (fs * 1.12f).sp, fontWeight = FontWeight.ExtraBold,
+                    maxLines = ((len.value) / (fs * 1.12f)).toInt().coerceAtLeast(1), overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 6.dp),
+                )
+            } else
             Text(
                 c.name, color = ink, fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.ExtraBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false,
@@ -631,6 +641,7 @@ private fun SeamCollectionColumn(c: SeamCollection, root: String, ink: Color, st
             SeamTextButton(GuangYueIcons.List, "列表", ink, (c.count ?: 0) > 0, onToggleList)
             Spacer(Modifier.width(6.dp))
             SeamMoreMenu(menu, ink)
+            Text("更多", color = ink.copy(alpha = 0.8f), fontSize = 13.sp)
         }
     }
 }
