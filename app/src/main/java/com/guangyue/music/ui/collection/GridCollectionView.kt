@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -161,6 +162,7 @@ fun GridCollectionView(
     onEnqueue: (Int) -> Unit,
     onLongPress: (Int) -> Unit,
     panelActions: List<GridPanelAction>,
+    onEnqueueAll: () -> Unit = {},
 ) {
     val daylight = (0.299f * ground.red + 0.587f * ground.green + 0.114f * ground.blue) > 0.5f
     val density = LocalDensity.current
@@ -169,6 +171,8 @@ fun GridCollectionView(
     val ox = remember { Animatable(0f) }
     val oy = remember { Animatable(0f) }
     var panelOpen by remember { mutableStateOf(false) }
+    var listOpen by remember { mutableStateOf(false) }
+    var sortAz by remember { mutableStateOf(false) }
     val bases = remember(cards.size) { Array(cards.size) { hexBase(it) } }
 
     val bounds = remember(bases, box) {
@@ -198,15 +202,24 @@ fun GridCollectionView(
             .background(ground)
             .onSizeChanged { box = it },
     ) {
-        if (coverUrl != null) {
+        // 11-17 照 Folia APK：背景是当前居中那张卡的封面放大模糊（不是集合封面），夜间也看得清。
+        val centered by remember(bases) {
+            derivedStateOf {
+                var best = -1; var bd = Float.MAX_VALUE
+                for (i in bases.indices) { val (bx, by) = bases[i]; val d = (bx + ox.value).let { it * it } + (by + oy.value).let { it * it }; if (d < bd) { bd = d; best = i } }
+                best
+            }
+        }
+        val bgCover = cards.getOrNull(centered)?.artwork ?: coverUrl
+        if (bgCover != null) {
             AsyncImage(
-                model = coverUrl,
+                model = bgCover,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { scaleX = 1.1f; scaleY = 1.1f; alpha = if (daylight) 0.18f else 0.12f }
-                    .blur(30.dp),
+                    .graphicsLayer { scaleX = 1.1f; scaleY = 1.1f; alpha = if (daylight) 0.22f else 0.3f }
+                    .blur(24.dp),
             )
         }
 
@@ -314,8 +327,8 @@ fun GridCollectionView(
                     .size(40.dp)
                     .shadow(6.dp, CircleShape, clip = false)
                     .clip(CircleShape)
-                    .background(if (daylight) Color.Black.copy(alpha = 0.05f) else Color.White.copy(alpha = 0.08f))
-                    .background(ground.copy(alpha = 0.6f))
+                    .background(ground)
+                    .background(ink.copy(alpha = 0.14f))
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) { Icon(GuangYueIcons.ChevronLeft, contentDescription = "返回", tint = ink, modifier = Modifier.size(20.dp)) }
@@ -324,7 +337,6 @@ fun GridCollectionView(
                     .align(Alignment.TopCenter)
                     .padding(horizontal = 72.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(ground.copy(alpha = 0.55f))
                     .clickable { panelOpen = !panelOpen }
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -332,13 +344,99 @@ fun GridCollectionView(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(title, color = ink, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     Icon(
-                        if (panelOpen) GuangYueIcons.ChevronUp else GuangYueIcons.ChevronDown,
-                        contentDescription = null, tint = ink.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(start = 6.dp).size(14.dp),
+                        GuangYueIcons.PanelLeft,
+                        contentDescription = "信息", tint = ink.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(start = 8.dp).size(16.dp),
                     )
                 }
                 if (subtitle.isNotBlank()) {
                     Text(subtitle, color = ink.copy(alpha = 0.5f), fontSize = 12.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 2.dp))
+                }
+            }
+        }
+
+        // ---------- 右下列表键 + 列表面板（Folia APK 手机版：圆键开一张浮动面板，排序 / 加入队列 / 关闭） ----------
+        if (cards.isNotEmpty()) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(end = 16.dp, bottom = 24.dp)
+                    .size(40.dp)
+                    .shadow(8.dp, CircleShape, clip = false)
+                    .clip(CircleShape)
+                    .background(ground)
+                    .background(ink.copy(alpha = 0.08f))
+                    .clickable { listOpen = !listOpen }
+                    .zIndex(75f),
+                contentAlignment = Alignment.Center,
+            ) { Icon(GuangYueIcons.List, contentDescription = "列表", tint = ink, modifier = Modifier.size(20.dp)) }
+        }
+        AnimatedVisibility(
+            visible = listOpen,
+            enter = fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.96f),
+            exit = fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.96f),
+            modifier = Modifier.zIndex(78f),
+        ) {
+            Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { listOpen = false }) {
+                val order = remember(cards, sortAz) {
+                    if (sortAz) cards.indices.sortedBy { cards[it].title.lowercase() } else cards.indices.toList()
+                }
+                Column(
+                    Modifier
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .padding(start = 64.dp, end = 20.dp, top = 56.dp, bottom = 84.dp)
+                        .fillMaxSize()
+                        .shadow(24.dp, RoundedCornerShape(32.dp), clip = false)
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(ground.copy(alpha = 0.94f))
+                        .border(1.dp, ink.copy(alpha = 0.1f), RoundedCornerShape(32.dp))
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 24.dp, bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
+                        Column(Modifier.weight(1f)) {
+                            Icon(
+                                GuangYueIcons.ArrowDownAZ, contentDescription = "按名称排序",
+                                tint = ink.copy(alpha = if (sortAz) 1f else 0.6f),
+                                modifier = Modifier.size(22.dp).clip(RoundedCornerShape(6.dp)).clickable { sortAz = !sortAz },
+                            )
+                            Text(title, color = ink, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
+                        }
+                        Box(Modifier.size(40.dp).clip(CircleShape).clickable { onEnqueueAll() }, contentAlignment = Alignment.Center) {
+                            Icon(GuangYueIcons.ListEnd, contentDescription = "全部加入队列", tint = ink, modifier = Modifier.size(20.dp))
+                        }
+                        Box(Modifier.size(40.dp).clip(CircleShape).clickable { listOpen = false }, contentAlignment = Alignment.Center) {
+                            Icon(GuangYueIcons.X, contentDescription = "关闭", tint = ink, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        Modifier.fillMaxWidth().weight(1f).padding(start = 12.dp, end = 16.dp, bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        items(order.size, key = { cards[order[it]].key }) { n ->
+                            val i = order[n]
+                            val c = cards[i]
+                            val on = i == centered
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (on) ink.copy(alpha = 0.08f) else Color.Transparent)
+                                    .pointerInput(c.key) { detectTapGestures(onTap = { centerOn(i); listOpen = false }, onLongPress = { onLongPress(i) }) }
+                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(Modifier.size(34.dp).clip(RoundedCornerShape(4.dp)).background(ink.copy(alpha = 0.1f))) {
+                                    if (c.artwork != null) AsyncImage(model = c.artwork, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                }
+                                Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                                    Text(c.title, color = if (isCurrent(i)) ink else ink.copy(alpha = 0.92f), fontSize = 13.sp, fontWeight = if (isCurrent(i)) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    if (c.artist.isNotBlank()) Text(c.artist, color = ink.copy(alpha = 0.55f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -471,7 +569,15 @@ private fun PolaroidCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (playAlpha > 0f) {
                         RoundBtn(ink, Modifier.graphicsLayer { alpha = playAlpha; scaleX = playScale; scaleY = playScale }, onPlay) {
-                            Icon(if (current && playing) GuangYueIcons.Pause else GuangYueIcons.Play, contentDescription = "播放", tint = ink, modifier = Modifier.size(15.dp))
+                            if (current && playing) Icon(GuangYueIcons.Pause, contentDescription = "暂停", tint = ink, modifier = Modifier.size(15.dp))
+                            else androidx.compose.foundation.Canvas(Modifier.size(14.dp).offset(x = 1.dp)) {
+                                // Folia 卡上播放键是实心三角。
+                                val path = androidx.compose.ui.graphics.Path().apply {
+                                    moveTo(size.width * 0.18f, size.height * 0.08f); lineTo(size.width * 0.92f, size.height * 0.5f)
+                                    lineTo(size.width * 0.18f, size.height * 0.92f); close()
+                                }
+                                drawPath(path, ink)
+                            }
                         }
                     }
                     if (queueAlpha > 0f) {

@@ -565,6 +565,12 @@ fun GuangYueNavHost(
                                 }
                             },
                             onLongPress = { i -> list.getOrNull(i)?.let { t -> collectionPick = listOf(t) } },
+                            onEnqueueAll = {
+                                if (list.isNotEmpty()) {
+                                    playback.appendTracks(list)
+                                    com.guangyue.feature.library.design.StatusToasts.show("已加入播放队列 ${list.size} 首")
+                                }
+                            },
                             panelActions = buildList {
                                 add(com.guangyue.music.ui.collection.GridPanelAction("播放全部", primary = true, enabled = list.isNotEmpty()) { playAllNow() })
                                 add(com.guangyue.music.ui.collection.GridPanelAction("加入播放队列", enabled = list.isNotEmpty()) {

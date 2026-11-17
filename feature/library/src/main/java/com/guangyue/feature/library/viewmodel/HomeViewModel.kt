@@ -485,7 +485,7 @@ class HomeViewModel @Inject constructor(
                 val all = com.guangyue.core.data.model.LibraryRules.allSongs(downloaded, scan.tracks)
                 if (all.isEmpty()) return@withContext emptyList()
                 val out = ArrayList<HomeTile>()
-                out += LibraryTiles.all.copy(subtitle = "${all.size} 首 · 全部歌曲", artwork = all.firstNotNullOfOrNull { it.artwork })
+                out += LibraryTiles.all.copy(subtitle = "全部歌曲", artwork = all.firstNotNullOfOrNull { it.artwork })
                 scan.tracks.groupBy { scan.folderOf[it.key] }
                     .filterKeys { it != null }
                     .entries.sortedByDescending { it.value.size }
@@ -493,7 +493,7 @@ class HomeViewModel @Inject constructor(
                         out += HomeTile(
                             key = LibraryTiles.FOLDER + folder,
                             title = folder!!.substringAfterLast('/').ifBlank { folder },
-                            subtitle = "${ts.size} 首 · 文件夹",
+                            subtitle = "文件夹",
                             artwork = ts.firstNotNullOfOrNull { it.artwork },
                             kind = HomeTileKind.PLAYLIST,
                         )
