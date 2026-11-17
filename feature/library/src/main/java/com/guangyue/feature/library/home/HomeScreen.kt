@@ -50,6 +50,8 @@ data class HomeTile(
     val subtitle: String,
     val artwork: String? = null,
     val kind: HomeTileKind = HomeTileKind.PLAYLIST,
+    /** 11-17：曲目数（Folia Grid3DSlider 标题下「N Tracks • 说明」那行）；不知道就 null。 */
+    val trackCount: Int? = null,
 )
 
 /** 卡片类型：点进去之后同一个 `onOpenTile`，但取歌单/榜单/推荐歌单歌单里曲目的方式不同。 */

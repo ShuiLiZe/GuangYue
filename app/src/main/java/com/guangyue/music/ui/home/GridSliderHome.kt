@@ -234,8 +234,8 @@ fun GridSliderHome(
     playbackBar: (@Composable () -> Unit)? = null,
     /** 11-17：「本地」页签的分段（Folia LocalGrid3DView sections：文件夹 / 专辑 / 歌手 / 歌单）。 */
     localSubs: List<GridSubSection> = emptyList(),
-    /** 「本地」页签右侧「刷新」动作（重扫手机音乐）。 */
-    localRefresh: (() -> Unit)? = null,
+    /** 「本地」页签的动作（Folia resolveLocalHomeActions：导入文件夹 / 刷新 / 导入歌单）。 */
+    localActions: List<GridLocalAction> = emptyList(),
 ) {
     // Folia 首页页签就是各个数据源本身（歌单 / 推荐 / 探索 / 专辑 / 本地），没有「全部」。
     var tab by rememberSaveable { mutableStateOf(initialTab.coerceIn(0, max(0, sections.size - 1))) }
@@ -298,11 +298,17 @@ fun GridSliderHome(
                     localSubs.forEachIndexed { i, sub ->
                         LocalChip(sub.icon, sub.label, i == localSub, i == localSub, inkColor) { localSub = i }
                     }
-                    // Folia 本地动作里的「刷新」（导入文件夹 / 导入歌单文件是桌面的文件选择，安卓直接读系统媒体库，不放）。
-                    if (localRefresh != null) {
-                        Spacer(Modifier.width(4.dp))
-                        LocalChip(GuangYueIcons.RefreshCw, "刷新", false, false, inkColor, localRefresh)
-                    }
+                }
+            }
+            // Folia 本地动作（导入文件夹 / 刷新 / 导入歌单）：桌面排在搜索框下方右侧；手机版那一格太窄会压到分段上，
+            // 这里改成分段下面一行右对齐的小胶囊（带字），不挡卡片。
+            if (localActions.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp, end = 16.dp, start = 16.dp).zIndex(5f),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    localActions.forEach { a -> LocalChip(a.icon, a.label, true, false, inkColor, a.onClick) }
                 }
             }
         }
@@ -719,8 +725,12 @@ private fun GridCaption(
                 tile.title, color = ink, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
             )
+            // Folia：`${trackCount} Tracks • 说明`，等宽字。
+            val sec = GridSliderModel.secondary(tile)
+            val line = listOfNotNull(tile.trackCount?.let { "$it 首" }, sec.takeIf { it.isNotBlank() }).joinToString(" • ")
             Text(
-                GridSliderModel.secondary(tile), color = ink.copy(alpha = 0.5f), fontSize = 12.sp, maxLines = 1,
+                line, color = ink.copy(alpha = 0.5f), fontSize = 12.sp, maxLines = 1,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                 overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp),
             )
         }
@@ -1038,6 +1048,9 @@ private fun GridMapSheet(tiles: List<HomeTile>, ink: Color, ground: Color, onClo
 
 /** 11-17：Folia 本地页签的一个分段。 */
 data class GridSubSection(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val tiles: List<HomeTile>)
+
+/** 11-17：本地页签的一个动作胶囊。 */
+data class GridLocalAction(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val onClick: () -> Unit)
 
 /** Folia DesktopGrid3DSurface 的小胶囊：图标 13 + 文字 11（分段没选中时只有图标）。 */
 @Composable

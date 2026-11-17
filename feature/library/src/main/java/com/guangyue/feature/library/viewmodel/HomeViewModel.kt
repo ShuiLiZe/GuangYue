@@ -485,7 +485,7 @@ class HomeViewModel @Inject constructor(
                 val all = com.guangyue.core.data.model.LibraryRules.allSongs(downloaded, scan.tracks)
                 if (all.isEmpty()) return@withContext emptyList()
                 val out = ArrayList<HomeTile>()
-                out += LibraryTiles.all.copy(subtitle = "文件夹", artwork = all.firstNotNullOfOrNull { it.artwork })
+                out += LibraryTiles.all.copy(subtitle = "全部歌曲", artwork = all.firstNotNullOfOrNull { it.artwork }, trackCount = all.size)
                 scan.tracks.groupBy { scan.folderOf[it.key] }
                     .filterKeys { it != null }
                     .entries.sortedByDescending { it.value.size }
@@ -493,9 +493,10 @@ class HomeViewModel @Inject constructor(
                         out += HomeTile(
                             key = LibraryTiles.FOLDER + folder,
                             title = folder!!.substringAfterLast('/').ifBlank { folder },
-                            subtitle = "文件夹",
+                            subtitle = folder.removePrefix("/storage/emulated/0/"),
                             artwork = ts.firstNotNullOfOrNull { it.artwork },
                             kind = HomeTileKind.PLAYLIST,
+                            trackCount = ts.size,
                         )
                     }
                 out
@@ -523,6 +524,7 @@ class HomeViewModel @Inject constructor(
                             subtitle = ts.map { it.artist }.filter { it.isNotBlank() }.distinct().take(2).joinToString(" / ").ifBlank { "专辑" },
                             artwork = ts.firstNotNullOfOrNull { it.artwork },
                             kind = HomeTileKind.PLAYLIST,
+                            trackCount = ts.size,
                         )
                     }
                 val artists = all.filter { it.artist.isNotBlank() }.groupBy { it.artist.trim() }
@@ -531,9 +533,10 @@ class HomeViewModel @Inject constructor(
                         HomeTile(
                             key = LibraryTiles.ARTIST + name,
                             title = name,
-                            subtitle = "${ts.size} 首",
+                            subtitle = "歌手",
                             artwork = ts.firstNotNullOfOrNull { it.artwork },
                             kind = HomeTileKind.PLAYLIST,
+                            trackCount = ts.size,
                         )
                     }
                 albums to artists
@@ -543,7 +546,74 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList<HomeTile>() to emptyList())
 
     /** 授权读手机音乐后重数「全部歌曲」。 */
-    fun refreshDeviceAudio() { _deviceRevision.value++ }
+    /** 11-17：Folia 本地「导入文件夹」——系统文件夹选择器选好后记下并重扫。 */
+    fun importFolder(tree: android.net.Uri, onDone: (String) -> Unit) {
+        viewModelScope.launch {
+            val name = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ImportedFolders.add(appContext, tree) }
+            _deviceRevision.value++
+            onDone(name)
+        }
+    }
+
+    /**
+     * 11-17：Folia 本地「导入歌单」（.m3u / .m3u8）：按路径、文件名、#EXTINF 歌名对上本地歌，建一个同名本地歌单。
+     * 回调 (歌单名, 对上几首, 总条目)；读不了文件时歌单名为空。
+     */
+    fun importPlaylistFile(uri: android.net.Uri, onDone: (String, Int, Int) -> Unit) {
+        viewModelScope.launch {
+            val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching null
+                    var text = String(bytes, Charsets.UTF_8)
+                    if (text.contains('\uFFFD')) text = String(bytes, charset("GBK"))
+                    val display = appContext.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                        ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+                        ?: uri.lastPathSegment.orEmpty().substringAfterLast('/')
+                    val name = display.substringBeforeLast('.').ifBlank { "导入的歌单" }
+                    val downloaded = downloadedLibrary.tracks.value.filter { downloadedLibrary.exists(it) }.map { downloadedLibrary.toPlayable(it) }
+                    val scan = DeviceAudio.scanDetailed(appContext)
+                    val all = com.guangyue.core.data.model.LibraryRules.allSongs(downloaded, scan.tracks)
+                    val byPath = HashMap<String, TrackEntity>()
+                    val byFile = HashMap<String, TrackEntity>()
+                    val byTitle = HashMap<String, TrackEntity>()
+                    fun norm(x: String) = x.replace('\\', '/').trim().lowercase()
+                    for (t in all) {
+                        val f = scan.fileOf[t.key] ?: t.localUri?.takeIf { it.startsWith("/") || it.startsWith("file:") }?.removePrefix("file://")
+                        if (f != null) { byPath[norm(f)] = t; byFile.putIfAbsent(norm(f).substringAfterLast('/'), t) }
+                        byTitle.putIfAbsent(norm(t.title), t)
+                        byTitle.putIfAbsent(norm("${t.artist} - ${t.title}"), t)
+                    }
+                    val matched = ArrayList<TrackEntity>()
+                    var entries = 0
+                    var extinf: String? = null
+                    for (raw in text.lineSequence()) {
+                        val line = raw.trim().removePrefix("\uFEFF")
+                        if (line.isEmpty()) continue
+                        if (line.startsWith("#EXTINF", true)) { extinf = line.substringAfter(',', "").trim(); continue }
+                        if (line.startsWith("#")) continue
+                        entries++
+                        val p = norm(java.net.URLDecoder.decode(line.removePrefix("file://").replace("+", "%2B"), "UTF-8"))
+                        val file = p.substringAfterLast('/')
+                        val hit = byPath[p]
+                            ?: byPath.entries.firstOrNull { (k, _) -> k.endsWith("/" + p.trimStart('.', '/')) }?.value
+                            ?: byFile[file]
+                            ?: extinf?.let { byTitle[norm(it)] ?: byTitle[norm(it.substringAfter(" - "))] }
+                            ?: byTitle[norm(file.substringBeforeLast('.'))]
+                            ?: byTitle[norm(file.substringBeforeLast('.').substringAfter(" - "))]
+                        extinf = null
+                        if (hit != null && matched.none { it.key == hit.key }) matched += hit
+                    }
+                    if (entries == 0) return@runCatching Triple(name, 0, 0)
+                    val id = playlists.create(name)
+                    if (matched.isNotEmpty()) playlists.addTracks(id, matched)
+                    Triple(name, matched.size, entries)
+                }.getOrNull()
+            }
+            if (r == null) onDone("", 0, 0) else onDone(r.first, r.second, r.third)
+        }
+    }
+
+    fun refreshDeviceAudio() { ImportedFolders.invalidate(); _deviceRevision.value++ }
 
     /**
      * 我喜欢 / 全部歌曲 / 最近播放：Folia 本地页签的 local-favorites、all-songs 卡片，

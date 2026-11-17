@@ -25,7 +25,13 @@ object DeviceAudio {
         context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
     /** 一次扫描的结果：保留的歌 + 被过滤规则排除的行 key（`mediastore:<id>`，用来清库）。 */
-    data class Scan(val tracks: List<TrackEntity>, val rejectedKeys: Set<String>, val folderOf: Map<String, String> = emptyMap())
+    data class Scan(
+        val tracks: List<TrackEntity>,
+        val rejectedKeys: Set<String>,
+        val folderOf: Map<String, String> = emptyMap(),
+        /** 11-17：每首的文件路径（导入 m3u 歌单时按路径 / 文件名对上）。 */
+        val fileOf: Map<String, String> = emptyMap(),
+    )
 
     /** 扫描全部音乐（不含铃声 / 录音 / 30 秒以下），按加入时间倒序。会查 ContentResolver，放后台线程。 */
     fun scan(context: Context): List<TrackEntity> = scanDetailed(context).tracks
@@ -35,6 +41,16 @@ object DeviceAudio {
      * 再把每行交给 [DeviceAudioRules] 按录音标记 / 铃声通知闹钟 / 路径 / 时长细筛。
      */
     fun scanDetailed(context: Context): Scan {
+        val media = scanMedia(context)
+        // 11-17：再并上「导入文件夹」里媒体库看不到的歌（Folia 本地「导入文件夹」）。
+        val byKey = media.tracks.associateBy { it.key }
+        val skip = media.fileOf.mapNotNull { (k, f) -> byKey[k]?.let { f.substringAfterLast('/').lowercase() to it.fileSize } }.toSet()
+        val extra = runCatching { ImportedFolders.scan(context, skip) }.getOrNull() ?: return media
+        if (extra.tracks.isEmpty()) return media
+        return Scan(media.tracks + extra.tracks, media.rejectedKeys, media.folderOf + extra.folderOf, media.fileOf + extra.fileOf)
+    }
+
+    private fun scanMedia(context: Context): Scan {
         if (!granted(context)) return Scan(emptyList(), emptySet())
         val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val cols = ArrayList(
@@ -60,6 +76,7 @@ object DeviceAudio {
         val out = ArrayList<TrackEntity>()
         val rejected = HashSet<String>()
         val folders = HashMap<String, String>()
+        val files = HashMap<String, String>()
         runCatching {
             context.contentResolver.query(
                 collection, cols.toTypedArray(),
@@ -108,6 +125,7 @@ object DeviceAudio {
                     val rawArtist = c.getString(artist).orEmpty()
                     // 11-17：本地页签按文件夹分（Folia 本地「文件夹」视图）。
                     path.substringBeforeLast('/', "").takeIf { it.isNotBlank() }?.let { folders[LibraryRules.DEVICE_PREFIX + rowId] = it }
+                    if (path.isNotBlank()) files[LibraryRules.DEVICE_PREFIX + rowId] = path
                     out += TrackEntity(
                         key = LibraryRules.DEVICE_PREFIX + rowId,
                         title = c.getString(title)?.takeIf { it.isNotBlank() }
@@ -126,7 +144,7 @@ object DeviceAudio {
                 }
             }
         }
-        return Scan(out, rejected, folders)
+        return Scan(out, rejected, folders, files)
     }
 
     private val ALBUM_ART = android.net.Uri.parse("content://media/external/audio/albumart")

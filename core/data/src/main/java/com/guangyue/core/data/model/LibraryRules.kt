@@ -89,7 +89,7 @@ object LibraryRules {
             rawJson = downloaded.rawJson ?: row.rawJson,
             artwork = downloaded.artwork ?: row.artwork,
         )
-        row.source == TrackEntity.SOURCE_LOCAL && !row.key.startsWith(DEVICE_PREFIX) ->
+        row.source == TrackEntity.SOURCE_LOCAL && !row.key.startsWith(DEVICE_PREFIX) && !row.key.startsWith("saf:") ->
             row.copy(source = TrackEntity.SOURCE_PLUGIN, localUri = null, fileSize = 0L)
         else -> row
     }

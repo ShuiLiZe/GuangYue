@@ -201,6 +201,25 @@ fun GuangYueNavHost(
                 listOf("推荐" to vm.recommended(sheets, recent), "榜单" to charts, "最近" to recent).filter { it.second.isNotEmpty() }
             }
             // 网格首页照 Folia 手机版 APK 页签：歌单 / 电台 / 专辑 / 本地（11-15 用户：Folia 没有的界面不加，删推荐/探索）。
+            // 11-17：Folia 本地「导入文件夹 / 导入歌单」→ 系统选择器。
+            val importFolderLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree(),
+            ) { uri ->
+                if (uri != null) vm.importFolder(uri) { name -> com.guangyue.feature.library.design.StatusToasts.show("已导入文件夹「$name」") }
+            }
+            val importPlaylistLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+            ) { uri ->
+                if (uri != null) vm.importPlaylistFile(uri) { name, hit, total ->
+                    com.guangyue.feature.library.design.StatusToasts.show(
+                        when {
+                            name.isEmpty() -> "读不了这个歌单文件"
+                            total == 0 -> "歌单文件里没有歌曲"
+                            else -> "已导入歌单「$name」：对上 $hit / $total 首"
+                        },
+                    )
+                }
+            }
             val homeMine by vm.playlistsFlow.collectAsStateWithLifecycle()
             // 11-17：本地页签照 Folia 手机版是集合卡（全部歌曲 + 各文件夹），不是单曲。
             val homeLocal by vm.localFolderTiles.collectAsStateWithLifecycle()
@@ -248,7 +267,17 @@ fun GuangYueNavHost(
                                 com.guangyue.music.ui.home.GridSubSection("歌手", com.guangyue.feature.library.design.icons.GuangYueIcons.User, homeLocalGroups.second),
                                 com.guangyue.music.ui.home.GridSubSection("歌单", com.guangyue.feature.library.design.icons.GuangYueIcons.ListMusic, homeMine),
                             ),
-                            localRefresh = { vm.refreshDeviceAudio(); com.guangyue.feature.library.design.StatusToasts.show("已重新扫描本地音乐") },
+                            localActions = listOf(
+                                com.guangyue.music.ui.home.GridLocalAction("导入文件夹", com.guangyue.feature.library.design.icons.GuangYueIcons.FolderOpen) {
+                                    runCatching { importFolderLauncher.launch(null) }
+                                },
+                                com.guangyue.music.ui.home.GridLocalAction("刷新", com.guangyue.feature.library.design.icons.GuangYueIcons.RefreshCw) {
+                                    vm.refreshDeviceAudio(); com.guangyue.feature.library.design.StatusToasts.show("已重新扫描本地音乐")
+                                },
+                                com.guangyue.music.ui.home.GridLocalAction("导入歌单", com.guangyue.feature.library.design.icons.GuangYueIcons.FileText) {
+                                    runCatching { importPlaylistLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "application/x-mpegurl", "application/vnd.apple.mpegurl", "text/plain", "application/octet-stream")) }
+                                },
+                            ),
                             // folia-sonnet 手机版首页：没有底栏，标题旁齿轮进设置，页签胶囊末尾带「去别处」的页签。
                             onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                             onOpenDownloads = { navController.navigate(Routes.DOWNLOADS) { launchSingleTop = true } },
