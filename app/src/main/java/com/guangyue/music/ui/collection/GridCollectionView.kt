@@ -761,18 +761,23 @@ private fun ArtistBioCard(a: GridArtistHead, ink: Color, daylight: Boolean, onTa
     ) {
         Text(a.name, color = ink, fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (a.alias.isNotBlank()) {
-            Text(a.alias, color = ink.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
+            Text(a.alias, color = ink.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
         }
         Box(Modifier.padding(top = 8.dp).size(width = 48.dp, height = 2.dp).clip(CircleShape).background(Color(0xFF38BDF8).copy(alpha = 0.6f)))
-        Text(
-            a.description?.takeIf { it.isNotBlank() } ?: "暂无详细介绍",
-            color = ink.copy(alpha = 0.65f), fontSize = 12.sp, lineHeight = 19.sp,
-            // Folia overflow-hidden 会把行拦腰切；这里按能放下的整行收尾加省略号。
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(top = 12.dp, bottom = 8.dp),
-        )
+        // Folia overflow-hidden 会把行拦腰切；这里按能放下的整行数排（放不下一整行就不画），末行省略号。
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp, bottom = 6.dp)) {
+            val lineDp = with(LocalDensity.current) { 19.sp.toDp() }
+            val lines = (maxHeight / lineDp).toInt()
+            if (lines > 0) {
+                Text(
+                    a.description?.takeIf { it.isNotBlank() } ?: "暂无详细介绍",
+                    color = ink.copy(alpha = 0.65f), fontSize = 12.sp, lineHeight = 19.sp,
+                    maxLines = lines, overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
         Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.05f)))
-        Text(stats, color = ink.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
+        Text(stats, color = ink.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
