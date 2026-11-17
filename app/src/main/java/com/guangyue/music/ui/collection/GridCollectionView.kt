@@ -63,6 +63,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
@@ -467,8 +468,16 @@ fun GridCollectionView(
             Column(
                 Modifier
                     .align(Alignment.TopCenter)
-                    // 歌手页左边多一颗胶囊（到 120dp），标题两侧同让 128dp 免得压住。
-                    .padding(horizontal = if (isArtist) 128.dp else 72.dp)
+                    // 歌手页左边多一颗胶囊（到 120dp）：标题仍居中，只有放不下时才往右让，不压住胶囊、也不被两侧硬挤成「周…」。
+                    .then(
+                        if (isArtist) Modifier.layout { m, c ->
+                            val left = 128.dp.roundToPx(); val right = 24.dp.roundToPx()
+                            val pl = m.measure(c.copy(minWidth = 0, maxWidth = (c.maxWidth - left - right).coerceAtLeast(0)))
+                            layout(c.maxWidth, pl.height) {
+                                pl.place(((c.maxWidth - pl.width) / 2).coerceIn(left, (c.maxWidth - right - pl.width).coerceAtLeast(left)), 0)
+                            }
+                        } else Modifier.padding(horizontal = 72.dp),
+                    )
                     .clip(RoundedCornerShape(16.dp))
                     // Folia GridViewChrome 标题块：bg-color 20% 底 + backdrop-blur（手机上只铺底色）。
                     .background(ground.copy(alpha = 0.2f))
@@ -720,7 +729,6 @@ private fun ArtistAvatar(picture: String?, ground: Color, ink: Color, onTap: () 
     Box(
         Modifier
             .requiredSize(200.dp)
-            .shadow(24.dp, CircleShape, clip = false)
             .clip(CircleShape)
             .background(ground.copy(alpha = 0.2f))
             .border(4.dp, Color.White.copy(alpha = 0.1f), CircleShape)
@@ -745,7 +753,6 @@ private fun ArtistBioCard(a: GridArtistHead, ink: Color, daylight: Boolean, onTa
     Column(
         Modifier
             .requiredSize(width = 360.dp, height = 200.dp)
-            .shadow(24.dp, RoundedCornerShape(24.dp), clip = false)
             .clip(RoundedCornerShape(24.dp))
             .background(if (daylight) Color.White.copy(alpha = 0.6f) else Color(0xFF18181B).copy(alpha = 0.6f))
             .border(1.dp, Color.White.copy(alpha = if (daylight) 0.3f else 0.1f), RoundedCornerShape(24.dp))
@@ -760,7 +767,8 @@ private fun ArtistBioCard(a: GridArtistHead, ink: Color, daylight: Boolean, onTa
         Text(
             a.description?.takeIf { it.isNotBlank() } ?: "暂无详细介绍",
             color = ink.copy(alpha = 0.65f), fontSize = 12.sp, lineHeight = 19.sp,
-            overflow = TextOverflow.Clip,
+            // Folia overflow-hidden 会把行拦腰切；这里按能放下的整行收尾加省略号。
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(top = 12.dp, bottom = 8.dp),
         )
         Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.05f)))

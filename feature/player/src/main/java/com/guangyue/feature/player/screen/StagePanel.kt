@@ -1,5 +1,7 @@
 package com.guangyue.feature.player.screen
 
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -213,7 +215,9 @@ fun StagePanel(
             ),
     ) {
         val width = stagePanelWidth(maxWidth)
-        val maxCardHeight = (maxHeight - STAGE_PANEL_BOTTOM - TOP_MARGIN).coerceAtLeast(160.dp)
+        // 11-18 横屏（高 < 480dp）：面板是模态的（卡外有收起接点），上沿不必让出顶栏 56dp，只留 12dp——播放列表多露一行多。
+        val topMargin = if (maxHeight < 480.dp) 12.dp else TOP_MARGIN
+        val maxCardHeight = (maxHeight - STAGE_PANEL_BOTTOM - topMargin).coerceAtLeast(160.dp)
         // 变换原点 = 面板键中心：键在卡右缘往里 16 - 16 = 0（卡与键同在 16dp 页边距内），
         // 键心在卡底之下 8 + 28 = 36dp。比例按卡宽、近似卡高（取最大高的一半作基准即可，差几 dp 不可见）。
         val originX = 1f - (28.dp / width)
@@ -663,6 +667,7 @@ const val StagePanelQueueShuffleTag = "stage-panel-queue-shuffle"
  * 歌名 13sp/19 半粗（不改色），歌手 12sp/17 t3。Folia 的行操作靠指针悬停才露出，
  * 触屏没有悬停，这里常驻三键「下一首播放 / 移到队尾 / 从队列中删除」（15dp 图标，命中 34×40dp）。空队列 = ListMusic 28 + 文案。
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun QueueBody(
     colors: StagePanelColors,
@@ -718,9 +723,18 @@ private fun QueueBody(
                 ) { Icon(GuangYueIcons.Shuffle, null, tint = colors.t2, modifier = Modifier.size(15.dp)) }
             }
         }
+        // Folia QueueTab：打开时把「正在播的前一行」滚到列表顶（刚播完的还看得见）。请求一块比视口高的矩形，
+        // 滚动容器就按上沿对齐（bringIntoView 对超出视口的目标取前沿）。
+        val curIdx = queue.indexOfFirst { it.current }
+        val anchorIdx = (curIdx - 1).coerceAtLeast(0)
+        val anchor = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+        LaunchedEffect(curIdx) {
+            if (curIdx > 0) runCatching { anchor.bringIntoView(androidx.compose.ui.geometry.Rect(0f, 0f, 1f, 100_000f)) }
+        }
         queue.forEach { row ->
             Box(
                 Modifier
+                    .then(if (row.index == anchorIdx) Modifier.bringIntoViewRequester(anchor) else Modifier)
                     .fillMaxWidth()
                     .height(48.dp)
                     .clip(RoundedCornerShape(8.dp))
