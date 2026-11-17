@@ -153,6 +153,7 @@ fun SettingsScreen(
         onPage = { page = it },
         onClose = onBack,
         modifier = modifier,
+        version = versionName,
     )
 }
 

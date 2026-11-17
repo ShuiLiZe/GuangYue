@@ -6662,4 +6662,13 @@ object GuangYueIcons {
             )
             .build()
     }
+
+    /** lucide lightbulb（Folia 思索帮助页）。 */
+    val Lightbulb: ImageVector by lazy {
+        ImageVector.Builder(name = "Lightbulb", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
+            .addPath(pathData = addPathNodes("M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"), fill = null, stroke = SolidColor(Color.Black), strokeLineWidth = 2f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round)
+            .addPath(pathData = addPathNodes("M9 18h6"), fill = null, stroke = SolidColor(Color.Black), strokeLineWidth = 2f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round)
+            .addPath(pathData = addPathNodes("M10 22h4"), fill = null, stroke = SolidColor(Color.Black), strokeLineWidth = 2f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round)
+            .build()
+    }
 }

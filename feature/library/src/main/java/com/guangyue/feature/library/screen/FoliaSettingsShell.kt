@@ -66,9 +66,12 @@ internal fun FoliaSettingsShell(
     onPage: (SettingsPage) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    version: String = "",
 ) {
     // Folia APK：设置窗首次打开落在「帮助」页。
     var help by rememberSaveable { mutableStateOf(true) }
+    // 11-17：Folia 帮助页两张卡（版本更新 / 思索帮助页）点开的说明窗。
+    var helpSheet by rememberSaveable { mutableStateOf<String?>(null) }
     val dark = Gyp.page.luminance() < 0.5f
     val card = if (dark) Color(0xFF202023) else Color(0xFFFFFFFF)
     val ink = Gyp.ink
@@ -129,6 +132,13 @@ internal fun FoliaSettingsShell(
                             Box(Modifier.fillMaxWidth().height(1.dp).background(hair))
                         }
                     }
+                    if (help) item("tiles") {
+                        // Folia HelpPage：两张带图标的卡（版本更新、思索帮助页）。键盘快捷键两组手机上没有键盘，不放。
+                        Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            HelpTile(GuangYueIcons.Sparkles, "版本更新", "查看这个版本带来的变化", ink, soft, fill) { helpSheet = "notes" }
+                            HelpTile(GuangYueIcons.Lightbulb, "思索帮助页", "了解广乐的基本操作与运行逻辑", ink, soft, fill) { helpSheet = "ponder" }
+                        }
+                    }
                     shown.groupBy { it.group }.forEach { (group, rows) ->
                         item("g-$group") {
                             Column(Modifier.padding(top = 18.dp)) {
@@ -168,6 +178,75 @@ internal fun FoliaSettingsShell(
                 }
             }
         }
+        helpSheet?.let { k ->
+            androidx.activity.compose.BackHandler { helpSheet = null }
+            HelpSheet(k, version) { helpSheet = null }
+        }
+    }
+}
+
+@Composable
+private fun HelpTile(icon: ImageVector, title: String, line: String, ink: Color, soft: Color, fill: Color, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(fill).clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = ink.copy(alpha = 0.85f), modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(line, color = soft, fontSize = 12.5.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+    }
+}
+
+/** 帮助卡点开的说明窗（Folia ReleaseNotesModal / 思索帮助页的手机版：一张圆角卡，标题 + 分条说明）。 */
+@Composable
+internal fun HelpSheet(kind: String, version: String, onClose: () -> Unit) {
+    val dark = Gyp.page.luminance() < 0.5f
+    val ink = Gyp.ink
+    val soft = ink.copy(alpha = 0.55f)
+    val title: String
+    val intro: String
+    val rows: List<Pair<String, String>>
+    if (kind == "notes") {
+        title = "版本更新"
+        intro = "以下是 $version 的新功能与改进"
+        rows = HelpTexts.releaseNotes
+    } else {
+        title = "思索帮助页"
+        intro = "广乐的基本操作与运行逻辑"
+        rows = HelpTexts.ponder
+    }
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)).clickable(indication = null, interactionSource = null, onClick = onClose),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier.padding(horizontal = 22.dp, vertical = 60.dp).fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp)).background(if (dark) Color(0xFF26262A) else Color.White)
+                .clickable(indication = null, interactionSource = null) {}
+                .padding(22.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = ink, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Box(Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
+                    Icon(GuangYueIcons.X, "关闭", tint = soft, modifier = Modifier.size(18.dp))
+                }
+            }
+            Text(intro, color = soft, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
+            LazyColumn(Modifier.heightIn(max = 520.dp)) {
+                rows.forEachIndexed { i, (h, d) ->
+                    item(i) {
+                        Column(Modifier.padding(vertical = 9.dp)) {
+                            Text(h, color = ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            Text(d, color = soft, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 3.dp))
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -178,4 +257,22 @@ private fun BigTab(text: String, on: Boolean, ink: Color, onClick: () -> Unit) {
         Spacer(Modifier.height(6.dp))
         Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(if (on) ink else Color.Transparent))
     }
+}
+
+/** 帮助窗的文案。版本更新每次发版改这里。 */
+internal object HelpTexts {
+    val releaseNotes: List<Pair<String, String>> = listOf(
+        "本地页签照 Folia" to "本地页签多了「导入文件夹」「刷新」「导入歌单」：导入文件夹用系统文件夹选择器，媒体库扫不到的地方（U 盘、带 .nomedia 的文件夹）里的歌也会并进「全部歌曲」和「文件夹」；导入歌单读 .m3u / .m3u8，按路径、文件名和歌名对上本地歌，建成同名本地歌单。",
+        "卡片标题下的曲目数" to "首页居中卡片下面那行改成 Folia 的「N 首 • 说明」，本地集合和本地歌单都带曲目数。",
+        "帮助页" to "设置的帮助页照 Folia 加了「版本更新」和「思索帮助页」两张卡。",
+    )
+
+    val ponder: List<Pair<String, String>> = listOf(
+        "首页卡片" to "左右滑动切换卡片，点中间那张进入歌单或开始播放。分段左边的「全部」一屏列出这一页所有卡片，点哪张就跳到哪张。",
+        "页签" to "顶部的歌单、电台、专辑、本地对应各个数据源。本地页签下面再分文件夹、专辑、歌手、歌单，当前那段带字，其余只有图标。",
+        "平台按钮" to "右下角的圆形按钮切换当前音源、登录在线平台账号；登录后首页歌单页签会列出账号里的歌单。",
+        "播放条与播放页" to "开始播放后底部出现悬浮播放条，点歌名进入播放页。播放页的歌词样式、背景在设置的「播放页」里选，细节参数在播放页的样式弹层里调。",
+        "搜索" to "首页右上的搜索框搜在线歌曲、专辑、歌手、歌单，结果按当前音源给。",
+        "资料库界面" to "设置 → 外观 → 资料库界面可以在网格和墙面两套界面之间切换，切换时保留播放队列。",
+    )
 }
