@@ -592,7 +592,10 @@ fun GuangYueNavHost(
                                 openPlayerAfterPlay()
                             }
                         }
+                        val falloff by shellVm.gridFalloff.collectAsStateWithLifecycle()
                         com.guangyue.music.ui.collection.GridCollectionView(
+                            minScale = falloff.first,
+                            minOpacity = falloff.second,
                             title = shownName,
                             subtitle = tile.subtitle.takeIf { s -> s.isNotBlank() } ?: kindLabel,
                             coverUrl = tile.artwork ?: list.firstOrNull { t -> t.artwork != null }?.artwork,
@@ -1109,9 +1112,13 @@ fun GuangYueNavHost(
             val style by styleVm.style.collectAsStateWithLifecycle()
             val settingsCtx = LocalContext.current
             var defaultQuality by remember { mutableStateOf(playback.defaultQuality) }
+            // 11-17：Folia 明暗模式三选一要知道「是否跟随系统」；shellVm 是 Activity 级的外壳 ViewModel。
+            val explicitDark by shellVm.explicitDark.collectAsStateWithLifecycle()
             SettingsScreen(
                 darkMode = darkMode,
                 onDarkModeChange = onDarkModeChange,
+                daylightChoice = when (explicitDark) { null -> "system"; true -> "dark"; false -> "light" },
+                onPickDaylight = { shellVm.pickDaylight(it) },
                 onOpenLicenses = { navController.navigate(Routes.LICENSES) },
                 onBack = { navController.popBackStack() },
                 lxQuality = lxQuality,
@@ -1188,6 +1195,8 @@ fun GuangYueNavHost(
                 onPickPlaybackEntryView = { shellVm.setPlaybackEntryView(it) },
                 ponderTouchButton = shellVm.ponderTouchButton.collectAsStateWithLifecycle().value,
                 onPonderTouchButton = { shellVm.setPonderTouchButton(it) },
+                gridFalloff = shellVm.gridFalloff.collectAsStateWithLifecycle().value,
+                onGridFalloff = { sc, op -> shellVm.setGridFalloff(sc, op) },
             )
         }
 

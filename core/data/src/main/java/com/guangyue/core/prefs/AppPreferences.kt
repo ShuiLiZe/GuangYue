@@ -39,6 +39,9 @@ class AppPreferences @Inject constructor(
     val hasDarkMode: Boolean
         get() = prefs.contains(KEY_DARK)
 
+    /** 11-17：Folia「明暗模式 → 跟随系统」——删掉显式选择，回到跟随系统。 */
+    fun clearDarkMode() = prefs.edit().remove(KEY_DARK).apply()
+
     /**
      * 搜索页上次选中的音源（插件 id）。
      *
@@ -270,6 +273,16 @@ class AppPreferences @Inject constructor(
         set(value) = prefs.edit().putString(KEY_GRID_CARD_STYLE, if (value == GridCardStyles.IMAGE) GridCardStyles.IMAGE else GridCardStyles.CARD).apply()
 
     /** 11-17：Folia「顶部胶囊入口」（options.homeTabsVisibility）：隐藏的首页页签名（歌单 / 电台 / 专辑 / 本地）。 */
+    /** 11-17：Folia「主页与歌单 → 网格卡片 → 卡片最小尺寸」（hexCardFalloff：默认 0.45，范围 0.2–1.1）。 */
+    var gridMinCardScale: Float
+        get() = prefs.getFloat(KEY_GRID_MIN_SCALE, GRID_MIN_SCALE_DEFAULT).coerceIn(0.2f, 1.1f)
+        set(value) = prefs.edit().putFloat(KEY_GRID_MIN_SCALE, value.coerceIn(0.2f, 1.1f)).apply()
+
+    /** 11-17：Folia「卡片最小透明度」（默认 0.4，范围 0–1）。 */
+    var gridMinCardOpacity: Float
+        get() = prefs.getFloat(KEY_GRID_MIN_OPACITY, GRID_MIN_OPACITY_DEFAULT).coerceIn(0f, 1f)
+        set(value) = prefs.edit().putFloat(KEY_GRID_MIN_OPACITY, value.coerceIn(0f, 1f)).apply()
+
     var homeTabsHidden: Set<String>
         get() = prefs.getStringSet(KEY_HOME_TABS_HIDDEN, emptySet()).orEmpty().toSet()
         set(value) = prefs.edit().putStringSet(KEY_HOME_TABS_HIDDEN, value).apply()
@@ -292,6 +305,10 @@ class AppPreferences @Inject constructor(
     private companion object {
         const val KEY_GRID_CARD_STYLE = "grid3d_card_style"
         const val KEY_HOME_TABS_HIDDEN = "home_tabs_hidden"
+        const val KEY_GRID_MIN_SCALE = "grid_min_card_scale"
+        const val KEY_GRID_MIN_OPACITY = "grid_min_card_opacity"
+        const val GRID_MIN_SCALE_DEFAULT = 0.45f
+        const val GRID_MIN_OPACITY_DEFAULT = 0.4f
         const val KEY_REMEMBER_HOME_CARD = "remember_home_card_position"
         const val KEY_PONDER_TOUCH_BUTTON = "ponder_touch_button"
         const val KEY_PLAY_ENTRY = "playback_entry_view"

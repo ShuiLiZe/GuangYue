@@ -527,6 +527,8 @@ fun V0cStage(
                     homeStyle = if (light) com.guangyue.core.prefs.HomeStyles.GRID else com.guangyue.core.prefs.HomeStyles.WALL,
                     versionName = "0.0.27",
                     initialPage = com.guangyue.feature.library.screen.SettingsPage.HOME,
+                    gridFalloff = if (light) 0.6f to 0.25f else 0.45f to 0.4f,
+                    daylightChoice = if (light) "light" else "system",
                     modifier = Modifier.navigationBarsPadding(),
                 )
             }

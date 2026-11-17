@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -97,6 +98,12 @@ fun SettingsScreen(
     /** 11-17：Folia 通用设置「思索 → 触屏思索按钮」；null 不显示。 */
     ponderTouchButton: Boolean? = null,
     onPonderTouchButton: (Boolean) -> Unit = {},
+    /** 11-17：Folia「明暗模式」浅色 / 深色 / 跟随系统；null 不显示（退回深色开关）。 */
+    daylightChoice: String? = null,
+    onPickDaylight: (String) -> Unit = {},
+    /** 11-17：Folia「网格卡片 → 卡片最小尺寸 / 最小透明度」；null 不显示。 */
+    gridFalloff: Pair<Float, Float>? = null,
+    onGridFalloff: (Float, Float) -> Unit = { _, _ -> },
     /** 打开时先显示的分类（取证用；正常进入是「外观」）。 */
     initialPage: SettingsPage = SettingsPage.APPEARANCE,
 ) {
@@ -112,8 +119,14 @@ fun SettingsScreen(
 
     // 全部设置项（数据驱动：分页与搜索共用一份）。
     val items = buildList {
-        add(SettingItem(SettingsPage.APPEARANCE, "外观", "深色模式", "跟随 Folia 的「午夜墨染」深色底", icon(if (darkMode) GuangYueIcons.Moon else GuangYueIcons.Sun),
-            trailing = { FoliaToggle(checked = darkMode, onChange = onDarkModeChange) }))
+        if (daylightChoice != null) {
+            // Folia AppearancePage「主题 → 明暗模式」（options.daylightMode*、followSystemThemeDesc），分段照它的顺序 浅色 / 深色 / 跟随系统。
+            add(SettingItem(SettingsPage.APPEARANCE, "主题", "明暗模式", "根据系统设置自动切换亮色 / 暗色主题；手动切换明暗模式后将关闭此选项。", icon(if (darkMode) GuangYueIcons.Moon else GuangYueIcons.Sun),
+                below = { FoliaSegmented(value = daylightChoice, options = listOf("light" to "浅色", "dark" to "深色", "system" to "跟随系统"), onSelect = onPickDaylight) }))
+        } else {
+            add(SettingItem(SettingsPage.APPEARANCE, "外观", "深色模式", "跟随 Folia 的「午夜墨染」深色底", icon(if (darkMode) GuangYueIcons.Moon else GuangYueIcons.Sun),
+                trailing = { FoliaToggle(checked = darkMode, onChange = onDarkModeChange) }))
+        }
         if (homeStyles.isNotEmpty()) {
             // Folia「设置 → 界面设置 → 资料库界面」（options.librarySuite / librarySuiteDesc）；11-17 起照 Folia settingsNavModel 放「主页与歌单」。
             add(SettingItem(SettingsPage.HOME, "资料库", "资料库界面", "首页、歌单和歌手页用哪套界面浏览。切换时保留播放队列。", icon(GuangYueIcons.LayoutGrid),
@@ -131,6 +144,18 @@ fun SettingsScreen(
         if (rememberHomeCard != null) {
             add(SettingItem(SettingsPage.HOME, "记住主页卡片位置", "记住主页卡片位置", "切换顶部入口或从播放界面返回时，回到各入口上次浏览的卡片。位置仅在本次打开应用期间保留。", icon(GuangYueIcons.Pin),
                 trailing = { FoliaToggle(checked = rememberHomeCard, onChange = onRememberHomeCard) }))
+        }
+        if (gridFalloff != null) {
+            // Folia HomePage「网格卡片」组（options.gridViewMinCardScale / gridViewMinCardOpacity，hexCardFalloff 范围与默认），作用于歌单详情的集合网格。
+            val (minScale, minOpacity) = gridFalloff
+            add(SettingItem(SettingsPage.HOME, "网格卡片", "卡片最小尺寸", "远离中心的卡片最多缩小到多少。调高外围更好辨认，调低纵深感更强。", icon(GuangYueIcons.Grid2x2),
+                below = { PercentSlider(minScale, 0.2f..1.1f) { onGridFalloff(it, minOpacity) } }))
+            add(SettingItem(SettingsPage.HOME, "网格卡片", "卡片最小透明度", "远离中心的卡片最多淡到多少。调高外围更清楚，调低视线更集中在中心。", icon(GuangYueIcons.Blend),
+                below = { PercentSlider(minOpacity, 0f..1f) { onGridFalloff(minScale, it) } }))
+            if (minScale != 0.45f || minOpacity != 0.4f) {
+                add(SettingItem(SettingsPage.HOME, "网格卡片", "恢复默认衰减", null, icon(GuangYueIcons.RotateCcw),
+                    onClick = { onGridFalloff(0.45f, 0.4f) }))
+            }
         }
         if (ponderTouchButton != null) {
             // Folia GeneralPage 的「思索」组（options.ponderTouchButton / ponderTouchButtonDesc），在「通用」页。
@@ -480,3 +505,28 @@ data class SettingChoice(
     val selected: String,
     val onPick: (String) -> Unit,
 )
+
+/** Folia kit/Slider：步长 0.01，右侧百分比读数（tnum）。 */
+@Composable
+private fun PercentSlider(value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        androidx.compose.material3.Slider(
+            value = value.coerceIn(range.start, range.endInclusive),
+            onValueChange = { v -> onChange(Math.round(v * 100f) / 100f) },
+            valueRange = range,
+            colors = androidx.compose.material3.SliderDefaults.colors(
+                thumbColor = Gyp.ink,
+                activeTrackColor = Gyp.accent,
+                inactiveTrackColor = Gyp.ink.copy(alpha = 0.15f),
+            ),
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            "${Math.round(value * 100f)}%",
+            color = Gyp.t2,
+            fontSize = 13.sp,
+            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+            modifier = Modifier.padding(start = 10.dp).widthIn(min = 44.dp),
+        )
+    }
+}

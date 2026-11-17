@@ -170,6 +170,9 @@ fun GridCollectionView(
     onEnqueueAll: () -> Unit = {},
     /** 取证用：开场就打开信息面板。 */
     initialPanelOpen: Boolean = false,
+    /** 11-17：Folia 设置「卡片最小尺寸 / 最小透明度」（离中心最远的卡缩到 / 淡到多少）。 */
+    minScale: Float = MIN_SCALE,
+    minOpacity: Float = MIN_OPACITY,
 ) {
     val daylight = (0.299f * ground.red + 0.587f * ground.green + 0.114f * ground.blue) > 0.5f
     val density = LocalDensity.current
@@ -274,8 +277,8 @@ fun GridCollectionView(
                     if (abs(cx) > wDp / 2 + CARD_W / 2 + 96 || abs(cy) > hDp / 2 + CARD_H / 2 + 96) continue
                     val dist = sqrt(cx * cx + cy * cy)
                     val p = min(dist / MAX_DISTANCE, 1f)
-                    val scale = CENTER_SCALE - (CENTER_SCALE - MIN_SCALE) * p
-                    val alpha = 1f - (1f - MIN_OPACITY) * p
+                    val scale = CENTER_SCALE - (CENTER_SCALE - minScale) * p
+                    val alpha = 1f - (1f - minOpacity) * p
                     val queueAlpha = when {
                         dist < LOD_START -> 1f
                         dist <= LOD_END -> 1f - (dist - LOD_START) / (LOD_END - LOD_START)

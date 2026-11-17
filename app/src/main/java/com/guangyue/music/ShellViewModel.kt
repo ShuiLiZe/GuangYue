@@ -36,6 +36,15 @@ class ShellViewModel @Inject constructor(
         viewModelScope.launch { preferences.darkMode = dark }
     }
 
+    /** 11-17：Folia 明暗模式三选一（light / dark / system）；手动选浅色或深色即不再跟随系统。 */
+    fun pickDaylight(choice: String) {
+        when (choice) {
+            "system" -> { _explicitDark.value = null; viewModelScope.launch { preferences.clearDarkMode() } }
+            "light" -> setDarkMode(false)
+            "dark" -> setDarkMode(true)
+        }
+    }
+
     /** 0.0.27：首页样式（[com.guangyue.core.prefs.HomeStyles]：wall = 封面墙，grid = 3D 滑卡）。首帧同步读。 */
     // 11-15：Folia 手机版只有网格首页；旧设置里存成墙面的也一律回网格。
     private val _homeStyle = MutableStateFlow(com.guangyue.core.prefs.HomeStyles.GRID)
@@ -79,6 +88,14 @@ class ShellViewModel @Inject constructor(
     private val _rememberHomeCard = MutableStateFlow(preferences.rememberHomeCard)
     val rememberHomeCard: StateFlow<Boolean> = _rememberHomeCard.asStateFlow()
     fun setRememberHomeCard(on: Boolean) { preferences.rememberHomeCard = on; _rememberHomeCard.value = on }
+
+    /** 11-17：Folia 集合网格卡片衰减（最小尺寸 / 最小透明度），设置与歌单网格共用。 */
+    private val _gridFalloff = MutableStateFlow(preferences.gridMinCardScale to preferences.gridMinCardOpacity)
+    val gridFalloff: StateFlow<Pair<Float, Float>> = _gridFalloff.asStateFlow()
+    fun setGridFalloff(scale: Float, opacity: Float) {
+        preferences.gridMinCardScale = scale; preferences.gridMinCardOpacity = opacity
+        _gridFalloff.value = preferences.gridMinCardScale to preferences.gridMinCardOpacity
+    }
 
     private val _ponderTouchButton = MutableStateFlow(preferences.ponderTouchButton)
     val ponderTouchButton: StateFlow<Boolean> = _ponderTouchButton.asStateFlow()
