@@ -80,7 +80,10 @@ internal fun FoliaSettingsShell(
     // 11-17：Folia 帮助页两张卡（版本更新 / 思索帮助页）点开的说明窗。
     var helpSheet by rememberSaveable { mutableStateOf<String?>(null) }
     val dark = Gyp.page.luminance() < 0.5f
-    val card = if (dark) Color(0xFF202023) else Color(0xFFFFFFFF)
+    // 11-18 照 Folia kit settingsTokens：窗底 --st-win、分组卡 --st-card（再描 1px --st-line）。
+    val card = if (dark) Color(0xFF1A1A1D) else Color(0xFFF3F3F4)
+    val groupCard = if (dark) Color(0xFF232327) else Color(0xFFFFFFFF)
+    val t2 = ink.copy(alpha = 0.62f)
     val ink = Gyp.ink
     val soft = ink.copy(alpha = 0.5f)
     val fill = ink.copy(alpha = if (dark) 0.05f else 0.04f)
@@ -146,30 +149,34 @@ internal fun FoliaSettingsShell(
                             HelpTile(GuangYueIcons.Lightbulb, "思索帮助页", "了解广乐的基本操作与运行逻辑", ink, soft, fill) { helpSheet = "ponder" }
                         }
                     }
-                    shown.groupBy { it.group }.forEach { (group, rows) ->
+                    // 11-18 照 Folia kit Group / Row：组标题 13 半粗 t2（无图标）、组间 28（首组 20）；卡片 --st-card 圆角 12 + 1px 线；
+                    // 行最低 56、左右 16 上下 10，标签 14 常规 t1、说明 12 / 18 t2；行间发丝线从左 16 起（kit .st-row::before）。
+                    shown.groupBy { it.group }.entries.forEachIndexed { gi, (group, rows) ->
                         item("g-$group") {
-                            Column(Modifier.padding(top = 18.dp)) {
-                                Row(Modifier.padding(start = 4.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(if (help) GuangYueIcons.CircleHelp else pageIcon(page), null, tint = soft, modifier = Modifier.size(15.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(group, color = soft, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp)
-                                }
-                                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(fill)) {
+                            Column(Modifier.padding(top = if (gi == 0) 20.dp else 28.dp)) {
+                                Text(
+                                    group, color = t2, fontSize = 13.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+                                )
+                                Column(
+                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(groupCard)
+                                        .border(1.dp, hair, RoundedCornerShape(12.dp)),
+                                ) {
                                     rows.forEachIndexed { i, it ->
-                                        if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(hair))
+                                        if (i > 0) Box(Modifier.padding(start = 16.dp).fillMaxWidth().height(1.dp).background(hair))
                                         Row(
-                                            Modifier.fillMaxWidth().heightIn(min = 60.dp)
+                                            Modifier.fillMaxWidth().heightIn(min = 56.dp)
                                                 .then(if (it.onClick != null) Modifier.clickable(onClick = it.onClick) else Modifier)
-                                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                                .padding(horizontal = 16.dp, vertical = 10.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
                                             Column(Modifier.weight(1f)) {
-                                                Text(it.label, color = ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                                                if (!it.hint.isNullOrBlank()) Text(it.hint, color = soft, fontSize = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp))
+                                                Text(it.label, color = ink, fontSize = 14.sp, lineHeight = 20.sp)
+                                                if (!it.hint.isNullOrBlank()) Text(it.hint, color = t2, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 2.dp))
                                             }
-                                            it.trailing?.let { t -> Spacer(Modifier.width(12.dp)); t() }
+                                            it.trailing?.let { t -> Spacer(Modifier.width(24.dp)); t() }
                                         }
-                                        it.below?.let { b -> Box(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 14.dp)) { b() } }
+                                        it.below?.let { b -> Box(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 14.dp)) { b() } }
                                     }
                                 }
                             }
