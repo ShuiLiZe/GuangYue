@@ -66,4 +66,24 @@ class ShellViewModel @Inject constructor(
         preferences.gridCardStyle = id
         _gridCardStyle.value = preferences.gridCardStyle
     }
+
+    // 11-17：Folia 首页设置「顶部胶囊入口」「记住主页卡片位置」与播放页「播放后进入的视图」。
+    private val _homeTabsHidden = MutableStateFlow(preferences.homeTabsHidden)
+    val homeTabsHidden: StateFlow<Set<String>> = _homeTabsHidden.asStateFlow()
+    fun setHomeTabVisible(tab: String, visible: Boolean) {
+        val next = if (visible) _homeTabsHidden.value - tab else _homeTabsHidden.value + tab
+        preferences.homeTabsHidden = next
+        _homeTabsHidden.value = next
+    }
+
+    private val _rememberHomeCard = MutableStateFlow(preferences.rememberHomeCard)
+    val rememberHomeCard: StateFlow<Boolean> = _rememberHomeCard.asStateFlow()
+    fun setRememberHomeCard(on: Boolean) { preferences.rememberHomeCard = on; _rememberHomeCard.value = on }
+
+    /** 本次打开应用期间各页签的卡片位置（Folia：位置仅在本次打开应用期间保留）。 */
+    val homeCardMemory: MutableMap<String, Int> = HashMap()
+
+    private val _playbackEntryView = MutableStateFlow(preferences.playbackEntryView)
+    val playbackEntryView: StateFlow<String> = _playbackEntryView.asStateFlow()
+    fun setPlaybackEntryView(id: String) { preferences.playbackEntryView = id; _playbackEntryView.value = preferences.playbackEntryView }
 }

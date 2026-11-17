@@ -236,6 +236,8 @@ fun GridSliderHome(
     localSubs: List<GridSubSection> = emptyList(),
     /** 「本地」页签的动作（Folia resolveLocalHomeActions：导入文件夹 / 刷新 / 导入歌单）。 */
     localActions: List<GridLocalAction> = emptyList(),
+    /** 11-17：Folia「记住主页卡片位置」：各页签（本地按分段）上次的卡片；null = 不记，换页签回到开头。 */
+    focusMemory: MutableMap<String, Int>? = null,
 ) {
     // Folia 首页页签就是各个数据源本身（歌单 / 推荐 / 探索 / 专辑 / 本地），没有「全部」。
     var tab by rememberSaveable { mutableStateOf(initialTab.coerceIn(0, max(0, sections.size - 1))) }
@@ -368,10 +370,16 @@ fun GridSliderHome(
         }
         // 换页签 = 换一份列表：焦点回到开头（Folia 列表变化走 'none' 直接跳）。
         key(tab, localSub) {
+            val memKey = "${tabs.getOrNull(tab)}/${if (isLocalTab) localSub else 0}"
             val pager = rememberPagerState(
-                initialPage = GridSliderModel.clampFocus(if (tab == initialTab) initialFocus else 0, tiles.size),
+                initialPage = GridSliderModel.clampFocus(focusMemory?.get(memKey) ?: (if (tab == initialTab) initialFocus else 0), tiles.size),
                 pageCount = { tiles.size },
             )
+            if (focusMemory != null) {
+                androidx.compose.runtime.LaunchedEffect(pager) {
+                    androidx.compose.runtime.snapshotFlow { pager.currentPage }.collect { focusMemory[memKey] = it }
+                }
+            }
             val scope = rememberCoroutineScope()
             val focus = GridSliderModel.clampFocus(pager.currentPage, tiles.size)
             val focused = tiles[focus]

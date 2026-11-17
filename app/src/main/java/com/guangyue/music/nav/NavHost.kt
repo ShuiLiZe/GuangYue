@@ -108,6 +108,9 @@ fun GuangYueNavHost(
     val homeStyle by shellVm.collectionStyle.collectAsStateWithLifecycle()
     val gridCardStyle by shellVm.gridCardStyle.collectAsStateWithLifecycle()
     val collectionStyle by shellVm.collectionStyle.collectAsStateWithLifecycle()
+    // 11-17：Folia「播放后进入的视图」：stay = 点播放只开始放，不跳播放页。
+    val playbackEntryView by shellVm.playbackEntryView.collectAsStateWithLifecycle()
+    val openPlayerAfterPlay: () -> Unit = { if (playbackEntryView != "stay") navController.navigate(Routes.LYRIC_FLOW) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val playbackState by playback.state.collectAsStateWithLifecycle()
 
@@ -229,13 +232,17 @@ fun GuangYueNavHost(
             val accountTiles by vm.accountTiles.collectAsStateWithLifecycle()
             val accountSyncing by vm.accountSyncing.collectAsStateWithLifecycle()
             LaunchedEffect(Unit) { vm.readAccountOnStart() }
-            val gridSections = remember(accountTiles, homeMine, sheets, recent, charts, homeLocal) {
-                listOf(
+            val homeTabsHidden by shellVm.homeTabsHidden.collectAsStateWithLifecycle()
+            val rememberHomeCard by shellVm.rememberHomeCard.collectAsStateWithLifecycle()
+            val gridSections = remember(accountTiles, homeMine, sheets, recent, charts, homeLocal, homeTabsHidden) {
+                val all = listOf(
                     "歌单" to (accountTiles + homeMine),
                     "电台" to vm.recommended(sheets, recent),
                     "专辑" to emptyList(),
                     "本地" to homeLocal,
                 )
+                // Folia「顶部胶囊入口」：关掉的页签不显示；全关了就都显示。
+                all.filter { it.first !in homeTabsHidden }.ifEmpty { all }
             }
             if (true) {
                 val homeCtx = androidx.compose.ui.platform.LocalContext.current
@@ -267,6 +274,7 @@ fun GuangYueNavHost(
                                 com.guangyue.music.ui.home.GridSubSection("歌手", com.guangyue.feature.library.design.icons.GuangYueIcons.User, homeLocalGroups.second),
                                 com.guangyue.music.ui.home.GridSubSection("歌单", com.guangyue.feature.library.design.icons.GuangYueIcons.ListMusic, homeMine),
                             ),
+                            focusMemory = shellVm.homeCardMemory.takeIf { rememberHomeCard },
                             localActions = listOf(
                                 com.guangyue.music.ui.home.GridLocalAction("导入文件夹", com.guangyue.feature.library.design.icons.GuangYueIcons.FolderOpen) {
                                     runCatching { importFolderLauncher.launch(null) }
@@ -392,7 +400,7 @@ fun GuangYueNavHost(
                             onOpenTile = { tile ->
                                 vm.playTracksOf(tile) { tracks, at ->
                                     playback.setQueueFromTracks(tracks, at, true)
-                                    navController.navigate(Routes.LYRIC_FLOW)
+                                    openPlayerAfterPlay()
                                 }
                             },
                         )
@@ -429,7 +437,7 @@ fun GuangYueNavHost(
                             onOpenTile = { tile ->
                                 vm.playTracksOf(tile) { tracks, at ->
                                     playback.setQueueFromTracks(tracks, at, true)
-                                    navController.navigate(Routes.LYRIC_FLOW)
+                                    openPlayerAfterPlay()
                                 }
                             },
                         )
@@ -454,7 +462,7 @@ fun GuangYueNavHost(
                         onOpenTile = { tile ->
                             vm.playTracksOf(tile) { tracks, at ->
                                 playback.setQueueFromTracks(tracks, at, true)
-                                navController.navigate(Routes.LYRIC_FLOW)
+                                openPlayerAfterPlay()
                             }
                         },
                         onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
@@ -578,7 +586,7 @@ fun GuangYueNavHost(
                             if (list.isNotEmpty()) {
                                 playback.setShuffle(false)
                                 playback.setQueueFromTracks(list, 0, true)
-                                navController.navigate(Routes.LYRIC_FLOW)
+                                openPlayerAfterPlay()
                             }
                         }
                         com.guangyue.music.ui.collection.GridCollectionView(
@@ -597,7 +605,7 @@ fun GuangYueNavHost(
                             onRetry = { attempt++ },
                             onPlay = { i ->
                                 playback.setQueueFromTracks(list, i, true)
-                                navController.navigate(Routes.LYRIC_FLOW)
+                                openPlayerAfterPlay()
                             },
                             onTogglePlayback = { playback.toggle() },
                             onEnqueue = { i ->
@@ -658,13 +666,13 @@ fun GuangYueNavHost(
                             if (com.guangyue.feature.library.viewmodel.AlbumTiles.isAlbum(t.key)) {
                                 vm.playTracksOf(t) { ts, at ->
                                     playback.setQueueFromTracks(ts, at, true)
-                                    navController.navigate(Routes.LYRIC_FLOW)
+                                    openPlayerAfterPlay()
                                 }
                             } else {
                                 val i = trackTiles.indexOf(t)
                                 if (i >= 0) {
                                     playback.setQueueFromTracks(list, i, true)
-                                    navController.navigate(Routes.LYRIC_FLOW)
+                                    openPlayerAfterPlay()
                                 }
                             }
                         },
@@ -684,14 +692,14 @@ fun GuangYueNavHost(
                                 if (list.isNotEmpty()) {
                                     playback.setShuffle(false)
                                     playback.setQueueFromTracks(list, 0, true)
-                                    navController.navigate(Routes.LYRIC_FLOW)
+                                    openPlayerAfterPlay()
                                 }
                             },
                             onShuffle = {
                                 if (list.isNotEmpty()) {
                                     playback.setQueueFromTracks(list, list.indices.random(), true)
                                     playback.setShuffle(true)
-                                    navController.navigate(Routes.LYRIC_FLOW)
+                                    openPlayerAfterPlay()
                                 }
                             },
                             onRetry = { attempt++ },
@@ -713,7 +721,7 @@ fun GuangYueNavHost(
                                         playback.setShuffle(false)
                                         playback.setQueueFromTracks(picked, 0, true)
                                     }
-                                    navController.navigate(Routes.LYRIC_FLOW)
+                                    openPlayerAfterPlay()
                                 }
                             },
                             // 2026-11-10：曲库（我喜欢 / 全部歌曲 / 最近播放）补全歌词与封面。
@@ -845,7 +853,7 @@ fun GuangYueNavHost(
                         onPlay = { index ->
                             vm.playFrom(index) { items, at ->
                                 playback.setQueue(items, at, true)
-                                navController.navigate(Routes.LYRIC_FLOW)
+                                openPlayerAfterPlay()
                             }
                         },
                         onAddToSheet = { item -> vm.addToCurrentSheet(item) },
@@ -958,7 +966,7 @@ fun GuangYueNavHost(
                 onOpenTile = { tile ->
                     vm.playTracksOf(tile) { tracks, at ->
                         playback.setQueueFromTracks(tracks, at, true)
-                        navController.navigate(Routes.LYRIC_FLOW)
+                        openPlayerAfterPlay()
                     }
                 },
                 onOpenSearch = { navController.navigate(Routes.SEARCH) },
@@ -1064,11 +1072,11 @@ fun GuangYueNavHost(
                         0,
                         true,
                     )
-                    navController.navigate(Routes.LYRIC_FLOW)
+                    openPlayerAfterPlay()
                 },
                 onPlayDownloaded = { entity ->
                     playback.setQueueFromTracks(listOf(entity), 0, true)
-                    navController.navigate(Routes.LYRIC_FLOW)
+                    openPlayerAfterPlay()
                 },
                 onOpenSettings = { navController.navigate(Routes.DOWNLOAD_SETTINGS) { launchSingleTop = true } },
                 vm = vm,
@@ -1159,6 +1167,14 @@ fun GuangYueNavHost(
                     )
                 },
                 versionName = com.guangyue.music.BuildConfig.VERSION_NAME,
+                homeTabs = shellVm.homeTabsHidden.collectAsStateWithLifecycle().value.let { hidden ->
+                    listOf("歌单", "电台", "专辑", "本地").map { it to (it !in hidden) }
+                },
+                onToggleHomeTab = { name, on -> shellVm.setHomeTabVisible(name, on) },
+                rememberHomeCard = shellVm.rememberHomeCard.collectAsStateWithLifecycle().value,
+                onRememberHomeCard = { shellVm.setRememberHomeCard(it) },
+                playbackEntryView = playbackEntryView,
+                onPickPlaybackEntryView = { shellVm.setPlaybackEntryView(it) },
             )
         }
 

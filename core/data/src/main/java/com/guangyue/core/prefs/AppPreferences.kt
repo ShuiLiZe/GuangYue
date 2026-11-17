@@ -269,8 +269,26 @@ class AppPreferences @Inject constructor(
         get() = if (prefs.getString(KEY_GRID_CARD_STYLE, GridCardStyles.CARD) == GridCardStyles.IMAGE) GridCardStyles.IMAGE else GridCardStyles.CARD
         set(value) = prefs.edit().putString(KEY_GRID_CARD_STYLE, if (value == GridCardStyles.IMAGE) GridCardStyles.IMAGE else GridCardStyles.CARD).apply()
 
+    /** 11-17：Folia「顶部胶囊入口」（options.homeTabsVisibility）：隐藏的首页页签名（歌单 / 电台 / 专辑 / 本地）。 */
+    var homeTabsHidden: Set<String>
+        get() = prefs.getStringSet(KEY_HOME_TABS_HIDDEN, emptySet()).orEmpty().toSet()
+        set(value) = prefs.edit().putStringSet(KEY_HOME_TABS_HIDDEN, value).apply()
+
+    /** 11-17：Folia「记住主页卡片位置」（rememberHomeCardPosition），默认开。 */
+    var rememberHomeCard: Boolean
+        get() = prefs.getBoolean(KEY_REMEMBER_HOME_CARD, true)
+        set(value) = prefs.edit().putBoolean(KEY_REMEMBER_HOME_CARD, value).apply()
+
+    /** 11-17：Folia「播放后进入的视图」（playbackEntryView）："player" = 可视化（默认）、"stay" = 留在原处。 */
+    var playbackEntryView: String
+        get() = if (prefs.getString(KEY_PLAY_ENTRY, "player") == "stay") "stay" else "player"
+        set(value) = prefs.edit().putString(KEY_PLAY_ENTRY, if (value == "stay") "stay" else "player").apply()
+
     private companion object {
         const val KEY_GRID_CARD_STYLE = "grid3d_card_style"
+        const val KEY_HOME_TABS_HIDDEN = "home_tabs_hidden"
+        const val KEY_REMEMBER_HOME_CARD = "remember_home_card_position"
+        const val KEY_PLAY_ENTRY = "playback_entry_view"
         const val KEY_VIS_BACKGROUND = "visualizer_background_mode"
         const val KEY_HOME_STYLE = "library_home_style"
         const val KEY_COLLECTION_STYLE = "library_collection_style"

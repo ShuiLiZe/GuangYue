@@ -85,6 +85,15 @@ fun SettingsScreen(
     /** 0.0.28：网格首页的歌单卡片样式（Folia grid3dCardStyle）；null 不显示（只在网格首页时显示，同 Folia GRID_ONLY）。 */
     gridCardStyle: String? = null,
     onPickGridCardStyle: (String) -> Unit = {},
+    /** 11-17：Folia「顶部胶囊入口」：四个页签与各自是否显示；空列表不显示。 */
+    homeTabs: List<Pair<String, Boolean>> = emptyList(),
+    onToggleHomeTab: (String, Boolean) -> Unit = { _, _ -> },
+    /** 11-17：Folia「记住主页卡片位置」；null 不显示。 */
+    rememberHomeCard: Boolean? = null,
+    onRememberHomeCard: (Boolean) -> Unit = {},
+    /** 11-17：Folia「播放后进入的视图」（player / stay）；null 不显示。 */
+    playbackEntryView: String? = null,
+    onPickPlaybackEntryView: (String) -> Unit = {},
 ) {
     var query by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
     var page by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(SettingsPage.APPEARANCE) }
@@ -109,6 +118,18 @@ fun SettingsScreen(
             // Folia「设置 → 首页 → 歌单卡片样式」（options.grid3dCardStyle / grid3dCardStyleDesc，选项顺序 image、card）。
             add(SettingItem(SettingsPage.APPEARANCE, "资料库", "歌单卡片样式", "选择首页歌单卡片样式：纯图片封面或经典的拍立得文本卡片。", icon(GuangYueIcons.LayoutGrid),
                 below = { FlowStyleChips(listOf("image" to "纯图片封面", "card" to "拍立得卡片"), gridCardStyle, onPickGridCardStyle) }))
+        }
+        homeTabs.forEach { (name, on) ->
+            add(SettingItem(SettingsPage.APPEARANCE, "顶部胶囊入口", "显示$name", null, icon(GuangYueIcons.LayoutGrid),
+                trailing = { FoliaToggle(checked = on, onChange = { v -> onToggleHomeTab(name, v) }) }))
+        }
+        if (rememberHomeCard != null) {
+            add(SettingItem(SettingsPage.APPEARANCE, "记住主页卡片位置", "记住主页卡片位置", "切换顶部入口或从播放界面返回时，回到各入口上次浏览的卡片。位置仅在本次打开应用期间保留。", icon(GuangYueIcons.Pin),
+                trailing = { FoliaToggle(checked = rememberHomeCard, onChange = onRememberHomeCard) }))
+        }
+        if (playbackEntryView != null) {
+            add(SettingItem(SettingsPage.PLAYER, "播放后进入的视图", "播放后进入的视图", "点击播放后默认打开哪个视图。", icon(GuangYueIcons.Play),
+                below = { FlowStyleChips(listOf("player" to "可视化", "stay" to "留在原处"), playbackEntryView, onPickPlaybackEntryView) }))
         }
         if (lyricStyles.isNotEmpty()) {
             add(SettingItem(SettingsPage.PLAYER, "歌词动画", "歌词样式", "播放舞台上的歌词画法；各样式的参数在舞台的样式弹层里调", icon(GuangYueIcons.Sparkles),
@@ -159,8 +180,8 @@ fun SettingsScreen(
 
 /** 设置分类（Folia settingsNavModel 的手机子集，名字取 zh-CN options.settingsPage*）。 */
 enum class SettingsPage(val label: String, val desc: String = "") {
-    APPEARANCE("外观", "主题、资料库界面与卡片样式。"),
-    PLAYER("播放页", "歌词动画、背景与町景。"),
+    APPEARANCE("外观", "主题、资料库界面、卡片样式与首页入口。"),
+    PLAYER("播放页", "播放后进入的视图、歌词动画、背景与町景。"),
     PLAYBACK("播放控制", "音质、取链源与音源插件。"),
     STORAGE("存储与备份", "下载与本机存储。"),
     ABOUT("关于"),
