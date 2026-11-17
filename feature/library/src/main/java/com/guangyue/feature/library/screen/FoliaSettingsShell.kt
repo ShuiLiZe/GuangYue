@@ -83,8 +83,8 @@ internal fun FoliaSettingsShell(
     // 11-18 照 Folia kit settingsTokens：窗底 --st-win、分组卡 --st-card（再描 1px --st-line）。
     val card = if (dark) Color(0xFF1A1A1D) else Color(0xFFF3F3F4)
     val groupCard = if (dark) Color(0xFF232327) else Color(0xFFFFFFFF)
-    val t2 = ink.copy(alpha = 0.62f)
     val ink = Gyp.ink
+    val t2 = ink.copy(alpha = 0.62f)
     val soft = ink.copy(alpha = 0.5f)
     val fill = ink.copy(alpha = if (dark) 0.05f else 0.04f)
     val hair = ink.copy(alpha = 0.08f)
