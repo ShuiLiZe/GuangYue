@@ -102,7 +102,7 @@ fun SettingsScreen(
             trailing = { FoliaToggle(checked = darkMode, onChange = onDarkModeChange) }))
         if (homeStyles.isNotEmpty()) {
             // Folia「设置 → 界面设置 → 资料库界面」（options.librarySuite / librarySuiteDesc）；手机设置没有「界面设置」页，放在外观里。
-            add(SettingItem(SettingsPage.APPEARANCE, "资料库", "资料库界面", "歌单详情用哪套界面浏览。切换时保留播放队列。", icon(GuangYueIcons.LayoutGrid),
+            add(SettingItem(SettingsPage.APPEARANCE, "资料库", "资料库界面", "首页、歌单和歌手页用哪套界面浏览。切换时保留播放队列。", icon(GuangYueIcons.LayoutGrid),
                 below = { HomeStylePicker(homeStyles, homeStyle, onPickHomeStyle) }))
         }
         if (gridCardStyle != null) {

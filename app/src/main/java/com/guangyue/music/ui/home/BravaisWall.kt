@@ -124,6 +124,10 @@ fun BravaisWall(
     onOpenSearch: () -> Unit,
     onEnqueueTile: (HomeTile) -> Unit = {},
     modifier: Modifier = Modifier,
+    /** 11-17：首页缝里的设置键（Folia 首页窄缝工具格：搜索、设置…）。null 时不显示。 */
+    onOpenSettings: (() -> Unit)? = null,
+    /** 11-17：首页页签带不带「全部」。Folia 手机版首页页签是 歌单 / 电台 / 专辑 / 本地，没有「全部」。 */
+    allTab: Boolean = true,
     /** B2：歌单 / 榜单 / 专辑 / 电台聚焦后的「进入」（Folia 聚焦卡的进入键 + 再点一下聚焦卡 = 进入集合）。null 时一律直接播放。 */
     onEnterTile: ((HomeTile) -> Unit)? = null,
     /** B2：集合层。非 null 时缝换成集合信息条（面包屑返回 + 大标题 + 「N 首」+ 播放全部 / 随机），不画首页页签。 */
@@ -152,7 +156,8 @@ fun BravaisWall(
     // B1d：缝（Seam）横条的页签 = 墙的数据来源；第 0 个是「全部」（各段按 key 去重拼起来）。
     var tab by rememberSaveable { mutableStateOf(0) }  // 进播放页再回来保留页签
     val sourceTiles = remember(sections, tab) {
-        if (tab == 0) sections.flatMap { it.second }.distinctBy { it.key } else sections.getOrNull(tab - 1)?.second.orEmpty()
+        if (!allTab) sections.getOrNull(tab)?.second.orEmpty()
+        else if (tab == 0) sections.flatMap { it.second }.distinctBy { it.key } else sections.getOrNull(tab - 1)?.second.orEmpty()
     }
     // 2026-11-14 集合层过滤（Folia collectionQuery + 缝里「过滤当前页」）：只收窄当前墙 / 列表，不发请求；首页不过滤。
     var filterQuery by rememberSaveable(collection?.name) { mutableStateOf(initialFilterQuery) }
@@ -390,7 +395,7 @@ fun BravaisWall(
                 if (collection != null) {
                     SeamCollectionRow(collection, title, inkColor, listMode = false, onToggleList = { listPref = true }, filter = seamFilter)
                 } else {
-                    SeamHomeRow(title, listOf("全部") + sections.map { it.first }, tab, inkColor, onSelect = { tab = it; expanded = null }, onOpenSearch = onOpenSearch)
+                    SeamHomeRow(title, (if (allTab) listOf("全部") else emptyList()) + sections.map { it.first }, tab, inkColor, onSelect = { tab = it; expanded = null }, onOpenSearch = onOpenSearch, onOpenSettings = onOpenSettings)
                 }
             }
             // 状态栏：墙铺满全屏（Folia 同），顶上加一道纸色渐隐让状态栏图标看得清。
@@ -894,7 +899,7 @@ private fun Color.luminanceDark(): Boolean = (0.299f * red + 0.587f * green + 0.
  * 手机化：页签放不下时整段横向滚（Folia 也是 overflowing 时横滚）；扫描进度、直达入口、管理隐藏、折叠键未移。
  */
 @Composable
-private fun SeamHomeRow(title: String, tabs: List<String>, active: Int, ink: Color, onSelect: (Int) -> Unit, onOpenSearch: () -> Unit) {
+private fun SeamHomeRow(title: String, tabs: List<String>, active: Int, ink: Color, onSelect: (Int) -> Unit, onOpenSearch: () -> Unit, onOpenSettings: (() -> Unit)? = null) {
     Row(
         Modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -927,6 +932,14 @@ private fun SeamHomeRow(title: String, tabs: List<String>, active: Int, ink: Col
             contentAlignment = Alignment.Center,
         ) {
             Icon(GuangYueIcons.Search, contentDescription = "搜索", tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
+        }
+        if (onOpenSettings != null) {
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).clickable(onClick = onOpenSettings),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(GuangYueIcons.Settings, contentDescription = "设置", tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
+            }
         }
     }
 }

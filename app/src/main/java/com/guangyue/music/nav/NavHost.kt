@@ -104,7 +104,8 @@ fun GuangYueNavHost(
     val accent: Color = GuangYueDesign.AccentDaylight
     // 0.0.27：首页样式（封面墙 / 3D 滑卡）。取外壳的 ShellViewModel（这里还在 NavHost 外，作用域是 Activity，与 MainActivity 同一个）。
     val shellVm: com.guangyue.music.ShellViewModel = androidx.hilt.navigation.compose.hiltViewModel()
-    val homeStyle by shellVm.homeStyle.collectAsStateWithLifecycle()
+    // 11-17：Folia 手机版「资料库界面」= 首页、歌单、歌手页一起切（模拟器 Folia 设置原文核实）。首页也跟这一个开关走。
+    val homeStyle by shellVm.collectionStyle.collectAsStateWithLifecycle()
     val gridCardStyle by shellVm.gridCardStyle.collectAsStateWithLifecycle()
     val collectionStyle by shellVm.collectionStyle.collectAsStateWithLifecycle()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -215,7 +216,7 @@ fun GuangYueNavHost(
                     "本地" to homeLocal,
                 )
             }
-            if (wallSections.isNotEmpty() || homeStyle == com.guangyue.core.prefs.HomeStyles.GRID) {
+            if (true) {
                 val homeCtx = androidx.compose.ui.platform.LocalContext.current
                 var homePick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<com.guangyue.core.data.model.TrackEntity>?>(null) }
                 // 提到外层：首页空态的「登录」胶囊与右下平台按钮共用同一个登录窗（Folia 两处都打开登录窗）。
@@ -358,8 +359,11 @@ fun GuangYueNavHost(
                         )
                         } else
                         com.guangyue.music.ui.home.BravaisWall(
-                            sections = wallSections,
-                            title = "广乐",
+                            // 11-17：墙面首页的页签与网格首页同一套（Folia 手机版 Playlists / Radio / Albums / Folder）。
+                            sections = gridSections,
+                            allTab = false,
+                            onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                            title = "资料库",
                             inkColor = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
                             groundColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
                             onOpenSearch = { navController.navigate(Routes.SEARCH) },
@@ -1084,12 +1088,12 @@ fun GuangYueNavHost(
                 onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
                 onOpenDownloads = { navController.navigate(Routes.DOWNLOAD_SETTINGS) },
                 // 11-15 用户：Folia 手机版只有网格首页，墙面（无限）切过去回不来，去掉切换。
-                // 0.0.33：首页固定网格；「资料库界面」只切歌单详情（网格集合页 / 墙面）。
+                // 11-17：「资料库界面」照 Folia 手机版，首页、歌单详情一起切（歌手页暂只有墙面）。
                 homeStyles = HOME_STYLE_OPTIONS,
                 homeStyle = collectionStyle,
                 onPickHomeStyle = { id ->
                     shellVm.setCollectionStyle(id)
-                    com.guangyue.feature.library.design.StatusToasts.show("歌单详情已切换为" + (HOME_STYLE_OPTIONS.firstOrNull { it.id == id }?.title ?: ""))
+                    com.guangyue.feature.library.design.StatusToasts.show("资料库界面已切换为" + (HOME_STYLE_OPTIONS.firstOrNull { it.id == id }?.title ?: ""))
                 },
                 gridCardStyle = gridCardStyle.takeIf { homeStyle == com.guangyue.core.prefs.HomeStyles.GRID },
                 onPickGridCardStyle = { id ->
