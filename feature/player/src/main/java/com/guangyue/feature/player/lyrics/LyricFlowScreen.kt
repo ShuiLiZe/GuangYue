@@ -678,21 +678,26 @@ fun LyricFlowScreen(
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // 11-18：照 folia-sonnet usePlayerChrome 返回键：40 圆、bg-black/20、text-white/60、Chevron 20（两种明暗都一样）；
+                // 命中仍 48dp（触屏）。Folia 平时藏起、鼠标进左上热区才出现，触屏常驻（手机上没有悬停）。
                 Box(
                     modifier = Modifier
                         .size(48.dp)
-                        .clip(CircleShape)
-                        .background(onBackdrop.copy(alpha = 0.12f))
                         .clickableNoRipple(onBack)
                         .semantics { contentDescription = backLabel },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        GuangYueIcons.ChevronLeft,
-                        null,
-                        tint = onBackdrop,
-                        modifier = Modifier.size(22.dp),
-                    )
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            GuangYueIcons.ChevronLeft,
+                            null,
+                            tint = Color.White.copy(alpha = 0.6f),
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
                 Spacer(Modifier.width(GySpace.l))
                 Column(Modifier.weight(1f).alpha(if (lyricStyle == LyricStyle.MONET && kernelLines.isNotEmpty() && emptyKind == null) 0f else 1f)) {

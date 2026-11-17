@@ -46,6 +46,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -104,6 +106,8 @@ fun FoliaSearchScreen(
     onPickSource: (String) -> Unit,
     onPlay: (Int) -> Unit,
     onAddToSheet: (MusicItem) -> Unit,
+    /** 11-18：Folia 搜索行的「加入播放队列」（Plus）；null 不显示。 */
+    onEnqueue: ((MusicItem) -> Unit)? = null,
     onDownload: (MusicItem) -> Unit,
     onPickHistory: (String) -> Unit,
     onOpenAlbum: (MusicItem) -> Unit,
@@ -176,6 +180,7 @@ fun FoliaSearchScreen(
                     onPlay = onPlay,
                     onDownload = onDownload,
                     onAddToSheet = onAddToSheet,
+                    onEnqueue = onEnqueue,
                     onOpenAlbum = onOpenAlbum,
                     onOpenArtist = onOpenArtist,
                     onTabChange = onTabChange,
@@ -400,6 +405,8 @@ private fun ResultsBody(
     onPlay: (Int) -> Unit,
     onDownload: (MusicItem) -> Unit,
     onAddToSheet: (MusicItem) -> Unit,
+    /** 11-18：Folia 搜索行的「加入播放队列」（Plus）；null 不显示。 */
+    onEnqueue: ((MusicItem) -> Unit)? = null,
     onOpenAlbum: (MusicItem) -> Unit,
     onOpenArtist: (MusicItem) -> Unit,
     onTabChange: (SearchTab) -> Unit,
@@ -421,7 +428,7 @@ private fun ResultsBody(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (state.tab) {
-                SearchTab.TRACKS -> TrackList(res, state.rows, onPlay, onDownload, onAddToSheet, state.loadingMore, state.musicEnd, onLoadMore)
+                SearchTab.TRACKS -> TrackList(res, state.rows, onPlay, onDownload, onAddToSheet, onEnqueue = onEnqueue, loadingMore = state.loadingMore, end = state.musicEnd, onLoadMore = onLoadMore)
                 SearchTab.ALBUMS -> AlbumGrid(res, state.albums, onOpenAlbum)
                 SearchTab.SHEETS -> AlbumGrid(res, state.sheets, onOpenAlbum)
                 SearchTab.ARTISTS -> ArtistGrid(res, state.artists, onOpenArtist)
@@ -446,6 +453,7 @@ private fun TrackList(
     onPlay: (Int) -> Unit,
     onDownload: (MusicItem) -> Unit,
     onAddToSheet: (MusicItem) -> Unit,
+    onEnqueue: ((MusicItem) -> Unit)? = null,
     loadingMore: Boolean = false,
     end: Boolean = true,
     onLoadMore: () -> Unit = {},
@@ -461,8 +469,8 @@ private fun TrackList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = GySpace.pageH, end = GySpace.pageH, top = GySpace.xxs, bottom = GySpace.l),
-        verticalArrangement = Arrangement.spacedBy(GySpace.s),
+        // Folia .search-list：行贴满列表宽（行自己带 18 / 14 内边距与发丝线），行间无空隙。
+        contentPadding = PaddingValues(top = GySpace.xxs, bottom = GySpace.l),
     ) {
         itemsIndexed(rows, key = { _, row -> "${row.pluginId}:${row.item.id}" }) { index, row ->
             ResultCard(
@@ -471,6 +479,7 @@ private fun TrackList(
                 onClick = { onPlay(index) },
                 onDownload = { onDownload(row.item) },
                 onAddToSheet = { onAddToSheet(row.item) },
+                onEnqueue = onEnqueue?.let { f -> { f(row.item) } },
             )
         }
         if (rows.isNotEmpty() && (loadingMore || !end)) {
@@ -483,6 +492,14 @@ private fun TrackList(
     }
 }
 
+/**
+ * 11-18：照 folia-sonnet `components/app/search/SearchResultRow.tsx` + `search.css`（.search-row）：
+ * 平铺行（无卡片底、圆角），行高 76，下沿 1px 发丝线（ink 9%），左右内边距 18 / 14，间距 10（≤639px）；
+ * 窄屏不显示序号与时长；方角 48 封面；歌名 15 粗体一行省略；第二行 12sp「歌手 / 专辑」（斜杠 40% 透明）；
+ * 行尾按钮顺序 收藏到歌单（Star）→ 加入播放队列（Plus），图标 16、60% 透明。
+ * ✋ 触控：Folia 窄屏按钮 30px，这里视觉 16dp 图标、命中 44dp；✋ 广乐多一颗下载（在线结果才有）；
+ * ✋ 速记簿（NotebookPen）广乐没有，不放。来源角标去掉（Folia 行里没有，来源在上方音源条）。
+ */
 @Composable
 private fun ResultCard(
     res: SearchStrings,
@@ -490,103 +507,74 @@ private fun ResultCard(
     onClick: () -> Unit,
     onDownload: () -> Unit,
     onAddToSheet: () -> Unit,
+    onEnqueue: (() -> Unit)? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val shape = RoundedCornerShape(GyRadius.card)
     val item = row.item
-    val subtitle = listOfNotNull(
-        item.displayArtist.orEmpty().takeIf { it.isNotBlank() },
-        item.album?.takeIf { it.isNotBlank() && it != item.title },
-    ).joinToString(" · ")
+    val artist = item.displayArtist.orEmpty().takeIf { it.isNotBlank() }
+    val album = item.album?.takeIf { it.isNotBlank() }
+    val hairline = Gyp.ink.copy(alpha = 0.09f)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 68.dp)
-            .clip(shape)
-            .background(if (pressed) Gyp.fill2 else Gyp.card)
-            .border(1.dp, Gyp.cardRing, shape)
+            .heightIn(min = 76.dp)
+            .background(if (pressed) Gyp.ink.copy(alpha = 0.04f) else Color.Transparent)
+            .drawBehind {
+                drawRect(hairline, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - 1.dp.toPx()), size = androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx()))
+            }
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = GySpace.l, vertical = GySpace.s),
+            .padding(start = 18.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(GySpace.l),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Cover(url = item.artwork, size = 48)
-        Column(Modifier.weight(1f)) {
+        Cover(url = item.artwork, size = 48, square = true)
+        Column(Modifier.weight(1f).padding(end = 4.dp)) {
             Text(
                 text = item.title,
-                fontSize = (GyText.row.value + 1).sp,
-                lineHeight = GyText.rowHeight,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp,
+                lineHeight = 20.sp,
+                fontWeight = FontWeight.Bold,
                 color = Gyp.ink,
-                // 中文长标题折两行再省略（Folia 桌面是 truncate 一行，手机放宽到两行）。
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = subtitle,
-                    fontSize = GyText.hint,
-                    lineHeight = GyText.hintHeight,
-                    color = Gyp.t2,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                Spacer(Modifier.width(GySpace.xs))
-                SourceBadge(label = row.platformLabel)
+            if (artist != null || album != null) {
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (artist != null) Text(
+                        text = artist, fontSize = 12.sp, lineHeight = 16.sp, color = Gyp.t2,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (artist != null && album != null) Text(" / ", fontSize = 12.sp, lineHeight = 16.sp, color = Gyp.t2.copy(alpha = 0.4f))
+                    if (album != null) Text(
+                        text = album, fontSize = 12.sp, lineHeight = 16.sp, color = Gyp.t2,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 140.dp),
+                    )
+                }
             }
         }
-        // Folia 的 ＋（加入播放队列）：触屏常驻，48dp 触控。
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .clickableNoRipple(onAddToSheet),
-            contentAlignment = Alignment.Center,
-        ) {
-            androidx.compose.material3.Icon(
-                imageVector = GuangYueIcons.Plus,
-                contentDescription = stringResource(res.addToPlaylist),
-                tint = Gyp.t2,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-        // 本地歌已经在手机里，Folia 本地结果只有「+」，不放下载。
-        if (row.pluginId != LOCAL_SOURCE) Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .clickableNoRipple(onDownload),
-            contentAlignment = Alignment.Center,
-        ) {
-            androidx.compose.material3.Icon(
-                imageVector = GuangYueIcons.Download,
-                contentDescription = stringResource(res.download),
-                tint = Gyp.t3,
-                modifier = Modifier.size(20.dp),
-            )
-        }
+        RowAction(GuangYueIcons.Star, stringResource(res.addToPlaylist), onAddToSheet)
+        if (onEnqueue != null) RowAction(GuangYueIcons.Plus, "加入播放队列", onEnqueue)
+        // 本地歌已经在手机里，Folia 本地结果没有下载。
+        if (row.pluginId != LOCAL_SOURCE) RowAction(GuangYueIcons.Download, stringResource(res.download), onDownload)
     }
 }
 
-/** 来源角标：Folia `span rounded-full border border-current/10 px-2 py-0.5 text-[10px]`。手机 12sp 下限。 */
+/** 行尾按钮（.search-row-action）：图标 16、60% 透明；命中 44dp。 */
 @Composable
-private fun SourceBadge(label: String) {
+private fun RowAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(percent = 50))
-            .background(Gyp.tint)
-            .padding(horizontal = GySpace.xs, vertical = 1.dp),
+        modifier = Modifier.size(44.dp).clickableNoRipple(onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            lineHeight = 14.sp,
-            color = Gyp.t3,
-            maxLines = 1,
+        androidx.compose.material3.Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = Gyp.ink.copy(alpha = 0.6f),
+            modifier = Modifier.size(16.dp),
         )
     }
 }
@@ -926,8 +914,8 @@ internal fun FailureBanner(
 
 /** 48dp 见方的封面：Folia `h-12 w-12 rounded-xl bg-zinc-500/15`。 */
 @Composable
-private fun Cover(url: String?, size: Int) {
-    val shape = RoundedCornerShape(GyRadius.row)
+private fun Cover(url: String?, size: Int, square: Boolean = false) {
+    val shape = if (square) androidx.compose.ui.graphics.RectangleShape else RoundedCornerShape(GyRadius.row)
     Box(Modifier.size(size.dp).clip(shape).background(Gyp.tint)) {
         if (url.isNullOrBlank()) {
             androidx.compose.material3.Icon(

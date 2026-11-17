@@ -875,6 +875,7 @@ fun GuangYueNavHost(
                         },
                         onAddToSheet = { item -> vm.addToCurrentSheet(item) },
                         onDownload = { item -> vm.download(item, playback.defaultQuality.wire) },
+                        onEnqueue = { item -> vm.enqueue(item) { playback.appendTracks(it) } },
                         onPickHistory = { q ->
                             vm.onQueryChange(q)
                             vm.searchNow()

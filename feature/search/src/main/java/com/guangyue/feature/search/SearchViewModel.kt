@@ -531,6 +531,13 @@ class SearchViewModel @Inject constructor(
         start(items, index.coerceIn(0, items.lastIndex))
     }
 
+    /** 11-18：Folia 搜索行「加入播放队列」：本地结果用原曲目，在线结果按插件条目转成曲目，交给 [append]（PlaybackController.appendTracks）。 */
+    fun enqueue(item: MusicItem, append: (List<com.guangyue.core.data.model.TrackEntity>) -> Unit) {
+        val localRow = if (item.platform == "local") localResults.firstOrNull { it.key == item.id } else null
+        append(listOf(localRow ?: com.guangyue.core.data.model.TrackMapper.fromPlugin(item)))
+        _state.value = _state.value.copy(message = "已加入播放队列")
+    }
+
     /** Add a result to the first playlist, creating 「我的收藏」 on demand. */
     fun addToCurrentSheet(item: MusicItem) {
         viewModelScope.launch {
