@@ -58,6 +58,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.unit.em
 import coil3.compose.AsyncImage
 import com.guangyue.core.plugin.AlbumItem
 import com.guangyue.core.plugin.ArtistItem
@@ -68,7 +70,6 @@ import com.guangyue.feature.library.design.FoliaButton
 import com.guangyue.feature.library.design.FoliaButtonVariant
 import com.guangyue.feature.library.design.FoliaEmptyState
 import com.guangyue.feature.library.design.FoliaSectionTitle
-import com.guangyue.feature.library.design.FoliaSegmented
 import com.guangyue.feature.library.design.GuangYueDesign
 import com.guangyue.feature.library.design.GyRadius
 import com.guangyue.feature.library.design.GySpace
@@ -212,6 +213,7 @@ object SearchTags {
     const val Failure = "search-failure"
     const val Idle = "search-idle"
     const val NoSource = "search-no-source"
+    const val KindTabs = "search-kind-tabs"
     const val Mini = "search-mini"
 }
 
@@ -333,9 +335,8 @@ private fun SearchHeader(
 // ---------------------------------------------------------------------------------------------
 
 /**
- * 音源胶囊：选中 = accent 实心 + onAccent 字（Folia 桌面就是主题色实心胶囊），未选中 = 浅底。
- *
- * 高度 36dp，但外层给 48dp 的触控高度（Folia `px-4 py-2 text-xs` 32px → 手机 36dp + 48dp 触摸区）。
+ * 音源条：照 Folia SearchTabs `.search-sources`——纯文字页签（13sp 粗体、字距 0.06em、上 6 下 9），
+ * 间距 22dp，选中 = 墨色字 + 底下 3dp 强调色条（换来源时色条淡入）；未选中 = 淡墨字。外层 48dp 触控高度。
  */
 @Composable
 private fun SourceRail(
@@ -351,7 +352,7 @@ private fun SourceRail(
         state = railState,
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = GySpace.pageH),
-        horizontalArrangement = Arrangement.spacedBy(GySpace.xs),
+        horizontalArrangement = Arrangement.spacedBy(22.dp),
     ) {
         items(available, key = { it.id }) { plugin ->
             SourceChip(
@@ -368,28 +369,90 @@ private fun SourceRail(
 
 @Composable
 private fun SourceChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
+    val mark by androidx.compose.animation.core.animateFloatAsState(if (selected) 1f else 0f, tween(200), label = "src-mark")
+    val ink = Gyp.ink
+    val soft = Gyp.t2
+    val accent = Gyp.accent
+    Box(
         modifier = Modifier
             .heightIn(min = 48.dp)
-            .clickableNoRipple(onClick),
-        verticalAlignment = Alignment.CenterVertically,
+            .clickableNoRipple { if (!selected) onClick() },
+        contentAlignment = Alignment.Center,
     ) {
-        Row(
+        Text(
+            text = label,
             modifier = Modifier
-                .height(36.dp)
-                .clip(RoundedCornerShape(percent = 50))
-                .background(if (selected) Gyp.ink else Gyp.tint)
-                .padding(horizontal = GySpace.l),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = label,
-                fontSize = GyText.hint,
-                lineHeight = GyText.hintHeight,
-                color = if (selected) Gyp.page else Gyp.t2,
-                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-                maxLines = 1,
-            )
+                .drawBehind {
+                    if (mark > 0f) {
+                        val h = 3.dp.toPx()
+                        drawRect(accent.copy(alpha = accent.alpha * mark), topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - h), size = androidx.compose.ui.geometry.Size(size.width, h))
+                    }
+                }
+                .padding(top = 6.dp, bottom = 9.dp),
+            fontSize = 13.sp,
+            lineHeight = 16.sp,
+            letterSpacing = 0.06.em,
+            color = if (selected) ink else soft,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * 种类页签：照 Folia SearchTabs `.search-kinds`（手机断点）——编号「01」等宽 11sp + 大字 18sp 900 粗，
+ * 间距 14dp、左留 16dp，选中前面一个 11dp 实心强调色方块（换种类时滑过去）。只有一种时不画。
+ */
+@Composable
+private fun SearchKindTabs(tabs: List<SearchTab>, tab: SearchTab, onSelect: (SearchTab) -> Unit) {
+    val ink = Gyp.ink
+    val soft = Gyp.t2
+    val accent = Gyp.accent
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+            .padding(horizontal = GySpace.pageH)
+            .testTag(SearchTags.KindTabs),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        tabs.forEachIndexed { index, item ->
+            val active = item == tab
+            val mark by androidx.compose.animation.core.animateFloatAsState(if (active) 1f else 0f, tween(220), label = "kind-mark")
+            Row(
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .clickableNoRipple { if (!active) onSelect(item) }
+                    .drawBehind {
+                        if (mark > 0f) {
+                            val side = 11.dp.toPx() * mark
+                            drawRect(accent.copy(alpha = accent.alpha * mark), topLeft = androidx.compose.ui.geometry.Offset((11.dp.toPx() - side) / 2f, size.height / 2f - side / 2f + 1.dp.toPx()), size = androidx.compose.ui.geometry.Size(side, side))
+                        }
+                    }
+                    .padding(start = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = String.format(java.util.Locale.ROOT, "%02d", index + 1),
+                    fontSize = 11.sp,
+                    lineHeight = 11.sp,
+                    letterSpacing = 0.08.em,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = (if (active) ink else soft).copy(alpha = 0.7f),
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                Text(
+                    text = item.label,
+                    fontSize = 18.sp,
+                    lineHeight = 18.sp,
+                    letterSpacing = (-0.01).em,
+                    fontWeight = FontWeight.Black,
+                    color = if (active) ink else soft,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
@@ -415,12 +478,7 @@ private fun ResultsBody(
 ) {
     Column(Modifier.fillMaxSize().testTag(SearchTags.Results)) {
         if (state.availableTypes.size > 1) {
-            FoliaSegmented(
-                value = state.tab,
-                options = state.availableTypes.map { tab -> tab to "${tab.label} ${state.tabCounts.of(tab)}" },
-                onSelect = onTabChange,
-                modifier = Modifier.padding(horizontal = GySpace.pageH, vertical = GySpace.xs),
-            )
+            SearchKindTabs(tabs = state.availableTypes, tab = state.tab, onSelect = onTabChange)
         }
         // 有结果但有错（Folia SearchWorkspace.tsx:112-120 的底部错误条）：不挡结果，给一个重试。
         if (state.failure != null) {
