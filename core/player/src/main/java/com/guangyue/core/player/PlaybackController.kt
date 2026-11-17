@@ -497,6 +497,12 @@ class PlaybackController @Inject constructor(
         player.volume = v.coerceIn(0f, 1f)
     }
 
+    /** 11-18 播放面板音量行（Folia VolumeRow）读当前值。 */
+    val volume: Float get() = player.volume
+
+    /** 11-18 播放面板「音频效果器」：交给系统均衡器面板的会话号。 */
+    val audioSessionId: Int get() = player.audioSessionId
+
     fun release() {
         player.release()
     }

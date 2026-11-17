@@ -48,6 +48,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -189,6 +193,13 @@ fun StagePanel(
     /** 11-18 Folia QueueTab 头行「保存为歌单」「打乱队列」；null = 不显示。 */
     onSaveQueue: (() -> Unit)? = null,
     onShuffleQueue: (() -> Unit)? = null,
+    /** 11-18 Folia ControlsTab：音量（0–1，null = 不显示音量行）、循环三态（ExoPlayer repeatMode 0/1/2）、系统均衡器、歌词样式左右换。 */
+    volume: Float? = null,
+    onVolume: ((Float) -> Unit)? = null,
+    repeatMode: Int? = null,
+    onRepeatMode: ((Int) -> Unit)? = null,
+    onOpenEqualizer: (() -> Unit)? = null,
+    onStepLyricStyle: ((Int) -> Unit)? = null,
 ) {
     val colors = stagePanelColors(dark)
     var qualityPick by remember { mutableStateOf(initialQualityPick) }
@@ -297,6 +308,12 @@ fun StagePanel(
                                     onPickMode = onPickMode,
                                     lyricStyleName = lyricStyleName,
                                     onOpenLyricStyle = onOpenLyricStyle,
+                                    volume = volume,
+                                    onVolume = onVolume,
+                                    repeatMode = repeatMode,
+                                    onRepeatMode = onRepeatMode,
+                                    onOpenEqualizer = onOpenEqualizer,
+                                    onStepLyricStyle = onStepLyricStyle,
                                 )
                                 StagePanelTab.QUEUE -> QueueBody(
                                     colors = colors,
@@ -542,6 +559,16 @@ private fun <T> Segments(
 
 // ---------------------------------------------------------------- 控制
 
+/**
+ * 11-18 照 Folia `panelTab/ControlsTab.tsx`：声音（音量行 + 三块）、分组线、外观（歌词样式取景器）。
+ *  - 音量行（VolumeRow）：40dp 一行 = 静音键（Volume2/1/X 17）· 滑杆（4dp 轨、强调色填充、16dp 白圆钮）· 百分比 12sp 右对齐 38dp。
+ *    拖动时直接改播放器音量（Folia 预听），松手不另存（广乐音量不持久化，每次启动 100%）。
+ *  - 三块（SoundTiles / QuickTile）：最低 64dp、圆角 10、内边距 10/9，图标在上、名字在下 12sp；亮起 = raise 底 + 图标强调色。
+ *    循环（名字就是当前状态：关闭循环 / 列表循环 / 单曲循环，点一下 关→列表→单曲）；✋ Folia 第二块是「智能过渡」，广乐没有，
+ *    换成「随机播放」开关（Folia 随机在别处，广乐面板里原本就有这一项，不丢）；「音频效果器」打开系统均衡器（带箭头）。
+ *  - 歌词样式取景器（ModeStepperRow）：‹ [48×30 字形框] 「歌词样式」11.5sp t3 / 当前名 14sp + ▾ ›；两侧 28dp 箭头直接换上一个 / 下一个样式，
+ *    点中间开样式面板（✋ Folia 是就地展开小图网格，广乐沿用已有样式面板）。✋ 背景类型行、播放页透明背景、主题来源 / 主题名两行广乐暂无对应。
+ */
 @Composable
 private fun ControlsBody(
     colors: StagePanelColors,
@@ -550,41 +577,192 @@ private fun ControlsBody(
     onPickMode: (PlayerMode) -> Unit,
     lyricStyleName: String,
     onOpenLyricStyle: () -> Unit,
+    volume: Float?,
+    onVolume: ((Float) -> Unit)?,
+    repeatMode: Int?,
+    onRepeatMode: ((Int) -> Unit)?,
+    onOpenEqualizer: (() -> Unit)?,
+    onStepLyricStyle: ((Int) -> Unit)?,
 ) {
     Column(Modifier.fillMaxWidth().padding(end = 2.dp)) {
-        SectionLabel("播放模式", colors)
-        Segments(
-            colors = colors,
-            options = listOf(
-                PlayerMode.Sequential to "顺序播放",
-                PlayerMode.LoopOne to "单曲循环",
-                PlayerMode.Shuffle to "随机播放",
-            ),
-            current = mode,
-            onPick = onPickMode,
-            height = 32.dp,
-        )
-        Spacer(Modifier.height(16.dp))
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
-        Spacer(Modifier.height(8.dp))
-        // Folia AppearanceSection 的「歌词样式」行：左名右值，点开样式窗口。
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .clickableNoRipple(onOpenLyricStyle),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(GuangYueIcons.Sparkles, null, tint = colors.t2, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(10.dp))
-            Text("歌词样式", fontSize = 14.sp, color = colors.t1, modifier = Modifier.weight(1f))
-            Text(lyricStyleName, fontSize = 13.sp, color = colors.t2, maxLines = 1)
-            Spacer(Modifier.width(4.dp))
-            Icon(GuangYueIcons.ChevronRight, null, tint = colors.t3, modifier = Modifier.size(16.dp))
+        if (volume != null && onVolume != null) VolumeRow(colors, accent, volume, onVolume)
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val repeat = repeatMode ?: if (mode == PlayerMode.LoopOne) 2 else 0
+            QuickTile(
+                colors, accent,
+                icon = when (repeat) { 2 -> GuangYueIcons.Repeat1; 1 -> GuangYueIcons.Repeat; else -> GuangYueIcons.RepeatOff },
+                label = when (repeat) { 2 -> "单曲循环"; 1 -> "列表循环"; else -> "关闭循环" },
+                lit = repeat != 0, open = false, modifier = Modifier.weight(1f),
+            ) {
+                if (onRepeatMode != null) onRepeatMode((repeat + 1) % 3)
+                else onPickMode(if (mode == PlayerMode.LoopOne) PlayerMode.Sequential else PlayerMode.LoopOne)
+            }
+            val shuffleOn = mode == PlayerMode.Shuffle
+            QuickTile(colors, accent, GuangYueIcons.Shuffle, "随机播放", lit = shuffleOn, open = false, modifier = Modifier.weight(1f)) {
+                onPickMode(if (shuffleOn) PlayerMode.Sequential else PlayerMode.Shuffle)
+            }
+            if (onOpenEqualizer != null) {
+                QuickTile(colors, accent, GuangYueIcons.SlidersHorizontal, "音频效果器", lit = false, open = true, modifier = Modifier.weight(1f), onClick = onOpenEqualizer)
+            }
         }
+        // GroupLine：mx-1 my-2 h-px。
+        Box(Modifier.padding(horizontal = 4.dp, vertical = 8.dp).fillMaxWidth().height(1.dp).background(colors.line))
+        StyleStepperRow(colors, lyricStyleName, onOpenLyricStyle, onStepLyricStyle)
         Spacer(Modifier.height(4.dp))
     }
 }
+
+/** Folia VolumeRow + PanelSlider。 */
+@Composable
+private fun VolumeRow(colors: StagePanelColors, accent: Color, volume: Float, onVolume: (Float) -> Unit) {
+    var shown by remember { mutableStateOf(volume) }
+    var held by remember { mutableStateOf(false) }
+    LaunchedEffect(volume) { if (!held) shown = volume }
+    var beforeMute by remember { mutableStateOf(1f) }
+    fun set(v: Float) { shown = v.coerceIn(0f, 1f); onVolume(shown) }
+    Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).clickableNoRipple {
+                if (shown > 0f) { beforeMute = shown; set(0f) } else set(beforeMute.takeIf { it > 0f } ?: 1f)
+            },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                when { shown <= 0f -> GuangYueIcons.VolumeX; shown < 0.5f -> GuangYueIcons.Volume1; else -> GuangYueIcons.Volume2 },
+                contentDescription = "音量", tint = colors.t2, modifier = Modifier.size(17.dp),
+            )
+        }
+        Spacer(Modifier.width(6.dp))
+        androidx.compose.foundation.layout.BoxWithConstraints(
+            Modifier
+                .weight(1f)
+                .height(32.dp)
+                .androidxPointer(onPress = { held = true }, onRelease = { held = false }) { x, w -> set(((x - 8f) / (w - 16f)).coerceIn(0f, 1f)) },
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            val track = maxWidth
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(colors.fill.copy(alpha = colors.fill.alpha * 1.8f))) {
+                Box(Modifier.fillMaxHeight().fillMaxWidth(shown).background(accent))
+            }
+            Box(
+                Modifier
+                    .offset(x = (track - 16.dp) * shown)
+                    .size(16.dp)
+                    .graphicsLayer { val s = if (held) 1.15f else 1f; scaleX = s; scaleY = s }
+                    .shadow(2.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(Color.White),
+            )
+        }
+        Text(
+            "${kotlin.math.round(shown * 100).toInt()}%",
+            fontSize = 12.sp, color = colors.t2, textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.width(38.dp),
+        )
+    }
+}
+
+/** 滑杆手势：按下即跳到该点（Folia：按在轨道上把圆钮中心带过去），拖动跟手。 */
+private fun Modifier.androidxPointer(onPress: () -> Unit, onRelease: () -> Unit, onX: (Float, Float) -> Unit): Modifier =
+    this.pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown()
+            onPress()
+            onX(down.position.x, size.width.toFloat())
+            down.consume()
+            while (true) {
+                val ev = awaitPointerEvent()
+                val c = ev.changes.firstOrNull { it.id == down.id } ?: break
+                if (!c.pressed) break
+                onX(c.position.x, size.width.toFloat())
+                c.consume()
+            }
+            onRelease()
+        }
+    }
+
+/** Folia QuickTile。 */
+@Composable
+private fun QuickTile(
+    colors: StagePanelColors,
+    accent: Color,
+    icon: ImageVector,
+    label: String,
+    lit: Boolean,
+    open: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier
+            .heightIn(min = 64.dp)
+            .then(if (lit) Modifier.shadow(1.dp, RoundedCornerShape(10.dp)) else Modifier)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (lit) colors.raise else colors.fill)
+            .clickableNoRipple(onClick)
+            .semantics { contentDescription = label }
+            .padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = 9.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = if (lit) accent else colors.t3, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.weight(1f))
+            if (open) Icon(GuangYueIcons.ChevronRight, null, tint = colors.t3.copy(alpha = colors.t3.alpha * 0.7f), modifier = Modifier.size(14.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(label, fontSize = 12.sp, lineHeight = 16.sp, color = if (lit) colors.t1 else colors.t2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Folia ModeStepperRow（歌词样式那一行）。 */
+@Composable
+private fun StyleStepperRow(colors: StagePanelColors, name: String, onOpen: () -> Unit, onStep: ((Int) -> Unit)?) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (onStep != null) StepArrow(colors, GuangYueIcons.ChevronLeft, "上一个歌词样式") { onStep(-1) }
+        Row(
+            Modifier
+                .weight(1f)
+                .height(48.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .clickableNoRipple(onOpen)
+                .padding(start = 6.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier.size(width = 48.dp, height = 30.dp).clip(RoundedCornerShape(6.dp)).background(colors.fill)
+                    .border(1.dp, colors.line, RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                // Folia modeGlyphs FALLBACK_GLYPH：三道横线（首行实、后两行半透明）。✋ 各样式自己的字形未搬。
+                androidx.compose.foundation.Canvas(Modifier.size(18.dp)) {
+                    val u = size.width / 24f
+                    val sw = 1.6f * u
+                    fun line(y: Float, x2: Float, a: Float) = drawLine(colors.t2.copy(alpha = colors.t2.alpha * a), androidx.compose.ui.geometry.Offset(5 * u, y * u), androidx.compose.ui.geometry.Offset(x2 * u, y * u), sw, androidx.compose.ui.graphics.StrokeCap.Round)
+                    line(8f, 19f, 1f); line(12f, 14f, 0.5f); line(16f, 17f, 0.5f)
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("歌词样式", fontSize = 11.5.sp, lineHeight = 15.sp, color = colors.t3)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, fontSize = 14.sp, lineHeight = 19.sp, color = colors.t1, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    Spacer(Modifier.width(4.dp))
+                    Icon(GuangYueIcons.ChevronDown, null, tint = colors.t3, modifier = Modifier.size(13.dp))
+                }
+            }
+        }
+        if (onStep != null) StepArrow(colors, GuangYueIcons.ChevronRight, "下一个歌词样式") { onStep(1) }
+    }
+}
+
+@Composable
+private fun StepArrow(colors: StagePanelColors, icon: ImageVector, label: String, onClick: () -> Unit) {
+    // Folia h-7 w-7 圆角 8、Chevron 14、t3；触控区放到 36dp。
+    Box(Modifier.size(width = 32.dp, height = 40.dp).clip(RoundedCornerShape(8.dp)).clickableNoRipple(onClick).semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
+        Icon(icon, null, tint = colors.t3, modifier = Modifier.size(14.dp))
+    }
+}
+
 
 @Composable
 private fun SectionLabel(text: String, colors: StagePanelColors) {

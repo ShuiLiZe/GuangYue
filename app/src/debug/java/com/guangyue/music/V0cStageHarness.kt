@@ -455,6 +455,27 @@ fun V0cStage(
                     }
                 }
             }
+        } else if (style == "panelcontrols") {
+            // 11-18：播放页面板「控制」页签照 Folia ControlsTab（音量行 + 循环 / 随机 / 音频效果器三块 + 歌词样式取景器）。3000 = 浅色；14000 = 单曲循环 + 随机亮起、静音。
+            val light = positionMs == 3_000L
+            val alt = positionMs == 14_000L
+            Box(Modifier.fillMaxSize().background(if (light) Color(0xFFE4E4E7) else Color(0xFF18181B))) {
+                com.guangyue.feature.player.screen.StagePanel(
+                    open = true,
+                    tab = com.guangyue.feature.player.screen.StagePanelTab.CONTROLS,
+                    onTab = {}, onDismiss = {}, dark = !light, accent = Color(0xFFE11D48),
+                    title = "告白气球", artist = "周杰伦", album = "周杰伦的床边故事", coverUrl = null,
+                    like = com.guangyue.feature.player.screen.LikeState.Idle, onToggleLike = {}, onAddToPlaylist = {},
+                    mode = if (alt) com.guangyue.feature.player.screen.PlayerMode.Shuffle else com.guangyue.feature.player.screen.PlayerMode.Sequential, onPickMode = {},
+                    lyricStyleName = "流光", onOpenLyricStyle = {},
+                    queue = emptyList(), onPickQueueRow = {}, onRemoveQueueRow = {},
+                    qualities = emptyList(), currentQuality = null, qualityDeclared = false, onPickQuality = {},
+                    skipEnter = true,
+                    volume = if (alt) 0f else 0.72f, onVolume = {},
+                    repeatMode = if (alt) 2 else 1, onRepeatMode = {},
+                    onOpenEqualizer = {}, onStepLyricStyle = {},
+                )
+            }
         } else if (style == "queuepanel") {
             // 11-18：播放页面板「播放列表」页签（Folia QueueTab：头行 播放队列 N + 保存为歌单 + 打乱队列；正在播强调竖条）。3000 = 浅色。
             val light = positionMs == 3_000L

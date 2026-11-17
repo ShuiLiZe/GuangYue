@@ -184,6 +184,13 @@ fun IPlayerRoute(
     }
 }
 
+/** 面板「歌词样式」行左右换的顺序：同样式面板列表（Folia registry order）。 */
+private val LyricStylePanelOrder = listOf(
+    LyricStyle.CLASSIC, LyricStyle.CADENZA, LyricStyle.PARTITA, LyricStyle.FUME, LyricStyle.TILT, LyricStyle.CLADDAGH,
+    LyricStyle.MONET, LyricStyle.PENDOLO, LyricStyle.NEBBIA, LyricStyle.SONNET, LyricStyle.HANABI, LyricStyle.TEMPERA,
+    LyricStyle.LUMIERE, LyricStyle.MACHI, LyricStyle.DIORAMA, LyricStyle.STILL,
+)
+
 /**
  * P1b：舞台上的浮卡面板外壳（收藏 / 队列 / 音质 / 模式都在 app 层接线，界面在 feature 的 [StagePanel]）。
  */
@@ -203,6 +210,8 @@ fun StagePanelHost(
     lyricOffsetMs: Long = 0L,
     onLyricOffset: (Long) -> Unit = {},
     lyricSourceNote: String = "",
+    /** 11-18 面板「歌词样式」行左右箭头直接换样式（Folia ModeStepperRow）；null = 不画箭头。 */
+    onPickLyricStyle: ((LyricStyle) -> Unit)? = null,
 ) {
     val ctx = LocalContext.current
     // 2026-11-10：LocalTrackRepository 从来没人提供（一直是 null），收藏点了只改了图标、没写库——
@@ -255,6 +264,7 @@ fun StagePanelHost(
             onDismiss = { saveQueueOpen = false },
         )
     }
+    var panelVolume by remember(open) { mutableStateOf(playback.volume) }
     val declared = item?.origin?.availableQualities.orEmpty()
     val downloadOptions = remember(item?.key, declared) { com.guangyue.core.download.DownloadQualityPick.options(declared) }
     val qualities = QualityLadder.of(declared).ifEmpty { QualityLadder.default() }.sortedByDescending { it.order }
@@ -305,10 +315,25 @@ fun StagePanelHost(
         },
         onAddToPlaylist = onAddToPlaylist,
         mode = playerMode(shuffle = playbackState.shuffle, repeatMode = playbackState.repeatMode),
-        onPickMode = { mode ->
-            val target = playerModeTarget(mode)
-            playback.setShuffle(target.shuffle)
-            playback.setRepeatMode(target.repeatMode)
+        // 11-18：控制页签照 Folia ControlsTab 拆成「循环」「随机播放」两块，互不清掉对方。
+        onPickMode = { mode -> playback.setShuffle(mode == com.guangyue.feature.player.screen.PlayerMode.Shuffle) },
+        repeatMode = playbackState.repeatMode,
+        onRepeatMode = { playback.setRepeatMode(it) },
+        volume = panelVolume,
+        onVolume = { v -> panelVolume = v; playback.setVolume(v) },
+        onOpenEqualizer = {
+            val intent = android.content.Intent(android.media.audiofx.AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL)
+                .putExtra(android.media.audiofx.AudioEffect.EXTRA_AUDIO_SESSION, playback.audioSessionId)
+                .putExtra(android.media.audiofx.AudioEffect.EXTRA_PACKAGE_NAME, ctx.packageName)
+                .putExtra(android.media.audiofx.AudioEffect.EXTRA_CONTENT_TYPE, android.media.audiofx.AudioEffect.CONTENT_TYPE_MUSIC)
+            val ok = runCatching { ctx.startActivity(intent) }.isSuccess
+            if (!ok) com.guangyue.feature.library.design.StatusToasts.show("这台手机没有系统音频效果器")
+        },
+        onStepLyricStyle = onPickLyricStyle?.let { pick ->
+            { d: Int ->
+                val i = LyricStylePanelOrder.indexOf(lyricStyle).coerceAtLeast(0)
+                pick(LyricStylePanelOrder[(i + d + LyricStylePanelOrder.size) % LyricStylePanelOrder.size])
+            }
         },
         lyricStyleName = styleName,
         onOpenLyricStyle = onOpenLyricStyle,

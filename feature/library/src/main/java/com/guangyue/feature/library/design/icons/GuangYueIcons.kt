@@ -1150,6 +1150,74 @@ object GuangYueIcons {
             .build()
     }
 
+    /** RepeatOff = lucide `repeat-off`（Folia loopModeIcon：循环关闭） */
+    val RepeatOff: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "RepeatOff",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        )
+            .addPath(
+                pathData = addPathNodes("M11.656 6H21l-4-4"),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .addPath(
+                pathData = addPathNodes("M17.898 17.898A4 4 0 0 1 17 18H3l4-4"),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .addPath(
+                pathData = addPathNodes("m2 2 20 20"),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .addPath(
+                pathData = addPathNodes("M21 13v1a4 4 0 0 1-.171 1.159"),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .addPath(
+                pathData = addPathNodes("m21 6-4 4"),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .addPath(
+                pathData = addPathNodes("M3 11v-1a4 4 0 0 1 3.102-3.898"),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .addPath(
+                pathData = addPathNodes("m7 22-4-4"),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .build()
+    }
+
     /** Repeat1 = lucide `repeat-1` */
     val Repeat1: ImageVector by lazy {
         ImageVector.Builder(
