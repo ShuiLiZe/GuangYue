@@ -653,6 +653,12 @@ fun GuangYueNavHost(
                                 }
                             },
                             onRetry = { attempt++ },
+                            onEnqueueAll = {
+                                if (list.isNotEmpty()) {
+                                    playback.appendTracks(list)
+                                    com.guangyue.feature.library.design.StatusToasts.show("已加入播放队列 ${list.size} 首")
+                                }
+                            },
                             onDownloadAll = { if (list.isNotEmpty()) downloadSome(list) },
                             // 2026-11-14：过滤中「播放全部 / 随机」只放命中的曲目（Folia playScope）。
                             onPlayTiles = { shown, shuffle ->

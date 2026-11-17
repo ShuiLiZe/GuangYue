@@ -79,6 +79,8 @@ import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.CircleShape
@@ -184,7 +186,11 @@ fun BravaisWall(
         // 镜头（世界坐标，左上角）：开场把区块 (0,0) 的中心放到视口中心。
         val startX = bw / 2 - vw / scale / 2
         val startY = bh / 2 - vh / scale / 2
-        val camX = remember { Animatable(startX.toFloat()) }
+        // 11-17 照 Folia APK 手机竖屏：集合页的缝是竖的一整列（BRAVAIS_SEAM_FULL_WIDTH 300，屏窄时留两边各 28 露墙），
+        // 放在世界 x=0 的区块边界上，跟着镜头横移；墙从缝两侧铺开。开场缝居中。
+        val vSeam = collection != null && vh > vw && !(LocalConfiguration.current.screenHeightDp < SEAM_COMPACT_SCREEN_DP)
+        val vSeamW = if (vSeam) minOf(300.0, vw - 56.0) else 0.0
+        val camX = remember { Animatable(if (vSeam) (-(vw - vSeamW) / 2 / scale).toFloat() else startX.toFloat()) }
         val camY = remember { Animatable(startY.toFloat()) }
         // 排名：初始镜头中心附近 3×3 区块，条目按排名落位（换数据才重算）。
         // 缝：竖屏横条（axis y），放在世界 y=0 的区块边界上（区块边界不切砖）；上半墙上移、下半墙下移各半条高。
@@ -336,10 +342,10 @@ fun BravaisWall(
                     val sy by animateFloatAsState(slot.y.toFloat(), spec, label = "y")
                     val sw by animateFloatAsState(slot.width.toFloat(), spec, label = "w")
                     val sh by animateFloatAsState(slot.height.toFloat(), spec, label = "h")
-                    val x = ((sx - cx) * scale).toFloat()
+                    val x = ((sx - cx) * scale).toFloat() + (if (vSeam && sx >= 0f) vSeamW.toFloat() else 0f)
                     // 顶栏固定在屏幕顶（用户 11-08：往下滑顶栏跟着走不行），墙不再在世界 y=0 处劈开让位，
                     // 整面墙在顶栏底下滑过；开场下移一条栏高，首屏不被盖住。
-                    val y = ((sy - cy) * scale).toFloat() + seamH / 2
+                    val y = ((sy - cy) * scale).toFloat() + (if (vSeam) 0f else seamH / 2)
                     Box(
                         Modifier
                             .offset { IntOffset((x * density.density).roundToInt(), (y * density.density).roundToInt()) }
@@ -384,6 +390,19 @@ fun BravaisWall(
                 }
             }
             val seamTop = statusTop
+            if (vSeam && collection != null) {
+                Box(
+                    Modifier
+                        .offset { IntOffset((((0.0 - cx) * scale) * density.density).roundToInt(), 0) }
+                        .width(vSeamW.dp)
+                        .fillMaxHeight()
+                        .zIndex(10f)
+                        .background(groundColor)
+                        .background(inkColor.copy(alpha = 0.04f)),
+                ) {
+                    SeamCollectionColumn(collection, title, inkColor, statusTop, onToggleList = { listPref = true }, filter = seamFilter)
+                }
+            } else
             Box(
                 Modifier
                     .offset { IntOffset(0, (seamTop * density.density).roundToInt()) }
@@ -463,6 +482,8 @@ data class SeamCollection(
      * 空列表时不出按钮。
      */
     val menu: List<SeamMenuItem> = emptyList(),
+    /** 11-17：「加入队列」（Folia 竖缝里播放全部旁边那颗）。null 时不显示。 */
+    val onEnqueueAll: (() -> Unit)? = null,
 )
 
 /** 取证用：「⋯ 更多」一进来就展开。 */
@@ -530,6 +551,101 @@ private fun SeamCollectionRow(c: SeamCollection, root: String, ink: Color, listM
     }
 }
 
+
+/**
+ * 竖缝（Folia APK 手机竖屏的集合页，BravaisSeamCollection 竖版）：从上到下——圆返回键 + 「资料库 › 名字」面包屑、
+ * 「过滤当前页」、分隔线、引号、竖排大标题（转 90°）、引号、分隔线、「N 首」、类型、
+ * 「播放全部」胶囊 + 「加入队列」、「列表」+「⋯ 更多」。补全信息 / 全部下载 / 随机放进「更多」。
+ */
+@Composable
+private fun SeamCollectionColumn(c: SeamCollection, root: String, ink: Color, statusTop: Float, onToggleList: () -> Unit, filter: SeamFilter?) {
+    val ready = !c.loading && !c.failed && (c.count ?: 0) > 0
+    val filtering = filter != null && CollectionFilter.normalize(filter.query).isNotEmpty()
+    val scoped = filtering && filter != null && c.onPlayTiles != null
+    val menu = buildList {
+        add(SeamMenuItem("shuffle", "随机播放", disabled = !ready) { if (scoped && filter != null) c.onPlayTiles?.invoke(filter.shown, true) else c.onShuffle() })
+        c.onDownloadAll?.let { add(SeamMenuItem("download", "全部下载", disabled = !ready, run = it)) }
+        c.onFillMeta?.let { add(SeamMenuItem("fill", if (c.fillingMeta) "补全中…" else "补全信息", disabled = !ready || c.fillingMeta, run = it)) }
+        addAll(c.menu)
+    }
+    Column(Modifier.fillMaxSize().padding(top = statusTop.dp + 20.dp, bottom = 24.dp, start = 20.dp, end = 20.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(32.dp).clip(CircleShape).background(ink.copy(alpha = 0.1f)).clickable(onClick = c.onBack),
+                contentAlignment = Alignment.Center,
+            ) { Icon(GuangYueIcons.ChevronLeft, contentDescription = "返回", tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(16.dp)) }
+            Spacer(Modifier.width(10.dp))
+            Text(root, color = ink.copy(alpha = 0.6f), fontSize = 12.sp, maxLines = 1, modifier = Modifier.clickable(onClick = c.onBack))
+            Text("  ›  ", color = ink.copy(alpha = 0.35f), fontSize = 12.sp)
+            Text(c.name, color = ink.copy(alpha = 0.6f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.height(18.dp))
+        if (filter != null && (c.count ?: 0) > 0) SeamFilterField(filter, ink)
+        else Box(Modifier.fillMaxWidth().height(1.dp).background(ink.copy(alpha = 0.1f)))
+        Text("\u201D", color = ink.copy(alpha = 0.5f), fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.CenterStart) {
+            val len = maxHeight
+            Text(
+                c.name, color = ink, fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.ExtraBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false,
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .layout { m, cons ->
+                        val pl = m.measure(cons.copy(minWidth = 0, maxWidth = len.roundToPx(), minHeight = 0, maxHeight = androidx.compose.ui.unit.Constraints.Infinity))
+                        layout(pl.height, pl.width) { pl.place(-(pl.width - pl.height) / 2, (pl.width - pl.height) / 2) }
+                    }
+                    .graphicsLayer { rotationZ = 90f },
+            )
+        }
+        Text("\u201C", color = ink.copy(alpha = 0.5f), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Box(Modifier.padding(top = 8.dp).fillMaxWidth().height(1.dp).background(ink.copy(alpha = 0.1f)))
+        val meta = when {
+            filtering && filter != null -> "${CollectionFilter.matchLabel(filter.matches, filter.total)} 首"
+            c.loading -> "加载中…"
+            c.failed -> "加载失败，点此重试"
+            c.count == 0 -> "没有取到曲目 · 点此重试"
+            c.count != null -> "${c.count} 首"
+            else -> ""
+        }
+        Text(meta, color = ink.copy(alpha = 0.6f), fontSize = 13.sp, modifier = Modifier.padding(top = 16.dp).then(if (c.failed || c.count == 0) Modifier.clickable(onClick = c.onRetry) else Modifier))
+        Text(c.kindLabel, color = ink.copy(alpha = 0.6f), fontSize = 13.sp, modifier = Modifier.padding(top = 14.dp))
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.height(40.dp).clip(RoundedCornerShape(12.dp)).background(ink.copy(alpha = if (ready) 0.12f else 0.05f))
+                    .clickable(enabled = ready) { if (scoped && filter != null) c.onPlayTiles?.invoke(filter.shown, false) else c.onPlayAll() }
+                    .padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(GuangYueIcons.Play, contentDescription = null, tint = ink.copy(alpha = if (ready) 0.9f else 0.3f), modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("播放全部", color = ink.copy(alpha = if (ready) 0.9f else 0.3f), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            }
+            if (c.onEnqueueAll != null) {
+                Spacer(Modifier.width(6.dp))
+                SeamTextButton(GuangYueIcons.ListEnd, "加入队列", ink, ready, c.onEnqueueAll)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SeamTextButton(GuangYueIcons.List, "列表", ink, (c.count ?: 0) > 0, onToggleList)
+            Spacer(Modifier.width(6.dp))
+            SeamMoreMenu(menu, ink)
+        }
+    }
+}
+
+@Composable
+private fun SeamTextButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, ink: Color, enabled: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.height(40.dp).clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = ink.copy(alpha = if (enabled) 0.8f else 0.3f), modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label, color = ink.copy(alpha = if (enabled) 0.8f else 0.3f), fontSize = 13.sp)
+    }
+}
 
 /** 面包屑「‹ 广乐 / 类型」，点根返回（BravaisSeamCrumbs）。 */
 @Composable
