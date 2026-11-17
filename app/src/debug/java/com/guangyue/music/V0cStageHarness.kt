@@ -724,6 +724,8 @@ fun V0cStage(
                 ),
                 initialListMode = style != "collectionwall" && style != "artistwall" && style != "artistalbums",
                 initialFilterQuery = when (style) { "collectionfilter" -> "周"; "collectionwall" -> "beat"; else -> "" },
+                // 11-18 artistwall：第 4 首在放，右下出「在此定位」键。
+                isCurrent = { t -> style == "artistwall" && t.key == tiles.getOrNull(3)?.key },
                 modifier = Modifier.fillMaxSize(),
             )
             }

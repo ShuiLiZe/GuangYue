@@ -40,6 +40,8 @@ import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -415,6 +417,47 @@ fun BravaisWall(
                     SeamCollectionRow(collection, title, inkColor, listMode = false, onToggleList = { listPref = true }, filter = seamFilter)
                 } else {
                     SeamHomeRow(title, (if (allTab) listOf("全部") else emptyList()) + sections.map { it.first }, tab, inkColor, onSelect = { tab = it; expanded = null }, onOpenSearch = onOpenSearch, onOpenSettings = onOpenSettings)
+                }
+            }
+            // 11-18 照 Folia BravaisStageChrome 的 above = GridLocateButton「在此定位」：正在播的那块在本层墙上时出现在右下，
+            // 按下 = 展开那块（Folia locate-playing → showSlot），镜头平移过去 + 一圈涟漪。✋ Folia 它叠在工具键上方，广乐墙面没有工具键，单独放右下。
+            val hereKey = ranked.entries.firstOrNull { isCurrent(it.value) }?.key
+            if (hereKey != null) {
+                val ring = remember { Animatable(1f) }
+                val accent = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                val daylight = !groundColor.luminanceDark()
+                Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .padding(bottom = 24.dp)
+                        .offset(x = 14.dp)
+                        .zIndex(30f)
+                        .size(40.dp)
+                        .graphicsLayer { alpha = 0.6f }
+                        .clip(CircleShape)
+                        .clickable {
+                            scope.launch { ring.snapTo(0f); ring.animateTo(1f, tween(520)) }
+                            val at = WallSlots.parseKey(hereKey)
+                            val slot = at?.let { (c, r, i) -> WallSlots.blockSlots(c, r).firstOrNull { it.slotIndex == i } }
+                            if (slot != null) expand(slot)
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(if (daylight) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.4f))
+                            .border(1.dp, inkColor.copy(alpha = 0.1f), CircleShape),
+                    )
+                    Box(
+                        Modifier
+                            .size(34.dp)
+                            .graphicsLayer { val k = 1f + ring.value * 0.6f; scaleX = k; scaleY = k; alpha = if (ring.value >= 1f) 0f else 1f - ring.value }
+                            .border(1.dp, accent, CircleShape),
+                    )
+                    Icon(GuangYueIcons.Crosshair, contentDescription = "定位正在播放", tint = accent, modifier = Modifier.size(16.dp))
                 }
             }
             // 状态栏：墙铺满全屏（Folia 同），顶上加一道纸色渐隐让状态栏图标看得清。
