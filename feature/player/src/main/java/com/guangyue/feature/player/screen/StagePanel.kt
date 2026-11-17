@@ -181,6 +181,9 @@ fun StagePanel(
     onDownloadQuality: ((Quality) -> Unit)? = null,
     /** 截图用例：直接打开弹层。 */
     initialQualityPick: Boolean = false,
+    /** 11-18 Folia QueueTab 行操作「下一首播放」「移到队尾」；null = 不显示。 */
+    onQueueRowNext: ((Int) -> Unit)? = null,
+    onQueueRowEnd: ((Int) -> Unit)? = null,
 ) {
     val colors = stagePanelColors(dark)
     var qualityPick by remember { mutableStateOf(initialQualityPick) }
@@ -294,6 +297,8 @@ fun StagePanel(
                                     queue = queue,
                                     onPick = onPickQueueRow,
                                     onRemove = onRemoveQueueRow,
+                                    onNext = onQueueRowNext,
+                                    onEnd = onQueueRowEnd,
                                 )
                                 StagePanelTab.QUALITY -> QualityBody(
                                     colors = colors,
@@ -648,7 +653,7 @@ private const val OFFSET_STEP = 250L
  * 照 Folia panelTab/QueueTab.tsx：头一行「播放队列 + 数目」（36dp，13sp 半粗 t2，数目常规 t3），
  * 行 48dp、圆角 8、左 12 右 6；正在播的那行铺 fill 底、左缘 3dp 强调色竖条（上下各让 14），
  * 歌名 13sp/19 半粗（不改色），歌手 12sp/17 t3。Folia 的行操作靠指针悬停才露出，
- * 触屏没有悬停，这里常驻「从队列中删除」（Trash2 15dp，命中 40dp）。空队列 = ListMusic 28 + 文案。
+ * 触屏没有悬停，这里常驻三键「下一首播放 / 移到队尾 / 从队列中删除」（15dp 图标，命中 34×40dp）。空队列 = ListMusic 28 + 文案。
  */
 @Composable
 private fun QueueBody(
@@ -657,6 +662,8 @@ private fun QueueBody(
     queue: List<PlayerQueueRow>,
     onPick: (Int) -> Unit,
     onRemove: (Int) -> Unit,
+    onNext: ((Int) -> Unit)? = null,
+    onEnd: ((Int) -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxWidth().padding(end = 2.dp)) {
         if (queue.isEmpty()) {
@@ -717,15 +724,21 @@ private fun QueueBody(
                         }
                     }
                     if (!row.current) {
-                        Box(
-                            Modifier
-                                .padding(start = 8.dp)
-                                .size(40.dp)
-                                .clickableNoRipple { onRemove(row.index) }
-                                .semantics { contentDescription = "从队列中删除" },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(GuangYueIcons.Trash2, null, tint = colors.t3, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(4.dp))
+                        listOfNotNull(
+                            onNext?.let { Triple(GuangYueIcons.ListPlus, "下一首播放", it) },
+                            onEnd?.let { Triple(GuangYueIcons.ListEnd, "移到队尾", it) },
+                            Triple(GuangYueIcons.Trash2, "从队列中删除", onRemove),
+                        ).forEach { (icon, label, action) ->
+                            Box(
+                                Modifier
+                                    .size(width = 34.dp, height = 40.dp)
+                                    .clickableNoRipple { action(row.index) }
+                                    .semantics { contentDescription = label },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(icon, null, tint = colors.t3, modifier = Modifier.size(15.dp))
+                            }
                         }
                     }
                 }

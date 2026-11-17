@@ -168,7 +168,7 @@ fun IPlayerRoute(
             lyricStyleLabel = lyricStyleLabel,
             onPickQueueRow = { index ->
                 queueRows.getOrNull(index)?.let { row ->
-                    playback.queueSnapshot().getOrNull(row.index)?.let { playback.playNow(it) }
+                    playback.playAt(row.index)
                 }
             },
             onQuality = {
@@ -292,8 +292,10 @@ fun StagePanelHost(
         lyricStyleName = styleName,
         onOpenLyricStyle = onOpenLyricStyle,
         queue = queueRows,
-        onPickQueueRow = { index -> playback.queueSnapshot().getOrNull(index)?.let { playback.playNow(it) } },
+        onPickQueueRow = { index -> playback.playAt(index) },
         onRemoveQueueRow = { index -> playback.removeAt(index); revision++ },
+        onQueueRowNext = { index -> playback.moveToNext(index); revision++ },
+        onQueueRowEnd = { index -> playback.moveToEnd(index); revision++ },
         qualities = qualities,
         currentQuality = item?.origin?.quality ?: playback.defaultQuality,
         qualityDeclared = declared.isNotEmpty(),

@@ -79,3 +79,5 @@
 
 ## 2026-11-18 播放页面板「播放队列」页签照 Folia panelTab/QueueTab.tsx
 - 🔧 页签名保持「播放列表」（Folia zh-CN panel.playlist）；头一行「播放队列 + 数目」（36dp，13 半粗 t2 / 数目 t3）；行 48dp、圆角 8、左 12 右 6，正在播的行 fill 底 + 左缘 3dp 强调色竖条，歌名 13/19 不改色，歌手 12/17 t3；去掉序号列与音浪图标。空队列 = ListMusic 28 +「播放列表为空」。✋ Folia 行操作（下一首播放 / 移到队尾 / 删除）靠悬停露出，触屏常驻删除（Trash2，命中 40dp）。
+- 🔧 行操作照 Folia 补「下一首播放」（ListPlus）「移到队尾」（ListEnd），触屏常驻（命中 34×40dp）；PlaybackController.moveTo / moveToNext / moveToEnd。
+- 🐞 修：点队列里的歌原走 playNow → setMediaItem 把播放器列表压成一首，与队列对不上（下一首失效、删行错位）；改为 playAt(index) 只换当前。

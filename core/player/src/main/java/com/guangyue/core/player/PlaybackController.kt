@@ -332,6 +332,44 @@ class PlaybackController @Inject constructor(
         publish()
     }
 
+    /**
+     * 播放队列里第 [index] 首（Folia QueueTab 点行 = onPlaySong(song, playQueue)：队列不变，只换当前）。
+     * 原来走 [playNow] 会 setMediaItem 把播放器列表压成一首，和 [queue] 对不上（下一首失效、删行错位）。
+     */
+    fun playAt(index: Int) {
+        if (index !in queue.indices) return
+        GuangYuePlaybackService.start(context)
+        if (player.mediaItemCount != queue.size) {
+            player.setMediaItems(queue.map { it.toMediaItem() }, index, 0L)
+        } else {
+            player.seekToDefaultPosition(index)
+        }
+        player.prepare()
+        player.play()
+        publish()
+    }
+
+    /** 把第 [from] 首挪到 [to]（Folia「下一首播放」= 当前之后、「移到队尾」= 末尾）。 */
+    fun moveTo(from: Int, to: Int) {
+        if (from !in queue.indices) return
+        val target = to.coerceIn(0, queue.size - 1)
+        if (from == target) return
+        val item = queue.removeAt(from)
+        queue.add(target, item)
+        if (player.mediaItemCount == queue.size) player.moveMediaItem(from, target)
+        publish()
+    }
+
+    /** 下一首播放：挪到当前这首后面。 */
+    fun moveToNext(index: Int) {
+        val cur = player.currentMediaItemIndex
+        if (index == cur) return
+        moveTo(index, if (index < cur) cur else cur + 1)
+    }
+
+    /** 移到队尾。 */
+    fun moveToEnd(index: Int) = moveTo(index, queue.size - 1)
+
     fun toggle() {
         if (player.isPlaying) player.pause() else player.play()
     }
