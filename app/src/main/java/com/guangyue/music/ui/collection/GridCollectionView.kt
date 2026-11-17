@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -184,6 +185,8 @@ fun GridCollectionView(
     onEnqueueAll: () -> Unit = {},
     /** 取证用：开场就打开信息面板。 */
     initialPanelOpen: Boolean = false,
+    /** 取证用：开场就打开曲目侧栏。 */
+    initialListOpen: Boolean = false,
     /** 11-17：Folia 设置「卡片最小尺寸 / 最小透明度」（离中心最远的卡缩到 / 淡到多少）。 */
     minScale: Float = MIN_SCALE,
     minOpacity: Float = MIN_OPACITY,
@@ -217,7 +220,7 @@ fun GridCollectionView(
     fun slotOfSong(i: Int) = if (isArtist) i + 2 else i
     fun slotOfAlbum(j: Int) = 2 + cards.size + j
     var panelOpen by remember { mutableStateOf(initialPanelOpen) }
-    var listOpen by remember { mutableStateOf(false) }
+    var listOpen by remember { mutableStateOf(initialListOpen) }
     var sortAz by remember { mutableStateOf(false) }
     val bases = remember(cards.size, albums.size, isArtist, square) {
         if (isArtist) ArtistGridCoords.build(cards.size, albums.size, spacingX, spacingY).toTypedArray()
@@ -499,98 +502,185 @@ fun GridCollectionView(
             }
         }
 
-        // ---------- 右下列表键 + 列表面板（Folia APK 手机版：圆键开一张浮动面板，排序 / 加入队列 / 关闭） ----------
+        // ---------- 右下列表键 + 「在此定位」+ 曲目侧栏（Folia GridViewTracksPanel：GridListSearchButton / GridLocateButton / SidePanelList） ----------
         // 歌手页（Folia GridListSearchButton「查看专辑」）列的是专辑；没有专辑时列热门歌曲。
         val listAlbums = isArtist && albums.isNotEmpty()
         val listCards = if (listAlbums) albums else cards
         fun slotOfListRow(i: Int) = if (listAlbums) slotOfAlbum(i) else slotOfSong(i)
+        // Folia isPlayingSongHere：正在播的歌是本页的一张卡。
+        val hereIndex = cards.indices.firstOrNull { isCurrent(it) } ?: -1
+        val accent = androidx.compose.material3.MaterialTheme.colorScheme.primary
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        val order = remember(listCards, sortAz) {
+            if (sortAz) listCards.indices.sortedBy { listCards[it].title.lowercase() } else listCards.indices.toList()
+        }
+        // 侧栏的焦点行 = 居中那张卡（Folia listFocusedIndex）；每次「定位」都再滚一次（revealTimes）。
+        var revealTimes by remember { mutableStateOf(0) }
+        val focusedRow = order.indexOfFirst { slotOfListRow(it) == centered }
+        fun locateHere() {
+            if (hereIndex < 0) return
+            centerOn(slotOfSong(hereIndex))
+            revealTimes++
+        }
         if (listCards.isNotEmpty()) {
-            Box(
+            Column(
                 Modifier
                     .align(Alignment.BottomEnd)
                     .windowInsetsPadding(WindowInsets.navigationBars)
                     .padding(end = 16.dp, bottom = 24.dp)
-                    .size(40.dp)
-                    .shadow(8.dp, CircleShape, clip = false)
-                    .clip(CircleShape)
-                    .background(ground)
-                    .background(ink.copy(alpha = 0.08f))
-                    .clickable { listOpen = !listOpen }
                     .zIndex(75f),
-                contentAlignment = Alignment.Center,
-            ) { Icon(GuangYueIcons.List, contentDescription = "列表", tint = ink, modifier = Modifier.size(20.dp)) }
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // Folia GridLocateButton：只在正在播的歌在本页时出现（✋ Folia 不在本页时按下会跳去那首歌所在的页，广乐没有这条路，不画）。
+                // 窄屏半让出屏（translate-x-1/2）、60% 不透明；本页有歌时十字点亮强调色；按下放一圈涟漪。
+                if (hereIndex >= 0 && !listAlbums) {
+                    val ring = remember { Animatable(1f) }
+                    Box(
+                        Modifier
+                            .offset(x = 14.dp)
+                            .size(40.dp)
+                            .graphicsLayer { alpha = 0.6f }
+                            .clip(CircleShape)
+                            .clickable {
+                                scope.launch { ring.snapTo(0f); ring.animateTo(1f, tween(520)) }
+                                locateHere()
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(34.dp)
+                                .shadow(6.dp, CircleShape, clip = false)
+                                .clip(CircleShape)
+                                .background(if (daylight) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.4f)),
+                        )
+                        Box(
+                            Modifier
+                                .size(34.dp)
+                                .graphicsLayer { val s = 1f + ring.value * 0.6f; scaleX = s; scaleY = s; alpha = if (ring.value >= 1f) 0f else 1f - ring.value }
+                                .border(1.dp, accent, CircleShape),
+                        )
+                        Icon(GuangYueIcons.Crosshair, contentDescription = "定位正在播放", tint = accent, modifier = Modifier.size(16.dp))
+                    }
+                }
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .shadow(8.dp, CircleShape, clip = false)
+                        .clip(CircleShape)
+                        .background(ground)
+                        .background(ink.copy(alpha = 0.08f))
+                        .clickable { listOpen = !listOpen },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(GuangYueIcons.List, contentDescription = if (listAlbums) "查看专辑" else "查看曲目", tint = ink, modifier = Modifier.size(20.dp)) }
+            }
+        }
+        // Folia SidePanelList：打开时先跳到焦点前 8 行再平滑滚到居中；之后每次焦点变 / 再定位都平滑滚过去。
+        LaunchedEffect(listOpen, focusedRow, revealTimes) {
+            if (!listOpen || focusedRow < 0) return@LaunchedEffect
+            kotlinx.coroutines.delay(60)
+            val viewport = listState.layoutInfo.viewportSize.height
+            val rowPx = with(density) { 60.dp.roundToPx() }
+            val centerOffset = -((viewport - rowPx) / 2).coerceAtLeast(0)
+            if (listState.layoutInfo.visibleItemsInfo.none { it.index == focusedRow }) listState.scrollToItem((focusedRow - 8).coerceAtLeast(0))
+            listState.animateScrollToItem(focusedRow, centerOffset)
         }
         AnimatedVisibility(
             visible = listOpen,
-            enter = fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.96f),
-            exit = fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.96f),
+            enter = fadeIn() + slideInHorizontally { it / 6 } + androidx.compose.animation.scaleIn(initialScale = 0.95f),
+            exit = fadeOut() + slideOutHorizontally { it / 6 } + androidx.compose.animation.scaleOut(targetScale = 0.95f),
             modifier = Modifier.zIndex(78f),
         ) {
+            val conf = androidx.compose.ui.platform.LocalConfiguration.current
+            val short = conf.screenHeightDp < 480
             Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { listOpen = false }) {
-                val order = remember(listCards, sortAz) {
-                    if (sortAz) listCards.indices.sortedBy { listCards[it].title.lowercase() } else listCards.indices.toList()
-                }
+                // Folia：right-6 top-24 w-80 max-w-[100vw-3rem] rounded-3xl p-6（手机按 86% 根字号折算：右 20、宽 276、圆角 21、内边距 20）；
+                // 横屏矮屏 top 让到 10，不然列表只剩两三行。
                 Column(
                     Modifier
+                        .align(Alignment.TopEnd)
                         .windowInsetsPadding(WindowInsets.statusBars)
                         .windowInsetsPadding(WindowInsets.navigationBars)
-                        .padding(start = 64.dp, end = 20.dp, top = 8.dp, bottom = 72.dp)
-                        .fillMaxSize()
-                        .shadow(24.dp, RoundedCornerShape(32.dp), clip = false)
-                        .clip(RoundedCornerShape(32.dp))
+                        .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+                        .padding(end = 20.dp, top = if (short) 10.dp else 72.dp, bottom = if (short) 10.dp else 72.dp)
+                        .width(minOf(276f, conf.screenWidthDp - 42f).dp)
+                        .fillMaxHeight()
+                        .shadow(24.dp, RoundedCornerShape(21.dp), clip = false)
+                        .clip(RoundedCornerShape(21.dp))
                         .background(ground.copy(alpha = 0.94f))
-                        .border(1.dp, ink.copy(alpha = 0.1f), RoundedCornerShape(32.dp))
-                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
+                        .border(1.dp, ink.copy(alpha = 0.1f), RoundedCornerShape(21.dp))
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+                        .padding(start = 20.dp, end = 20.dp, top = if (short) 14.dp else 20.dp, bottom = if (short) 10.dp else 20.dp),
                 ) {
-                    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 24.dp, bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
-                        Column(Modifier.weight(1f)) {
-                            Icon(
-                                GuangYueIcons.ArrowDownAZ, contentDescription = "按名称排序",
-                                tint = ink.copy(alpha = if (sortAz) 1f else 0.6f),
-                                modifier = Modifier.size(22.dp).clip(RoundedCornerShape(6.dp)).clickable { sortAz = !sortAz },
-                            )
-                            Text(if (listAlbums) "歌手专辑 / ALBUMS" else title, color = ink, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
+                    // 头行：标题 18 粗一行（按 86% = 15.5）· 右侧 定位（本页有歌时点亮）· 关闭。✋ 名称排序 / 全部加入队列是广乐多出的两颗。
+                    Row(Modifier.fillMaxWidth().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(32.dp).clip(CircleShape).clickable { sortAz = !sortAz }, contentAlignment = Alignment.Center) {
+                            Icon(GuangYueIcons.ArrowDownAZ, contentDescription = "按名称排序", tint = ink.copy(alpha = if (sortAz) 1f else 0.45f), modifier = Modifier.size(16.dp))
                         }
-                        Box(Modifier.size(40.dp).clip(CircleShape).clickable { onEnqueueAll() }, contentAlignment = Alignment.Center) {
-                            Icon(GuangYueIcons.ListEnd, contentDescription = "全部加入队列", tint = ink, modifier = Modifier.size(20.dp))
+                        Text(
+                            if (listAlbums) "歌手专辑 / ALBUMS" else title, color = ink, fontSize = 15.5.sp, fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.2).sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f).padding(start = 4.dp, end = 6.dp),
+                        )
+                        if (hereIndex >= 0 && !listAlbums) {
+                            Box(Modifier.size(32.dp).clip(CircleShape).clickable { locateHere() }, contentAlignment = Alignment.Center) {
+                                Icon(GuangYueIcons.Crosshair, contentDescription = "定位正在播放", tint = accent, modifier = Modifier.size(16.dp))
+                            }
                         }
-                        Box(Modifier.size(40.dp).clip(CircleShape).clickable { listOpen = false }, contentAlignment = Alignment.Center) {
-                            Icon(GuangYueIcons.X, contentDescription = "关闭", tint = ink, modifier = Modifier.size(20.dp))
+                        if (!listAlbums) {
+                            Box(Modifier.size(32.dp).clip(CircleShape).clickable { onEnqueueAll() }, contentAlignment = Alignment.Center) {
+                                Icon(GuangYueIcons.ListEnd, contentDescription = "全部加入队列", tint = ink, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                        Box(Modifier.size(32.dp).clip(CircleShape).clickable { listOpen = false }, contentAlignment = Alignment.Center) {
+                            Icon(GuangYueIcons.X, contentDescription = "关闭", tint = ink, modifier = Modifier.size(16.dp))
                         }
                     }
                     androidx.compose.foundation.lazy.LazyColumn(
-                        Modifier.fillMaxWidth().weight(1f).padding(start = 12.dp, end = 16.dp, bottom = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(10.dp)),
+                        state = listState,
                     ) {
                         items(order.size, key = { listCards[order[it]].key }) { n ->
                             val i = order[n]
                             val c = listCards[i]
-                            val on = slotOfListRow(i) == centered
-                            val cur = !listAlbums && isCurrent(i)
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (on) ink.copy(alpha = 0.08f) else Color.Transparent)
-                                    .pointerInput(c.key, listAlbums) {
-                                        detectTapGestures(
-                                            onTap = {
-                                                centerOn(slotOfListRow(i)); listOpen = false
-                                                // Folia：居中、收起，320ms 后进专辑。
-                                                if (listAlbums) scope.launch { kotlinx.coroutines.delay(320); onOpenAlbum(i) }
-                                            },
-                                            onLongPress = { if (!listAlbums) onLongPress(i) },
-                                        )
+                            val active = n == focusedRow
+                            // Folia TrackListItem：行高 60（px 不随根字号缩）、外 px-2 py-1、内 p-2 圆角 8；封面 40（→34）圆角 4；
+                            // 歌名 14 半粗（→12）一行，歌手 10 / 60%；焦点行 10% 底。触屏常驻「加入队列」（Folia 悬停才露）。
+                            Box(Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 7.dp, vertical = 3.dp)) {
+                                Row(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (active) ink.copy(alpha = 0.1f) else Color.Transparent)
+                                        .pointerInput(c.key, listAlbums) {
+                                            detectTapGestures(
+                                                onTap = {
+                                                    if (listAlbums) {
+                                                        // Folia CollectionListItem：居中、收起，320ms 后进专辑。
+                                                        centerOn(slotOfListRow(i)); listOpen = false
+                                                        scope.launch { kotlinx.coroutines.delay(320); onOpenAlbum(i) }
+                                                    } else onPlay(i)
+                                                },
+                                                onLongPress = { if (!listAlbums) onLongPress(i) },
+                                            )
+                                        }
+                                        .padding(horizontal = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Box(Modifier.size(34.dp).clip(RoundedCornerShape(4.dp)).background(if (daylight) Color(0xFFE4E4E7) else Color(0xFF27272A))) {
+                                        if (c.artwork != null) AsyncImage(model = c.artwork, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                                     }
-                                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Box(Modifier.size(34.dp).clip(RoundedCornerShape(4.dp)).background(ink.copy(alpha = 0.1f))) {
-                                    if (c.artwork != null) AsyncImage(model = c.artwork, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                                }
-                                Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                                    Text(c.title, color = if (cur) ink else ink.copy(alpha = 0.92f), fontSize = 13.sp, lineHeight = 17.sp, fontWeight = if (cur) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    if (c.artist.isNotBlank()) Text(c.artist, color = ink.copy(alpha = 0.55f), fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+                                    Column(Modifier.padding(start = 10.dp).weight(1f)) {
+                                        Text(c.title, color = ink, fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        val second = c.artist.substringBefore(',').substringBefore('、').trim()
+                                        if (second.isNotBlank()) Text(second, color = ink.copy(alpha = 0.6f), fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+                                    }
+                                    if (!listAlbums) {
+                                        Box(Modifier.size(36.dp).clip(CircleShape).clickable { onEnqueue(i) }, contentAlignment = Alignment.Center) {
+                                            Icon(GuangYueIcons.Plus, contentDescription = "加入播放队列", tint = ink.copy(alpha = 0.6f), modifier = Modifier.size(14.dp))
+                                        }
+                                    }
                                 }
                             }
                         }

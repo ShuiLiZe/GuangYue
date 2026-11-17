@@ -568,6 +568,23 @@ fun V0cStage(
                     albums = albums,
                 )
             }
+        } else if (style == "gridtracklist") {
+            // 11-18：歌单详情曲目侧栏（Folia SidePanelList / TrackListItem）+ 右下「在此定位」键：正在播第 5 首。3000 = 浅色。
+            val light = positionMs == 3_000L
+            val ink = if (light) Color(0xFF18181B) else Color(0xFFF4F4F5)
+            val names = listOf("晴天", "后来", "夜曲", "月亮代表我的心", "七里香", "红豆", "稻香", "小幸运", "演员", "平凡之路", "光年之外", "起风了", "体面", "说散就散")
+            val cards = names.mapIndexed { i, t -> com.guangyue.music.ui.collection.GridTrackCard("t$i", t, if (i % 2 == 0) "周杰伦" else "王菲, 陈奕迅", "测试专辑", 240_000L + i * 7_000L, null) }
+            FoliaTheme(dark = !light) {
+                com.guangyue.music.ui.collection.GridCollectionView(
+                    title = "通勤路上的好心情", subtitle = "测试歌单",
+                    coverUrl = null, cards = cards, loading = false, failed = false, ink = ink,
+                    ground = if (light) Color(0xFFF4F4F5) else Color(0xFF09090B),
+                    countLabel = "${cards.size} 首", isCurrent = { it == 4 }, playing = true,
+                    onBack = {}, onRetry = {}, onPlay = {}, onTogglePlayback = {}, onEnqueue = {}, onLongPress = {},
+                    panelActions = listOf(com.guangyue.music.ui.collection.GridPanelAction("播放全部", primary = true) {}),
+                    initialListOpen = positionMs != 14_000L,
+                )
+            }
         } else if (style == "gridcollection" || style == "gridcollectionbleed") {
             // 11-17：gridcollectionbleed = Folia 全画幅封面（面板收起）；3000 浅色再加正方形卡片。
             val bleed = style == "gridcollectionbleed"
