@@ -274,50 +274,58 @@ fun PagePonderOverlay(
                 drawPath(Path().apply { addRoundRect(rr) }, Color.White.copy(alpha = 0.85f * glow), style = Stroke(ring))
             }
         }
-        // 顶部：标题 + 章节胶囊 + 关闭。
-        Column(
-            Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(GuangYueIcons.Lightbulb, null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(16.dp))
-                Spacer(Modifier.size(6.dp))
-                Text("思索 · ${GridPagePonder.TITLE}", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Box(
-                    Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onClose).semantics { contentDescription = "关闭思索" },
-                    contentAlignment = Alignment.Center,
-                ) { Icon(GuangYueIcons.X, null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(20.dp)) }
-            }
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                chapters.forEachIndexed { i, c ->
-                    val on = i == chapter
-                    Box(
-                        Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(50))
-                            .background(if (on) Color.White else Color.White.copy(alpha = 0.12f))
-                            .clickable { chapter = i; step = 0 }
-                            .padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(c.title, color = if (on) Color.Black else Color.White.copy(alpha = 0.8f), fontSize = 12.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
-                    }
-                }
-            }
+        // 说明卡（标题、章节胶囊、说明、翻页都在卡里，不压页头）：放在高亮控件对面空得多的那边；
+        // 横屏且控件不宽时放到左右另一侧。
+        val wPx = with(density) { maxWidth.toPx() }
+        val landscape = maxWidth > maxHeight
+        val side = landscape && rect != null && rect.width < wPx * 0.6f
+        val atBottom = rect == null || (hPx - rect.bottom) >= rect.top
+        val cardAlign = when {
+            side -> if (rect!!.center.x > wPx / 2f) Alignment.CenterStart else Alignment.CenterEnd
+            atBottom -> Alignment.BottomCenter
+            else -> Alignment.TopCenter
         }
-        // 说明卡：控件在上半屏就放底部，否则放在章节胶囊下面。
-        val atBottom = rect == null || rect.center.y < hPx * 0.5f
         Column(
             Modifier
-                .align(if (atBottom) Alignment.BottomCenter else Alignment.TopCenter)
+                .align(cardAlign)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(start = 16.dp, end = 16.dp, top = if (atBottom) 0.dp else 104.dp, bottom = 16.dp)
-                .widthIn(max = 520.dp)
+                .padding(16.dp)
+                .widthIn(max = if (side) 360.dp else 520.dp)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
                 .background(card)
                 .border(1.dp, ink.copy(alpha = 0.08f), RoundedCornerShape(20.dp))
                 .clickable(indication = null, interactionSource = null) {}
-                .padding(18.dp),
+                .padding(start = 18.dp, end = 8.dp, top = 6.dp, bottom = 16.dp),
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(GuangYueIcons.Lightbulb, null, tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(15.dp))
+                Spacer(Modifier.size(6.dp))
+                Text("思索 · ${GridPagePonder.TITLE}", color = ink, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onClose).semantics { contentDescription = "关闭思索" },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(GuangYueIcons.X, null, tint = soft, modifier = Modifier.size(18.dp)) }
+            }
+            Row(
+                Modifier.padding(end = 10.dp).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                chapters.forEachIndexed { i, c ->
+                    val on = i == chapter
+                    Box(
+                        Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(50))
+                            .background(if (on) ink else ink.copy(alpha = 0.07f))
+                            .clickable { chapter = i; step = 0 }
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(c.title, color = if (on) card else ink.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Column(Modifier.padding(end = 10.dp)) {
             Text("${chapter + 1} / ${chapters.size} · ${ch.title}", color = soft, fontSize = 12.sp)
             Spacer(Modifier.height(6.dp))
             Text(st.text, color = ink, fontSize = 15.sp, lineHeight = 22.sp)
@@ -340,6 +348,7 @@ fun PagePonderOverlay(
                         .clickable { next() }.padding(horizontal = 18.dp),
                     contentAlignment = Alignment.Center,
                 ) { Text(if (last) "完成" else "下一步", color = card, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+            }
             }
         }
     }
