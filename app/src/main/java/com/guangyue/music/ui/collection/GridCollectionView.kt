@@ -108,6 +108,19 @@ data class GridTrackCard(
     val artwork: String?,
 )
 
+/**
+ * 11-18 网格歌手页（Folia library/suites/grid/artist/ArtistGridView.tsx）的歌手信息：
+ * 头像圆卡 + 简介卡排在中间一行，热门歌曲在上半、专辑在下半（[ArtistGridCoords]）。
+ */
+data class GridArtistHead(
+    val name: String,
+    val alias: String = "",
+    val description: String? = null,
+    val picture: String? = null,
+    val trackCount: Int? = null,
+    val albumCount: Int? = null,
+)
+
 data class GridPanelAction(val label: String, val primary: Boolean = false, val danger: Boolean = false, val enabled: Boolean = true, val run: () -> Unit)
 
 private const val CARD_W = 180f
@@ -177,6 +190,13 @@ fun GridCollectionView(
     fullBleedCover: Boolean = false,
     /** 11-17：Folia「正方形卡片」（只在全画幅时生效）：面积不变的正方形，间距同比（squareGridCardBox）。 */
     squareCards: Boolean = false,
+    /** 11-18：不为 null = Folia 网格歌手页（头像 + 简介 + 热门歌曲 + 专辑）。 */
+    artist: GridArtistHead? = null,
+    /** 歌手页下半的专辑卡（点居中的那张 = 进专辑）。 */
+    albums: List<GridTrackCard> = emptyList(),
+    onOpenAlbum: (Int) -> Unit = {},
+    /** 信息面板里的简介（null = 用 [subtitle]）。 */
+    panelDescription: String? = null,
 ) {
     val square = squareCards && fullBleedCover
     val side = kotlin.math.round(sqrt(CARD_W * CARD_H))
@@ -188,12 +208,20 @@ fun GridCollectionView(
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     var box by remember { mutableStateOf(IntSize.Zero) }
-    val ox = remember { Animatable(0f) }
+    val isArtist = artist != null
+    val ox = remember { Animatable(if (isArtist) ArtistGridCoords.cameraAtOpen(spacingX).first else 0f) }
     val oy = remember { Animatable(0f) }
+    var bioOpen by remember { mutableStateOf(false) }
+    // 歌手页：0 头像、1 简介、2.. 热门歌曲、其后专辑；其它页：下标 = 曲目下标。
+    fun slotOfSong(i: Int) = if (isArtist) i + 2 else i
+    fun slotOfAlbum(j: Int) = 2 + cards.size + j
     var panelOpen by remember { mutableStateOf(initialPanelOpen) }
     var listOpen by remember { mutableStateOf(false) }
     var sortAz by remember { mutableStateOf(false) }
-    val bases = remember(cards.size, square) { Array(cards.size) { hexBase(it, spacingX, spacingY) } }
+    val bases = remember(cards.size, albums.size, isArtist, square) {
+        if (isArtist) ArtistGridCoords.build(cards.size, albums.size, spacingX, spacingY).toTypedArray()
+        else Array(cards.size) { hexBase(it, spacingX, spacingY) }
+    }
 
     val bounds = remember(bases, box) {
         if (bases.isEmpty()) floatArrayOf(0f, 0f, 0f, 0f) else {
@@ -230,7 +258,9 @@ fun GridCollectionView(
                 best
             }
         }
-        val bgCover = cards.getOrNull(centered)?.artwork ?: coverUrl
+        // 歌手页：Folia 背景固定用第一首热门歌曲的封面。
+        val bgCover = if (isArtist) cards.firstOrNull()?.artwork ?: artist?.picture ?: coverUrl
+        else cards.getOrNull(centered)?.artwork ?: coverUrl
         if (bgCover != null) {
             AsyncImage(
                 model = bgCover,
@@ -275,20 +305,66 @@ fun GridCollectionView(
                     )
                 },
         ) {
-            if (box != IntSize.Zero && cards.isNotEmpty()) {
+            if (box != IntSize.Zero && (cards.isNotEmpty() || isArtist)) {
                 val wDp = with(density) { box.width.toDp().value }
                 val hDp = with(density) { box.height.toDp().value }
                 val dx = ox.value
                 val dy = oy.value
-                for (i in cards.indices) {
-                    val (bx, by) = bases[i]
+                if (artist != null) {
+                    // Folia：两行淡水印「时下流行 / POPULAR」「歌手专辑 / ALBUMS」，钉在头像簇旁（层级 80、6% 不透明）。
+                    ArtistWatermark("时下流行 / POPULAR", dx - spacingX * 2.55f, dy - spacingY * 0.42f, ink, density.density)
+                    if (albums.isNotEmpty()) ArtistWatermark("歌手专辑 / ALBUMS", dx + spacingX * 0.45f, dy + spacingY * 0.52f, ink, density.density)
+                }
+                for (n in bases.indices) {
+                    val (bx, by) = bases[n]
                     val cx = bx + dx
                     val cy = by + dy
-                    if (abs(cx) > wDp / 2 + cardW / 2 + 96 || abs(cy) > hDp / 2 + cardH / 2 + 96) continue
+                    val halfW = if (isArtist && n == 1) 180f else cardW / 2
+                    if (abs(cx) > wDp / 2 + halfW + 96 || abs(cy) > hDp / 2 + cardH / 2 + 96) continue
                     val dist = sqrt(cx * cx + cy * cy)
                     val p = min(dist / MAX_DISTANCE, 1f)
                     val scale = CENTER_SCALE - (CENTER_SCALE - minScale) * p
                     val alpha = 1f - (1f - minOpacity) * p
+                    if (artist != null && n < 2) {
+                        androidx.compose.runtime.key(if (n == 0) "__artist_avatar__" else "__artist_bio__") {
+                            Box(
+                                Modifier
+                                    .align(Alignment.Center)
+                                    .offset { IntOffset((cx * density.density).roundToInt(), (cy * density.density).roundToInt()) }
+                                    .zIndex(50f - 49f * p + if (n == 1) 5f else 0f)
+                                    .graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha },
+                            ) {
+                                if (n == 0) ArtistAvatar(artist.picture, ground, ink) { centerOn(0) }
+                                else ArtistBioCard(artist, ink, daylight) { if (centered == 1) bioOpen = true else centerOn(1) }
+                            }
+                        }
+                        continue
+                    }
+                    val songIdx = if (isArtist) n - 2 else n
+                    if (songIdx >= cards.size) {
+                        val j = songIdx - cards.size
+                        val album = albums.getOrNull(j) ?: continue
+                        androidx.compose.runtime.key("album:" + album.key) {
+                            Box(
+                                Modifier
+                                    .align(Alignment.Center)
+                                    .offset { IntOffset((cx * density.density).roundToInt(), (cy * density.density).roundToInt()) }
+                                    .zIndex(50f - 49f * p)
+                                    .graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha },
+                            ) {
+                                PolaroidCard(
+                                    card = album, cardW = cardW, cardH = cardH, fullBleed = fullBleedCover,
+                                    ink = ink, ground = ground, daylight = daylight, current = false, playing = false,
+                                    queueAlpha = 0f, playAlpha = 0f, playScale = 0.8f,
+                                    // Folia openWhenFocusedOnCardClick：专辑卡点居中的那张才进专辑。
+                                    onTap = { if (dist < 40f) onOpenAlbum(j) else centerOn(n) },
+                                    onLong = {}, onPlay = { onOpenAlbum(j) }, onQueue = {},
+                                )
+                            }
+                        }
+                        continue
+                    }
+                    val i = songIdx
                     val queueAlpha = when {
                         dist < LOD_START -> 1f
                         dist <= LOD_END -> 1f - (dist - LOD_START) / (LOD_END - LOD_START)
@@ -318,7 +394,7 @@ fun GridCollectionView(
                                 queueAlpha = queueAlpha,
                                 playAlpha = playAlpha,
                                 playScale = playScale,
-                                onTap = { if (dist < 40f) onPlay(i) else centerOn(i) },
+                                onTap = { if (dist < 40f) onPlay(i) else centerOn(n) },
                                 onLong = { onLongPress(i) },
                                 onPlay = { if (isCurrent(i)) onTogglePlayback() else onPlay(i) },
                                 onQueue = { onEnqueue(i) },
@@ -327,7 +403,7 @@ fun GridCollectionView(
                     }
                 }
             }
-            if (cards.isEmpty()) {
+            if (cards.isEmpty() && !isArtist) {
                 Column(Modifier.align(Alignment.Center).padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     when {
                         loading -> Text("正在加载…", color = ink.copy(alpha = 0.5f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -344,6 +420,39 @@ fun GridCollectionView(
 
         // ---------- 顶部：返回 + 标题胶囊 ----------
         Box(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(top = 20.dp).zIndex(70f)) {
+            if (artist != null) {
+                // Folia ArtistHeaderPillButton「热门歌曲加入队列」：窄屏只剩图标（h-10 w-10），底色同返回键，返回键右侧 gap-4。
+                Box(
+                    Modifier
+                        .padding(start = 24.dp + 40.dp + 16.dp)
+                        .size(40.dp)
+                        .shadow(6.dp, CircleShape, clip = false)
+                        .clip(CircleShape)
+                        .background(ground.copy(alpha = 0.6f))
+                        .background(if (daylight) Color.Black.copy(alpha = 0.05f) else Color.White.copy(alpha = 0.08f))
+                        .clickable(enabled = cards.isNotEmpty(), onClick = onEnqueueAll)
+                        .graphicsLayer { alpha = if (cards.isNotEmpty()) 1f else 0.4f },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(GuangYueIcons.ListPlus, contentDescription = "热门歌曲加入队列", tint = ink, modifier = Modifier.size(16.dp)) }
+                if (loading || failed) {
+                    // Folia：右上角加载 / 重试胶囊（bg 65%）。
+                    Row(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = 24.dp)
+                            .clip(CircleShape)
+                            .background(ground.copy(alpha = 0.65f))
+                            .clickable(enabled = failed, onClick = onRetry)
+                            .heightIn(min = 40.dp)
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(GuangYueIcons.RefreshCw, null, tint = ink, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (failed) "重试" else "正在加载…", color = ink, fontSize = 12.sp)
+                    }
+                }
+            }
             Box(
                 Modifier
                     .padding(start = 24.dp)
@@ -358,7 +467,8 @@ fun GridCollectionView(
             Column(
                 Modifier
                     .align(Alignment.TopCenter)
-                    .padding(horizontal = 72.dp)
+                    // 歌手页左边多一颗胶囊（到 120dp），标题两侧同让 128dp 免得压住。
+                    .padding(horizontal = if (isArtist) 128.dp else 72.dp)
                     .clip(RoundedCornerShape(16.dp))
                     // Folia GridViewChrome 标题块：bg-color 20% 底 + backdrop-blur（手机上只铺底色）。
                     .background(ground.copy(alpha = 0.2f))
@@ -381,7 +491,11 @@ fun GridCollectionView(
         }
 
         // ---------- 右下列表键 + 列表面板（Folia APK 手机版：圆键开一张浮动面板，排序 / 加入队列 / 关闭） ----------
-        if (cards.isNotEmpty()) {
+        // 歌手页（Folia GridListSearchButton「查看专辑」）列的是专辑；没有专辑时列热门歌曲。
+        val listAlbums = isArtist && albums.isNotEmpty()
+        val listCards = if (listAlbums) albums else cards
+        fun slotOfListRow(i: Int) = if (listAlbums) slotOfAlbum(i) else slotOfSong(i)
+        if (listCards.isNotEmpty()) {
             Box(
                 Modifier
                     .align(Alignment.BottomEnd)
@@ -404,8 +518,8 @@ fun GridCollectionView(
             modifier = Modifier.zIndex(78f),
         ) {
             Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { listOpen = false }) {
-                val order = remember(cards, sortAz) {
-                    if (sortAz) cards.indices.sortedBy { cards[it].title.lowercase() } else cards.indices.toList()
+                val order = remember(listCards, sortAz) {
+                    if (sortAz) listCards.indices.sortedBy { listCards[it].title.lowercase() } else listCards.indices.toList()
                 }
                 Column(
                     Modifier
@@ -426,7 +540,7 @@ fun GridCollectionView(
                                 tint = ink.copy(alpha = if (sortAz) 1f else 0.6f),
                                 modifier = Modifier.size(22.dp).clip(RoundedCornerShape(6.dp)).clickable { sortAz = !sortAz },
                             )
-                            Text(title, color = ink, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
+                            Text(if (listAlbums) "歌手专辑 / ALBUMS" else title, color = ink, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 10.dp))
                         }
                         Box(Modifier.size(40.dp).clip(CircleShape).clickable { onEnqueueAll() }, contentAlignment = Alignment.Center) {
                             Icon(GuangYueIcons.ListEnd, contentDescription = "全部加入队列", tint = ink, modifier = Modifier.size(20.dp))
@@ -439,16 +553,26 @@ fun GridCollectionView(
                         Modifier.fillMaxWidth().weight(1f).padding(start = 12.dp, end = 16.dp, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        items(order.size, key = { cards[order[it]].key }) { n ->
+                        items(order.size, key = { listCards[order[it]].key }) { n ->
                             val i = order[n]
-                            val c = cards[i]
-                            val on = i == centered
+                            val c = listCards[i]
+                            val on = slotOfListRow(i) == centered
+                            val cur = !listAlbums && isCurrent(i)
                             Row(
                                 Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(if (on) ink.copy(alpha = 0.08f) else Color.Transparent)
-                                    .pointerInput(c.key) { detectTapGestures(onTap = { centerOn(i); listOpen = false }, onLongPress = { onLongPress(i) }) }
+                                    .pointerInput(c.key, listAlbums) {
+                                        detectTapGestures(
+                                            onTap = {
+                                                centerOn(slotOfListRow(i)); listOpen = false
+                                                // Folia：居中、收起，320ms 后进专辑。
+                                                if (listAlbums) scope.launch { kotlinx.coroutines.delay(320); onOpenAlbum(i) }
+                                            },
+                                            onLongPress = { if (!listAlbums) onLongPress(i) },
+                                        )
+                                    }
                                     .padding(horizontal = 8.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -456,7 +580,7 @@ fun GridCollectionView(
                                     if (c.artwork != null) AsyncImage(model = c.artwork, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                                 }
                                 Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                                    Text(c.title, color = if (isCurrent(i)) ink else ink.copy(alpha = 0.92f), fontSize = 13.sp, lineHeight = 17.sp, fontWeight = if (isCurrent(i)) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(c.title, color = if (cur) ink else ink.copy(alpha = 0.92f), fontSize = 13.sp, lineHeight = 17.sp, fontWeight = if (cur) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     if (c.artist.isNotBlank()) Text(c.artist, color = ink.copy(alpha = 0.55f), fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
                                 }
                             }
@@ -500,14 +624,16 @@ fun GridCollectionView(
                             .then(if (cutCompact) Modifier.height(64.dp) else Modifier.aspectRatio(1f))
                             .clip(RoundedCornerShape(16.dp)).background(ink.copy(alpha = 0.08f)),
                     ) {
-                        if (coverUrl != null) AsyncImage(model = coverUrl, contentDescription = title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        val panelCover = artist?.picture ?: coverUrl
+                        if (panelCover != null) AsyncImage(model = panelCover, contentDescription = title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     }
                     Text(title, color = ink, fontSize = if (cutCompact) 16.sp else 20.sp, fontWeight = FontWeight.Bold, lineHeight = if (cutCompact) 21.sp else 26.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = if (cutCompact) 10.dp else 16.dp))
                     Text(countLabel, color = ink.copy(alpha = 0.4f), fontSize = 10.sp, modifier = Modifier.padding(top = 6.dp))
-                    if (subtitle.isNotBlank()) {
+                    val about = panelDescription ?: subtitle
+                    if (about.isNotBlank()) {
                         // Folia：简介 text-xs、opacity 65、max-h-40 自己滚（长简介不把按钮排推远）。
                         Text(
-                            subtitle, color = ink.copy(alpha = 0.65f), fontSize = 12.sp, lineHeight = 18.sp,
+                            about, color = ink.copy(alpha = 0.65f), fontSize = 12.sp, lineHeight = 18.sp,
                             maxLines = if (cutCompact) 3 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(top = if (cutCompact) 8.dp else 12.dp)
                                 .then(if (cutCompact) Modifier else Modifier.heightIn(max = 160.dp).verticalScroll(rememberScrollState())),
@@ -526,6 +652,119 @@ fun GridCollectionView(
                 }
             }
         }
+
+        // ---------- 简介全文（Folia Biography 浮层：黑 60% 底 + 圆角 24 卡，点外面收起） ----------
+        AnimatedVisibility(visible = bioOpen && artist != null, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.zIndex(100f)) {
+            val a = artist ?: return@AnimatedVisibility
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f))
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { bioOpen = false }
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                val conf = androidx.compose.ui.platform.LocalConfiguration.current
+                Column(
+                    Modifier
+                        .widthIn(max = 576.dp)
+                        .fillMaxWidth()
+                        .heightIn(max = (conf.screenHeightDp * 0.7f).dp)
+                        .shadow(24.dp, RoundedCornerShape(24.dp), clip = false)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(if (daylight) Color.White.copy(alpha = 0.92f) else Color(0xFF18181B).copy(alpha = 0.92f))
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+                        .padding(24.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Column(Modifier.weight(1f)) {
+                            Text("BIOGRAPHY", color = ink.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Text(a.name, color = ink, fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+                            if (a.alias.isNotBlank()) Text(a.alias, color = ink.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+                        }
+                        Box(Modifier.size(40.dp).clip(CircleShape).clickable { bioOpen = false }, contentAlignment = Alignment.Center) {
+                            Icon(GuangYueIcons.X, contentDescription = "关闭", tint = ink.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    Text(
+                        a.description?.takeIf { it.isNotBlank() } ?: "暂无详细介绍",
+                        color = ink.copy(alpha = 0.8f), fontSize = 14.sp, lineHeight = 22.sp,
+                        modifier = Modifier.padding(top = 16.dp).weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Folia 歌手页水印：24sp 特粗衬线、字距 0.25em、6% 不透明，以 (x, y) 为中心。 */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.ArtistWatermark(text: String, x: Float, y: Float, ink: Color, density: Float) {
+    Text(
+        text,
+        color = ink.copy(alpha = 0.06f),
+        fontSize = 24.sp,
+        fontWeight = FontWeight.ExtraBold,
+        fontFamily = FontFamily.Serif,
+        letterSpacing = 6.sp,
+        maxLines = 1,
+        softWrap = false,
+        modifier = Modifier
+            .align(Alignment.Center)
+            .offset { IntOffset((x * density).roundToInt(), (y * density).roundToInt()) }
+            .zIndex(80f),
+    )
+}
+
+/** Folia 歌手头像圆卡：200dp、白 10% 4dp 描边、底色 bg 20%；没有图时一枚唱片。 */
+@Composable
+private fun ArtistAvatar(picture: String?, ground: Color, ink: Color, onTap: () -> Unit) {
+    Box(
+        Modifier
+            .requiredSize(200.dp)
+            .shadow(24.dp, CircleShape, clip = false)
+            .clip(CircleShape)
+            .background(ground.copy(alpha = 0.2f))
+            .border(4.dp, Color.White.copy(alpha = 0.1f), CircleShape)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onTap),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (picture != null) {
+            AsyncImage(model = picture, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else {
+            Icon(GuangYueIcons.Disc, null, tint = ink.copy(alpha = 0.2f), modifier = Modifier.size(64.dp))
+        }
+    }
+}
+
+/**
+ * Folia 简介卡（360×200 手机断点）：rounded-3xl p-6、日光白 60% / 夜 zinc-900 60% + 描边；
+ * 名字 30sp 特粗一行、别名 12sp 50%、48×2 天蓝短线；简介 12sp 65%；底部发丝线下「N 首 • M 专辑」10sp 40%。
+ */
+@Composable
+private fun ArtistBioCard(a: GridArtistHead, ink: Color, daylight: Boolean, onTap: () -> Unit) {
+    val stats = listOfNotNull(a.trackCount?.let { "$it 首" }, a.albumCount?.let { "$it 专辑" }).joinToString(" • ")
+    Column(
+        Modifier
+            .requiredSize(width = 360.dp, height = 200.dp)
+            .shadow(24.dp, RoundedCornerShape(24.dp), clip = false)
+            .clip(RoundedCornerShape(24.dp))
+            .background(if (daylight) Color.White.copy(alpha = 0.6f) else Color(0xFF18181B).copy(alpha = 0.6f))
+            .border(1.dp, Color.White.copy(alpha = if (daylight) 0.3f else 0.1f), RoundedCornerShape(24.dp))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onTap)
+            .padding(24.dp),
+    ) {
+        Text(a.name, color = ink, fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (a.alias.isNotBlank()) {
+            Text(a.alias, color = ink.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
+        }
+        Box(Modifier.padding(top = 8.dp).size(width = 48.dp, height = 2.dp).clip(CircleShape).background(Color(0xFF38BDF8).copy(alpha = 0.6f)))
+        Text(
+            a.description?.takeIf { it.isNotBlank() } ?: "暂无详细介绍",
+            color = ink.copy(alpha = 0.65f), fontSize = 12.sp, lineHeight = 19.sp,
+            overflow = TextOverflow.Clip,
+            modifier = Modifier.weight(1f).padding(top = 12.dp, bottom = 8.dp),
+        )
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.05f)))
+        Text(stats, color = ink.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
     }
 }
 

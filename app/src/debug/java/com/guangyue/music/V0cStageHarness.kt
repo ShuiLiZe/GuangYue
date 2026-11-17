@@ -544,6 +544,30 @@ fun V0cStage(
                     )
                 }
             }
+        } else if (style == "gridartist") {
+            // 11-18：网格歌手页（Folia ArtistGridView）：头像 + 简介卡居中一行，热门歌曲在上、专辑在下。3000 = 浅色；14000 = 简介全文浮层前先居中到简介卡。
+            val light = positionMs == 3_000L
+            val ink = if (light) Color(0xFF18181B) else Color(0xFFF4F4F5)
+            val songs = listOf("晴天", "七里香", "夜曲", "稻香", "告白气球", "青花瓷", "简单爱", "以父之名")
+                .mapIndexed { i, t -> com.guangyue.music.ui.collection.GridTrackCard("s$i", t, "周杰伦", "叶惠美", 240_000L + i * 7_000L, null) }
+            val albums = listOf("叶惠美" to "2003", "七里香" to "2004", "范特西" to "2001", "八度空间" to "2002")
+                .mapIndexed { i, (t, y) -> com.guangyue.music.ui.collection.GridTrackCard("a$i", t, y, "", 0L, null) }
+            FoliaTheme(dark = !light) {
+                com.guangyue.music.ui.collection.GridCollectionView(
+                    title = "周杰伦", subtitle = "艺术家",
+                    coverUrl = null, cards = songs, loading = false, failed = false, ink = ink,
+                    ground = if (light) Color(0xFFF4F4F5) else Color(0xFF09090B),
+                    countLabel = "${songs.size} 首 · 歌手", isCurrent = { it == 1 }, playing = true,
+                    onBack = {}, onRetry = {}, onPlay = {}, onTogglePlayback = {}, onEnqueue = {}, onLongPress = {},
+                    panelActions = listOf(com.guangyue.music.ui.collection.GridPanelAction("播放全部", primary = true) {}),
+                    artist = com.guangyue.music.ui.collection.GridArtistHead(
+                        name = "周杰伦", alias = "1234 万 粉丝",
+                        description = "华语流行乐男歌手、音乐人、演员、导演。2000 年发行首张个人专辑《Jay》，融合 R&B、嘻哈与中国风，作品横跨二十余年。",
+                        picture = null, trackCount = songs.size, albumCount = albums.size,
+                    ),
+                    albums = albums,
+                )
+            }
         } else if (style == "gridcollection" || style == "gridcollectionbleed") {
             // 11-17：gridcollectionbleed = Folia 全画幅封面（面板收起）；3000 浅色再加正方形卡片。
             val bleed = style == "gridcollectionbleed"

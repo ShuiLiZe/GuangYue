@@ -59,6 +59,8 @@ jobs:
         run: ./gradlew :feature:search:testDebugUnitTest --tests '*LocalSongMatch*' --no-daemon --stacktrace
       - name: 平台图标单测（feature:library，只跑 ProviderLogos*）
         run: ./gradlew :feature:library:testDebugUnitTest --tests '*ProviderLogos*' --no-daemon --stacktrace
+      - name: 网格歌手页排位单测（app，只跑 ArtistGridCoords*）
+        run: ./gradlew :app:testDebugUnitTest --tests '*ArtistGridCoords*' --no-daemon --stacktrace
       - name: 打乱队列单测（core:player，只跑 QueueShuffle*）
         run: ./gradlew :core:player:testDebugUnitTest --tests '*QueueShuffle*' --no-daemon --stacktrace
       - name: 编译 debug APK

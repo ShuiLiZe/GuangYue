@@ -584,7 +584,8 @@ fun GuangYueNavHost(
                 content = {
                     // 2026-11-16 用户：歌单详情要和 Folia 一样 → 照 Folia 网格集合页（GridView tracks）。歌手页仍走墙面（有专辑段）。
                     // 0.0.33 用户：歌单详情有两套（Folia 资料库界面：网格 / 墙面），设置里切。
-                    if (!isArtistPage && collectionStyle == com.guangyue.core.prefs.HomeStyles.GRID) {
+                    // 11-18：歌手页在网格界面下也照 Folia ArtistGridView（头像 + 简介 + 热门歌曲 + 专辑），不再落墙面。
+                    if (collectionStyle == com.guangyue.core.prefs.HomeStyles.GRID) {
                         val playAllNow = {
                             if (list.isNotEmpty()) {
                                 playback.setShuffle(false)
@@ -599,8 +600,22 @@ fun GuangYueNavHost(
                             minOpacity = falloff.second,
                             fullBleedCover = cardShape.first,
                             squareCards = cardShape.second,
+                            artist = if (isArtistPage) {
+                                val known = com.guangyue.feature.library.viewmodel.ArtistTiles.knownOrNull(tile.key)
+                                com.guangyue.music.ui.collection.GridArtistHead(
+                                    name = shownName,
+                                    alias = tile.subtitle.takeIf { s -> s.endsWith(" 粉丝") }.orEmpty(),
+                                    description = known?.description,
+                                    picture = tile.artwork ?: known?.avatar,
+                                    trackCount = tracks?.size,
+                                    albumCount = albumTiles.size.takeIf { n -> n > 0 },
+                                )
+                            } else null,
+                            albums = remember(albumTiles) { albumTiles.map { a -> com.guangyue.music.ui.collection.GridTrackCard(a.key, a.title, a.subtitle, "", 0L, a.artwork) } },
+                            onOpenAlbum = { j -> albumTiles.getOrNull(j)?.let(openAlbum) },
+                            panelDescription = if (isArtistPage) com.guangyue.feature.library.viewmodel.ArtistTiles.knownOrNull(tile.key)?.description.orEmpty() else null,
                             title = shownName,
-                            subtitle = tile.subtitle.takeIf { s -> s.isNotBlank() } ?: kindLabel,
+                            subtitle = if (isArtistPage) "艺术家" else tile.subtitle.takeIf { s -> s.isNotBlank() } ?: kindLabel,
                             coverUrl = tile.artwork ?: list.firstOrNull { t -> t.artwork != null }?.artwork,
                             cards = remember(list) { list.map { t -> com.guangyue.music.ui.collection.GridTrackCard(t.key, t.title, t.artist, t.album, t.durationMs, t.artwork) } },
                             loading = tracks == null && !failed,
@@ -627,7 +642,9 @@ fun GuangYueNavHost(
                             onEnqueueAll = {
                                 if (list.isNotEmpty()) {
                                     playback.appendTracks(list)
-                                    com.guangyue.feature.library.design.StatusToasts.show("已加入播放队列 ${list.size} 首")
+                                    com.guangyue.feature.library.design.StatusToasts.show(
+                                        if (isArtistPage) "已加入 ${list.size} 首热门歌曲到播放队列" else "已加入播放队列 ${list.size} 首",
+                                    )
                                 }
                             },
                             panelActions = buildList {
