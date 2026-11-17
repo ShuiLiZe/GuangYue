@@ -54,6 +54,15 @@ private const val TAG = "GYICON"
  */
 @Composable
 internal fun PluginIcon(plugin: PluginMeta, modifier: Modifier = Modifier) {
+    // folia-sonnet：认得出的平台用本尊图标（ProviderLogos），不再去拉站点 favicon。
+    val logo = remember(plugin.id, plugin.platform) { com.guangyue.feature.library.design.ProviderLogos.resFor(plugin.platform, plugin.name) }
+    if (logo != null) {
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(logo), contentDescription = null,
+            contentScale = ContentScale.Crop, modifier = modifier.size(PluginIconSize).clip(CircleShape),
+        )
+        return
+    }
     val context = LocalContext.current
     val candidates = remember(plugin.id, plugin.iconUrl, plugin.srcUrl, plugin.platform) {
         PluginPlatformIcons.candidatesFor(plugin)

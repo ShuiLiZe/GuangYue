@@ -295,13 +295,23 @@ fun QrLoginDialog(
 
 @Composable
 private fun Badge(p: QrPlatform, size: androidx.compose.ui.unit.Dp, ring: Boolean = false) {
+    // folia-sonnet PlatformMark：有本尊图标就铺满裁圆、不套色底；没有才「一个字 + 平台色」。
+    val logo = com.guangyue.feature.library.design.ProviderLogos.resFor(p.id)
     Box(
-        Modifier.size(size).clip(CircleShape)
-            .then(if (ring) Modifier.border(3.dp, Color(0xFF1C1C1E), CircleShape) else Modifier)
-            .background(PLATFORM_COLOR[p] ?: Color.Gray),
+        Modifier.size(size)
+            .then(if (ring) Modifier.border(3.dp, Color(0xFF1C1C1E), CircleShape).padding(3.dp) else Modifier)
+            .clip(CircleShape)
+            .then(if (logo == null) Modifier.background(PLATFORM_COLOR[p] ?: Color.Gray) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        Text(badgeText(p), color = Color.White, fontSize = (size.value * 0.42f).sp, fontWeight = FontWeight.Bold)
+        if (logo != null) {
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(logo), contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Text(badgeText(p), color = Color.White, fontSize = (size.value * 0.42f).sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 

@@ -845,7 +845,7 @@ fun ProviderPill(label: String?, dark: Boolean, onClick: () -> Unit, iconUrl: St
             Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFE5312B))
+                .background(providerDiscColor(label))
                 .clickable(onClick = onClick)
                 .semantics { contentDescription = "音源与登录" + (label?.let { "：$it" } ?: "") },
             contentAlignment = Alignment.Center,
@@ -875,7 +875,7 @@ fun ProviderLoginPill(label: String?, ink: Color, onClick: () -> Unit, iconUrl: 
                 .padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(28.dp).clip(CircleShape).background(Color(0xFFE5312B)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(28.dp).clip(CircleShape).background(providerDiscColor(label)), contentAlignment = Alignment.Center) {
                 ProviderMark(label, iconUrl, 13.sp, 16.dp)
             }
             Spacer(Modifier.width(10.dp))
@@ -890,9 +890,29 @@ fun ProviderLoginPill(label: String?, ink: Color, onClick: () -> Unit, iconUrl: 
 }
 
 
-/** 平台标记：有站点图标就铺满圆（Folia 平台按钮是平台 logo），取不到回退音源名首字。 */
+/**
+ * 平台圆底色：有本尊图标的平台不套底色（图自己就是底，folia-sonnet PlatformMark hasAppIcon），
+ * 没有的照 Folia 平台记号色回落（认不出的用 Folia NEUTRAL_MARK_COLOR 那一档红，沿用广乐旧色）。
+ */
+private fun providerDiscColor(label: String?): Color =
+    if (com.guangyue.feature.library.design.ProviderLogos.resFor(label) != null) Color.Transparent else Color(0xFFE5312B)
+
+/**
+ * 平台标记（folia-sonnet PlatformMark）：认得出的平台亮本尊图标（铺满、裁成圆）；
+ * 认不出的再试站点图标，取不到回退音源名首字。
+ */
 @Composable
 private fun ProviderMark(label: String?, iconUrl: String?, letterSize: androidx.compose.ui.unit.TextUnit, iconSize: androidx.compose.ui.unit.Dp) {
+    val logo = remember(label) { com.guangyue.feature.library.design.ProviderLogos.resFor(label) }
+    if (logo != null) {
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(logo),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize().clip(CircleShape),
+        )
+        return
+    }
     // 先画首字，站点图标真正解码出来才盖上去（白底 + 图标）；favicon 取不到 / 解不出时一直是首字。
     var loaded by remember(iconUrl) { mutableStateOf(false) }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -970,7 +990,7 @@ fun ProviderSwitcher(
                                 .padding(horizontal = 8.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Box(Modifier.size(24.dp).clip(CircleShape).background(Color(0xFFE5312B)), contentAlignment = Alignment.Center) {
+                            Box(Modifier.size(24.dp).clip(CircleShape).background(providerDiscColor(name)), contentAlignment = Alignment.Center) {
                                 ProviderMark(name, icon, 11.sp, 14.dp)
                             }
                             Spacer(Modifier.width(10.dp))

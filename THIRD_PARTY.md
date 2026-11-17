@@ -51,3 +51,9 @@ Copyright (C) 2026 GuangYue contributors
 | jaudiotagger | 音频标签 | LGPL-2.1 |
 
 App 内「设置 → 开源许可」页列出了同一份清单。
+
+## 平台图标：folia-sonnet
+
+`feature/library/src/main/res/drawable-nodpi/provider_*.png`（网易云 / QQ音乐 / 酷狗 / 波点 / 汽水 / 飞牛 / 洛雪）取自
+folia-sonnet `src/assets/providers/`（https://github.com/maimai993/folia-sonnet ，AGPL-3.0），缩到 192px。
+图标本身是各平台的商标，只用来标明音源来自哪个平台。
