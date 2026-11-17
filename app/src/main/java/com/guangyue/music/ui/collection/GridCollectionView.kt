@@ -31,6 +31,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -163,6 +167,8 @@ fun GridCollectionView(
     onLongPress: (Int) -> Unit,
     panelActions: List<GridPanelAction>,
     onEnqueueAll: () -> Unit = {},
+    /** 取证用：开场就打开信息面板。 */
+    initialPanelOpen: Boolean = false,
 ) {
     val daylight = (0.299f * ground.red + 0.587f * ground.green + 0.114f * ground.blue) > 0.5f
     val density = LocalDensity.current
@@ -170,7 +176,7 @@ fun GridCollectionView(
     var box by remember { mutableStateOf(IntSize.Zero) }
     val ox = remember { Animatable(0f) }
     val oy = remember { Animatable(0f) }
-    var panelOpen by remember { mutableStateOf(false) }
+    var panelOpen by remember { mutableStateOf(initialPanelOpen) }
     var listOpen by remember { mutableStateOf(false) }
     var sortAz by remember { mutableStateOf(false) }
     val bases = remember(cards.size) { Array(cards.size) { hexBase(it) } }
@@ -448,36 +454,48 @@ fun GridCollectionView(
             exit = fadeOut() + slideOutHorizontally { -it / 6 },
             modifier = Modifier.zIndex(80f),
         ) {
+            // 11-17：手机横屏（矮屏）照 folia-sonnet androidPhoneFit ①：面板贴 10/10、宽 min(320, 46vw)、内边距 14，
+            // 封面压成 64dp 横幅，按钮排收一档——让「播放全部」不用滚就露出来。竖屏不变。
+            val conf = androidx.compose.ui.platform.LocalConfiguration.current
+            val cutCompact = conf.screenHeightDp < 480
             Box(Modifier.fillMaxSize().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { panelOpen = false }) {
                 Column(
                     Modifier
                         .windowInsetsPadding(WindowInsets.statusBars)
-                        .padding(start = 24.dp, end = 24.dp, top = 96.dp, bottom = 24.dp)
-                        .widthIn(max = 320.dp)
+                        .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+                        .then(
+                            if (cutCompact) Modifier.padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = 10.dp)
+                                .widthIn(max = minOf(320f, conf.screenWidthDp * 0.46f).dp)
+                            else Modifier.padding(start = 24.dp, end = 24.dp, top = 96.dp, bottom = 24.dp).widthIn(max = 320.dp),
+                        )
                         .shadow(24.dp, RoundedCornerShape(24.dp), clip = false)
                         .clip(RoundedCornerShape(24.dp))
                         .background(ground.copy(alpha = 0.92f))
                         .border(1.dp, ink.copy(alpha = 0.12f), RoundedCornerShape(24.dp))
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
                         .verticalScroll(rememberScrollState())
-                        .padding(24.dp),
+                        .padding(if (cutCompact) 14.dp else 24.dp),
                 ) {
-                    Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(16.dp)).background(ink.copy(alpha = 0.08f))) {
+                    Box(
+                        Modifier.fillMaxWidth()
+                            .then(if (cutCompact) Modifier.height(64.dp) else Modifier.aspectRatio(1f))
+                            .clip(RoundedCornerShape(16.dp)).background(ink.copy(alpha = 0.08f)),
+                    ) {
                         if (coverUrl != null) AsyncImage(model = coverUrl, contentDescription = title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     }
-                    Text(title, color = ink, fontSize = 20.sp, fontWeight = FontWeight.Bold, lineHeight = 26.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 16.dp))
+                    Text(title, color = ink, fontSize = if (cutCompact) 16.sp else 20.sp, fontWeight = FontWeight.Bold, lineHeight = if (cutCompact) 21.sp else 26.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = if (cutCompact) 10.dp else 16.dp))
                     Text(countLabel, color = ink.copy(alpha = 0.4f), fontSize = 10.sp, modifier = Modifier.padding(top = 6.dp))
                     if (subtitle.isNotBlank()) {
-                        Text(subtitle, color = ink.copy(alpha = 0.65f), fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 12.dp))
+                        Text(subtitle, color = ink.copy(alpha = 0.65f), fontSize = 12.sp, lineHeight = 18.sp, maxLines = if (cutCompact) 3 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = if (cutCompact) 8.dp else 12.dp))
                     }
                     Column(
-                        Modifier.padding(top = 16.dp).fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        Modifier.padding(top = if (cutCompact) 8.dp else 16.dp).fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(if (cutCompact) 4.dp else 8.dp),
                     ) {
                         Box(Modifier.fillMaxWidth().height(1.dp).background(ink.copy(alpha = 0.1f)))
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(if (cutCompact) 4.dp else 8.dp))
                         panelActions.forEach { a ->
-                            Pill(a.label, ink, ground, primary = a.primary, danger = a.danger, enabled = a.enabled, full = true) { panelOpen = false; a.run() }
+                            Pill(a.label, ink, ground, primary = a.primary, danger = a.danger, enabled = a.enabled, full = true, compact = cutCompact) { panelOpen = false; a.run() }
                         }
                     }
                 }
@@ -487,7 +505,7 @@ fun GridCollectionView(
 }
 
 @Composable
-private fun Pill(label: String, ink: Color, ground: Color, primary: Boolean = false, danger: Boolean = false, enabled: Boolean = true, full: Boolean = false, onClick: () -> Unit) {
+private fun Pill(label: String, ink: Color, ground: Color, primary: Boolean = false, danger: Boolean = false, enabled: Boolean = true, full: Boolean = false, compact: Boolean = false, onClick: () -> Unit) {
     val bg = when {
         primary -> ink
         else -> ink.copy(alpha = 0.08f)
@@ -503,9 +521,10 @@ private fun Pill(label: String, ink: Color, ground: Color, primary: Boolean = fa
             .background(bg)
             .clickable(enabled = enabled, onClick = onClick)
             .graphicsLayer { alpha = if (enabled) 1f else 0.4f }
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            // 紧凑档：sonnet 按钮 padding 6px、字号 11px；手机触控最低 40dp。
+            .then(if (compact) Modifier.heightIn(min = 40.dp).padding(horizontal = 16.dp, vertical = 6.dp) else Modifier.padding(horizontal = 20.dp, vertical = 12.dp)),
         contentAlignment = Alignment.Center,
-    ) { Text(label, color = fg, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+    ) { Text(label, color = fg, fontSize = if (compact) 11.sp else 12.sp, fontWeight = FontWeight.Bold) }
 }
 
 private fun formatDuration(ms: Long): String {

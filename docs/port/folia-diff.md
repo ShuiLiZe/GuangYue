@@ -7,7 +7,7 @@
 
 ## 首页
 - 🔧 未登录态（63336cd 默认落歌单页签，空态即登录面板，胶囊直开登录窗；文案改用 Folia 原文）：Folia 显示「先搜几首喜欢的歌试试看」+ 说明 + 「登录到 网易云」胶囊（后跟各平台圆标），中间灰色人像方块。广乐未登录直接显示推荐卡片。→ 拟：无任何平台账号时首屏照搬 HomeLoginPanel，推荐降为其下方/页签内。
-- ⏳ 页签：Folia 4 个（歌单/电台/专辑/本地，小字白胶囊），广乐 5 个（歌单/推荐/探索/专辑/本地）。「推荐」「探索」是广乐自加。
+- ✅ 页签：Folia 4 个（歌单/电台/专辑/本地），广乐 0.0.29 起同（推荐/探索已去）。
 - ⏳ 右下平台按钮：Folia 是平台真 logo 圆标；广乐是「网」字圆标（源码 PlatformMark 也是字标，APK 用 logo）。
 - ✋ 标题字重：两边都是 Bold，观感差来自中文字形。
 - ✅ 顶栏布局（标题+齿轮+右侧搜索胶囊）。
@@ -44,3 +44,14 @@
 - 🔧 2026-11-15 QQ 音乐已接：core/data `account/QqAccount.kt`（纯函数：GetPlaylistByUin + CgiGetPlaylistFavInfo 读歌单、uniform_get_Dissinfo 读曲目，1000/104401 = 登录过期）+ `AccountLibrary`（凭据 uin/musickey、files/account 缓存）。扫码成功自动读、「同步数据」手动重读，提示照 Folia 文案；首页歌单页签先列账号歌单（我喜欢置顶），点开进集合层可播。❓ 待真机验证接口与取链。
 - 🔧 2026-11-15 网易云已接：eapi 加密抽到 core/plugin `login/NeteaseCrypto.kt`（扫码登录与账号读取共用）；core/data `account/NeteaseAccount.kt`（纯函数）：`/api/nuser/account/get` 拿 uid（code 200 无 profile 或 301/401/403 = 登录过期，照 Folia neteaseFailure），`/api/user/playlist` 读自建 + 收藏（「我喜欢的音乐」= specialType 5 且创建者是自己，置顶；收藏来的别人的「喜欢」不算），`/api/v6/playlist/detail` 取 trackIds + `/api/v3/song/detail` 每 400 首补全（Folia playlist/track/all 两步）。凭据 MUSIC_U / __csrf 存本机，0.0.30 只写进插件变量的回头迁移；缓存 files/account/netease_*.json，退出清掉。首页歌单页签按当前音源取舍（Folia withActiveProvider：当前平台有账号歌单只列它的，否则 QQ + 网易云都列），后接本地歌单。❓ 待真机验证接口（eapi 风控）与取链。
 - 🔧 2026-11-15 酷狗已接：core/data `account/KugouAccount.kt`（纯函数）照 KuGouMusicApi `user_playlist.js` / `playlist_track_all.js` / `login_token.js` 与 util/helper.js 的安卓签名（盐 OIlwieks…，appid 1005 / clientver 20489，mid = calculateMid(md5(guid))）直连 gateway.kugou.com：POST `/v7/get_all_list`（x-router cloudlist.service.kugou.com，type 2，一页 100，source 2 / 带 musiclib_id 的专辑略过，「我喜欢」= listid 2 或同名，置顶；type 0 自建、1 收藏），GET `/pubsongs/v2/get_other_list_file_nofilt`（global_collection_id、begin_idx、一页 100）；error_code 152 / HTTP 401·403 = 登录失效（Folia kugouTransport），别的码算同步失败。扫码拿的是网页端（appid 1005 / srcappid 2919）token：KuGouMusicApi 就拿它直接签网关；Folia 手机版说会遇到 20017，那时照 login_token.js 用 `/v5/login_by_token`（AES p3 + 裸 RSA pk，secu_params 解出新 token）换安卓 token 再读一次，换到的存 `kg_app_token`（只认从当前扫码 token 换来的）。曲目 rawJson 带 hash / album_id / album_audio_id（插件与洛雪 kg 取链），platform 取已装酷狗插件的，没有写「酷狗」（LxPlatforms 顺手认中文平台名）。凭据 userid / token 存本机，0.0.30 只写进插件变量的回头迁移；缓存 files/account/kugou_*.json，退出清掉。首页歌单页签当前音源酷狗只列酷狗，不是三家时按 QQ、网易云、酷狗依次全列。自建歌单没封面时 Folia 会再拿第一首歌的封面，这里没做（显示占位色块）。❓ 待真机验证：网页 token 能否直接签网关、login_by_token 兜底、取链。
+
+
+## 2026-11-17 晚：对照 folia-sonnet `src/styles/androidPhoneFit.css`（dev 分支）与 Folia ponder 源码
+- 🔧 首页右上灯泡（Folia PagePonderTouchButton）：48dp 圆、落地/换页签露 4 秒后收起，右上 96dp 热区叫出；设置 → 外观「触屏思索按钮」。✋ Folia 的思索是合成舞台 + 光标动画，手机上改为真实首页挖洞高亮 + 说明卡（章节与文案照 grid-page scenes，键盘那章换成「平台与播放」）。
+- 🔧 播放页胶囊竖屏展开态（Portrait phone fit）：宽 min(100vw-40, 22rem)，两行（左 32 播放键 · 歌名 12sp + 两侧箭头 · 右两槽 15 图标 / 进度条跨满）。✋ 触控区保持 40–44dp（Folia 32px / 槽 3px 内边距在手指下太小）。
+- 🔧 播放页面板手柄竖屏（panel-toggle）：不再和胶囊挤一行，44dp 贴右缘、浮在胶囊上方（Folia bottom 120px）。横屏仍在胶囊右侧。
+- 🔧 歌单详情信息面板横屏（① 侧切入面板）：贴 10/10、宽 min(320, 46vw)、内边距 14，封面压成 64dp 横幅，按钮 11sp、间距 4。竖屏不变。
+- 🔧 本地搜索支持拼音（全拼 / 首字母）。Folia 本地搜索本身不做拼音（只命令窗 / 设置搜索用 pinyin-pro）；用户要求，按同思路加。
+- ⏳ UI 尺度：sonnet 手机竖屏根字号 86%（横屏 76%，用户可调滑条）。广乐按 dp 原样，整体偏大一档的观感可能来自这里；要做需全局 density 缩放 + 设置滑条，单独排期。
+- ⏳ 歌单选择弹窗（②）：横屏面板定高、标题钉住、列表交回外层滚。未核对广乐的歌单选择窗。
+- ⏳ 正在播放卡片（now-playing toast）位置已照做（top 安全区 + 72、left 12）✅；Lattice / bravais 墙面左上返回键「挖孔下沿 + 6px」未核对。

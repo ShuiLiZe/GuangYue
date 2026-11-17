@@ -492,6 +492,27 @@ fun V0cStage(
                     )
                 }
             }
+        } else if (style == "gridcollection") {
+            // 11-17：歌单详情（GridView）信息面板开着。竖屏 = 原样；横屏照 sonnet ① 紧凑（64dp 横幅封面、按钮收一档）。3000 = 浅色。
+            val light = positionMs == 3_000L
+            val ink = if (light) Color(0xFF18181B) else Color(0xFFF4F4F5)
+            val cards = listOf("晴天" to "周杰伦", "后来" to "刘若英", "夜曲" to "周杰伦", "月亮代表我的心" to "邓丽君", "七里香" to "周杰伦", "红豆" to "王菲")
+                .mapIndexed { i, (t, a) -> com.guangyue.music.ui.collection.GridTrackCard("t$i", t, a, "测试专辑", 240_000L + i * 7_000L, null) }
+            FoliaTheme(dark = !light) {
+                com.guangyue.music.ui.collection.GridCollectionView(
+                    title = "通勤路上的好心情", subtitle = "一张用来测试信息面板的歌单，简介写得稍微长一点，看看横屏下会不会把按钮挤出去。",
+                    coverUrl = null, cards = cards, loading = false, failed = false, ink = ink,
+                    ground = if (light) Color(0xFFF4F4F5) else Color(0xFF09090B),
+                    countLabel = "${cards.size} 首", isCurrent = { false }, playing = false,
+                    onBack = {}, onRetry = {}, onPlay = {}, onTogglePlayback = {}, onEnqueue = {}, onLongPress = {},
+                    panelActions = listOf(
+                        com.guangyue.music.ui.collection.GridPanelAction("播放全部", primary = true) {},
+                        com.guangyue.music.ui.collection.GridPanelAction("全部加入队列") {},
+                        com.guangyue.music.ui.collection.GridPanelAction("下载全部") {},
+                    ),
+                    initialPanelOpen = true,
+                )
+            }
         } else if (style == "gridhomeswitch") {
             // 0.0.27：切换入口取证 = 设置 → 外观 → 资料库界面（Folia「设置 → 界面设置 → 资料库界面」）。
             // 3000 = 浅色、选中「网格」；其余 = 深色、默认「墙面」。

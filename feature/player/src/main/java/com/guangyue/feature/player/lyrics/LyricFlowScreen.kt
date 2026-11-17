@@ -9,6 +9,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -866,6 +867,73 @@ fun LyricFlowScreen(
             )
 
             // ---------------- 底部播放胶囊 ----------------
+            val panelKey: @Composable (androidx.compose.ui.unit.Dp) -> Unit = { keySize ->
+                if (onOpenPanel != null) {
+                    val panelPill = if (darkMode) Color(0xFF17171A).copy(alpha = 0.55f) else Color.White.copy(alpha = 0.62f)
+                    // P1b：面板打开时圆键反色成实心关闭键（Folia 基准 player-panel-*-m412：浅色黑底白 X）。
+                    val keyBg by androidx.compose.animation.animateColorAsState(
+                        if (panelOpen) (if (darkMode) Color(0xFFF4F4F5) else Color(0xFF18181B)) else panelPill,
+                        label = "panelKeyBg",
+                    )
+                    val keyInk by androidx.compose.animation.animateColorAsState(
+                        if (panelOpen) (if (darkMode) Color(0xFF18181B) else Color.White) else pillInk,
+                        label = "panelKeyInk",
+                    )
+                    Box(
+                        Modifier
+                            .size(keySize)
+                            .clip(CircleShape)
+                            .background(keyBg)
+                            .clickableNoRipple(onOpenPanel)
+                            .semantics { contentDescription = if (panelOpen) "关闭面板" else "播放面板" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        androidx.compose.animation.Crossfade(targetState = panelOpen, label = "panelKey") { opened ->
+                            Icon(
+                                if (opened) GuangYueIcons.X else GuangYueIcons.SlidersHorizontal,
+                                null,
+                                tint = keyInk,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                                }
+            }
+            val barPortrait = LocalConfiguration.current.screenHeightDp >= BAR_COMPACT_SCREEN_DP
+            if (barPortrait) {
+                // 11-17：竖屏照 folia-sonnet androidPhoneFit：面板手柄不和胶囊挤一行，贴右缘、抬到胶囊上方（bottom 120px，44px）；
+                // 胶囊自己居中。
+                Box(Modifier.fillMaxWidth().alpha(chromeAlpha)) {
+                LyricBar(
+                    modifier = Modifier.fillMaxWidth(),
+                    positionMs = positionMs,
+                    durationMs = playback.durationMs,
+                    progress = progress,
+                    playing = playback.isPlaying,
+                    pillInk = pillInk,
+                    dark = darkMode,
+                    labels = strings,
+                    onTogglePlay = onTogglePlay,
+                    onScrub = { scrubbing = true; scrubValue = it },
+                    onScrubPreview = onSeekPreview,
+                    onScrubEnd = {
+                        onSeek(scrubValue)
+                        scrubbing = false
+                    },
+                    title = playback.item?.title.orEmpty(),
+                    onNext = onNext,
+                    onPrevious = onPrevious,
+                    modeIcon = modeIcon,
+                    modeLabel = modeLabel,
+                    onCycleMode = onCycleMode,
+                    initialExpanded = initialBarExpanded,
+                )
+                    if (onOpenPanel != null) {
+                        // 浮在胶囊上方，不占版面（不挤舞台）。
+                        Box(Modifier.align(Alignment.TopEnd).offset(y = (-36).dp).padding(end = 4.dp)) { panelKey(44.dp) }
+                    }
+                }
+            } else {
             Row(Modifier.fillMaxWidth().alpha(chromeAlpha), verticalAlignment = Alignment.CenterVertically) {
                 LyricBar(
                     modifier = Modifier.weight(1f),
@@ -892,36 +960,10 @@ fun LyricFlowScreen(
                     initialExpanded = initialBarExpanded,
                 )
                 if (onOpenPanel != null) {
-                    val panelPill = if (darkMode) Color(0xFF17171A).copy(alpha = 0.55f) else Color.White.copy(alpha = 0.62f)
-                    // P1b：面板打开时圆键反色成实心关闭键（Folia 基准 player-panel-*-m412：浅色黑底白 X）。
-                    val keyBg by androidx.compose.animation.animateColorAsState(
-                        if (panelOpen) (if (darkMode) Color(0xFFF4F4F5) else Color(0xFF18181B)) else panelPill,
-                        label = "panelKeyBg",
-                    )
-                    val keyInk by androidx.compose.animation.animateColorAsState(
-                        if (panelOpen) (if (darkMode) Color(0xFF18181B) else Color.White) else pillInk,
-                        label = "panelKeyInk",
-                    )
                     Spacer(Modifier.width(GySpace.s))
-                    Box(
-                        Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(keyBg)
-                            .clickableNoRipple(onOpenPanel)
-                            .semantics { contentDescription = if (panelOpen) "关闭面板" else "播放面板" },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        androidx.compose.animation.Crossfade(targetState = panelOpen, label = "panelKey") { opened ->
-                            Icon(
-                                if (opened) GuangYueIcons.X else GuangYueIcons.SlidersHorizontal,
-                                null,
-                                tint = keyInk,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
+                    panelKey(56.dp)
                 }
+            }
             }
         }
         // 2026-11-14：Folia NowPlayingToast（正在播放 / 接下来播放），手机上停在左上返回键下方
