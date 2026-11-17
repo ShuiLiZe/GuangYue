@@ -146,6 +146,9 @@ class AppPreferences @Inject constructor(
                 opacity = prefs.getFloat(KEY_SUBTITLE_OPACITY, 0.6f).toDouble(),
                 background = prefs.getBoolean(KEY_SUBTITLE_BACKGROUND, true),
                 upcomingBlur = prefs.getBoolean(KEY_SUBTITLE_UPCOMING_BLUR, true),
+                fontScale = prefs.getFloat(KEY_SUBTITLE_FONT_SCALE, 1f).toDouble(),
+                fontInherits = prefs.getBoolean(KEY_SUBTITLE_FONT_INHERITS, true),
+                fontStyle = prefs.getString(KEY_SUBTITLE_FONT_STYLE, "sans") ?: "sans",
             ),
         )
         set(v) {
@@ -156,6 +159,9 @@ class AppPreferences @Inject constructor(
                 .putFloat(KEY_SUBTITLE_OPACITY, s.opacity.toFloat())
                 .putBoolean(KEY_SUBTITLE_BACKGROUND, s.background)
                 .putBoolean(KEY_SUBTITLE_UPCOMING_BLUR, s.upcomingBlur)
+                .putFloat(KEY_SUBTITLE_FONT_SCALE, s.fontScale.toFloat())
+                .putBoolean(KEY_SUBTITLE_FONT_INHERITS, s.fontInherits)
+                .putString(KEY_SUBTITLE_FONT_STYLE, s.fontStyle)
                 .apply()
         }
 
@@ -368,6 +374,9 @@ class AppPreferences @Inject constructor(
         const val KEY_SUBTITLE_OPACITY = "subtitle_overlay_opacity"
         const val KEY_SUBTITLE_BACKGROUND = "subtitle_overlay_background"
         const val KEY_SUBTITLE_UPCOMING_BLUR = "subtitle_upcoming_lyrics_blur"
+        const val KEY_SUBTITLE_FONT_SCALE = "subtitle_font_scale"
+        const val KEY_SUBTITLE_FONT_INHERITS = "subtitle_font_inherits_lyrics"
+        const val KEY_SUBTITLE_FONT_STYLE = "subtitle_font_style"
         const val KEY_CL_FOCUS = "claddagh_tuning_focus"
         const val KEY_CL_RADIUS = "claddagh_tuning_radius"
         const val KEY_CL_TILT = "claddagh_tuning_tilt"

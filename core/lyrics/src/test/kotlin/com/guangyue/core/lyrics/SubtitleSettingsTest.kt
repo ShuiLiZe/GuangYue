@@ -38,6 +38,9 @@ class SubtitleSettingsTest {
     @Test fun `透明度夹在 0点2 到 1`() {
         assertEquals(0.2, SubtitleSettings.sanitize(SubtitleSettings(opacity = 0.0)).opacity, 1e-9)
         assertEquals(1.0, SubtitleSettings.sanitize(SubtitleSettings(opacity = 3.0)).opacity, 1e-9)
+        assertEquals(1.4, SubtitleSettings.sanitize(SubtitleSettings(fontScale = 9.0)).fontScale, 1e-9)
+        assertEquals(1.1, SubtitleSettings.sanitize(SubtitleSettings(fontScale = 1.08)).fontScale, 1e-9)
+        assertEquals("sans", SubtitleSettings.sanitize(SubtitleSettings(fontStyle = "x")).fontStyle)
         assertEquals(0.6, SubtitleSettings.DEFAULT.opacity, 1e-9)
     }
 }

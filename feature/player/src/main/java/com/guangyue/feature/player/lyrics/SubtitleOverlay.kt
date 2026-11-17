@@ -188,6 +188,8 @@ internal fun LyricSubtitleOverlay(
     background: Boolean = true,
     /** Folia subtitleUpcomingLyricsBlur：下一句（预告 / next 行）加 1px 模糊。 */
     upcomingBlur: Boolean = true,
+    /** Folia subtitleFontScale（字幕缩放）：乘在 clamp 出的字号上（等价 resolveSubtitleFontSizes(scale)）。 */
+    fontScale: Float = 1f,
 ) {
     if (!content.visible || (content.rows.isEmpty() && content.previews.isEmpty())) return
 
@@ -197,7 +199,7 @@ internal fun LyricSubtitleOverlay(
         enter.animateTo(1f, tween(durationMillis = SUBTITLE_ENTER_MS, easing = FastOutSlowInEasing))
     }
 
-    val sizes = ClassicLayout.resolveSubtitleFontSizes(1.0)
+    val sizes = ClassicLayout.resolveSubtitleFontSizes(fontScale.toDouble())
     // 字号算成 dp 再交给 sp —— sp 已含系统 fontScale，重复相乘会双重放大。
     val primaryDp = clampFontDp(
         sizes.translationMinRem, sizes.translationPreferredVw, sizes.translationMaxRem, viewportWidthDp,

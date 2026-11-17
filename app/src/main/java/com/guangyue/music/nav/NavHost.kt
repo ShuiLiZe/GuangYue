@@ -1439,6 +1439,9 @@ fun GuangYueNavHost(
                         onSubtitle = styleVm::updateSubtitle,
                         common = lyricCommon,
                         onCommon = styleVm::updateCommon,
+                        backgrounds = listOf("latent" to "隐现", "common" to "通用"),
+                        background = visBackground,
+                        onBackground = styleVm::pickBackground,
                     )
                 }
             }

@@ -863,7 +863,13 @@ fun LyricFlowScreen(
                 secondaryColor = if (lyricStyle == LyricStyle.LUMIERE) com.guangyue.feature.player.lyrics.visualizer.LumiereSubtitleColor else theme.secondary,
                 scrimColor = theme.background,
                 viewportWidthDp = LocalConfiguration.current.screenWidthDp.toFloat(),
-                fontFamily = GuangYueDesign.Sans,
+                // Folia「字幕字体」：继承歌词字体（歌词跟随样式时仍用原来的无衬线）/ 单独设。
+                fontFamily = when (if (subtitleSettings.fontInherits) lyricCommon.fontStyle else subtitleSettings.fontStyle) {
+                    "serif" -> GuangYueDesign.Serif
+                    "mono" -> FontFamily.Monospace
+                    else -> GuangYueDesign.Sans
+                },
+                fontScale = subtitleSettings.fontScale.toFloat(),
                 opacity = subtitleSettings.opacity.toFloat(),
                 background = subtitleSettings.background,
                 upcomingBlur = subtitleSettings.upcomingBlur,

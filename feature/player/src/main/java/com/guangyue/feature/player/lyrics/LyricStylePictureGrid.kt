@@ -111,7 +111,7 @@ private fun StylePicture(style: LyricStyle, name: String, chosen: Boolean, accen
 }
 
 /** 一笔字形：SVG path（24 视框）、不透明度、是否填充、绕 (12,12) 旋转角。 */
-private class GlyphStroke(val d: String, val alpha: Float = 1f, val fill: Boolean = false, val rotate: Float = 0f)
+private class GlyphStroke(val d: String, val alpha: Float = 1f, val fill: Boolean = false, val rotate: Float = 0f, val width: Float = 1.6f)
 
 private fun circle(cx: Float, cy: Float, r: Float) = "M${cx - r},${cy}a$r,$r 0 1,0 ${2 * r},0a$r,$r 0 1,0 ${-2 * r},0Z"
 private fun ellipse(cx: Float, cy: Float, rx: Float, ry: Float) = "M${cx - rx},${cy}a$rx,$ry 0 1,0 ${2 * rx},0a$rx,$ry 0 1,0 ${-2 * rx},0Z"
@@ -143,6 +143,11 @@ private fun glyphOf(style: LyricStyle): List<GlyphStroke> = when (style) {
 @Composable
 internal fun StyleGlyph(style: LyricStyle, color: Color, modifier: Modifier = Modifier) {
     val strokes = remember(style) { glyphOf(style).map { it to PathParser().parsePathString(it.d).toPath() } }
+    GlyphCanvas(strokes, color, modifier)
+}
+
+@Composable
+private fun GlyphCanvas(strokes: List<Pair<GlyphStroke, androidx.compose.ui.graphics.Path>>, color: Color, modifier: Modifier) {
     Canvas(modifier) {
         val k = size.minDimension / 24f
         scale(k, k, pivot = androidx.compose.ui.geometry.Offset.Zero) {
@@ -150,9 +155,57 @@ internal fun StyleGlyph(style: LyricStyle, color: Color, modifier: Modifier = Mo
                 rotate(g.rotate, pivot = androidx.compose.ui.geometry.Offset(12f, 12f)) {
                     drawPath(
                         path, color.copy(alpha = color.alpha * g.alpha),
-                        style = if (g.fill) Fill else Stroke(width = 1.6f, cap = StrokeCap.Round, join = StrokeJoin.Round),
+                        style = if (g.fill) Fill else Stroke(width = g.width, cap = StrokeCap.Round, join = StrokeJoin.Round),
                     )
                 }
+            }
+        }
+    }
+}
+
+
+/** Folia backgrounds/<id>/entry.tsx 的 glyph（隐现：上层点阵 + 下层流体；通用：三角 + 圆）。 */
+private fun backgroundGlyphOf(id: String): List<GlyphStroke> = when (id) {
+    "latent" -> listOf(GlyphStroke("M4.5 7.5h.01M9 7.5h.01M13.5 7.5h.01M18 7.5h.01", 0.55f, width = 2.2f), GlyphStroke("M3 15c3-3.5 6-3.5 9 0s6 3.5 9 0"))
+    "common" -> listOf(GlyphStroke("M4 17l5-8 5 8z"), GlyphStroke(circle(17.5f, 8.5f, 3f), 0.55f))
+    else -> listOf(GlyphStroke("M5 8h14"), GlyphStroke("M5 12h9", 0.5f), GlyphStroke("M5 16h12", 0.5f))
+}
+
+/**
+ * Folia VisPlayground「背景」页 BACKGROUND_KIND_GROUP：PictureGrid 3 列（画框同样式架），框里画背景字形。
+ * ✋ Folia 框里是背景层的实时小画面（LivePicture），这里同样式架只画字形。
+ */
+@Composable
+internal fun BackgroundPictureGrid(options: List<Pair<String, String>>, selected: String, accent: Color, onPick: (String) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        options.chunked(3).forEach { line ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                line.forEach { (id, name) ->
+                    val chosen = id == selected
+                    val strokes = remember(id) { backgroundGlyphOf(id).map { it to PathParser().parsePathString(it.d).toPath() } }
+                    Column(
+                        Modifier.weight(1f).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPick(id) },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Box(Modifier.fillMaxWidth().aspectRatio(16f / 10f)) {
+                            if (chosen) Box(Modifier.fillMaxSize().border(2.dp, accent, RoundedCornerShape(11.dp)))
+                            Box(
+                                Modifier.fillMaxSize().padding(3.dp).clip(RoundedCornerShape(8.dp))
+                                    .background(Gyp.preview).border(1.dp, Gyp.line2, RoundedCornerShape(8.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                GlyphCanvas(strokes, if (chosen) Gyp.ink else Gyp.t2, Modifier.size(28.dp))
+                            }
+                        }
+                        Text(
+                            name, fontSize = 12.sp, lineHeight = 18.sp,
+                            fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (chosen) Gyp.ink else Gyp.t2, maxLines = 1,
+                            modifier = Modifier.padding(top = 3.dp),
+                        )
+                    }
+                }
+                repeat(3 - line.size) { Box(Modifier.weight(1f)) }
             }
         }
     }

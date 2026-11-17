@@ -12,6 +12,12 @@ data class SubtitleSettings(
     val opacity: Double = 0.6,
     val background: Boolean = true,
     val upcomingBlur: Boolean = true,
+    /** Folia subtitle_font_scale（字幕缩放 0.85–1.4）。 */
+    val fontScale: Double = 1.0,
+    /** Folia subtitle_font_inherits_lyrics（默认 true）：字幕跟歌词同一字体。 */
+    val fontInherits: Boolean = true,
+    /** 不继承时字幕自己的字体："sans" / "serif" / "mono"。 */
+    val fontStyle: String = "sans",
 ) {
     companion object {
         val DEFAULT = SubtitleSettings()
@@ -20,6 +26,8 @@ data class SubtitleSettings(
         fun sanitize(s: SubtitleSettings) = s.copy(
             layout = SubtitleLayout.parse(SubtitleLayout.encode(s.layout)) ?: SubtitleLayout.DEFAULT,
             opacity = if (s.opacity.isFinite()) s.opacity.coerceIn(OPACITY_MIN, OPACITY_MAX) else 0.6,
+            fontScale = if (s.fontScale.isFinite()) (s.fontScale.coerceIn(0.85, 1.4) / 0.05).let { kotlin.math.round(it) * 0.05 } else 1.0,
+            fontStyle = if (s.fontStyle in listOf("sans", "serif", "mono")) s.fontStyle else "sans",
         )
     }
 }

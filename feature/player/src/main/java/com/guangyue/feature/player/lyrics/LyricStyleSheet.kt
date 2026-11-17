@@ -244,7 +244,11 @@ fun LyricStyleSheet(
     /** 「字体」页（Folia previewCommonSettings）：字号 / 整体透明度；null 不出这一页。 */
     common: com.guangyue.core.lyrics.LyricCommonSettings = com.guangyue.core.lyrics.LyricCommonSettings.DEFAULT,
     onCommon: ((com.guangyue.core.lyrics.LyricCommonSettings) -> Unit)? = null,
-    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕 / 2 字体）。 */
+    /** 「背景」页（Folia previewBackgroundSettings）：背景类型 id → 名字；null 不出这一页。 */
+    backgrounds: List<Pair<String, String>> = emptyList(),
+    background: String = "latent",
+    onBackground: ((String) -> Unit)? = null,
+    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕 / 2 字体 / 3 背景）。 */
     initialSection: Int = 0,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -283,6 +287,9 @@ fun LyricStyleSheet(
             onSubtitle = onSubtitle,
             common = common,
             onCommon = onCommon,
+            backgrounds = backgrounds,
+            background = background,
+            onBackground = onBackground,
         )
     }
 }
@@ -319,7 +326,11 @@ private fun LyricStylePanelContent(
     /** 「字体」页（Folia previewCommonSettings）：字号 / 整体透明度；null 不出这一页。 */
     common: com.guangyue.core.lyrics.LyricCommonSettings = com.guangyue.core.lyrics.LyricCommonSettings.DEFAULT,
     onCommon: ((com.guangyue.core.lyrics.LyricCommonSettings) -> Unit)? = null,
-    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕 / 2 字体）。 */
+    /** 「背景」页（Folia previewBackgroundSettings）：背景类型 id → 名字；null 不出这一页。 */
+    backgrounds: List<Pair<String, String>> = emptyList(),
+    background: String = "latent",
+    onBackground: ((String) -> Unit)? = null,
+    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕 / 2 字体 / 3 背景）。 */
     initialSection: Int = 0,
 ) {
     // Folia `index.css:163-168` `.theme-glass-panel`：`--bg-color` 85% 底 + `--text-primary` 12% 描边。
@@ -360,6 +371,7 @@ private fun LyricStylePanelContent(
             // 页签顺序照 Folia SECTION_OPTIONS（样式 → 背景 → 字体 → 字幕 → 全局），手机上有的三页：歌词动画 / 字体 / 字幕。
             val sectionIds = buildList {
                 add(0)
+                if (onBackground != null && backgrounds.isNotEmpty()) add(3)
                 if (onCommon != null) add(2)
                 if (onSubtitle != null) add(1)
             }
@@ -406,6 +418,23 @@ private fun LyricStylePanelContent(
             if (section == 1 && onSubtitle != null) {
                 SubtitleSettingsRows(subtitle, accent, onSubtitle)
                 ResetRow(str(strings.reset), accent) { onSubtitle(com.guangyue.core.lyrics.SubtitleSettings.DEFAULT) }
+            } else if (section == 3 && onBackground != null) {
+                Text(
+                    text = "背景类型",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Gyp.ink,
+                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 10.dp),
+                )
+                BackgroundPictureGrid(backgrounds, background, accent, onBackground)
+                Spacer(Modifier.height(12.dp))
+                // ✋ Folia 各背景还有自己的参数组（隐现的显示方式 / 取色 / 节拍响应…、通用的几何图形…），广乐背景层暂无这些参数。
+                Text(
+                    text = "这种背景暂无可调参数。",
+                    fontSize = 13.sp,
+                    color = Gyp.t2,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
             } else if (section == 2 && onCommon != null) {
                 CommonSettingsRows(common, style, accent, onCommon)
                 ResetRow(str(strings.reset), accent) { onCommon(com.guangyue.core.lyrics.LyricCommonSettings.DEFAULT) }
@@ -616,6 +645,8 @@ private fun ToggleRow(
     checked: Boolean,
     accent: Color,
     onChange: (Boolean) -> Unit,
+    /** Folia Row note：标签下 12/18 t2 说明。 */
+    note: String? = null,
 ) {
     Row(
         modifier = Modifier
@@ -626,13 +657,15 @@ private fun ToggleRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            color = Gyp.ink,
-            modifier = Modifier.weight(1f, fill = false),
-        )
+        Column(Modifier.weight(1f, fill = false)) {
+            Text(
+                text = label,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                color = Gyp.ink,
+            )
+            if (note != null) Text(note, fontSize = 12.sp, lineHeight = 18.sp, color = Gyp.t2, modifier = Modifier.padding(top = 2.dp))
+        }
         Spacer(Modifier.width(24.dp))
         // V1b-2：原来的 [FoliaToggle] 是 Material `Switch` 换色（Material 的拇指/轨迹尺寸与波形弧），
         // 换成本文件里的自绘 [FoliaSwitch]（Folia `kit/Toggle.tsx` 的 40×24 胶囊 + 18dp 滑钮）。
@@ -971,7 +1004,11 @@ fun LyricStyleSheetPreview(
     /** 「字体」页（Folia previewCommonSettings）：字号 / 整体透明度；null 不出这一页。 */
     common: com.guangyue.core.lyrics.LyricCommonSettings = com.guangyue.core.lyrics.LyricCommonSettings.DEFAULT,
     onCommon: ((com.guangyue.core.lyrics.LyricCommonSettings) -> Unit)? = null,
-    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕 / 2 字体）。 */
+    /** 「背景」页（Folia previewBackgroundSettings）：背景类型 id → 名字；null 不出这一页。 */
+    backgrounds: List<Pair<String, String>> = emptyList(),
+    background: String = "latent",
+    onBackground: ((String) -> Unit)? = null,
+    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕 / 2 字体 / 3 背景）。 */
     initialSection: Int = 0,
 ) {
     LyricStylePanelContent(
@@ -998,6 +1035,9 @@ fun LyricStyleSheetPreview(
         onSubtitle = onSubtitle,
         common = common,
         onCommon = onCommon,
+        backgrounds = backgrounds,
+        background = background,
+        onBackground = onBackground,
         initialSection = initialSection,
     )
 }
@@ -1414,7 +1454,7 @@ private fun SubtitleSettingsRows(
         color = Gyp.ink,
         modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp),
     )
-    ToggleRow(label = "隐藏底部字幕层", checked = s.hidden, accent = accent, onChange = { onChange(s.copy(hidden = it)) })
+    ToggleRow(label = "隐藏底部字幕层", checked = s.hidden, accent = accent, onChange = { onChange(s.copy(hidden = it)) }, note = "不影响使用独立字幕的动画模式。")
     if (s.hidden) return
     SegmentedRow(
         label = "底部字幕行数",
@@ -1463,8 +1503,32 @@ private fun SubtitleSettingsRows(
         step = 0.05f,
         format = ::formatPercent,
     )
-    ToggleRow(label = "字幕背景", checked = s.background, accent = accent, onChange = { onChange(s.copy(background = it)) })
+    ToggleRow(label = "字幕背景", checked = s.background, accent = accent, onChange = { onChange(s.copy(background = it)) }, note = "为底部字幕添加主题自适应的柔和扩散光晕，提高复杂画面中的可读性。")
     ToggleRow(label = "下一句歌词添加模糊效果", checked = s.upcomingBlur, accent = accent, onChange = { onChange(s.copy(upcomingBlur = it)) })
+    // Folia SUBTITLE_FONT_GROUP「字幕字体」：继承歌词字体 → 关掉后单独选字体；字幕缩放 0.85–1.4。
+    Text(
+        text = "字幕字体",
+        fontSize = 15.sp,
+        fontWeight = FontWeight.Bold,
+        color = Gyp.ink,
+        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 2.dp),
+    )
+    ToggleRow(label = "字幕继承歌词字体", checked = s.fontInherits, accent = accent, onChange = { onChange(s.copy(fontInherits = it)) }, note = "关闭后可为字幕单独设置字体。")
+    if (!s.fontInherits) {
+        LyricFontTiles(selected = s.fontStyle, accent = accent, withFollow = false, onPick = { onChange(s.copy(fontStyle = it)) })
+        Spacer(Modifier.height(6.dp))
+    }
+    TuningSliderRow(
+        label = "字幕缩放",
+        value = s.fontScale.toFloat(),
+        accent = accent,
+        onChange = { onChange(s.copy(fontScale = it.toDouble())) },
+        min = 0.85f,
+        max = 1.4f,
+        step = 0.05f,
+        format = ::formatPercent,
+    )
+    SliderMarks(marks = com.guangyue.core.lyrics.LyricCommonSettings.FONT_SCALE_MARKS.map { it.toFloat() }, min = 0.85f, max = 1.4f, label = ::formatPercent)
 }
 
 
@@ -1518,6 +1582,7 @@ private fun ResetRow(label: String, accent: Color, onClick: () -> Unit) {
 
 private fun sectionLabel(id: Int): String = when (id) {
     1 -> "字幕"
+    3 -> "背景"
     2 -> "字体"
     else -> "歌词动画"
 }
@@ -1621,14 +1686,14 @@ private fun SliderMarks(marks: List<Float>, min: Float, max: Float, label: (Floa
 
 /** Folia FontTiles：4 列画框，框里「永Aa」用该字体画（18sp），名字在下；选中同样式架的 2dp 强调色环。 */
 @Composable
-private fun LyricFontTiles(selected: String, accent: Color, onPick: (String) -> Unit) {
+private fun LyricFontTiles(selected: String, accent: Color, onPick: (String) -> Unit, withFollow: Boolean = true) {
     val D = com.guangyue.feature.library.design.GuangYueDesign
     val options = listOf(
         Triple("", "跟随样式", D.Serif),
         Triple("sans", "无衬线", D.Sans),
         Triple("serif", "衬线", D.Serif),
         Triple("mono", "等宽", androidx.compose.ui.text.font.FontFamily.Monospace),
-    )
+    ).filter { withFollow || it.first != "" }
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         options.forEach { (value, name, family) ->
             val chosen = value == selected
@@ -1658,5 +1723,6 @@ private fun LyricFontTiles(selected: String, accent: Color, onPick: (String) -> 
                 )
             }
         }
+        repeat(4 - options.size) { Box(Modifier.weight(1f)) }
     }
 }

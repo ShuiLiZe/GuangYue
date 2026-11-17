@@ -803,16 +803,16 @@ fun V0cStage(
                 },
                 modifier = Modifier.fillMaxSize(),
             )
-        } else if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama" || style == "sheetsubtitle" || style == "sheetfont") {
+        } else if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama" || style == "sheetsubtitle" || style == "sheetfont" || style == "sheetbg") {
             val subtitleProbe = remember {
-                androidx.compose.runtime.mutableStateOf(com.guangyue.core.lyrics.SubtitleSettings(layout = listOf("current", "next")))
+                androidx.compose.runtime.mutableStateOf(com.guangyue.core.lyrics.SubtitleSettings(layout = listOf("current", "next"), fontInherits = false, fontStyle = "serif", fontScale = 1.25))
             }
             // 11-18 sheetfont：「字体」页，等宽、字号 125%、整体透明度 60%，底下流光同步吃这三项。
             val commonProbe = remember {
                 androidx.compose.runtime.mutableStateOf(com.guangyue.core.lyrics.LyricCommonSettings(fontScale = 1.25, opacity = 0.6, fontStyle = "mono"))
             }
             CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
-                if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama" || style == "sheetsubtitle" || style == "sheetfont") {
+                if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama" || style == "sheetsubtitle" || style == "sheetfont" || style == "sheetbg") {
                     LyricFlowScreen(
                         lyrics = remember { parseLrc(LRC) },
                         currentIndex = 1,
@@ -833,7 +833,7 @@ fun V0cStage(
                         coverUrl = null,
                         glowStrengthOverride = V0dGlowOverride,
                         // 2026-11-14 sheetsubtitle：底下流光 + 双行字幕（当前句 + 下一句），对照「字幕」页设置。
-                        lyricStyle = if (style == "sheetsubtitle" || style == "sheetfont") LyricStyle.CLASSIC else LyricStyle.FUME,
+                        lyricStyle = if (style == "sheetsubtitle" || style == "sheetfont" || style == "sheetbg") LyricStyle.CLASSIC else LyricStyle.FUME,
                         subtitleSettings = if (style == "sheetsubtitle") subtitleProbe.value else com.guangyue.core.lyrics.SubtitleSettings.DEFAULT,
                         lyricCommon = if (style == "sheetfont") commonProbe.value else com.guangyue.core.lyrics.LyricCommonSettings.DEFAULT,
                         modifier = Modifier.fillMaxSize(),
@@ -858,7 +858,7 @@ fun V0cStage(
                             "sheetcladdagh" -> LyricStyle.CLADDAGH
                             // 2026-11-14：镜台参数面板（DioramaSettingsPanel 照译）。
                             "sheetdiorama" -> LyricStyle.DIORAMA
-                            "sheetfont" -> LyricStyle.CLASSIC
+                            "sheetfont", "sheetbg" -> LyricStyle.CLASSIC
                             else -> LyricStyle.FUME
                         },
                         fumeName = v0cString(R.string.lyrics_style_fume),
@@ -866,8 +866,11 @@ fun V0cStage(
                         subtitle = subtitleProbe.value,
                         onSubtitle = if (style == "sheetsubtitle") ({ v -> subtitleProbe.value = v }) else null,
                         common = commonProbe.value,
-                        onCommon = if (style == "sheetfont") ({ v -> commonProbe.value = v }) else null,
-                        initialSection = if (style == "sheetsubtitle") 1 else if (style == "sheetfont") 2 else 0,
+                        onCommon = if (style == "sheetfont" || style == "sheetbg") ({ v -> commonProbe.value = v }) else null,
+                        backgrounds = listOf("latent" to "隐现", "common" to "通用"),
+                        background = "latent",
+                        onBackground = if (style == "sheetfont" || style == "sheetbg") ({ _ -> }) else null,
+                        initialSection = if (style == "sheetsubtitle") 1 else if (style == "sheetfont") 2 else if (style == "sheetbg") 3 else 0,
                     )
                 }
             }
