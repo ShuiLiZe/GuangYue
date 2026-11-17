@@ -27,6 +27,9 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** 11-17：搜索页音源条上「本地」的 id。 */
+const val LOCAL_SOURCE = "__local__"
+
 /** One row of the result list, tagged with the plugin that produced it. */
 data class SearchRow(
     val pluginId: String,
@@ -91,6 +94,8 @@ data class SearchUiState(
     val musicPage: Int = 1,
     val musicEnd: Boolean = false,
     val loadingMore: Boolean = false,
+    /** 11-17：Folia 搜索页音源条最后的「本地」——搜手机里的歌（全部歌曲），不打插件。 */
+    val local: Boolean = false,
 ) {
     /** 当前选中的音源。 */
     val selected: PluginMeta? get() = available.firstOrNull { it.id == sourceId }
@@ -129,6 +134,9 @@ class SearchViewModel @Inject constructor(
     private val history: SearchHistoryRepository,
     private val downloads: DownloadManager,
     private val prefs: AppPreferences,
+    private val downloadedLibrary: com.guangyue.core.download.DownloadedLibrary,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
+    savedState: androidx.lifecycle.SavedStateHandle,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SearchUiState())
@@ -161,7 +169,12 @@ class SearchViewModel @Inject constructor(
     private val loadedTypes = mutableSetOf<String>()
     private var loadedQuery: String = ""
 
+    /** 本地搜索这一次的结果（开播用原曲目，不走插件取链）。 */
+    private var localResults: List<com.guangyue.core.data.model.TrackEntity> = emptyList()
+
     init {
+        // 11-17：首页本地页签点搜索框进来（search?local=1），默认选「本地」。
+        if (savedState.get<String>("local") == "1") _state.value = _state.value.copy(local = true)
         // 0.0.7 修：以前只有插件管理页会调 manager.load()，搜索页直接进来时
         // PluginManager.plugins 还是初值空列表 → available 为空 → 点搜索永远走
         // 「还没有可用的音源」分支，装好插件也搜不到。这里必须自己拉一次。
@@ -180,7 +193,7 @@ class SearchViewModel @Inject constructor(
                 _state.value = _state.value.copy(
                     available = selectable,
                     sourceId = keep,
-                    availableTypes = tabsOf(selectable.firstOrNull { it.id == keep }),
+                    availableTypes = if (_state.value.local) listOf(SearchTab.TRACKS) else tabsOf(selectable.firstOrNull { it.id == keep }),
                 )
                 if (keep != previous) {
                     prefs.lastSourceId = keep
@@ -237,6 +250,28 @@ class SearchViewModel @Inject constructor(
 
     /** 选中一个音源：只用它搜，并记住选择（下次进搜索页默认还是它）。 */
     fun selectSource(id: String) {
+        if (id == LOCAL_SOURCE) {
+            if (_state.value.local) return
+            debounce.cancel()
+            job?.cancel()
+            _state.value = _state.value.copy(
+                local = true, availableTypes = listOf(SearchTab.TRACKS), tab = SearchTab.TRACKS,
+                rows = emptyList(), albums = emptyList(), artists = emptyList(), sheets = emptyList(),
+                failure = null, searched = false, loading = false,
+            )
+            forgetLoaded()
+            if (_state.value.query.isNotBlank()) search()
+            return
+        }
+        if (_state.value.local) {
+            _state.value = _state.value.copy(local = false, rows = emptyList(), searched = false, failure = null)
+            forgetLoaded()
+            if (id == _state.value.sourceId) {
+                _state.value = _state.value.copy(availableTypes = tabsOf(_state.value.selected))
+                if (_state.value.query.isNotBlank()) search()
+                return
+            }
+        }
         if (id == _state.value.sourceId) return
         val plugin = _state.value.available.firstOrNull { it.id == id } ?: return
         _state.value = _state.value.copy(
@@ -278,6 +313,7 @@ class SearchViewModel @Inject constructor(
     fun search() {
         val query = _state.value.query.trim()
         if (query.isEmpty()) return
+        if (_state.value.local) { searchLocal(query); return }
         val plugin = _state.value.selected
         if (plugin == null) {
             _state.value = _state.value.copy(
@@ -353,7 +389,46 @@ class SearchViewModel @Inject constructor(
     }
 
     /** 0.0.34：单曲列表滑到底时取下一页（插件 search(page=n)），去重后接在后面。 */
+    /** 本地搜索：在「全部歌曲」（下载 + 手机媒体库 + 导入文件夹）里按歌名、歌手、专辑找。 */
+    private fun searchLocal(query: String) {
+        job?.cancel()
+        job = viewModelScope.launch {
+            _state.value = _state.value.copy(loading = true, failure = null, message = null)
+            history.record(query)
+            val found = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val downloaded = downloadedLibrary.tracks.value.filter { downloadedLibrary.exists(it) }.map { downloadedLibrary.toPlayable(it) }
+                    val scan = com.guangyue.feature.library.viewmodel.DeviceAudio.scanDetailed(appContext)
+                    com.guangyue.core.data.model.LibraryRules.allSongs(downloaded, scan.tracks).filter { t ->
+                        t.title.contains(query, true) || t.artist.contains(query, true) || t.album.contains(query, true)
+                    }
+                }.getOrDefault(emptyList())
+            }
+            if (!_state.value.local) return@launch
+            localResults = found
+            _state.value = _state.value.copy(
+                loading = false,
+                searched = true,
+                rows = found.map { t ->
+                    SearchRow(
+                        pluginId = LOCAL_SOURCE, pluginName = "本地", platformLabel = "本地",
+                        item = MusicItem(platform = "local", id = t.key, title = t.title, artist = t.artist,
+                            album = t.album.ifBlank { null }, artwork = t.artwork, durationMs = t.durationMs.takeIf { it > 0 }),
+                    )
+                },
+                failure = if (found.isEmpty()) "本地没有「$query」的歌曲" else null,
+                musicEnd = true,
+                loadingMore = false,
+            )
+        }
+    }
+
+    /** 本地搜索时的开播列表（原曲目）；不是本地搜索返回 null。 */
+    fun localPlaylist(): List<com.guangyue.core.data.model.TrackEntity>? =
+        if (_state.value.local) localResults.takeIf { it.isNotEmpty() } else null
+
     fun loadMore() {
+        if (_state.value.local) return
         val st = _state.value
         if (st.tab != SearchTab.TRACKS || st.loading || st.loadingMore || st.musicEnd || st.rows.isEmpty()) return
         val plugin = st.selected ?: return
@@ -420,6 +495,7 @@ class SearchViewModel @Inject constructor(
 
     /** 下载一条搜索结果。 */
     fun download(item: MusicItem, quality: String = "high") {
+        if (item.platform == "local") { _state.value = _state.value.copy(message = "本地歌曲已在手机里，不用下载"); return }
         viewModelScope.launch {
             val ok = runCatching { downloads.enqueue(item, Quality.fromWire(quality)) }.getOrDefault(false)
             _state.value = _state.value.copy(message = if (ok) "已加入下载队列" else "该歌曲已在队列或已下载")
@@ -450,7 +526,8 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             val existing = playlists.playlists().firstOrNull()?.firstOrNull()?.id
             val id = existing ?: playlists.create("我的收藏")
-            playlists.addTracks(id, listOf(item))
+            val localRow = if (item.platform == "local") localResults.firstOrNull { it.key == item.id } else null
+            if (localRow != null) playlists.addTracks(id, listOf(localRow)) else playlists.addTracks(id, listOf(item))
             _state.value = _state.value.copy(message = "已加入歌单")
         }
     }

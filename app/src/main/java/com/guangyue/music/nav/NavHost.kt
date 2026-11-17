@@ -275,6 +275,7 @@ fun GuangYueNavHost(
                                 com.guangyue.music.ui.home.GridSubSection("歌单", com.guangyue.feature.library.design.icons.GuangYueIcons.ListMusic, homeMine),
                             ),
                             focusMemory = shellVm.homeCardMemory.takeIf { rememberHomeCard },
+                            onOpenLocalSearch = { navController.navigate(Routes.SEARCH + "?local=1") },
                             localActions = listOf(
                                 com.guangyue.music.ui.home.GridLocalAction("导入文件夹", com.guangyue.feature.library.design.icons.GuangYueIcons.FolderOpen) {
                                     runCatching { importFolderLauncher.launch(null) }
@@ -828,7 +829,10 @@ fun GuangYueNavHost(
             )
         }
 
-        composable(Routes.SEARCH) {
+        composable(
+            "${Routes.SEARCH}?local={local}",
+            arguments = listOf(androidx.navigation.navArgument("local") { type = androidx.navigation.NavType.StringType; defaultValue = "0" }),
+        ) {
             val vm: SearchViewModel = hiltViewModel()
             val state by vm.state.collectAsStateWithLifecycle()
             // 0.0.14 真机：搜索页点下载/加入歌单没有任何反馈，看起来像「不能下载」。
@@ -851,7 +855,12 @@ fun GuangYueNavHost(
                         // 0.0.7：音源单选，只用用户选中的那一个插件搜
                         onPickSource = { id -> vm.selectSource(id) },
                         onPlay = { index ->
-                            vm.playFrom(index) { items, at ->
+                            val localList = vm.localPlaylist()
+                            if (localList != null) {
+                                // 11-17：本地搜索结果直接放原曲目（本地文件），不走插件取链。
+                                playback.setQueueFromTracks(localList, index.coerceIn(0, localList.lastIndex), true)
+                                openPlayerAfterPlay()
+                            } else vm.playFrom(index) { items, at ->
                                 playback.setQueue(items, at, true)
                                 openPlayerAfterPlay()
                             }

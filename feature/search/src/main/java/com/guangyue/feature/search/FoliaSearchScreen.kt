@@ -136,13 +136,13 @@ fun FoliaSearchScreen(
             onClose = onClose ?: { onQueryChange("") },
         )
 
-        if (state.available.isNotEmpty()) {
-            SourceRail(
-                available = state.available,
-                sourceId = state.sourceId,
-                onPickSource = onPickSource,
-            )
-        }
+        // Folia 手机版：音源条最后是「本地」（从首页本地页签进来时选中它）。
+        SourceRail(
+            available = state.available,
+            sourceId = state.sourceId,
+            local = state.local,
+            onPickSource = onPickSource,
+        )
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (phase) {
@@ -336,9 +336,14 @@ private fun SearchHeader(
 private fun SourceRail(
     available: List<PluginMeta>,
     sourceId: String,
+    local: Boolean = false,
     onPickSource: (String) -> Unit,
 ) {
+    val railState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // 从本地页签进来：把「本地」滚进视野（Folia 截图里它在最右）。
+    androidx.compose.runtime.LaunchedEffect(Unit) { if (local && available.isNotEmpty()) railState.scrollToItem(available.size) }
     LazyRow(
+        state = railState,
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = GySpace.pageH),
         horizontalArrangement = Arrangement.spacedBy(GySpace.xs),
@@ -346,9 +351,12 @@ private fun SourceRail(
         items(available, key = { it.id }) { plugin ->
             SourceChip(
                 label = platformLabelOf(plugin),
-                selected = plugin.id == sourceId,
+                selected = !local && plugin.id == sourceId,
                 onClick = { onPickSource(plugin.id) },
             )
+        }
+        item(key = LOCAL_SOURCE) {
+            SourceChip(label = "本地", selected = local, onClick = { onPickSource(LOCAL_SOURCE) })
         }
     }
 }

@@ -39,7 +39,7 @@ enum class SearchPagePhase {
  * 从 [SearchUiState] 推出可见状态。判断顺序与 Folia 一致（先加载、再错误、再空）。
  */
 fun SearchUiState.pagePhase(): SearchPagePhase {
-    if (available.isEmpty()) return SearchPagePhase.NoSource
+    if (available.isEmpty() && !local) return SearchPagePhase.NoSource
     val hasAny = rows.isNotEmpty() ||
         albums.isNotEmpty() ||
         artists.isNotEmpty() ||

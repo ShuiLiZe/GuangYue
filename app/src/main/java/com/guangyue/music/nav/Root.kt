@@ -45,7 +45,7 @@ fun GuangYueRoot(
     navController: NavHostController = rememberNavController(),
 ) {
     val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route ?: Routes.HOME
+    val currentRoute = backStackEntry?.destination?.route?.substringBefore('?') ?: Routes.HOME
 
     // 0.0.9（U2）：Tab 名走 strings.xml，不再在代码里写中文（values/ 即中文默认）。
     val tabItems = listOf(

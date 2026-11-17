@@ -238,6 +238,8 @@ fun GridSliderHome(
     localActions: List<GridLocalAction> = emptyList(),
     /** 11-17：Folia「记住主页卡片位置」：各页签（本地按分段）上次的卡片；null = 不记，换页签回到开头。 */
     focusMemory: MutableMap<String, Int>? = null,
+    /** 11-17：Folia 本地页签的搜索框是「搜索本地歌曲」，点开搜索页默认选「本地」。 */
+    onOpenLocalSearch: (() -> Unit)? = null,
 ) {
     // Folia 首页页签就是各个数据源本身（歌单 / 推荐 / 探索 / 专辑 / 本地），没有「全部」。
     var tab by rememberSaveable { mutableStateOf(initialTab.coerceIn(0, max(0, sections.size - 1))) }
@@ -283,8 +285,8 @@ fun GridSliderHome(
     ) {
         GridHomeHeader(
             title, tabs, tab, inkColor, compact,
-            onSelect = { tab = it }, onOpenSearch = onOpenSearch,
-            onOpenSettings = onOpenSettings, onOpenDownloads = onOpenDownloads, extraTabs = extraTabs, searchHint = searchHint,
+            onSelect = { tab = it }, onOpenSearch = if (isLocalTab && onOpenLocalSearch != null) onOpenLocalSearch else onOpenSearch,
+            onOpenSettings = onOpenSettings, onOpenDownloads = onOpenDownloads, extraTabs = extraTabs, searchHint = if (isLocalTab && onOpenLocalSearch != null) "搜索本地歌曲..." else searchHint,
         )
         if (isLocalTab) {
             // Folia 手机版本地页签：页签下一行「全部」地图胶囊 + 分段（当前段带字，其余只有图标），右侧竖排动作胶囊。
@@ -738,7 +740,7 @@ private fun GridCaption(
             val line = listOfNotNull(tile.trackCount?.let { "$it 首" }, sec.takeIf { it.isNotBlank() }).joinToString(" • ")
             Text(
                 line, color = ink.copy(alpha = 0.5f), fontSize = 12.sp, maxLines = 1,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                fontFeatureSettings = "tnum",
                 overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp),
             )
         }
