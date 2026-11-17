@@ -272,6 +272,13 @@ fun LyricFlowScreen(
     // 11-18：再乘「字体」页的字号倍率（Folia lyricsFontScale）；商籁/凝彩/绘光/花火/町景自己算字号，不吃这一项（ownFontSizeNoticeKey）。
     val lyricsFontScale = LocalDensity.current.fontScale.toDouble() *
         (if (lyricStyle.sizesOwnFont()) 1.0 else lyricCommon.fontScale)
+    // 「字体」页的字体（Folia theme.fontStyle）：空串 = 跟随样式（各舞台原本的字体）。✋ 自算字号的几个样式字体也自带，不换。
+    fun lyricFont(default: FontFamily): FontFamily = if (lyricStyle.sizesOwnFont()) default else when (lyricCommon.fontStyle) {
+        "sans" -> GuangYueDesign.Sans
+        "serif" -> GuangYueDesign.Serif
+        "mono" -> FontFamily.Monospace
+        else -> default
+    }
     // Folia VisualizerBackdrop 的 opacity：整层（背景 + 舞台）一起淡，顶栏/字幕/胶囊不受影响。
     val visualizerLayer = if (lyricCommon.opacity < 0.999) Modifier.graphicsLayer { alpha = lyricCommon.opacity.toFloat() } else Modifier
     val viewportWidthPx = with(LocalDensity.current) {
@@ -309,7 +316,7 @@ fun LyricFlowScreen(
                     lyricsFontScale = lyricsFontScale,
                     activeColor = lyricAccent,
                     baseColor = onBackdrop,
-                    fontFamily = GuangYueDesign.Serif,
+                    fontFamily = lyricFont(GuangYueDesign.Serif),
                     glowStrengthOverride = glowStrengthOverride,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -414,7 +421,7 @@ fun LyricFlowScreen(
                 activeColor = lyricAccent,
                 baseColor = onBackdrop,
                 accentColor = lyricAccent,
-                fontFamily = GuangYueDesign.Serif,
+                fontFamily = lyricFont(GuangYueDesign.Serif),
                 reduceMotion = reduceMotion,
                 settleSteps = fumeSettleSteps,
                 settleTargetTime = fumeSettleTimeSeconds,
@@ -434,7 +441,7 @@ fun LyricFlowScreen(
                 lyricsFontScale = lyricsFontScale,
                 activeColor = lyricAccent,
                 baseColor = onBackdrop,
-                fontFamily = GuangYueDesign.Serif,
+                fontFamily = lyricFont(GuangYueDesign.Serif),
                 settleSteps = if (fumeStillFrame) 90 else 0,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -449,7 +456,7 @@ fun LyricFlowScreen(
                 lyricsFontScale = lyricsFontScale,
                 primaryColor = onBackdrop,
                 accentColor = lyricAccent,
-                fontFamily = GuangYueDesign.Serif,
+                fontFamily = lyricFont(GuangYueDesign.Serif),
                 reduceMotion = reduceMotion,
             )
         }
@@ -462,7 +469,7 @@ fun LyricFlowScreen(
                 lyricsFontScale = lyricsFontScale,
                 primaryColor = onBackdrop,
                 secondaryColor = theme.secondary,
-                fontFamily = GuangYueDesign.Serif,
+                fontFamily = lyricFont(GuangYueDesign.Serif),
             )
         }
         // P3 莫奈：海报版面一层（歌手 / 竖线 / 大标题 / 专辑 / 歌词轨），让出顶栏与底部胶囊。
@@ -481,7 +488,7 @@ fun LyricFlowScreen(
                 primaryColor = onBackdrop,
                 secondaryColor = theme.secondary,
                 backgroundColor = theme.background,
-                fontFamily = FontFamily.SansSerif, // Folia DEFAULT_THEME 为无衬线
+                fontFamily = lyricFont(FontFamily.SansSerif), // Folia DEFAULT_THEME 为无衬线
                 // R1b：横屏照 Folia 整屏排（不让顶栏与胶囊，矮屏上下溢出被裁）；竖屏保留适配版式。
                 topReserve = if (monetLandscape) 0.dp else 64.dp,
                 bottomReserve = if (monetLandscape) 0.dp else 104.dp,
@@ -521,7 +528,7 @@ fun LyricFlowScreen(
                 clock = clock,
                 lyricsFontScale = lyricsFontScale,
                 accentColor = lyricAccent,
-                fontFamily = GuangYueDesign.Serif,
+                fontFamily = lyricFont(GuangYueDesign.Serif),
                 reduceMotion = reduceMotion,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -658,7 +665,7 @@ fun LyricFlowScreen(
                 secondaryColor = theme.secondary,
                 accentColor = lyricAccent,
                 backgroundColor = theme.background,
-                fontFamily = GuangYueDesign.Serif,
+                fontFamily = lyricFont(GuangYueDesign.Serif),
                 reduceMotion = reduceMotion,
                 onSeekToLine = onSeekToLine,
                 // Folia 时计铺满整个视口（VisualizerShell inset-0），轮心 (0, 0.5h)、半径 0.42·min(w,h)；
@@ -776,7 +783,7 @@ fun LyricFlowScreen(
                         lyricsFontScale = lyricsFontScale,
                         primaryColor = onBackdrop,
                         accentColor = lyricAccent,
-                        fontFamily = GuangYueDesign.Serif,
+                        fontFamily = lyricFont(GuangYueDesign.Serif),
                         reduceMotion = reduceMotion,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -796,7 +803,7 @@ fun LyricFlowScreen(
                         lyricsFontScale = lyricsFontScale,
                         activeColor = lyricAccent,
                         baseColor = onBackdrop,
-                        fontFamily = GuangYueDesign.Serif,
+                        fontFamily = lyricFont(GuangYueDesign.Serif),
                         glowStrengthOverride = glowStrengthOverride,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -816,7 +823,7 @@ fun LyricFlowScreen(
                         lyricsFontScale = lyricsFontScale,
                         activeColor = lyricAccent,
                         baseColor = onBackdrop,
-                        fontFamily = GuangYueDesign.Serif,
+                        fontFamily = lyricFont(GuangYueDesign.Serif),
                         glowStrengthOverride = glowStrengthOverride,
                         // 舞台 Box 已经居中，内层不能再让 FlowRow 的 fillMaxWidth 把宽度
                         // 撑到整屏（词距是按内核算出的 marginRight，撑满会溢出）。

@@ -807,9 +807,9 @@ fun V0cStage(
             val subtitleProbe = remember {
                 androidx.compose.runtime.mutableStateOf(com.guangyue.core.lyrics.SubtitleSettings(layout = listOf("current", "next")))
             }
-            // 11-18 sheetfont：「字体」页，字号 125%、整体透明度 60%，底下流光同步吃这两项。
+            // 11-18 sheetfont：「字体」页，等宽、字号 125%、整体透明度 60%，底下流光同步吃这三项。
             val commonProbe = remember {
-                androidx.compose.runtime.mutableStateOf(com.guangyue.core.lyrics.LyricCommonSettings(fontScale = 1.25, opacity = 0.6))
+                androidx.compose.runtime.mutableStateOf(com.guangyue.core.lyrics.LyricCommonSettings(fontScale = 1.25, opacity = 0.6, fontStyle = "mono"))
             }
             CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
                 if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama" || style == "sheetsubtitle" || style == "sheetfont") {

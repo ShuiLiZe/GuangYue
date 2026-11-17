@@ -13,5 +13,7 @@ class LyricCommonSettingsTest {
         assertEquals(0.75, t.opacity, 1e-9)
         val n = LyricCommonSettings.sanitize(LyricCommonSettings(fontScale = Double.NaN, opacity = Double.NaN))
         assertEquals(LyricCommonSettings.DEFAULT, n)
+        assertEquals("", LyricCommonSettings.sanitize(LyricCommonSettings(fontStyle = "comic")).fontStyle)
+        assertEquals("mono", LyricCommonSettings.sanitize(LyricCommonSettings(fontStyle = "mono")).fontStyle)
     }
 }

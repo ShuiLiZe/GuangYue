@@ -165,6 +165,7 @@ class AppPreferences @Inject constructor(
             com.guangyue.core.lyrics.LyricCommonSettings(
                 fontScale = prefs.getFloat(KEY_LYRIC_FONT_SCALE, 1f).toDouble(),
                 opacity = prefs.getFloat(KEY_VISUALIZER_OPACITY, 1f).toDouble(),
+                fontStyle = prefs.getString(KEY_LYRIC_FONT_STYLE, "") ?: "",
             ),
         )
         set(v) {
@@ -172,6 +173,7 @@ class AppPreferences @Inject constructor(
             prefs.edit()
                 .putFloat(KEY_LYRIC_FONT_SCALE, s.fontScale.toFloat())
                 .putFloat(KEY_VISUALIZER_OPACITY, s.opacity.toFloat())
+                .putString(KEY_LYRIC_FONT_STYLE, s.fontStyle)
                 .apply()
         }
 
@@ -360,6 +362,7 @@ class AppPreferences @Inject constructor(
         const val KEY_DIORAMA_TUNING = "diorama_tuning"
         const val KEY_LYRIC_FONT_SCALE = "lyrics_font_scale"
         const val KEY_VISUALIZER_OPACITY = "visualizer_opacity"
+        const val KEY_LYRIC_FONT_STYLE = "lyrics_font_style"
         const val KEY_SUBTITLE_HIDDEN = "hide_player_translation_subtitle"
         const val KEY_SUBTITLE_LAYOUT = "subtitle_overlay_layout"
         const val KEY_SUBTITLE_OPACITY = "subtitle_overlay_opacity"

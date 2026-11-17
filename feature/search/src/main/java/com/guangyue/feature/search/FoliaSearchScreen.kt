@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
@@ -561,6 +562,14 @@ private fun TrackList(
         }
     }
     androidx.compose.runtime.LaunchedEffect(nearEnd, end, rows.size) { if (nearEnd && !end) onLoadMore() }
+    // Folia search.css `.search-list:not([data-search-entered]) .search-row`：一组新结果到时逐行从左滑进
+    // （每行晚 32ms，前 12 行封顶），之后翻页 / 滚出来的行不再动。以第一行的键认「新的一组」。
+    val enterKey = rows.firstOrNull()?.let { "${it.pluginId}:${it.item.id}" }
+    var entered by remember(enterKey) { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(enterKey) {
+        kotlinx.coroutines.delay(ROW_ENTER_MS + 12L * ROW_ENTER_STAGGER_MS)
+        entered = true
+    }
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -575,6 +584,7 @@ private fun TrackList(
                 onDownload = { onDownload(row.item) },
                 onAddToSheet = { onAddToSheet(row.item) },
                 onEnqueue = onEnqueue?.let { f -> { f(row.item) } },
+                enterOrder = if (entered) -1 else index,
             )
         }
         if (rows.isNotEmpty() && (loadingMore || !end)) {
@@ -603,9 +613,21 @@ private fun ResultCard(
     onDownload: () -> Unit,
     onAddToSheet: () -> Unit,
     onEnqueue: (() -> Unit)? = null,
+    /** ≥0：这一组结果刚到，按序号错开滑进来；-1 不动。 */
+    enterOrder: Int = -1,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    // .search-row::before：左缘 3dp 强调色竖条（上下各让 10），按住时从下往上长出来（260ms）。
+    val bar by androidx.compose.animation.core.animateFloatAsState(if (pressed) 1f else 0f, tween(260), label = "rowBar")
+    val accent = Gyp.accent
+    val enter = remember { androidx.compose.animation.core.Animatable(if (enterOrder >= 0) 0f else 1f) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (enter.value < 1f) {
+            kotlinx.coroutines.delay(enterOrder.coerceAtMost(12) * ROW_ENTER_STAGGER_MS)
+            enter.animateTo(1f, tween(ROW_ENTER_MS.toInt(), easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)))
+        }
+    }
     val item = row.item
     val artist = item.displayArtist.orEmpty().takeIf { it.isNotBlank() }
     val album = item.album?.takeIf { it.isNotBlank() }
@@ -615,16 +637,32 @@ private fun ResultCard(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 76.dp)
+            .graphicsLayer {
+                // search-row-in：from opacity 0、translateX(-22px)。
+                alpha = enter.value
+                translationX = (1f - enter.value) * -22.dp.toPx()
+            }
             .background(if (pressed) Gyp.ink.copy(alpha = 0.04f) else Color.Transparent)
             .drawBehind {
                 drawRect(hairline, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - 1.dp.toPx()), size = androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx()))
+                if (bar > 0f) {
+                    val inset = 10.dp.toPx()
+                    val h = (size.height - inset * 2) * bar
+                    drawRect(accent, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - inset - h), size = androidx.compose.ui.geometry.Size(3.dp.toPx(), h))
+                }
             }
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(start = 18.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Cover(url = item.artwork, size = 48, square = true)
+        Box {
+            Cover(url = item.artwork, size = 48, square = true)
+            // .search-row-play：按住时封面上盖 45% 黑 + 白色播放三角 18。
+            if (pressed) Box(Modifier.size(48.dp).background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
+                androidx.compose.material3.Icon(GuangYueIcons.Play, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+            }
+        }
         Column(Modifier.weight(1f).padding(end = 4.dp)) {
             Text(
                 text = item.title,
@@ -1092,3 +1130,7 @@ internal fun ArtistItem.asMusicItem(): MusicItem = MusicItem(
 
 
 
+
+/** Folia search.css search-row-in：520ms，每行错开 32ms。 */
+private const val ROW_ENTER_MS = 520L
+private const val ROW_ENTER_STAGGER_MS = 32L

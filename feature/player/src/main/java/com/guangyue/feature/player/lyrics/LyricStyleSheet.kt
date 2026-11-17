@@ -3,6 +3,8 @@
 package com.guangyue.feature.player.lyrics
 
 import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -1533,7 +1535,7 @@ private fun ownFontSizeNotice(style: LyricStyle): String? = when (style) {
 /**
  * Folia VisPlaygroundSettingsPanel「字体」页（activeSection === 'common'）：
  * 自己算字号的样式先给一行说明（Row notice）→ 字号（0.85–1.4，步长 0.05，刻度 90/100/110/125%，那几个样式下置灰）
- * → 整体透明度（0.2–1）。✋ 预览文本 / 字体 / 字重未移植（广乐各舞台字体按样式定死，见 folia-diff.md）。
+ * → 整体透明度（0.2–1）；字体画框在最上（FontTiles）。✋ 预览文本 / 系统字体 / 字重未移植（见 folia-diff.md）。
  */
 @Composable
 private fun CommonSettingsRows(
@@ -1550,6 +1552,10 @@ private fun CommonSettingsRows(
         color = Gyp.ink,
         modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp),
     )
+    // Folia Row label=字体 below=FontTiles：一行标签，下面 4 列画框（「永Aa」用该字体画，名字在下）。
+    Text("字体", fontSize = 14.sp, color = Gyp.ink, modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 8.dp))
+    LyricFontTiles(selected = s.fontStyle, accent = accent, onPick = { onChange(s.copy(fontStyle = it)) })
+    Spacer(Modifier.height(6.dp))
     val notice = ownFontSizeNotice(style)
     if (notice != null) {
         Text(
@@ -1595,7 +1601,8 @@ private fun CommonSettingsRows(
 @Composable
 private fun SliderMarks(marks: List<Float>, min: Float, max: Float, label: (Float) -> String) {
     androidx.compose.foundation.layout.BoxWithConstraints(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(16.dp),
+        // 滑杆行 44dp 高、轨道居中，刻度往上收 10dp 贴着轨道（Folia 刻度紧挨轨道下沿）。
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).offset(y = (-10).dp).height(16.dp),
     ) {
         val inset = 8.dp
         val usable = maxWidth - inset * 2
@@ -1607,6 +1614,48 @@ private fun SliderMarks(marks: List<Float>, min: Float, max: Float, label: (Floa
                 contentAlignment = Alignment.Center,
             ) {
                 Text(label(m), fontSize = 11.sp, color = Gyp.t3, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** Folia FontTiles：4 列画框，框里「永Aa」用该字体画（18sp），名字在下；选中同样式架的 2dp 强调色环。 */
+@Composable
+private fun LyricFontTiles(selected: String, accent: Color, onPick: (String) -> Unit) {
+    val D = com.guangyue.feature.library.design.GuangYueDesign
+    val options = listOf(
+        Triple("", "跟随样式", D.Serif),
+        Triple("sans", "无衬线", D.Sans),
+        Triple("serif", "衬线", D.Serif),
+        Triple("mono", "等宽", androidx.compose.ui.text.font.FontFamily.Monospace),
+    )
+    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        options.forEach { (value, name, family) ->
+            val chosen = value == selected
+            Column(
+                Modifier.weight(1f).clickableNoRipple { onPick(value) }.semantics { contentDescription = name },
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(Modifier.fillMaxWidth().aspectRatio(16f / 10f)) {
+                    if (chosen) Box(Modifier.fillMaxSize().border(2.dp, accent, RoundedCornerShape(11.dp)))
+                    Box(
+                        Modifier.fillMaxSize().padding(3.dp).clip(RoundedCornerShape(8.dp))
+                            .background(Gyp.preview).border(1.dp, Gyp.line2, RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "永Aa", fontSize = 18.sp, lineHeight = 18.sp, fontFamily = family,
+                            fontStyle = if (value == "") androidx.compose.ui.text.font.FontStyle.Italic else null,
+                            color = if (value == "") Gyp.t2 else Gyp.ink, maxLines = 1,
+                        )
+                    }
+                }
+                Text(
+                    name, fontSize = 12.sp, lineHeight = 18.sp,
+                    fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (chosen) Gyp.ink else Gyp.t2, maxLines = 1,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
             }
         }
     }
