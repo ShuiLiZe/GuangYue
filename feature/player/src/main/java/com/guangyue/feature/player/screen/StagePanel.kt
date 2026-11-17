@@ -84,7 +84,7 @@ enum class StagePanelTab(val label: String) {
     COVER("封面"),
     LYRICS("歌词"),
     CONTROLS("控制"),
-    QUEUE("播放列表"),
+    QUEUE("播放队列"),
     QUALITY("音质"),
 }
 
@@ -644,6 +644,12 @@ private const val OFFSET_STEP = 250L
 
 // ---------------------------------------------------------------- 播放列表
 
+/**
+ * 照 Folia panelTab/QueueTab.tsx：头一行「播放队列 + 数目」（36dp，13sp 半粗 t2，数目常规 t3），
+ * 行 48dp、圆角 8、左 12 右 6；正在播的那行铺 fill 底、左缘 3dp 强调色竖条（上下各让 14），
+ * 歌名 13sp/19 半粗（不改色），歌手 12sp/17 t3。Folia 的行操作靠指针悬停才露出，
+ * 触屏没有悬停，这里常驻「从队列中删除」（Trash2 15dp，命中 40dp）。空队列 = ListMusic 28 + 文案。
+ */
 @Composable
 private fun QueueBody(
     colors: StagePanelColors,
@@ -653,60 +659,75 @@ private fun QueueBody(
     onRemove: (Int) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(end = 2.dp)) {
-        SectionLabel("播放列表 · ${queue.size} 首", colors)
         if (queue.isEmpty()) {
-            Text(
-                "播放列表是空的",
-                fontSize = 13.sp,
-                color = colors.t3,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 28.dp),
-            )
+            Column(
+                Modifier.fillMaxWidth().padding(vertical = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(GuangYueIcons.ListMusic, null, tint = colors.t3, modifier = Modifier.size(28.dp))
+                Spacer(Modifier.height(10.dp))
+                Text("播放列表为空", fontSize = 13.sp, color = colors.t3)
+            }
             return@Column
         }
+        Row(
+            Modifier.fillMaxWidth().height(36.dp).padding(start = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("播放队列", fontSize = 13.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, color = colors.t2)
+            Spacer(Modifier.width(6.dp))
+            Text("${queue.size}", fontSize = 13.sp, lineHeight = 20.sp, color = colors.t3)
+        }
         queue.forEach { row ->
-            Row(
+            Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(8.dp))
                     .background(if (row.current) colors.fill else Color.Transparent)
-                    .clickableNoRipple { onPick(row.index) }
-                    .padding(start = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .clickableNoRipple { onPick(row.index) },
             ) {
-                Box(Modifier.width(22.dp), contentAlignment = Alignment.CenterStart) {
-                    if (row.current) {
-                        Icon(GuangYueIcons.AudioLines, null, tint = accent, modifier = Modifier.size(14.dp))
-                    } else {
-                        Text("${row.index + 1}", fontSize = 11.sp, color = colors.t3)
-                    }
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        row.title,
-                        fontSize = 14.sp,
-                        lineHeight = 19.sp,
-                        fontWeight = if (row.current) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (row.current) accent else colors.t1,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (row.subtitle.isNotBlank()) {
-                        Text(row.subtitle, fontSize = 12.sp, lineHeight = 16.sp, color = colors.t2, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-                if (!row.current) {
+                if (row.current) {
                     Box(
                         Modifier
-                            .size(40.dp)
-                            .clickableNoRipple { onRemove(row.index) }
-                            .semantics { contentDescription = "移出队列" },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(GuangYueIcons.X, null, tint = colors.t3, modifier = Modifier.size(14.dp))
+                            .align(Alignment.CenterStart)
+                            .padding(vertical = 14.dp)
+                            .fillMaxHeight()
+                            .width(3.dp)
+                            .clip(RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp))
+                            .background(accent),
+                    )
+                }
+                Row(
+                    Modifier.fillMaxSize().padding(start = 12.dp, end = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            row.title,
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp,
+                            fontWeight = if (row.current) FontWeight.SemiBold else FontWeight.Normal,
+                            color = colors.t1,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (row.subtitle.isNotBlank()) {
+                            Text(row.subtitle, fontSize = 12.sp, lineHeight = 17.sp, color = colors.t3, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
-                } else {
-                    Spacer(Modifier.width(12.dp))
+                    if (!row.current) {
+                        Box(
+                            Modifier
+                                .padding(start = 8.dp)
+                                .size(40.dp)
+                                .clickableNoRipple { onRemove(row.index) }
+                                .semantics { contentDescription = "从队列中删除" },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(GuangYueIcons.Trash2, null, tint = colors.t3, modifier = Modifier.size(15.dp))
+                        }
+                    }
                 }
             }
         }
