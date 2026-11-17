@@ -205,7 +205,11 @@ class HomeViewModel @Inject constructor(
 
     /** 本地歌单（推荐段的第一来源）。 */
     val playlistsFlow: StateFlow<List<HomeTile>> = playlists.playlists()
-        .map { list -> list.map { it.toTile() } }
+        .map { list ->
+            // 11-17：Folia 标题下「N Tracks」——本地歌单带上曲目数。
+            val counts = runCatching { playlists.trackCounts() }.getOrDefault(emptyMap())
+            list.map { it.toTile().copy(trackCount = counts[it.id] ?: 0) }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** 最近播放（最多 20 条，按播放时间倒序由 DAO 保证）。 */
@@ -606,8 +610,9 @@ class HomeViewModel @Inject constructor(
                     if (entries == 0) return@runCatching Triple(name, 0, 0)
                     val id = playlists.create(name)
                     if (matched.isNotEmpty()) playlists.addTracks(id, matched)
+                    android.util.Log.i("GYM3U", "import $name entries=$entries matched=${matched.size} index=${byPath.size}/${byFile.size}/${byTitle.size}")
                     Triple(name, matched.size, entries)
-                }.getOrNull()
+                }.onFailure { android.util.Log.w("GYM3U", "import failed", it) }.getOrNull()
             }
             if (r == null) onDone("", 0, 0) else onDone(r.first, r.second, r.third)
         }
