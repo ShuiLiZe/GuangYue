@@ -173,6 +173,8 @@ object GridSliderModel {
 
     /** 标题块第二行：来源 · 类型（Folia 是「N 首歌曲 • 描述」，这边没有曲目数）。 */
     fun secondary(tile: HomeTile): String =
+        // 本地集合卡（全部歌曲 / 文件夹 / 专辑 / 歌手）Folia 只写一行说明，不再挂类型。
+        if (tile.key.startsWith(com.guangyue.feature.library.viewmodel.LibraryTiles.PREFIX) && tile.subtitle.isNotBlank()) tile.subtitle.trim() else
         listOf(tile.subtitle.trim(), kindLabel(tile.kind)).filter { it.isNotBlank() }.joinToString(" · ")
 
     /** 点居中卡时是「进入集合」还是「播放」：歌单 / 推荐歌单 / 电台 / 专辑进入，单曲播放（同封面墙聚焦卡）。 */
