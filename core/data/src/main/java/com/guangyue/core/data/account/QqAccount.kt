@@ -220,6 +220,27 @@ object QqAccountApi {
         )
     }.toString()
 
+    /**
+     * 「我喜欢」的另一条读法（qqmusic-api get_fav_song 同款）：DissInfo.CgiGetDiss，disstid 传 0、dirid 201，
+     * 靠 comm 里的登录凭据认人。uniform_get_Dissinfo 读「我喜欢」读不到时回落到这条。
+     */
+    fun likedSongsBody(c: QqCredential, begin: Int, num: Int): String = buildJsonObject {
+        put("comm", comm(c))
+        put(
+            "req_0",
+            req("music.srfDissInfo.DissInfo", "CgiGetDiss", buildJsonObject {
+                put("disstid", 0)
+                put("dirid", LIKED_DIR_ID)
+                put("enc_host_uin", "")
+                put("tag", 1)
+                put("userinfo", 1)
+                put("orderlist", 1)
+                put("song_begin", begin)
+                put("song_num", num)
+            }),
+        )
+    }.toString()
+
     // ———————————————————————— 解析 ————————————————————————
 
     private fun parseRoot(body: String): JsonObject? =

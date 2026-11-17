@@ -226,20 +226,35 @@ class AccountLibrary @Inject constructor(
         val c = qqCredential()
         if (c == null) _qqExpired.value = true
         val fresh: Result<List<AccountSong>> = if (c == null) Result.failure(AccountExpiredException()) else runCatching {
-            val acc = ArrayList<AccountSong>()
-            var begin = 0
-            while (begin < MAX_SONGS) {
-                val page = when (val r = QqAccountApi.parseSongs(post(c, QqAccountApi.songsBody(c, p, begin, PAGE)))) {
-                    is QqRead.Ok -> r.value
-                    QqRead.Expired -> throw AccountExpiredException()
-                    is QqRead.Failed -> error(r.reason)
+            val readAll = { liked: Boolean ->
+                val acc = ArrayList<AccountSong>()
+                var begin = 0
+                while (begin < MAX_SONGS) {
+                    val body = if (liked) QqAccountApi.likedSongsBody(c, begin, LIKED_PAGE) else QqAccountApi.songsBody(c, p, begin, PAGE)
+                    val text = post(c, body)
+                    val page = when (val r = QqAccountApi.parseSongs(text)) {
+                        is QqRead.Ok -> r.value
+                        QqRead.Expired -> throw AccountExpiredException()
+                        is QqRead.Failed -> {
+                            android.util.Log.w("GYACCOUNT", "qq tracks ${p.id} liked=$liked refused: ${r.reason} body=${text.take(300)}")
+                            error(r.reason)
+                        }
+                    }
+                    if (begin == 0) android.util.Log.i("GYACCOUNT", "qq tracks ${p.id} liked=$liked listed=${page.listed} total=${page.total}")
+                    acc += page.songs
+                    begin += page.listed
+                    val total = page.total
+                    val size = if (liked) LIKED_PAGE else PAGE
+                    if (page.listed == 0 || page.listed < size && total == null || total != null && begin >= total) break
                 }
-                acc += page.songs
-                begin += page.listed
-                val total = page.total
-                if (page.listed == 0 || page.listed < PAGE && total == null || total != null && begin >= total) break
+                acc.distinctBy { it.id }
             }
-            acc.distinctBy { it.id }
+            val first = runCatching { readAll(false) }
+            val songs = first.getOrNull()
+            if (p.liked && (songs == null || songs.isEmpty() && (p.trackCount ?: 0) > 0)) {
+                if (first.exceptionOrNull() is AccountExpiredException) throw first.exceptionOrNull()!!
+                readAll(true)
+            } else first.getOrThrow()
         }
         fresh.getOrNull()?.let { songs ->
             _qqExpired.value = false
@@ -595,6 +610,7 @@ class AccountLibrary @Inject constructor(
 
     private companion object {
         const val PAGE = 500
+        const val LIKED_PAGE = 100
         const val MAX_SONGS = 10_000
         const val MAX_PLAYLISTS = 5_000
     }
