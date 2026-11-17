@@ -20,6 +20,8 @@ object ImportedFolders {
     const val PREFIX = "saf:"
     private val AUDIO_EXT = setOf("mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "ape", "wma", "alac", "aiff", "aif", "dsf", "mka")
 
+    private val NOT_AUDIO = setOf("m3u", "m3u8", "pls", "cue", "lrc", "xspf", "wpl")
+
     @Volatile private var cache: DeviceAudio.Scan? = null
 
     fun trees(context: Context): List<Uri> =
@@ -81,6 +83,8 @@ object ImportedFolders {
                 val mime = c.getString(2).orEmpty()
                 if (mime == DocumentsContract.Document.MIME_TYPE_DIR) { subdirs += id to name; continue }
                 val ext = name.substringAfterLast('.', "").lowercase()
+                // 歌单文件（m3u / pls，mime 也是 audio/*）、歌词、cue 不算歌。
+                if (ext in NOT_AUDIO || mime.contains("mpegurl") || mime.contains("scpls")) continue
                 if (!mime.startsWith("audio/") && ext !in AUDIO_EXT) continue
                 val size = if (c.isNull(3)) 0L else c.getLong(3)
                 if ((name.lowercase() to size) in skip) continue
