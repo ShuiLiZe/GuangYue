@@ -386,7 +386,7 @@ fun GridCollectionView(
                     Modifier
                         .windowInsetsPadding(WindowInsets.statusBars)
                         .windowInsetsPadding(WindowInsets.navigationBars)
-                        .padding(start = 64.dp, end = 20.dp, top = 56.dp, bottom = 84.dp)
+                        .padding(start = 64.dp, end = 20.dp, top = 8.dp, bottom = 72.dp)
                         .fillMaxSize()
                         .shadow(24.dp, RoundedCornerShape(32.dp), clip = false)
                         .clip(RoundedCornerShape(32.dp))
@@ -431,8 +431,8 @@ fun GridCollectionView(
                                     if (c.artwork != null) AsyncImage(model = c.artwork, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                                 }
                                 Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                                    Text(c.title, color = if (isCurrent(i)) ink else ink.copy(alpha = 0.92f), fontSize = 13.sp, fontWeight = if (isCurrent(i)) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    if (c.artist.isNotBlank()) Text(c.artist, color = ink.copy(alpha = 0.55f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+                                    Text(c.title, color = if (isCurrent(i)) ink else ink.copy(alpha = 0.92f), fontSize = 13.sp, lineHeight = 17.sp, fontWeight = if (isCurrent(i)) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    if (c.artist.isNotBlank()) Text(c.artist, color = ink.copy(alpha = 0.55f), fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
                                 }
                             }
                         }
