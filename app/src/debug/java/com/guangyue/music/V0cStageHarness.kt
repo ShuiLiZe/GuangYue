@@ -455,6 +455,36 @@ fun V0cStage(
                     }
                 }
             }
+        } else if (style == "searchresults") {
+            // 11-18：搜索结果（照 sonnet SearchTabs 来源条 / 编号种类页签 / search-meta 状态行）。3000 = 浅色。
+            val light = positionMs == 3_000L
+            val plugins = listOf(
+                com.guangyue.core.plugin.PluginMeta(id = "netease-1", platform = "netease", name = "网易云音乐", version = "1.9.24",
+                    supportedSearchType = listOf(com.guangyue.core.plugin.SearchType.MUSIC, com.guangyue.core.plugin.SearchType.ALBUM, com.guangyue.core.plugin.SearchType.ARTIST),
+                    enabled = true, health = com.guangyue.core.plugin.PluginHealth.OK, sortOrder = 0),
+                com.guangyue.core.plugin.PluginMeta(id = "qq-1", platform = "qq", name = "QQ音乐", version = "1.9.24",
+                    supportedSearchType = listOf(com.guangyue.core.plugin.SearchType.MUSIC),
+                    enabled = true, health = com.guangyue.core.plugin.PluginHealth.OK, sortOrder = 1),
+            )
+            val rows = listOf("夜曲" to "叶惠美", "七里香" to "七里香", "告白气球" to "周杰伦的床边故事", "晴天" to "叶惠美").mapIndexed { i, (t, a) ->
+                com.guangyue.feature.search.SearchRow(
+                    pluginId = "netease-1", pluginName = "网易云音乐", platformLabel = "网易",
+                    item = com.guangyue.core.plugin.MusicItem(platform = "netease", id = "ne-$i", title = t, artist = "周杰伦", album = a, durationMs = 260_000L),
+                )
+            }
+            val state = com.guangyue.feature.search.SearchUiState(
+                query = "周杰伦", available = plugins, sourceId = "netease-1", searched = true, rows = rows,
+                availableTypes = listOf(com.guangyue.feature.search.SearchTab.TRACKS, com.guangyue.feature.search.SearchTab.ALBUMS, com.guangyue.feature.search.SearchTab.ARTISTS),
+            )
+            FoliaTheme(dark = !light) {
+                Box(Modifier.fillMaxSize().background(if (light) Color(0xFFF4F4F5) else Color(0xFF09090B))) {
+                    com.guangyue.feature.search.FoliaSearchScreen(
+                        res = com.guangyue.music.nav.searchStrings(), state = state,
+                        onQueryChange = {}, onSearch = {}, onPickSource = {}, onPlay = {}, onAddToSheet = {}, onDownload = {},
+                        onPickHistory = {}, onOpenAlbum = {}, onOpenArtist = {}, onTabChange = {}, onRetry = {}, onOpenSourceManager = {},
+                    )
+                }
+            }
         } else if (style == "gridponder") {
             // 11-17：Folia 触屏思索按钮 + 本页思索（挖洞高亮 + 说明卡）。37500 = 深色、第 1 章（齿轮）；
             // 3000 = 浅色、第 3 章（轨道）；14000 = 深色、第 5 章（平台按钮）；44000 = 深色、只露灯泡（不收起）。
