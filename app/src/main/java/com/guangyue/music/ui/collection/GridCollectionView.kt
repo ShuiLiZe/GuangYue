@@ -127,7 +127,7 @@ private val DIRS = arrayOf(
 )
 
 /** hexViewport.ts getHexCubicAtIndex + resizeHexGridCoords：返回 (baseX, baseY)，单位 dp。 */
-internal fun hexBase(index: Int): Pair<Float, Float> {
+internal fun hexBase(index: Int, spacingX: Float = SPACING_X, spacingY: Float = SPACING_Y): Pair<Float, Float> {
     if (index <= 0) return 0f to 0f
     var radius = 1
     while (index >= 1 + 3 * radius * (radius + 1)) radius++
@@ -138,7 +138,7 @@ internal fun hexBase(index: Int): Pair<Float, Float> {
     var x = radius; var y = -radius; var z = 0
     for (s in 0 until side) { x += DIRS[s][0] * radius; y += DIRS[s][1] * radius; z += DIRS[s][2] * radius }
     x += DIRS[side][0] * steps; y += DIRS[side][1] * steps; z += DIRS[side][2] * steps
-    return (x * SPACING_X + z * SPACING_X / 2f) to (z * SPACING_Y)
+    return (x * spacingX + z * spacingX / 2f) to (z * spacingY)
 }
 
 /** framer-motion inertia 的指数逼近：1 - e^(-t/τ)，在动画时长内归一。 */
@@ -173,7 +173,17 @@ fun GridCollectionView(
     /** 11-17：Folia 设置「卡片最小尺寸 / 最小透明度」（离中心最远的卡缩到 / 淡到多少）。 */
     minScale: Float = MIN_SCALE,
     minOpacity: Float = MIN_OPACITY,
+    /** 11-17：Folia「全画幅封面」——封面铺满整张卡，歌名歌手叠在渐变遮罩上。 */
+    fullBleedCover: Boolean = false,
+    /** 11-17：Folia「正方形卡片」（只在全画幅时生效）：面积不变的正方形，间距同比（squareGridCardBox）。 */
+    squareCards: Boolean = false,
 ) {
+    val square = squareCards && fullBleedCover
+    val side = kotlin.math.round(sqrt(CARD_W * CARD_H))
+    val cardW = if (square) side else CARD_W
+    val cardH = if (square) side else CARD_H
+    val spacingX = if (square) kotlin.math.round(SPACING_X * side / CARD_W) else SPACING_X
+    val spacingY = if (square) kotlin.math.round(SPACING_Y * side / CARD_H) else SPACING_Y
     val daylight = (0.299f * ground.red + 0.587f * ground.green + 0.114f * ground.blue) > 0.5f
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
@@ -183,14 +193,14 @@ fun GridCollectionView(
     var panelOpen by remember { mutableStateOf(initialPanelOpen) }
     var listOpen by remember { mutableStateOf(false) }
     var sortAz by remember { mutableStateOf(false) }
-    val bases = remember(cards.size) { Array(cards.size) { hexBase(it) } }
+    val bases = remember(cards.size, square) { Array(cards.size) { hexBase(it, spacingX, spacingY) } }
 
     val bounds = remember(bases, box) {
         if (bases.isEmpty()) floatArrayOf(0f, 0f, 0f, 0f) else {
             val wDp = with(density) { box.width.toDp().value }
             val hDp = with(density) { box.height.toDp().value }
-            val bx = max(0f, wDp / 2 - 2 * SPACING_X)
-            val by = max(0f, hDp / 2 - 2 * SPACING_Y)
+            val bx = max(0f, wDp / 2 - 2 * spacingX)
+            val by = max(0f, hDp / 2 - 2 * spacingY)
             floatArrayOf(
                 -bases.maxOf { it.first } - bx, -bases.minOf { it.first } + bx,
                 -bases.maxOf { it.second } - by, -bases.minOf { it.second } + by,
@@ -274,7 +284,7 @@ fun GridCollectionView(
                     val (bx, by) = bases[i]
                     val cx = bx + dx
                     val cy = by + dy
-                    if (abs(cx) > wDp / 2 + CARD_W / 2 + 96 || abs(cy) > hDp / 2 + CARD_H / 2 + 96) continue
+                    if (abs(cx) > wDp / 2 + cardW / 2 + 96 || abs(cy) > hDp / 2 + cardH / 2 + 96) continue
                     val dist = sqrt(cx * cx + cy * cy)
                     val p = min(dist / MAX_DISTANCE, 1f)
                     val scale = CENTER_SCALE - (CENTER_SCALE - minScale) * p
@@ -297,6 +307,9 @@ fun GridCollectionView(
                         ) {
                             PolaroidCard(
                                 card = card,
+                                cardW = cardW,
+                                cardH = cardH,
+                                fullBleed = fullBleedCover,
                                 ink = ink,
                                 ground = ground,
                                 daylight = daylight,
@@ -573,6 +586,9 @@ private fun formatDuration(ms: Long): String {
 @Composable
 private fun PolaroidCard(
     card: GridTrackCard,
+    cardW: Float,
+    cardH: Float,
+    fullBleed: Boolean,
     ink: Color,
     ground: Color,
     daylight: Boolean,
@@ -587,9 +603,75 @@ private fun PolaroidCard(
     onQueue: () -> Unit,
 ) {
     val shape = RoundedCornerShape(12.dp)
+    val actions: @Composable () -> Unit = {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (playAlpha > 0f) {
+                RoundBtn(ink, Modifier.graphicsLayer { alpha = playAlpha; scaleX = playScale; scaleY = playScale }, onPlay) {
+                    if (current && playing) Icon(GuangYueIcons.Pause, contentDescription = "暂停", tint = ink, modifier = Modifier.size(15.dp))
+                    else androidx.compose.foundation.Canvas(Modifier.size(14.dp).offset(x = 1.dp)) {
+                        // Folia 卡上播放键是实心三角。
+                        val path = androidx.compose.ui.graphics.Path().apply {
+                            moveTo(size.width * 0.18f, size.height * 0.08f); lineTo(size.width * 0.92f, size.height * 0.5f)
+                            lineTo(size.width * 0.18f, size.height * 0.92f); close()
+                        }
+                        drawPath(path, ink)
+                    }
+                }
+            }
+            if (queueAlpha > 0f) {
+                RoundBtn(ink, Modifier.graphicsLayer { alpha = queueAlpha }, onQueue) {
+                    Icon(GuangYueIcons.Plus, contentDescription = "加入队列", tint = ink, modifier = Modifier.size(15.dp))
+                }
+            }
+        }
+    }
+    val meta: @Composable (Float) -> Unit = { a ->
+        if (card.album.isNotBlank()) Text(card.album, color = ink.copy(alpha = a), fontSize = 9.sp, lineHeight = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(formatDuration(card.durationMs), color = ink.copy(alpha = a), fontSize = 9.sp, lineHeight = 11.sp, fontFamily = FontFamily.Monospace)
+    }
+    if (fullBleed) {
+        // Folia PolaroidCard fullBleedCover：封面铺满，上面一层静态渐变（日间白、夜间黑，26%→100%：0/30/74/93%），字在底部 p-3。
+        val shade = if (daylight) Color.White else Color.Black
+        Box(
+            Modifier
+                .requiredSize(cardW.dp, cardH.dp)
+                .shadow(10.dp, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.25f))
+                .clip(shape)
+                .background(if (daylight) Color(0x99E4E4E7) else Color(0x9927272A))
+                .border(1.dp, ink.copy(alpha = if (current) 0.32f else 0.05f), shape)
+                .pointerInput(card.key) {
+                    detectTapGestures(onTap = { onTap() }, onLongPress = { onLong() })
+                },
+        ) {
+            if (card.artwork != null) {
+                AsyncImage(model = card.artwork, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            } else {
+                Icon(GuangYueIcons.Disc, contentDescription = null, tint = ink.copy(alpha = 0.2f), modifier = Modifier.size(56.dp).align(Alignment.Center))
+            }
+            Box(
+                Modifier.fillMaxSize().background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        0f to shade.copy(alpha = 0f), 0.26f to shade.copy(alpha = 0f), 0.5f to shade.copy(alpha = 0.3f),
+                        0.74f to shade.copy(alpha = 0.74f), 1f to shade.copy(alpha = 0.93f),
+                    ),
+                ),
+            )
+            Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(card.title, color = ink, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                if (card.artist.isNotBlank()) {
+                    Text(card.artist, color = ink.copy(alpha = 0.7f), fontSize = 10.sp, lineHeight = 13.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.Bottom) {
+                    Column(Modifier.weight(1f).padding(end = 8.dp)) { meta(0.55f) }
+                    actions()
+                }
+            }
+        }
+        return
+    }
     Column(
         Modifier
-            .requiredSize(CARD_W.dp, CARD_H.dp)
+            .requiredSize(cardW.dp, cardH.dp)
             .shadow(10.dp, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.25f))
             .clip(shape)
             .background(ground.copy(alpha = 0.95f))
@@ -619,29 +701,9 @@ private fun PolaroidCard(
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f).padding(end = 8.dp)) {
-                    if (card.album.isNotBlank()) Text(card.album, color = ink.copy(alpha = 0.35f), fontSize = 9.sp, lineHeight = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(formatDuration(card.durationMs), color = ink.copy(alpha = 0.35f), fontSize = 9.sp, lineHeight = 11.sp, fontFamily = FontFamily.Monospace)
+                    meta(0.35f)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (playAlpha > 0f) {
-                        RoundBtn(ink, Modifier.graphicsLayer { alpha = playAlpha; scaleX = playScale; scaleY = playScale }, onPlay) {
-                            if (current && playing) Icon(GuangYueIcons.Pause, contentDescription = "暂停", tint = ink, modifier = Modifier.size(15.dp))
-                            else androidx.compose.foundation.Canvas(Modifier.size(14.dp).offset(x = 1.dp)) {
-                                // Folia 卡上播放键是实心三角。
-                                val path = androidx.compose.ui.graphics.Path().apply {
-                                    moveTo(size.width * 0.18f, size.height * 0.08f); lineTo(size.width * 0.92f, size.height * 0.5f)
-                                    lineTo(size.width * 0.18f, size.height * 0.92f); close()
-                                }
-                                drawPath(path, ink)
-                            }
-                        }
-                    }
-                    if (queueAlpha > 0f) {
-                        RoundBtn(ink, Modifier.graphicsLayer { alpha = queueAlpha }, onQueue) {
-                            Icon(GuangYueIcons.Plus, contentDescription = "加入队列", tint = ink, modifier = Modifier.size(15.dp))
-                        }
-                    }
-                }
+                actions()
             }
         }
     }

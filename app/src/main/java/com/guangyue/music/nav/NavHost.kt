@@ -593,9 +593,12 @@ fun GuangYueNavHost(
                             }
                         }
                         val falloff by shellVm.gridFalloff.collectAsStateWithLifecycle()
+                        val cardShape by shellVm.gridCardShape.collectAsStateWithLifecycle()
                         com.guangyue.music.ui.collection.GridCollectionView(
                             minScale = falloff.first,
                             minOpacity = falloff.second,
+                            fullBleedCover = cardShape.first,
+                            squareCards = cardShape.second,
                             title = shownName,
                             subtitle = tile.subtitle.takeIf { s -> s.isNotBlank() } ?: kindLabel,
                             coverUrl = tile.artwork ?: list.firstOrNull { t -> t.artwork != null }?.artwork,
@@ -1196,6 +1199,8 @@ fun GuangYueNavHost(
                 ponderTouchButton = shellVm.ponderTouchButton.collectAsStateWithLifecycle().value,
                 onPonderTouchButton = { shellVm.setPonderTouchButton(it) },
                 gridFalloff = shellVm.gridFalloff.collectAsStateWithLifecycle().value,
+                gridCardShape = shellVm.gridCardShape.collectAsStateWithLifecycle().value,
+                onGridCardShape = { b, sq -> shellVm.setGridCardShape(b, sq) },
                 onGridFalloff = { sc, op -> shellVm.setGridFalloff(sc, op) },
             )
         }

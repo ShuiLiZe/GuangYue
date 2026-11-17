@@ -92,6 +92,13 @@ class ShellViewModel @Inject constructor(
     /** 11-17：Folia 集合网格卡片衰减（最小尺寸 / 最小透明度），设置与歌单网格共用。 */
     private val _gridFalloff = MutableStateFlow(preferences.gridMinCardScale to preferences.gridMinCardOpacity)
     val gridFalloff: StateFlow<Pair<Float, Float>> = _gridFalloff.asStateFlow()
+    /** 11-17：Folia 全画幅封面 / 正方形卡片（first = 全画幅，second = 正方形）。 */
+    private val _gridCardShape = MutableStateFlow(preferences.gridFullBleedCover to preferences.gridSquareCards)
+    val gridCardShape: StateFlow<Pair<Boolean, Boolean>> = _gridCardShape.asStateFlow()
+    fun setGridCardShape(fullBleed: Boolean, square: Boolean) {
+        preferences.gridFullBleedCover = fullBleed; preferences.gridSquareCards = square
+        _gridCardShape.value = fullBleed to square
+    }
     fun setGridFalloff(scale: Float, opacity: Float) {
         preferences.gridMinCardScale = scale; preferences.gridMinCardOpacity = opacity
         _gridFalloff.value = preferences.gridMinCardScale to preferences.gridMinCardOpacity

@@ -273,6 +273,14 @@ class AppPreferences @Inject constructor(
         set(value) = prefs.edit().putString(KEY_GRID_CARD_STYLE, if (value == GridCardStyles.IMAGE) GridCardStyles.IMAGE else GridCardStyles.CARD).apply()
 
     /** 11-17：Folia「顶部胶囊入口」（options.homeTabsVisibility）：隐藏的首页页签名（歌单 / 电台 / 专辑 / 本地）。 */
+    /** 11-17：Folia「网格卡片 → 全画幅封面 / 正方形卡片」（默认都关）。 */
+    var gridFullBleedCover: Boolean
+        get() = prefs.getBoolean(KEY_GRID_FULL_BLEED, false)
+        set(value) = prefs.edit().putBoolean(KEY_GRID_FULL_BLEED, value).apply()
+    var gridSquareCards: Boolean
+        get() = prefs.getBoolean(KEY_GRID_SQUARE, false)
+        set(value) = prefs.edit().putBoolean(KEY_GRID_SQUARE, value).apply()
+
     /** 11-17：Folia「主页与歌单 → 网格卡片 → 卡片最小尺寸」（hexCardFalloff：默认 0.45，范围 0.2–1.1）。 */
     var gridMinCardScale: Float
         get() = prefs.getFloat(KEY_GRID_MIN_SCALE, GRID_MIN_SCALE_DEFAULT).coerceIn(0.2f, 1.1f)
@@ -306,6 +314,8 @@ class AppPreferences @Inject constructor(
         const val KEY_GRID_CARD_STYLE = "grid3d_card_style"
         const val KEY_HOME_TABS_HIDDEN = "home_tabs_hidden"
         const val KEY_GRID_MIN_SCALE = "grid_min_card_scale"
+        const val KEY_GRID_FULL_BLEED = "grid_full_bleed_cover"
+        const val KEY_GRID_SQUARE = "grid_square_cards"
         const val KEY_GRID_MIN_OPACITY = "grid_min_card_opacity"
         const val GRID_MIN_SCALE_DEFAULT = 0.45f
         const val GRID_MIN_OPACITY_DEFAULT = 0.4f

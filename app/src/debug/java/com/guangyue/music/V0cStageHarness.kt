@@ -492,7 +492,9 @@ fun V0cStage(
                     )
                 }
             }
-        } else if (style == "gridcollection") {
+        } else if (style == "gridcollection" || style == "gridcollectionbleed") {
+            // 11-17：gridcollectionbleed = Folia 全画幅封面（面板收起）；3000 浅色再加正方形卡片。
+            val bleed = style == "gridcollectionbleed"
             // 11-17：歌单详情（GridView）信息面板开着。竖屏 = 原样；横屏照 sonnet ① 紧凑（64dp 横幅封面、按钮收一档）。3000 = 浅色。
             val light = positionMs == 3_000L
             val ink = if (light) Color(0xFF18181B) else Color(0xFFF4F4F5)
@@ -510,7 +512,9 @@ fun V0cStage(
                         com.guangyue.music.ui.collection.GridPanelAction("全部加入队列") {},
                         com.guangyue.music.ui.collection.GridPanelAction("下载全部") {},
                     ),
-                    initialPanelOpen = true,
+                    initialPanelOpen = !bleed,
+                    fullBleedCover = bleed,
+                    squareCards = bleed && light,
                 )
             }
         } else if (style == "gridhomeswitch") {
@@ -528,6 +532,7 @@ fun V0cStage(
                     versionName = "0.0.27",
                     initialPage = com.guangyue.feature.library.screen.SettingsPage.HOME,
                     gridFalloff = if (light) 0.6f to 0.25f else 0.45f to 0.4f,
+                    gridCardShape = if (light) true to true else false to false,
                     daylightChoice = if (light) "light" else "system",
                     modifier = Modifier.navigationBarsPadding(),
                 )

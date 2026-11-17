@@ -69,9 +69,11 @@ internal fun FoliaSettingsShell(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     version: String = "",
+    /** 取证用：直接落在「选项」页。 */
+    startOnOptions: Boolean = false,
 ) {
     // Folia APK：设置窗首次打开落在「帮助」页。
-    var help by rememberSaveable { mutableStateOf(true) }
+    var help by rememberSaveable { mutableStateOf(!startOnOptions) }
     // 11-17：Folia 帮助页两张卡（版本更新 / 思索帮助页）点开的说明窗。
     var helpSheet by rememberSaveable { mutableStateOf<String?>(null) }
     val dark = Gyp.page.luminance() < 0.5f
@@ -269,7 +271,7 @@ internal object HelpTexts {
         "播放页底部胶囊" to "竖屏展开时照 Folia 手机版收成两行：左边播放键、中间歌名、右边播放模式和下一首，下面一行是进度条；右侧面板键挪到胶囊上方，不再和胶囊挤一行。",
         "设置分类照 Folia" to "设置的选项分成 外观、播放页、主页与歌单、播放控制、通用、存储与备份：资料库界面、卡片样式、顶部胶囊入口、记住卡片位置在「主页与歌单」，触屏思索按钮在「通用」。",
         "明暗模式" to "外观里的明暗模式改成 浅色 / 深色 / 跟随系统 三选一；手动选浅色或深色后就不再跟随系统。",
-        "网格卡片衰减" to "主页与歌单 → 网格卡片：调歌单网格里远离中心的卡片最小缩到多大、最淡到多淡，可一键恢复默认。",
+        "网格卡片" to "主页与歌单 → 网格卡片：可以让封面铺满整张卡（全画幅封面），再选正方形卡片；也能调远离中心的卡片最小缩到多大、最淡到多淡，一键恢复默认。",
         "歌单详情" to "信息面板的按钮带上图标，简介太长时在面板里自己滚；横屏时面板变窄、封面压成横幅，「播放全部」不用滚就能点到。",
     )
 

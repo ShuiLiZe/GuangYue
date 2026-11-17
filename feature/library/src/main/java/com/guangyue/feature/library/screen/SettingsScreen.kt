@@ -103,6 +103,9 @@ fun SettingsScreen(
     onPickDaylight: (String) -> Unit = {},
     /** 11-17：Folia「网格卡片 → 卡片最小尺寸 / 最小透明度」；null 不显示。 */
     gridFalloff: Pair<Float, Float>? = null,
+    /** 11-17：Folia「全画幅封面 / 正方形卡片」（first / second）；null 不显示。 */
+    gridCardShape: Pair<Boolean, Boolean>? = null,
+    onGridCardShape: (Boolean, Boolean) -> Unit = { _, _ -> },
     onGridFalloff: (Float, Float) -> Unit = { _, _ -> },
     /** 打开时先显示的分类（取证用；正常进入是「外观」）。 */
     initialPage: SettingsPage = SettingsPage.APPEARANCE,
@@ -144,6 +147,16 @@ fun SettingsScreen(
         if (rememberHomeCard != null) {
             add(SettingItem(SettingsPage.HOME, "记住主页卡片位置", "记住主页卡片位置", "切换顶部入口或从播放界面返回时，回到各入口上次浏览的卡片。位置仅在本次打开应用期间保留。", icon(GuangYueIcons.Pin),
                 trailing = { FoliaToggle(checked = rememberHomeCard, onChange = onRememberHomeCard) }))
+        }
+        if (gridCardShape != null) {
+            val (bleed, square) = gridCardShape
+            add(SettingItem(SettingsPage.HOME, "网格卡片", "全画幅封面", "让封面图铺满整张网格卡片，歌名和歌手改为叠在封面上的渐变遮罩里显示，做法和队列拼贴一致。", icon(GuangYueIcons.Images),
+                trailing = { FoliaToggle(checked = bleed, onChange = { onGridCardShape(it, square) }) }))
+            // Folia：正方形只在全画幅打开后才有意义（Reveal when fullBleedCover）。
+            if (bleed) {
+                add(SettingItem(SettingsPage.HOME, "网格卡片", "正方形卡片", "让卡片高宽相等，方形封面完整显示，不再被上下裁掉。卡片面积保持不变，变矮的同时会变宽，网格间距同步调整。", icon(GuangYueIcons.Square),
+                    trailing = { FoliaToggle(checked = square, onChange = { onGridCardShape(bleed, it) }) }))
+            }
         }
         if (gridFalloff != null) {
             // Folia HomePage「网格卡片」组（options.gridViewMinCardScale / gridViewMinCardOpacity，hexCardFalloff 范围与默认），作用于歌单详情的集合网格。
@@ -210,6 +223,7 @@ fun SettingsScreen(
         onClose = onBack,
         modifier = modifier,
         version = versionName,
+        startOnOptions = initialPage != SettingsPage.APPEARANCE,
     )
 }
 
