@@ -45,10 +45,12 @@ import com.guangyue.feature.library.design.Gyp
 import com.guangyue.feature.library.design.icons.GuangYueIcons
 
 private fun pageIcon(p: SettingsPage): ImageVector = when (p) {
-    SettingsPage.APPEARANCE -> GuangYueIcons.Palette
+    SettingsPage.APPEARANCE -> GuangYueIcons.Contrast
+    SettingsPage.HOME -> GuangYueIcons.LayoutGrid
+    SettingsPage.GENERAL -> GuangYueIcons.SlidersHorizontal
     SettingsPage.PLAYER -> GuangYueIcons.Sparkles
     SettingsPage.PLAYBACK -> GuangYueIcons.AudioLines
-    SettingsPage.STORAGE -> GuangYueIcons.HardDrive
+    SettingsPage.STORAGE -> GuangYueIcons.Database
     SettingsPage.ABOUT -> GuangYueIcons.CircleHelp
 }
 

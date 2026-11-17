@@ -285,7 +285,50 @@ fun PagePonderOverlay(
             atBottom -> Alignment.BottomCenter
             else -> Alignment.TopCenter
         }
-        Column(
+        // 11-17 修：横屏高亮的是整条轨道（宽、居中）时，上下空位都不到完整说明卡的高度，卡会盖住轨道。
+        // 这时用紧凑卡：章节胶囊收成页头一行文字，说明与翻页并排，高约 100dp，塞进较大的那条空位。
+        val gapDp = if (rect == null) Float.MAX_VALUE else with(density) { maxOf(rect.top, hPx - rect.bottom).toDp().value }
+        val compact = landscape && !side && rect != null && gapDp < 240f
+        if (compact) {
+            Column(
+                Modifier
+                    .align(cardAlign)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .widthIn(max = 640.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(card)
+                    .border(1.dp, ink.copy(alpha = 0.08f), RoundedCornerShape(18.dp))
+                    .clickable(indication = null, interactionSource = null) {}
+                    .padding(start = 16.dp, end = 6.dp, top = 2.dp, bottom = 10.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(GuangYueIcons.Lightbulb, null, tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("思索 · ${chapter + 1} / ${chapters.size} · ${ch.title}", color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onClose).semantics { contentDescription = "关闭思索" },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(GuangYueIcons.X, null, tint = soft, modifier = Modifier.size(17.dp)) }
+                }
+                Row(Modifier.padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(st.text, color = ink, fontSize = 14.sp, lineHeight = 19.sp, maxLines = 2, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.size(10.dp))
+                    if (chapter > 0 || step > 0) {
+                        Box(
+                            Modifier.heightIn(min = 40.dp).clip(RoundedCornerShape(50)).clickable { prev() }.padding(horizontal = 12.dp),
+                            contentAlignment = Alignment.Center,
+                        ) { Text("上一步", color = soft, fontSize = 13.sp) }
+                    }
+                    Box(
+                        Modifier.heightIn(min = 40.dp).clip(RoundedCornerShape(50)).background(ink)
+                            .clickable { next() }.padding(horizontal = 16.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { Text(if (last) "完成" else "下一步", color = card, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+                }
+            }
+        } else Column(
             Modifier
                 .align(cardAlign)
                 .windowInsetsPadding(WindowInsets.safeDrawing)

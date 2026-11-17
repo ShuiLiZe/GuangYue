@@ -97,9 +97,11 @@ fun SettingsScreen(
     /** 11-17：Folia 通用设置「思索 → 触屏思索按钮」；null 不显示。 */
     ponderTouchButton: Boolean? = null,
     onPonderTouchButton: (Boolean) -> Unit = {},
+    /** 打开时先显示的分类（取证用；正常进入是「外观」）。 */
+    initialPage: SettingsPage = SettingsPage.APPEARANCE,
 ) {
     var query by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
-    var page by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(SettingsPage.APPEARANCE) }
+    var page by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(initialPage) }
 
     val chevron: @Composable () -> Unit = {
         Icon(GuangYueIcons.ChevronRight, null, tint = Gyp.t3, modifier = Modifier.size(16.dp))
@@ -113,26 +115,26 @@ fun SettingsScreen(
         add(SettingItem(SettingsPage.APPEARANCE, "外观", "深色模式", "跟随 Folia 的「午夜墨染」深色底", icon(if (darkMode) GuangYueIcons.Moon else GuangYueIcons.Sun),
             trailing = { FoliaToggle(checked = darkMode, onChange = onDarkModeChange) }))
         if (homeStyles.isNotEmpty()) {
-            // Folia「设置 → 界面设置 → 资料库界面」（options.librarySuite / librarySuiteDesc）；手机设置没有「界面设置」页，放在外观里。
-            add(SettingItem(SettingsPage.APPEARANCE, "资料库", "资料库界面", "首页、歌单和歌手页用哪套界面浏览。切换时保留播放队列。", icon(GuangYueIcons.LayoutGrid),
+            // Folia「设置 → 界面设置 → 资料库界面」（options.librarySuite / librarySuiteDesc）；11-17 起照 Folia settingsNavModel 放「主页与歌单」。
+            add(SettingItem(SettingsPage.HOME, "资料库", "资料库界面", "首页、歌单和歌手页用哪套界面浏览。切换时保留播放队列。", icon(GuangYueIcons.LayoutGrid),
                 below = { HomeStylePicker(homeStyles, homeStyle, onPickHomeStyle) }))
         }
         if (gridCardStyle != null) {
             // Folia「设置 → 首页 → 歌单卡片样式」（options.grid3dCardStyle / grid3dCardStyleDesc，选项顺序 image、card）。
-            add(SettingItem(SettingsPage.APPEARANCE, "资料库", "歌单卡片样式", "选择首页歌单卡片样式：纯图片封面或经典的拍立得文本卡片。", icon(GuangYueIcons.LayoutGrid),
+            add(SettingItem(SettingsPage.HOME, "资料库", "歌单卡片样式", "选择首页歌单卡片样式：纯图片封面或经典的拍立得文本卡片。", icon(GuangYueIcons.LayoutGrid),
                 below = { FlowStyleChips(listOf("image" to "纯图片封面", "card" to "拍立得卡片"), gridCardStyle, onPickGridCardStyle) }))
         }
         homeTabs.forEach { (name, on) ->
-            add(SettingItem(SettingsPage.APPEARANCE, "顶部胶囊入口", "显示$name", null, icon(GuangYueIcons.LayoutGrid),
+            add(SettingItem(SettingsPage.HOME, "顶部胶囊入口", "显示$name", null, icon(GuangYueIcons.LayoutGrid),
                 trailing = { FoliaToggle(checked = on, onChange = { v -> onToggleHomeTab(name, v) }) }))
         }
         if (rememberHomeCard != null) {
-            add(SettingItem(SettingsPage.APPEARANCE, "记住主页卡片位置", "记住主页卡片位置", "切换顶部入口或从播放界面返回时，回到各入口上次浏览的卡片。位置仅在本次打开应用期间保留。", icon(GuangYueIcons.Pin),
+            add(SettingItem(SettingsPage.HOME, "记住主页卡片位置", "记住主页卡片位置", "切换顶部入口或从播放界面返回时，回到各入口上次浏览的卡片。位置仅在本次打开应用期间保留。", icon(GuangYueIcons.Pin),
                 trailing = { FoliaToggle(checked = rememberHomeCard, onChange = onRememberHomeCard) }))
         }
         if (ponderTouchButton != null) {
-            // Folia GeneralPage 的「思索」组（options.ponderTouchButton / ponderTouchButtonDesc）；手机设置没有通用页，放外观。
-            add(SettingItem(SettingsPage.APPEARANCE, "思索", "触屏思索按钮", "触屏设备右上角的灯泡。", icon(GuangYueIcons.Lightbulb),
+            // Folia GeneralPage 的「思索」组（options.ponderTouchButton / ponderTouchButtonDesc），在「通用」页。
+            add(SettingItem(SettingsPage.GENERAL, "思索", "触屏思索按钮", "触屏设备右上角的灯泡。", icon(GuangYueIcons.Lightbulb),
                 trailing = { FoliaToggle(checked = ponderTouchButton, onChange = onPonderTouchButton) }))
         }
         if (playbackEntryView != null) {
@@ -186,11 +188,13 @@ fun SettingsScreen(
     )
 }
 
-/** 设置分类（Folia settingsNavModel 的手机子集，名字取 zh-CN options.settingsPage*）。 */
+/** 设置分类（Folia settingsNavModel 的手机子集，顺序与名字照它：外观/播放页/主页与歌单/播放控制/通用/存储与备份，zh-CN options.settingsPage*）。 */
 enum class SettingsPage(val label: String, val desc: String = "") {
-    APPEARANCE("外观", "主题、资料库界面、卡片样式与首页入口。"),
+    APPEARANCE("外观", "主题与深浅色。"),
     PLAYER("播放页", "播放后进入的视图、歌词动画、背景与町景。"),
+    HOME("主页与歌单", "资料库界面、卡片样式、顶部胶囊入口与卡片位置。"),
     PLAYBACK("播放控制", "音质、取链源与音源插件。"),
+    GENERAL("通用", "思索等通用行为。"),
     STORAGE("存储与备份", "下载与本机存储。"),
     ABOUT("关于"),
 }

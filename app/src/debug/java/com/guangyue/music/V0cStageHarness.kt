@@ -514,7 +514,7 @@ fun V0cStage(
                 )
             }
         } else if (style == "gridhomeswitch") {
-            // 0.0.27：切换入口取证 = 设置 → 外观 → 资料库界面（Folia「设置 → 界面设置 → 资料库界面」）。
+            // 0.0.27：切换入口取证 = 设置 → 主页与歌单（11-17 起，原在外观） → 资料库界面（Folia「设置 → 界面设置 → 资料库界面」）。
             // 3000 = 浅色、选中「网格」；其余 = 深色、默认「墙面」。
             val light = positionMs == 3_000L
             FoliaTheme(dark = !light) {
@@ -526,6 +526,7 @@ fun V0cStage(
                     homeStyles = com.guangyue.music.nav.HOME_STYLE_OPTIONS,
                     homeStyle = if (light) com.guangyue.core.prefs.HomeStyles.GRID else com.guangyue.core.prefs.HomeStyles.WALL,
                     versionName = "0.0.27",
+                    initialPage = com.guangyue.feature.library.screen.SettingsPage.HOME,
                     modifier = Modifier.navigationBarsPadding(),
                 )
             }
