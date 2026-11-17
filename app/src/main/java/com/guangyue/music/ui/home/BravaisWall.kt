@@ -900,12 +900,23 @@ private fun Color.luminanceDark(): Boolean = (0.299f * red + 0.587f * green + 0.
  */
 @Composable
 private fun SeamHomeRow(title: String, tabs: List<String>, active: Int, ink: Color, onSelect: (Int) -> Unit, onOpenSearch: () -> Unit, onOpenSettings: (() -> Unit)? = null) {
+    // 11-17：Folia useBravaisSeamTabsFit 的缩减顺序——放不下先隐藏标题，再把页签缩成一个字（全名留在无障碍描述里）。
+    // 以前直接横向滚动，手机上「本地」被挤出屏外看不见。
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        val avail = maxWidth.value - 32f - 40f - (if (onOpenSettings != null) 40f else 0f)
+        val titleW = title.length * 19.5f + 12f
+        val fullW = tabs.sumOf { (24 + 14 * it.length).toDouble() }.toFloat() + 4f * (tabs.size - 1)
+        val shortW = tabs.size * 38f + 4f * (tabs.size - 1)
+        val showTitle = titleW + fullW <= avail
+        val short = !showTitle && fullW > avail
     Row(
         Modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, color = ink, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 4.5.sp, maxLines = 1)
-        Spacer(Modifier.width(12.dp))
+        if (showTitle) {
+            Text(title, color = ink, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 4.5.sp, maxLines = 1)
+            Spacer(Modifier.width(12.dp))
+        }
         Row(
             Modifier.weight(1f).horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -914,7 +925,7 @@ private fun SeamHomeRow(title: String, tabs: List<String>, active: Int, ink: Col
             tabs.forEachIndexed { i, label ->
                 val on = i == active
                 Text(
-                    label,
+                    if (short && !on) label.take(1) else label,
                     color = if (on) ink else ink.copy(alpha = 0.62f),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -922,7 +933,7 @@ private fun SeamHomeRow(title: String, tabs: List<String>, active: Int, ink: Col
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
                         .background(if (on) ink.copy(alpha = 0.14f) else Color.Transparent)
-                        .clickable { onSelect(i) }
+                        .clickable(onClickLabel = label) { onSelect(i) }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                 )
             }
@@ -941,6 +952,7 @@ private fun SeamHomeRow(title: String, tabs: List<String>, active: Int, ink: Col
                 Icon(GuangYueIcons.Settings, contentDescription = "设置", tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
             }
         }
+    }
     }
 }
 
