@@ -554,7 +554,8 @@ private fun ResultCard(
                 modifier = Modifier.size(20.dp),
             )
         }
-        Box(
+        // 本地歌已经在手机里，Folia 本地结果只有「+」，不放下载。
+        if (row.pluginId != LOCAL_SOURCE) Box(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
