@@ -214,6 +214,7 @@ object SearchTags {
     const val Idle = "search-idle"
     const val NoSource = "search-no-source"
     const val KindTabs = "search-kind-tabs"
+    const val Meta = "search-meta"
     const val Mini = "search-mini"
 }
 
@@ -399,6 +400,31 @@ private fun SourceChip(label: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** Folia `search-meta`：「共 N 条」的 N；还能往下翻时带「+」。 */
+internal fun searchCountLabel(count: Int, more: Boolean): String = "共 $count${if (more) "+" else ""} 条"
+
+/**
+ * 状态行：照 Folia `.search-meta`——来源名 + 「共 N 条」，等宽 11sp 600、字距 0.1em、淡墨，
+ * 后面一道 1dp 发丝线延伸到右边。
+ */
+@Composable
+private fun SearchMetaLine(source: String, count: Int, more: Boolean) {
+    val soft = Gyp.t2
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = GySpace.pageH, vertical = 8.dp).testTag(SearchTags.Meta),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        val style = androidx.compose.ui.text.TextStyle(
+            fontSize = 11.sp, lineHeight = 11.sp, letterSpacing = 0.1.em,
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = soft,
+        )
+        if (source.isNotEmpty()) Text(source, style = style, maxLines = 1)
+        if (count > 0) Text(searchCountLabel(count, more), style = style, maxLines = 1)
+        Box(Modifier.weight(1f).height(1.dp).background(Gyp.ink.copy(alpha = 0.09f)))
+    }
+}
+
 /**
  * 种类页签：照 Folia SearchTabs `.search-kinds`（手机断点）——编号「01」等宽 11sp + 大字 18sp 900 粗，
  * 间距 14dp、左留 16dp，选中前面一个 11dp 实心强调色方块（换种类时滑过去）。只有一种时不画。
@@ -480,6 +506,11 @@ private fun ResultsBody(
         if (state.availableTypes.size > 1) {
             SearchKindTabs(tabs = state.availableTypes, tab = state.tab, onSelect = onTabChange)
         }
+        SearchMetaLine(
+            source = if (state.local) "本地" else state.selected?.let { platformLabelOf(it) }.orEmpty(),
+            count = if (state.loading) 0 else state.tabCounts.of(state.tab),
+            more = state.tab == SearchTab.TRACKS && !state.musicEnd,
+        )
         // 有结果但有错（Folia SearchWorkspace.tsx:112-120 的底部错误条）：不挡结果，给一个重试。
         if (state.failure != null) {
             FailureBanner(res = res, failure = state.failure, onRetry = onRetry)
