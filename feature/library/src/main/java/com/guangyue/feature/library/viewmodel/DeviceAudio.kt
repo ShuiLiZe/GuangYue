@@ -25,7 +25,7 @@ object DeviceAudio {
         context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
     /** 一次扫描的结果：保留的歌 + 被过滤规则排除的行 key（`mediastore:<id>`，用来清库）。 */
-    data class Scan(val tracks: List<TrackEntity>, val rejectedKeys: Set<String>)
+    data class Scan(val tracks: List<TrackEntity>, val rejectedKeys: Set<String>, val folderOf: Map<String, String> = emptyMap())
 
     /** 扫描全部音乐（不含铃声 / 录音 / 30 秒以下），按加入时间倒序。会查 ContentResolver，放后台线程。 */
     fun scan(context: Context): List<TrackEntity> = scanDetailed(context).tracks
@@ -59,6 +59,7 @@ object DeviceAudio {
         if (Build.VERSION.SDK_INT >= 31) cols += MediaStore.Audio.Media.IS_RECORDING
         val out = ArrayList<TrackEntity>()
         val rejected = HashSet<String>()
+        val folders = HashMap<String, String>()
         runCatching {
             context.contentResolver.query(
                 collection, cols.toTypedArray(),
@@ -105,6 +106,8 @@ object DeviceAudio {
                     val uri = ContentUris.withAppendedId(collection, rowId).toString()
                     val art = ContentUris.withAppendedId(ALBUM_ART, c.getLong(albumId)).toString()
                     val rawArtist = c.getString(artist).orEmpty()
+                    // 11-17：本地页签按文件夹分（Folia 本地「文件夹」视图）。
+                    path.substringBeforeLast('/', "").takeIf { it.isNotBlank() }?.let { folders[LibraryRules.DEVICE_PREFIX + rowId] = it }
                     out += TrackEntity(
                         key = LibraryRules.DEVICE_PREFIX + rowId,
                         title = c.getString(title)?.takeIf { it.isNotBlank() }
@@ -123,7 +126,7 @@ object DeviceAudio {
                 }
             }
         }
-        return Scan(out, rejected)
+        return Scan(out, rejected, folders)
     }
 
     private val ALBUM_ART = android.net.Uri.parse("content://media/external/audio/albumart")

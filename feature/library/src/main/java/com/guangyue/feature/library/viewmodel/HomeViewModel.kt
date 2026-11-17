@@ -473,6 +473,37 @@ class HomeViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
+    /**
+     * 11-17：首页「本地」页签照 Folia 手机版：不是一首首歌，而是集合卡——「全部歌曲」+ 手机里每个有歌的文件夹。
+     * 点开走集合页（lib:all / lib:folder:<路径>）。
+     */
+    val localFolderTiles: StateFlow<List<HomeTile>> = combine(downloadedLibrary.tracks, _deviceRevision) { list, _ -> list }
+        .map { list ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val downloaded = list.filter { downloadedLibrary.exists(it) }.map { downloadedLibrary.toPlayable(it) }
+                val scan = DeviceAudio.scanDetailed(appContext)
+                val all = com.guangyue.core.data.model.LibraryRules.allSongs(downloaded, scan.tracks)
+                if (all.isEmpty()) return@withContext emptyList()
+                val out = ArrayList<HomeTile>()
+                out += LibraryTiles.all.copy(subtitle = "${all.size} 首 · 全部歌曲", artwork = all.firstNotNullOfOrNull { it.artwork })
+                scan.tracks.groupBy { scan.folderOf[it.key] }
+                    .filterKeys { it != null }
+                    .entries.sortedByDescending { it.value.size }
+                    .forEach { (folder, ts) ->
+                        out += HomeTile(
+                            key = LibraryTiles.FOLDER + folder,
+                            title = folder!!.substringAfterLast('/').ifBlank { folder },
+                            subtitle = "${ts.size} 首 · 文件夹",
+                            artwork = ts.firstNotNullOfOrNull { it.artwork },
+                            kind = HomeTileKind.PLAYLIST,
+                        )
+                    }
+                out
+            }
+        }
+        .catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     /** 授权读手机音乐后重数「全部歌曲」。 */
     fun refreshDeviceAudio() { _deviceRevision.value++ }
 
@@ -537,7 +568,11 @@ class HomeViewModel @Inject constructor(
                     runCatching { tracks.purgeDevice(scan.rejectedKeys) }
                     rules.allSongs(downloaded, scan.tracks, tracks.favoriteKeys())
                 }
-                else -> emptyList()
+                else -> if (which.startsWith(LibraryTiles.FOLDER)) {
+                    val folder = which.removePrefix(LibraryTiles.FOLDER)
+                    val scan = DeviceAudio.scanDetailed(appContext)
+                    scan.tracks.filter { scan.folderOf[it.key] == folder }
+                } else emptyList()
             }
         }
 
@@ -1140,6 +1175,8 @@ object LibraryTiles {
     const val LIKED = "lib:liked"
     const val ALL = "lib:all"
     const val RECENT = "lib:recent"
+    /** 11-17：手机里的一个文件夹（lib:folder:<路径>）。 */
+    const val FOLDER = "lib:folder:"
 
     val liked = HomeTile(key = LIKED, title = "我喜欢", subtitle = "收藏的歌曲", kind = HomeTileKind.PLAYLIST)
     val all = HomeTile(key = ALL, title = "全部歌曲", subtitle = "下载与手机里的歌", kind = HomeTileKind.PLAYLIST)

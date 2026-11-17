@@ -202,7 +202,8 @@ fun GuangYueNavHost(
             }
             // 网格首页照 Folia 手机版 APK 页签：歌单 / 电台 / 专辑 / 本地（11-15 用户：Folia 没有的界面不加，删推荐/探索）。
             val homeMine by vm.playlistsFlow.collectAsStateWithLifecycle()
-            val homeLocal by vm.localTiles.collectAsStateWithLifecycle()
+            // 11-17：本地页签照 Folia 手机版是集合卡（全部歌曲 + 各文件夹），不是单曲。
+            val homeLocal by vm.localFolderTiles.collectAsStateWithLifecycle()
             // 2026-11-15：歌单页签先列登录账号的歌单（我喜欢置顶，Folia 手机版），再接本地歌单。
             // QQ / 网易云 / 酷狗按当前音源取舍（AccountTiles.forHome：当前平台有账号歌单只列它的，否则都列）。
             val accountTiles by vm.accountTiles.collectAsStateWithLifecycle()
