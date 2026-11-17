@@ -412,16 +412,15 @@ private fun LyricStylePanelContent(
                     LyricStyle.DIORAMA to (if (strings.diorama != 0) str(strings.diorama) else ""),
                     LyricStyle.STILL to (if (strings.still != 0) str(strings.still) else ""),
                 )
-                styleRows.forEach { (rowStyle, rowName) ->
-                    if (rowName.isNotBlank()) {
-                        StyleRow(
-                            name = rowName,
-                            selected = style == rowStyle,
-                            accent = accent,
-                            onClick = { onStyle(rowStyle) },
-                        )
-                    }
-                }
+                // 11-18：照 Folia 样式架 PictureGrid（4 列 16:10 画框 + 名字），原来一行一个的列表去掉。
+                Box(Modifier.height(GySpace.s))
+                LyricStylePictureGrid(
+                    rows = styleRows.filter { it.second.isNotBlank() },
+                    selected = style,
+                    accent = accent,
+                    title = "歌词样式",
+                    onPick = onStyle,
+                )
 
                 Box(Modifier.height(GySpace.s))
 
