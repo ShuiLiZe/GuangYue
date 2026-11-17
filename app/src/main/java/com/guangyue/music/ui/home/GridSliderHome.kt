@@ -740,7 +740,7 @@ private fun GridCaption(
             val line = listOfNotNull(tile.trackCount?.let { "$it 首" }, sec.takeIf { it.isNotBlank() }).joinToString(" • ")
             Text(
                 line, color = ink.copy(alpha = 0.5f), fontSize = 12.sp, maxLines = 1,
-                fontFeatureSettings = "tnum",
+                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                 overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp),
             )
         }
