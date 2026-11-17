@@ -84,7 +84,7 @@ enum class StagePanelTab(val label: String) {
     COVER("封面"),
     LYRICS("歌词"),
     CONTROLS("控制"),
-    QUEUE("播放队列"),
+    QUEUE("播放列表"),
     QUALITY("音质"),
 }
 
