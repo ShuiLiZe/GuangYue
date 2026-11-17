@@ -78,6 +78,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -240,6 +242,12 @@ fun GridSliderHome(
     focusMemory: MutableMap<String, Int>? = null,
     /** 11-17：Folia 本地页签的搜索框是「搜索本地歌曲」，点开搜索页默认选「本地」。 */
     onOpenLocalSearch: (() -> Unit)? = null,
+    /** 11-17：Folia 触屏思索按钮（右上角灯泡，PagePonderTouchButton）；false 不显示。 */
+    ponderButton: Boolean = false,
+    /** 取证用：开场直接打开本页思索的第几章（-1 = 不打开）。 */
+    initialPonderChapter: Int = -1,
+    /** 取证用：灯泡露出来停多久（默认 Folia 4 秒）。 */
+    ponderRevealMs: Long = GridPagePonder.REVEAL_MS,
 ) {
     // Folia 首页页签就是各个数据源本身（歌单 / 推荐 / 探索 / 专辑 / 本地），没有「全部」。
     var tab by rememberSaveable { mutableStateOf(initialTab.coerceIn(0, max(0, sections.size - 1))) }
@@ -261,7 +269,22 @@ fun GridSliderHome(
     var mapOpen by remember { mutableStateOf(false) }
     var jumpTo by remember { mutableStateOf<Int?>(null) }
     val darkInk = inkColor.red + inkColor.green + inkColor.blue > 1.5f
-    Box(modifier.fillMaxSize().background(groundColor)) {
+    // 11-17 思索：锚点（各控件在根坐标里的位置）、灯泡显隐、教程开关。
+    val anchors = remember { androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
+    val ponderState = remember { PonderButtonState() }
+    var ponderOpen by rememberSaveable { mutableStateOf(initialPonderChapter >= 0) }
+    var rootOffset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val anchorMap = anchors.takeIf { ponderButton || initialPonderChapter >= 0 }
+    Box(
+        modifier.fillMaxSize().background(groundColor)
+            .then(
+                if (anchorMap != null) Modifier.onGloballyPositioned { rootOffset = it.boundsInRoot().topLeft } else Modifier,
+            )
+            .ponderHotspot(
+                ponderState.takeIf { ponderButton && !ponderOpen },
+                WindowInsets.safeDrawing.getTop(LocalDensity.current).toFloat(),
+            ),
+    ) {
     if (background != null) {
         background()
         // Folia Grid3D 根节点 mainBg：夜间 bg-black/20、日间 bg-white/40，压在动态背景上。
@@ -287,6 +310,7 @@ fun GridSliderHome(
             title, tabs, tab, inkColor, compact,
             onSelect = { tab = it }, onOpenSearch = if (isLocalTab && onOpenLocalSearch != null) onOpenLocalSearch else onOpenSearch,
             onOpenSettings = onOpenSettings, onOpenDownloads = onOpenDownloads, extraTabs = extraTabs, searchHint = if (isLocalTab && onOpenLocalSearch != null) "搜索本地歌曲..." else searchHint,
+            anchors = anchorMap,
         )
         if (isLocalTab) {
             // Folia 手机版本地页签：页签下一行「全部」地图胶囊 + 分段（当前段带字，其余只有图标），右侧竖排动作胶囊。
@@ -297,7 +321,9 @@ fun GridSliderHome(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     if (tiles.size > 1) {
-                        LocalChip(GuangYueIcons.Map, "全部", true, false, inkColor) { mapOpen = true }
+                        Box(Modifier.ponderAnchor("map", anchorMap)) {
+                            LocalChip(GuangYueIcons.Map, "全部", true, false, inkColor) { mapOpen = true }
+                        }
                     }
                     localSubs.forEachIndexed { i, sub ->
                         LocalChip(sub.icon, sub.label, i == localSub, i == localSub, inkColor) { localSub = i }
@@ -312,7 +338,9 @@ fun GridSliderHome(
                     horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Row(Modifier.ponderAnchor("sourceActions", anchorMap), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     localActions.forEach { a -> LocalChip(a.icon, a.label, true, false, inkColor, a.onClick) }
+                    }
                 }
             }
         }
@@ -356,6 +384,7 @@ fun GridSliderHome(
             Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.Center) {
                 Row(
                     Modifier
+                        .ponderAnchor("map", anchorMap)
                         .clip(RoundedCornerShape(50))
                         .background(inkColor.copy(alpha = 0.08f))
                         .border(1.dp, inkColor.copy(alpha = 0.06f), RoundedCornerShape(50))
@@ -393,13 +422,15 @@ fun GridSliderHome(
                 val enter = onEnterTile?.takeIf { GridSliderModel.opensCollection(t) }
                 (enter ?: onOpenTile)(t)
             }
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().ponderAnchor("shelf", anchorMap)) {
                 val w = maxWidth.value
                 val h = maxHeight.value
                 val cover = GridSliderModel.coverSize(compact, w, h, polaroid, fontScale)
                 val peak = GridSliderModel.peakScale(compact, polaroid)
                 val pitch = cover + GridSliderModel.CARD_GAP_DP
                 val pad = if (compact) GridSliderModel.COMPACT_PAD_DP else GridSliderModel.TALL_PAD_DP
+                // 思索锚点：中央那张卡的位置（只量不画）。
+                Box(Modifier.align(Alignment.Center).size(cover.dp).ponderAnchor("focusedCard", anchorMap))
                 HorizontalPager(
                     state = pager,
                     modifier = Modifier.fillMaxSize(),
@@ -484,7 +515,7 @@ fun GridSliderHome(
                 .padding(start = 16.dp, end = 16.dp + 48.dp + 12.dp, bottom = 16.dp)
                 .fillMaxWidth(),
             contentAlignment = Alignment.Center,
-        ) { playbackBar() }
+        ) { Box(Modifier.ponderAnchor("playbar", anchorMap)) { playbackBar() } }
     }
         if (providerButton != null) {
         // Folia SwitcherPill：右下角浮着的平台按钮（fixed bottom-4 right-4）。
@@ -492,13 +523,32 @@ fun GridSliderHome(
             Modifier.align(Alignment.BottomEnd)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
                 .padding(16.dp),
-        ) { providerButton() }
+        ) { Box(Modifier.ponderAnchor("provider", anchorMap)) { providerButton() } }
     }
     // 盖在平台按钮之上。
     if (mapOpen && tiles.isNotEmpty()) {
         GridMapSheet(tiles = tiles, ink = inkColor, ground = groundColor, onClose = { mapOpen = false }) { i ->
             jumpTo = i; mapOpen = false
         }
+    }
+    // 11-17 Folia 触屏思索按钮：右上角灯泡（right-5 top-5），压在页头之上；教程开着时不显示。
+    if (ponderButton && !ponderOpen && !mapOpen) {
+        PagePonderTouchButton(
+            state = ponderState,
+            revealKey = tab,
+            dark = darkInk,
+            revealMs = ponderRevealMs,
+            onOpen = { ponderOpen = true },
+            modifier = Modifier.align(Alignment.TopEnd)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                .padding(top = if (compact) 4.dp else 11.dp, end = 20.dp),
+        )
+    }
+    if (ponderOpen) {
+        PagePonderOverlay(
+            anchors = anchors, dark = darkInk, rootOffset = rootOffset,
+            initialChapter = initialPonderChapter.coerceAtLeast(0), onClose = { ponderOpen = false },
+        )
     }
     }
 }
@@ -515,6 +565,7 @@ private fun GridHomeHeader(
     onSelect: (Int) -> Unit, onOpenSearch: () -> Unit,
     onOpenSettings: (() -> Unit)?, extraTabs: List<Pair<String, () -> Unit>>, searchHint: String,
     onOpenDownloads: (() -> Unit)? = null,
+    anchors: androidx.compose.runtime.snapshots.SnapshotStateMap<String, androidx.compose.ui.geometry.Rect>? = null,
 ) {
     val dark = ink.red + ink.green + ink.blue > 1.5f
     Column(
@@ -530,7 +581,7 @@ private fun GridHomeHeader(
                 if (onOpenSettings != null) {
                     Spacer(Modifier.width(8.dp))
                     Box(
-                        Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onOpenSettings)
+                        Modifier.ponderAnchor("help", anchors).size(40.dp).clip(CircleShape).clickable(onClick = onOpenSettings)
                             .semantics { contentDescription = "设置" },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -550,6 +601,7 @@ private fun GridHomeHeader(
             Row(
                 Modifier
                     .weight(1f)
+                    .ponderAnchor("search", anchors)
                     .clip(RoundedCornerShape(50))
                     .background(ink.copy(alpha = 0.05f))
                     .border(1.dp, (if (dark) Color.White else Color.Black).copy(alpha = 0.10f), RoundedCornerShape(50))
@@ -567,6 +619,7 @@ private fun GridHomeHeader(
         Row(
             Modifier
                 .graphicsLayer { scaleX = 0.9f; scaleY = 0.9f }
+                .ponderAnchor("tabs", anchors)
                 .clip(RoundedCornerShape(50))
                 .background(ink.copy(alpha = if (dark) 0.10f else 0.05f))
                 .padding(if (compact) 2.dp else 4.dp)

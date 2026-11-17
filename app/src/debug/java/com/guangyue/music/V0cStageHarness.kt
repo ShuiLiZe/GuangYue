@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -452,6 +453,43 @@ fun V0cStage(
                             initialFocus = focus,
                         )
                     }
+                }
+            }
+        } else if (style == "gridponder") {
+            // 11-17：Folia 触屏思索按钮 + 本页思索（挖洞高亮 + 说明卡）。37500 = 深色、第 1 章（齿轮）；
+            // 3000 = 浅色、第 3 章（轨道）；14000 = 深色、第 5 章（平台按钮）；44000 = 深色、只露灯泡（不收起）。
+            val light = positionMs == 3_000L
+            val k = com.guangyue.feature.library.home.HomeTileKind.SHEET
+            val rec = listOf("深夜电台 · 安静的歌", "周末的咖啡馆", "通勤路上的好心情", "九十年代华语金曲", "雨天适合听的钢琴曲")
+                .mapIndexed { i, t -> com.guangyue.feature.library.home.HomeTile("sheet:$i", t, "QQ 音乐", kind = k) }
+            val chapter = when (positionMs) { 3_000L -> 2; 14_000L -> 4; 44_000L -> -1; else -> 0 }
+            val ink = if (light) Color(0xFF18181B) else Color(0xFFF4F4F5)
+            FoliaTheme(dark = !light) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .background(if (light) Color(0xFFF4F4F5) else Color(0xFF09090B))
+                        .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars.only(androidx.compose.foundation.layout.WindowInsetsSides.Bottom)),
+                ) {
+                    com.guangyue.music.ui.home.GridSliderHome(
+                        sections = listOf("歌单" to rec, "电台" to rec.reversed(), "专辑" to emptyList(), "本地" to emptyList()),
+                        title = "广乐",
+                        inkColor = ink,
+                        groundColor = if (light) Color(0xFFF4F4F5) else Color(0xFF09090B),
+                        onOpenTile = {},
+                        onOpenSearch = {},
+                        onEnterTile = {},
+                        onOpenSettings = {},
+                        providerButton = { com.guangyue.music.ui.home.ProviderPill("QQ音乐", !light) {} },
+                        playbackBar = {
+                            Box(
+                                Modifier.fillMaxWidth().height(56.dp)
+                                    .background(ink.copy(alpha = 0.10f), androidx.compose.foundation.shape.RoundedCornerShape(50)),
+                            )
+                        },
+                        ponderButton = true,
+                        initialPonderChapter = chapter,
+                        ponderRevealMs = if (chapter < 0) Long.MAX_VALUE else com.guangyue.music.ui.home.GridPagePonder.REVEAL_MS,
+                    )
                 }
             }
         } else if (style == "gridhomeswitch") {

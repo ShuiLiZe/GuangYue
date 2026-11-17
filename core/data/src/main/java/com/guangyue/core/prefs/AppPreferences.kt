@@ -279,6 +279,11 @@ class AppPreferences @Inject constructor(
         get() = prefs.getBoolean(KEY_REMEMBER_HOME_CARD, true)
         set(value) = prefs.edit().putBoolean(KEY_REMEMBER_HOME_CARD, value).apply()
 
+    /** 11-17：Folia「触屏思索按钮」（showPonderTouchButton）：首页右上角的灯泡，默认开。 */
+    var ponderTouchButton: Boolean
+        get() = prefs.getBoolean(KEY_PONDER_TOUCH_BUTTON, true)
+        set(value) = prefs.edit().putBoolean(KEY_PONDER_TOUCH_BUTTON, value).apply()
+
     /** 11-17：Folia「播放后进入的视图」（playbackEntryView）："player" = 可视化（默认）、"stay" = 留在原处。 */
     var playbackEntryView: String
         get() = if (prefs.getString(KEY_PLAY_ENTRY, "player") == "stay") "stay" else "player"
@@ -288,6 +293,7 @@ class AppPreferences @Inject constructor(
         const val KEY_GRID_CARD_STYLE = "grid3d_card_style"
         const val KEY_HOME_TABS_HIDDEN = "home_tabs_hidden"
         const val KEY_REMEMBER_HOME_CARD = "remember_home_card_position"
+        const val KEY_PONDER_TOUCH_BUTTON = "ponder_touch_button"
         const val KEY_PLAY_ENTRY = "playback_entry_view"
         const val KEY_VIS_BACKGROUND = "visualizer_background_mode"
         const val KEY_HOME_STYLE = "library_home_style"

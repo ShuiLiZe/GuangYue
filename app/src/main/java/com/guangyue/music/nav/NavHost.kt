@@ -234,6 +234,7 @@ fun GuangYueNavHost(
             LaunchedEffect(Unit) { vm.readAccountOnStart() }
             val homeTabsHidden by shellVm.homeTabsHidden.collectAsStateWithLifecycle()
             val rememberHomeCard by shellVm.rememberHomeCard.collectAsStateWithLifecycle()
+            val ponderTouchButton by shellVm.ponderTouchButton.collectAsStateWithLifecycle()
             val gridSections = remember(accountTiles, homeMine, sheets, recent, charts, homeLocal, homeTabsHidden) {
                 val all = listOf(
                     "歌单" to (accountTiles + homeMine),
@@ -275,6 +276,7 @@ fun GuangYueNavHost(
                                 com.guangyue.music.ui.home.GridSubSection("歌单", com.guangyue.feature.library.design.icons.GuangYueIcons.ListMusic, homeMine),
                             ),
                             focusMemory = shellVm.homeCardMemory.takeIf { rememberHomeCard },
+                            ponderButton = ponderTouchButton,
                             onOpenLocalSearch = { navController.navigate(Routes.SEARCH + "?local=1") },
                             localActions = listOf(
                                 com.guangyue.music.ui.home.GridLocalAction("导入文件夹", com.guangyue.feature.library.design.icons.GuangYueIcons.FolderOpen) {
@@ -1184,6 +1186,8 @@ fun GuangYueNavHost(
                 onRememberHomeCard = { shellVm.setRememberHomeCard(it) },
                 playbackEntryView = playbackEntryView,
                 onPickPlaybackEntryView = { shellVm.setPlaybackEntryView(it) },
+                ponderTouchButton = shellVm.ponderTouchButton.collectAsStateWithLifecycle().value,
+                onPonderTouchButton = { shellVm.setPonderTouchButton(it) },
             )
         }
 

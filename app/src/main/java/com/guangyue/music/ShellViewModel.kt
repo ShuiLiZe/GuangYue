@@ -80,6 +80,10 @@ class ShellViewModel @Inject constructor(
     val rememberHomeCard: StateFlow<Boolean> = _rememberHomeCard.asStateFlow()
     fun setRememberHomeCard(on: Boolean) { preferences.rememberHomeCard = on; _rememberHomeCard.value = on }
 
+    private val _ponderTouchButton = MutableStateFlow(preferences.ponderTouchButton)
+    val ponderTouchButton: StateFlow<Boolean> = _ponderTouchButton.asStateFlow()
+    fun setPonderTouchButton(on: Boolean) { preferences.ponderTouchButton = on; _ponderTouchButton.value = on }
+
     /** 本次打开应用期间各页签的卡片位置（Folia：位置仅在本次打开应用期间保留）。 */
     val homeCardMemory: MutableMap<String, Int> = HashMap()
 

@@ -94,6 +94,9 @@ fun SettingsScreen(
     /** 11-17：Folia「播放后进入的视图」（player / stay）；null 不显示。 */
     playbackEntryView: String? = null,
     onPickPlaybackEntryView: (String) -> Unit = {},
+    /** 11-17：Folia 通用设置「思索 → 触屏思索按钮」；null 不显示。 */
+    ponderTouchButton: Boolean? = null,
+    onPonderTouchButton: (Boolean) -> Unit = {},
 ) {
     var query by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
     var page by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(SettingsPage.APPEARANCE) }
@@ -126,6 +129,11 @@ fun SettingsScreen(
         if (rememberHomeCard != null) {
             add(SettingItem(SettingsPage.APPEARANCE, "记住主页卡片位置", "记住主页卡片位置", "切换顶部入口或从播放界面返回时，回到各入口上次浏览的卡片。位置仅在本次打开应用期间保留。", icon(GuangYueIcons.Pin),
                 trailing = { FoliaToggle(checked = rememberHomeCard, onChange = onRememberHomeCard) }))
+        }
+        if (ponderTouchButton != null) {
+            // Folia GeneralPage 的「思索」组（options.ponderTouchButton / ponderTouchButtonDesc）；手机设置没有通用页，放外观。
+            add(SettingItem(SettingsPage.APPEARANCE, "思索", "触屏思索按钮", "触屏设备右上角的灯泡。", icon(GuangYueIcons.Lightbulb),
+                trailing = { FoliaToggle(checked = ponderTouchButton, onChange = onPonderTouchButton) }))
         }
         if (playbackEntryView != null) {
             add(SettingItem(SettingsPage.PLAYER, "播放后进入的视图", "播放后进入的视图", "点击播放后默认打开哪个视图。", icon(GuangYueIcons.Play),
