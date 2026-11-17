@@ -1280,6 +1280,7 @@ fun GuangYueNavHost(
             val claddaghTuning by styleVm.claddaghTuning.collectAsStateWithLifecycle()
             val dioramaTuning by styleVm.dioramaTuning.collectAsStateWithLifecycle()
             val subtitleSettings by styleVm.subtitle.collectAsStateWithLifecycle()
+            val lyricCommon by styleVm.common.collectAsStateWithLifecycle()
             val lyricOffset by vm.offsetMs.collectAsStateWithLifecycle()
             // V1a：当前样式（流光 / 浮名），同一份 styleVm —— 播放页切好、这里直接生效。
             val style by styleVm.style.collectAsStateWithLifecycle()
@@ -1355,6 +1356,7 @@ fun GuangYueNavHost(
                     claddaghTuning = claddaghTuning,
                     dioramaTuning = dioramaTuning,
                     subtitleSettings = subtitleSettings,
+                    lyricCommon = lyricCommon,
                     latentBackground = visBackground == "latent",
                 )
                 StagePanelHost(
@@ -1435,6 +1437,8 @@ fun GuangYueNavHost(
                         onDioramaTuning = styleVm::updateDiorama,
                         subtitle = subtitleSettings,
                         onSubtitle = styleVm::updateSubtitle,
+                        common = lyricCommon,
+                        onCommon = styleVm::updateCommon,
                     )
                 }
             }

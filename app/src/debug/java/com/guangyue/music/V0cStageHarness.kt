@@ -803,12 +803,16 @@ fun V0cStage(
                 },
                 modifier = Modifier.fillMaxSize(),
             )
-        } else if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama" || style == "sheetsubtitle") {
+        } else if (style == "sheet" || style == "sheetbare" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama" || style == "sheetsubtitle" || style == "sheetfont") {
             val subtitleProbe = remember {
                 androidx.compose.runtime.mutableStateOf(com.guangyue.core.lyrics.SubtitleSettings(layout = listOf("current", "next")))
             }
+            // 11-18 sheetfont：「字体」页，字号 125%、整体透明度 60%，底下流光同步吃这两项。
+            val commonProbe = remember {
+                androidx.compose.runtime.mutableStateOf(com.guangyue.core.lyrics.LyricCommonSettings(fontScale = 1.25, opacity = 0.6))
+            }
             CompositionLocalProvider(LyricStringHost provides { id -> v0cString(id) }) {
-                if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama" || style == "sheetsubtitle") {
+                if (style == "sheet" || style == "sheetclassic" || style == "sheetpartita" || style == "sheettilt" || style == "sheetcladdagh" || style == "sheetdiorama" || style == "sheetsubtitle" || style == "sheetfont") {
                     LyricFlowScreen(
                         lyrics = remember { parseLrc(LRC) },
                         currentIndex = 1,
@@ -829,8 +833,9 @@ fun V0cStage(
                         coverUrl = null,
                         glowStrengthOverride = V0dGlowOverride,
                         // 2026-11-14 sheetsubtitle：底下流光 + 双行字幕（当前句 + 下一句），对照「字幕」页设置。
-                        lyricStyle = if (style == "sheetsubtitle") LyricStyle.CLASSIC else LyricStyle.FUME,
+                        lyricStyle = if (style == "sheetsubtitle" || style == "sheetfont") LyricStyle.CLASSIC else LyricStyle.FUME,
                         subtitleSettings = if (style == "sheetsubtitle") subtitleProbe.value else com.guangyue.core.lyrics.SubtitleSettings.DEFAULT,
+                        lyricCommon = if (style == "sheetfont") commonProbe.value else com.guangyue.core.lyrics.LyricCommonSettings.DEFAULT,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -853,13 +858,16 @@ fun V0cStage(
                             "sheetcladdagh" -> LyricStyle.CLADDAGH
                             // 2026-11-14：镜台参数面板（DioramaSettingsPanel 照译）。
                             "sheetdiorama" -> LyricStyle.DIORAMA
+                            "sheetfont" -> LyricStyle.CLASSIC
                             else -> LyricStyle.FUME
                         },
                         fumeName = v0cString(R.string.lyrics_style_fume),
                         partitaName = v0cString(R.string.lyrics_style_partita),
                         subtitle = subtitleProbe.value,
                         onSubtitle = if (style == "sheetsubtitle") ({ v -> subtitleProbe.value = v }) else null,
-                        initialSection = if (style == "sheetsubtitle") 1 else 0,
+                        common = commonProbe.value,
+                        onCommon = if (style == "sheetfont") ({ v -> commonProbe.value = v }) else null,
+                        initialSection = if (style == "sheetsubtitle") 1 else if (style == "sheetfont") 2 else 0,
                     )
                 }
             }

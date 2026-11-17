@@ -80,6 +80,16 @@ class LyricStyleViewModel @Inject constructor(
         viewModelScope.launch { preferences.subtitleSettings = safe }
     }
 
+    /** 歌词样式窗口「字体」页（字号 / 整体透明度）。 */
+    private val _common = MutableStateFlow(preferences.lyricCommonSettings)
+    val common: StateFlow<com.guangyue.core.lyrics.LyricCommonSettings> = _common.asStateFlow()
+
+    fun updateCommon(s: com.guangyue.core.lyrics.LyricCommonSettings) {
+        val safe = com.guangyue.core.lyrics.LyricCommonSettings.sanitize(s)
+        _common.value = safe
+        viewModelScope.launch { preferences.lyricCommonSettings = safe }
+    }
+
     fun updateDiorama(t: DioramaTuning) {
         val safe = DioramaTuning.sanitize(t)
         _dioramaTuning.value = safe

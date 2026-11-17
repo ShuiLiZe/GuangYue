@@ -2,6 +2,7 @@
 
 package com.guangyue.feature.player.lyrics
 
+import androidx.compose.ui.draw.alpha
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -238,7 +239,10 @@ fun LyricStyleSheet(
     onDioramaTuning: (DioramaTuning) -> Unit = {},
     subtitle: com.guangyue.core.lyrics.SubtitleSettings = com.guangyue.core.lyrics.SubtitleSettings.DEFAULT,
     onSubtitle: ((com.guangyue.core.lyrics.SubtitleSettings) -> Unit)? = null,
-    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕）。 */
+    /** 「字体」页（Folia previewCommonSettings）：字号 / 整体透明度；null 不出这一页。 */
+    common: com.guangyue.core.lyrics.LyricCommonSettings = com.guangyue.core.lyrics.LyricCommonSettings.DEFAULT,
+    onCommon: ((com.guangyue.core.lyrics.LyricCommonSettings) -> Unit)? = null,
+    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕 / 2 字体）。 */
     initialSection: Int = 0,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -275,6 +279,8 @@ fun LyricStyleSheet(
             onDioramaTuning = onDioramaTuning,
             subtitle = subtitle,
             onSubtitle = onSubtitle,
+            common = common,
+            onCommon = onCommon,
         )
     }
 }
@@ -308,7 +314,10 @@ private fun LyricStylePanelContent(
     onDioramaTuning: (DioramaTuning) -> Unit = {},
     subtitle: com.guangyue.core.lyrics.SubtitleSettings = com.guangyue.core.lyrics.SubtitleSettings.DEFAULT,
     onSubtitle: ((com.guangyue.core.lyrics.SubtitleSettings) -> Unit)? = null,
-    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕）。 */
+    /** 「字体」页（Folia previewCommonSettings）：字号 / 整体透明度；null 不出这一页。 */
+    common: com.guangyue.core.lyrics.LyricCommonSettings = com.guangyue.core.lyrics.LyricCommonSettings.DEFAULT,
+    onCommon: ((com.guangyue.core.lyrics.LyricCommonSettings) -> Unit)? = null,
+    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕 / 2 字体）。 */
     initialSection: Int = 0,
 ) {
     // Folia `index.css:163-168` `.theme-glass-panel`：`--bg-color` 85% 底 + `--text-primary` 12% 描边。
@@ -346,6 +355,12 @@ private fun LyricStylePanelContent(
             Spacer(Modifier.height(if (compact) 6.dp else 12.dp))
             // Folia 歌词样式窗口右栏分页（SECTION_OPTIONS）：手机上只放「歌词动画」「字幕」两页，顶部分段切换。
             var section by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(initialSection) }
+            // 页签顺序照 Folia SECTION_OPTIONS（样式 → 背景 → 字体 → 字幕 → 全局），手机上有的三页：歌词动画 / 字体 / 字幕。
+            val sectionIds = buildList {
+                add(0)
+                if (onCommon != null) add(2)
+                if (onSubtitle != null) add(1)
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = GuangYueIcons.Sparkles,
@@ -361,12 +376,12 @@ private fun LyricStylePanelContent(
                     fontWeight = FontWeight.Bold,
                     color = Gyp.ink,
                 )
-                if (compact && onSubtitle != null) {
+                if (compact && sectionIds.size > 1) {
                     Box(Modifier.width(16.dp))
                     SheetSectionTabs(
-                        labels = listOf("歌词动画", "字幕"),
-                        selected = section,
-                        onSelect = { section = it },
+                        labels = sectionIds.map { sectionLabel(it) },
+                        selected = sectionIds.indexOf(section).coerceAtLeast(0),
+                        onSelect = { section = sectionIds[it] },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -378,17 +393,20 @@ private fun LyricStylePanelContent(
                     color = Gyp.inkSoft,
                     modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
                 )
-                if (onSubtitle != null) {
+                if (sectionIds.size > 1) {
                     SheetSectionTabs(
-                        labels = listOf("歌词动画", "字幕"),
-                        selected = section,
-                        onSelect = { section = it },
+                        labels = sectionIds.map { sectionLabel(it) },
+                        selected = sectionIds.indexOf(section).coerceAtLeast(0),
+                        onSelect = { section = sectionIds[it] },
                     )
                 }
             }
             if (section == 1 && onSubtitle != null) {
                 SubtitleSettingsRows(subtitle, accent, onSubtitle)
                 ResetRow(str(strings.reset), accent) { onSubtitle(com.guangyue.core.lyrics.SubtitleSettings.DEFAULT) }
+            } else if (section == 2 && onCommon != null) {
+                CommonSettingsRows(common, style, accent, onCommon)
+                ResetRow(str(strings.reset), accent) { onCommon(com.guangyue.core.lyrics.LyricCommonSettings.DEFAULT) }
             } else {
                 // 样式列表：按 Folia registry 的 order 排（classic 30 → cadenza 40 → partita 50 → fume 60
                 // → tilt 70 → claddagh 80 → still 130）。一行 = 左样式名、右选中标记；点击只切样式、不关弹层。
@@ -948,7 +966,10 @@ fun LyricStyleSheetPreview(
     onDioramaTuning: (DioramaTuning) -> Unit = {},
     subtitle: com.guangyue.core.lyrics.SubtitleSettings = com.guangyue.core.lyrics.SubtitleSettings.DEFAULT,
     onSubtitle: ((com.guangyue.core.lyrics.SubtitleSettings) -> Unit)? = null,
-    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕）。 */
+    /** 「字体」页（Folia previewCommonSettings）：字号 / 整体透明度；null 不出这一页。 */
+    common: com.guangyue.core.lyrics.LyricCommonSettings = com.guangyue.core.lyrics.LyricCommonSettings.DEFAULT,
+    onCommon: ((com.guangyue.core.lyrics.LyricCommonSettings) -> Unit)? = null,
+    /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕 / 2 字体）。 */
     initialSection: Int = 0,
 ) {
     LyricStylePanelContent(
@@ -973,6 +994,8 @@ fun LyricStyleSheetPreview(
         onDioramaTuning = onDioramaTuning,
         subtitle = subtitle,
         onSubtitle = onSubtitle,
+        common = common,
+        onCommon = onCommon,
         initialSection = initialSection,
     )
 }
@@ -1486,6 +1509,105 @@ private fun ResetRow(label: String, accent: Color, onClick: () -> Unit) {
             Icon(imageVector = GuangYueIcons.RotateCcw, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
             Box(Modifier.width(8.dp))
             Text(label, fontSize = 13.sp, color = accent)
+        }
+    }
+}
+
+
+private fun sectionLabel(id: Int): String = when (id) {
+    1 -> "字幕"
+    2 -> "字体"
+    else -> "歌词动画"
+}
+
+/** Folia 各样式 ownFontSizeNoticeKey 的中文（zh-CN.ts）。 */
+private fun ownFontSizeNotice(style: LyricStyle): String? = when (style) {
+    LyricStyle.SONNET -> "商籁模式会根据画面尺寸、歌词量和布局自动计算字号；通用字体尺寸设置在此模式下无效。"
+    LyricStyle.TEMPERA -> "凝彩模式会根据画面尺寸、歌词量和排版区域自动计算字号；通用字体尺寸设置在此模式下无效。"
+    LyricStyle.LUMIERE -> "绘光模式会根据画面尺寸和每个光位的文字区自动计算歌词字号；通用字体尺寸设置在此模式下只影响底部字幕。"
+    LyricStyle.HANABI -> "花火模式会根据画面尺寸和每个镜头的文字区自动计算歌词字号；通用字体尺寸设置在此模式下只影响底部字幕。"
+    LyricStyle.MACHI -> "町景会按场景里屏幕和招牌的大小自动排歌词字号；通用字体尺寸设置在此模式下只影响底部字幕。"
+    else -> null
+}
+
+/**
+ * Folia VisPlaygroundSettingsPanel「字体」页（activeSection === 'common'）：
+ * 自己算字号的样式先给一行说明（Row notice）→ 字号（0.85–1.4，步长 0.05，刻度 90/100/110/125%，那几个样式下置灰）
+ * → 整体透明度（0.2–1）。✋ 预览文本 / 字体 / 字重未移植（广乐各舞台字体按样式定死，见 folia-diff.md）。
+ */
+@Composable
+private fun CommonSettingsRows(
+    s: com.guangyue.core.lyrics.LyricCommonSettings,
+    style: LyricStyle,
+    accent: Color,
+    onChange: (com.guangyue.core.lyrics.LyricCommonSettings) -> Unit,
+) {
+    val C = com.guangyue.core.lyrics.LyricCommonSettings
+    Text(
+        text = "字体",
+        fontSize = 15.sp,
+        fontWeight = FontWeight.Bold,
+        color = Gyp.ink,
+        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp),
+    )
+    val notice = ownFontSizeNotice(style)
+    if (notice != null) {
+        Text(
+            text = notice,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            color = Gyp.t2,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+        )
+    }
+    val disabled = notice != null
+    Column(Modifier.alpha(if (disabled) 0.4f else 1f)) {
+        TuningSliderRow(
+            label = "字号",
+            value = s.fontScale.toFloat(),
+            accent = accent,
+            onChange = { if (!disabled) onChange(s.copy(fontScale = it.toDouble())) },
+            min = C.FONT_SCALE_MIN.toFloat(),
+            max = C.FONT_SCALE_MAX.toFloat(),
+            step = 0.05f,
+            format = ::formatPercent,
+        )
+        SliderMarks(
+            marks = C.FONT_SCALE_MARKS.map { it.toFloat() },
+            min = C.FONT_SCALE_MIN.toFloat(),
+            max = C.FONT_SCALE_MAX.toFloat(),
+            label = ::formatPercent,
+        )
+    }
+    TuningSliderRow(
+        label = "整体透明度",
+        value = s.opacity.toFloat(),
+        accent = accent,
+        onChange = { onChange(s.copy(opacity = it.toDouble())) },
+        min = C.OPACITY_MIN.toFloat(),
+        max = C.OPACITY_MAX.toFloat(),
+        step = 0.05f,
+        format = ::formatPercent,
+    )
+}
+
+/** Folia kit Slider 的 marks：滑钮行程（两端各让 8dp，同 [FoliaSliderGeometry]）下方的小字刻度，11sp `--st-t3`。 */
+@Composable
+private fun SliderMarks(marks: List<Float>, min: Float, max: Float, label: (Float) -> String) {
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(16.dp),
+    ) {
+        val inset = 8.dp
+        val usable = maxWidth - inset * 2
+        val markW = 40.dp
+        for (m in marks) {
+            val f = ((m - min) / (max - min)).coerceIn(0f, 1f)
+            Box(
+                Modifier.width(markW).offset(x = inset + usable * f - markW / 2),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label(m), fontSize = 11.sp, color = Gyp.t3, maxLines = 1)
+            }
         }
     }
 }

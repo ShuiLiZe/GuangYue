@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -177,6 +178,8 @@ fun LyricFlowScreen(
     dioramaTuning: com.guangyue.core.lyrics.DioramaTuning = com.guangyue.core.lyrics.DioramaTuning.DEFAULT,
     /** 底部字幕设置（Folia 歌词样式窗口「字幕」页）。 */
     subtitleSettings: com.guangyue.core.lyrics.SubtitleSettings = com.guangyue.core.lyrics.SubtitleSettings.DEFAULT,
+    /** 歌词样式窗口「字体」页：字号倍率 / 整体透明度（Folia previewCommonSettings）。 */
+    lyricCommon: com.guangyue.core.lyrics.LyricCommonSettings = com.guangyue.core.lyrics.LyricCommonSettings.DEFAULT,
     /** V2d：「倾诉」调参（Folia tilt/tuning.ts）。 */
     tiltTuning: com.guangyue.core.lyrics.TiltTuning = com.guangyue.core.lyrics.TiltTuning.DEFAULT,
     /** V2a：「云阶」调参（Folia partita/tuning.ts）。 */
@@ -266,7 +269,11 @@ fun LyricFlowScreen(
     }
 
     // 渲染里读：系统字号倍率（1.3 倍不溢出），与内核字号 clamp 一起用。
-    val lyricsFontScale = LocalDensity.current.fontScale.toDouble()
+    // 11-18：再乘「字体」页的字号倍率（Folia lyricsFontScale）；商籁/凝彩/绘光/花火/町景自己算字号，不吃这一项（ownFontSizeNoticeKey）。
+    val lyricsFontScale = LocalDensity.current.fontScale.toDouble() *
+        (if (lyricStyle.sizesOwnFont()) 1.0 else lyricCommon.fontScale)
+    // Folia VisualizerBackdrop 的 opacity：整层（背景 + 舞台）一起淡，顶栏/字幕/胶囊不受影响。
+    val visualizerLayer = if (lyricCommon.opacity < 0.999) Modifier.graphicsLayer { alpha = lyricCommon.opacity.toFloat() } else Modifier
     val viewportWidthPx = with(LocalDensity.current) {
         LocalConfiguration.current.screenWidthDp.dp.toPx().toDouble()
     }
@@ -368,6 +375,7 @@ fun LyricFlowScreen(
             .then(chromeTouchModifier)
             .testTag(LyricRootTag),
     ) {
+        Box(Modifier.fillMaxSize().then(visualizerLayer)) {
         // Folia backgrounds/common：通用几何背景（静止不画背景；浮名按自己的「通用几何图形」开关）。
         // 11-18：Folia「动画与性能 → 静态模式」：隐现背景停在静帧，通用几何背景不画（MotionPrefs）。
         val motionPrefs = com.guangyue.feature.player.lyrics.visualizer.MotionPrefs.flow(androidx.compose.ui.platform.LocalContext.current)
@@ -658,6 +666,7 @@ fun LyricFlowScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+        } // visualizerLayer
         Column(
             Modifier
                 .fillMaxSize()
@@ -812,6 +821,7 @@ fun LyricFlowScreen(
                         // 舞台 Box 已经居中，内层不能再让 FlowRow 的 fillMaxWidth 把宽度
                         // 撑到整屏（词距是按内核算出的 marginRight，撑满会溢出）。
                         modifier = Modifier
+                            .then(visualizerLayer)
                             .fillMaxWidth()
                             .heightIn(max = with(LocalDensity.current) { stageHeightPx.toDp() })
                             .clickableNoRipple { if (currentIndex >= 0) onSeekToLine(currentIndex) },
@@ -1436,3 +1446,9 @@ private tailrec fun android.content.Context.findActivity(): android.app.Activity
     is android.content.ContextWrapper -> baseContext.findActivity()
     else -> null
 }
+
+
+/** Folia 各样式 entry 的 ownFontSizeNoticeKey：这几个样式自己算歌词字号，「字体」页的字号不作用。 */
+internal fun LyricStyle.sizesOwnFont(): Boolean =
+    this == LyricStyle.SONNET || this == LyricStyle.TEMPERA || this == LyricStyle.LUMIERE ||
+        this == LyricStyle.HANABI || this == LyricStyle.MACHI

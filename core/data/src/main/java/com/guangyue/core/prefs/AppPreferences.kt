@@ -159,6 +159,22 @@ class AppPreferences @Inject constructor(
                 .apply()
         }
 
+    /** 歌词样式窗口「字体」页：字号倍率 / 整体透明度（Folia lyrics font scale、visualizer_opacity）。 */
+    var lyricCommonSettings: com.guangyue.core.lyrics.LyricCommonSettings
+        get() = com.guangyue.core.lyrics.LyricCommonSettings.sanitize(
+            com.guangyue.core.lyrics.LyricCommonSettings(
+                fontScale = prefs.getFloat(KEY_LYRIC_FONT_SCALE, 1f).toDouble(),
+                opacity = prefs.getFloat(KEY_VISUALIZER_OPACITY, 1f).toDouble(),
+            ),
+        )
+        set(v) {
+            val s = com.guangyue.core.lyrics.LyricCommonSettings.sanitize(v)
+            prefs.edit()
+                .putFloat(KEY_LYRIC_FONT_SCALE, s.fontScale.toFloat())
+                .putFloat(KEY_VISUALIZER_OPACITY, s.opacity.toFloat())
+                .apply()
+        }
+
     /** 「镜台」调参（Folia diorama/tuning.ts storage.key = 'diorama_tuning'）：整组存一个串，读回夹范围。 */
     var dioramaTuning: DioramaTuning
         get() = DioramaTuning.decode(prefs.getString(KEY_DIORAMA_TUNING, null))
@@ -342,6 +358,8 @@ class AppPreferences @Inject constructor(
         const val KEY_CLASSIC_SPACING = "classic_tuning_spacing"
 
         const val KEY_DIORAMA_TUNING = "diorama_tuning"
+        const val KEY_LYRIC_FONT_SCALE = "lyrics_font_scale"
+        const val KEY_VISUALIZER_OPACITY = "visualizer_opacity"
         const val KEY_SUBTITLE_HIDDEN = "hide_player_translation_subtitle"
         const val KEY_SUBTITLE_LAYOUT = "subtitle_overlay_layout"
         const val KEY_SUBTITLE_OPACITY = "subtitle_overlay_opacity"
