@@ -370,6 +370,32 @@ class PlaybackController @Inject constructor(
     /** 移到队尾。 */
     fun moveToEnd(index: Int) = moveTo(index, queue.size - 1)
 
+    /**
+     * Folia QueueTab「打乱队列」：正在播的挪到队首、其余打乱（[QueueShuffle]），不打断当前这首。
+     * 播放器列表与 [queue] 对齐时：先把当前项挪到 0，删掉其后全部，再按新顺序追加。
+     */
+    fun shuffleQueue() {
+        if (!QueueShuffle.canShuffle(queue.size)) return
+        val aligned = player.mediaItemCount == queue.size
+        val curKey = player.currentMediaItem?.mediaId
+        val curInQueue = queue.indexOfFirst { it.key == curKey }
+        val order = QueueShuffle.order(queue.size, curInQueue)
+        val reordered = order.map { queue[it] }
+        queue.clear()
+        queue += reordered
+        val cur = player.currentMediaItemIndex
+        if (aligned && curInQueue >= 0 && cur in 0 until player.mediaItemCount) {
+            if (cur != 0) player.moveMediaItem(cur, 0)
+            if (player.mediaItemCount > 1) player.removeMediaItems(1, player.mediaItemCount)
+            player.addMediaItems(reordered.drop(1).map { it.toMediaItem() })
+        } else if (aligned && player.mediaItemCount > 0 && curInQueue < 0) {
+            player.setMediaItems(reordered.map { it.toMediaItem() }, 0, 0L)
+            player.prepare()
+        }
+        // 未对齐（单曲 playNow 后）只改 queue；下次 playAt 会按 queue 重建播放器列表。
+        publish()
+    }
+
     fun toggle() {
         if (player.isPlaying) player.pause() else player.play()
     }

@@ -455,6 +455,28 @@ fun V0cStage(
                     }
                 }
             }
+        } else if (style == "queuepanel") {
+            // 11-18：播放页面板「播放列表」页签（Folia QueueTab：头行 播放队列 N + 保存为歌单 + 打乱队列；正在播强调竖条）。3000 = 浅色。
+            val light = positionMs == 3_000L
+            val titles = listOf("夜曲" to "周杰伦", "七里香" to "周杰伦", "告白气球" to "周杰伦", "晴天" to "周杰伦", "后来" to "刘若英", "红豆" to "王菲", "十年" to "陈奕迅", "小幸运" to "田馥甄")
+            val rows = titles.mapIndexed { i, (t, a) ->
+                com.guangyue.feature.player.screen.PlayerQueueRow(index = i, title = t, subtitle = a, current = i == 2)
+            }
+            Box(Modifier.fillMaxSize().background(if (light) Color(0xFFE4E4E7) else Color(0xFF18181B))) {
+                com.guangyue.feature.player.screen.StagePanel(
+                    open = true,
+                    tab = com.guangyue.feature.player.screen.StagePanelTab.QUEUE,
+                    onTab = {}, onDismiss = {}, dark = !light, accent = Color(0xFFE11D48),
+                    title = "告白气球", artist = "周杰伦", album = "周杰伦的床边故事", coverUrl = null,
+                    like = com.guangyue.feature.player.screen.LikeState.Idle, onToggleLike = {}, onAddToPlaylist = {},
+                    mode = com.guangyue.feature.player.screen.PlayerMode.Sequential, onPickMode = {},
+                    lyricStyleName = "经典", onOpenLyricStyle = {},
+                    queue = rows, onPickQueueRow = {}, onRemoveQueueRow = {},
+                    qualities = emptyList(), currentQuality = null, qualityDeclared = false, onPickQuality = {},
+                    skipEnter = true,
+                    onQueueRowNext = {}, onQueueRowEnd = {}, onSaveQueue = {}, onShuffleQueue = {},
+                )
+            }
         } else if (style == "searchresults") {
             // 11-18：搜索结果（照 sonnet SearchTabs 来源条 / 编号种类页签 / search-meta 状态行）。3000 = 浅色。
             val light = positionMs == 3_000L

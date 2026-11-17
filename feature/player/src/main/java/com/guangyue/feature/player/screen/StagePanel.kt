@@ -184,6 +184,9 @@ fun StagePanel(
     /** 11-18 Folia QueueTab 行操作「下一首播放」「移到队尾」；null = 不显示。 */
     onQueueRowNext: ((Int) -> Unit)? = null,
     onQueueRowEnd: ((Int) -> Unit)? = null,
+    /** 11-18 Folia QueueTab 头行「保存为歌单」「打乱队列」；null = 不显示。 */
+    onSaveQueue: (() -> Unit)? = null,
+    onShuffleQueue: (() -> Unit)? = null,
 ) {
     val colors = stagePanelColors(dark)
     var qualityPick by remember { mutableStateOf(initialQualityPick) }
@@ -299,6 +302,8 @@ fun StagePanel(
                                     onRemove = onRemoveQueueRow,
                                     onNext = onQueueRowNext,
                                     onEnd = onQueueRowEnd,
+                                    onSave = onSaveQueue,
+                                    onShuffle = onShuffleQueue,
                                 )
                                 StagePanelTab.QUALITY -> QualityBody(
                                     colors = colors,
@@ -647,6 +652,9 @@ private fun StepKey(text: String, label: String, colors: StagePanelColors, onCli
 
 private const val OFFSET_STEP = 250L
 
+const val StagePanelQueueSaveTag = "stage-panel-queue-save"
+const val StagePanelQueueShuffleTag = "stage-panel-queue-shuffle"
+
 // ---------------------------------------------------------------- 播放列表
 
 /**
@@ -664,6 +672,8 @@ private fun QueueBody(
     onRemove: (Int) -> Unit,
     onNext: ((Int) -> Unit)? = null,
     onEnd: ((Int) -> Unit)? = null,
+    onSave: (() -> Unit)? = null,
+    onShuffle: (() -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxWidth().padding(end = 2.dp)) {
         if (queue.isEmpty()) {
@@ -683,7 +693,30 @@ private fun QueueBody(
         ) {
             Text("播放队列", fontSize = 13.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, color = colors.t2)
             Spacer(Modifier.width(6.dp))
-            Text("${queue.size}", fontSize = 13.sp, lineHeight = 20.sp, color = colors.t3)
+            Text("${queue.size}", fontSize = 13.sp, lineHeight = 20.sp, color = colors.t3, modifier = Modifier.weight(1f))
+            // Folia：Button quiet「保存为歌单」+ PanelIconButton s「打乱队列」（Shuffle 15）。触屏命中放到 36dp 高。
+            if (onSave != null) {
+                Box(
+                    Modifier
+                        .height(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickableNoRipple { onSave() }
+                        .padding(horizontal = 8.dp)
+                        .testTag(StagePanelQueueSaveTag),
+                    contentAlignment = Alignment.Center,
+                ) { Text("保存为歌单", fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, color = colors.t2) }
+            }
+            if (onShuffle != null && queue.size >= 2) {
+                Box(
+                    Modifier
+                        .size(width = 36.dp, height = 36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickableNoRipple { onShuffle() }
+                        .semantics { contentDescription = "打乱队列" }
+                        .testTag(StagePanelQueueShuffleTag),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(GuangYueIcons.Shuffle, null, tint = colors.t2, modifier = Modifier.size(15.dp)) }
+            }
         }
         queue.forEach { row ->
             Box(

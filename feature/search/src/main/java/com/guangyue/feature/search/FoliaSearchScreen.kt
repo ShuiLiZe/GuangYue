@@ -139,7 +139,10 @@ fun FoliaSearchScreen(
             onSearch = onSearch,
             onClear = { onQueryChange("") },
             onClose = onClose ?: { onQueryChange("") },
-            autoFocus = !state.searched,
+            // 11-18：横屏高度只有 ~360dp，进页就弹键盘会把历史/结果整片盖住；横屏改为点框再弹。
+            autoFocus = !state.searched &&
+                androidx.compose.ui.platform.LocalConfiguration.current.orientation !=
+                android.content.res.Configuration.ORIENTATION_LANDSCAPE,
         )
 
         // Folia 手机版：音源条最后是「本地」（从首页本地页签进来时选中它）。

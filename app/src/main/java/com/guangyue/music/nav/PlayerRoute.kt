@@ -234,6 +234,27 @@ fun StagePanelHost(
             )
         }
     }
+    // 11-18 Folia QueueTab「保存为歌单」：起名 → 新建歌单并按队列顺序写入（Folia 只给全本地队列开，广乐歌单按曲目 key 存，在线曲也能存）。
+    var saveQueueOpen by remember { mutableStateOf(false) }
+    if (saveQueueOpen) {
+        com.guangyue.feature.player.screen.PlaylistNameSheet(
+            title = "保存为歌单",
+            hint = "输入歌单名称",
+            initial = "",
+            onSave = { name ->
+                val rows = playback.queueSnapshot().mapNotNull { it.toCachedTrack() }
+                val ok = runCatching {
+                    val repo = playlistRepositoryOf(ctx)
+                    val id = repo.create(name)
+                    repo.addTracks(id, rows)
+                }.isSuccess
+                com.guangyue.feature.library.design.StatusToasts.show(
+                    if (ok) "已保存为歌单「$name」（${rows.size} 首）" else "保存失败",
+                )
+            },
+            onDismiss = { saveQueueOpen = false },
+        )
+    }
     val declared = item?.origin?.availableQualities.orEmpty()
     val downloadOptions = remember(item?.key, declared) { com.guangyue.core.download.DownloadQualityPick.options(declared) }
     val qualities = QualityLadder.of(declared).ifEmpty { QualityLadder.default() }.sortedByDescending { it.order }
@@ -296,6 +317,11 @@ fun StagePanelHost(
         onRemoveQueueRow = { index -> playback.removeAt(index); revision++ },
         onQueueRowNext = { index -> playback.moveToNext(index); revision++ },
         onQueueRowEnd = { index -> playback.moveToEnd(index); revision++ },
+        onSaveQueue = { saveQueueOpen = true },
+        onShuffleQueue = {
+            playback.shuffleQueue(); revision++
+            com.guangyue.feature.library.design.StatusToasts.show("已打乱播放队列")
+        },
         qualities = qualities,
         currentQuality = item?.origin?.quality ?: playback.defaultQuality,
         qualityDeclared = declared.isNotEmpty(),
