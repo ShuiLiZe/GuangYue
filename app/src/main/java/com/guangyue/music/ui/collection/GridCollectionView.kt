@@ -218,8 +218,8 @@ fun GridCollectionView(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { scaleX = 1.1f; scaleY = 1.1f; alpha = if (daylight) 0.22f else 0.3f }
-                    .blur(24.dp),
+                    .graphicsLayer { scaleX = 1.1f; scaleY = 1.1f; alpha = if (daylight) 0.18f else 0.12f }
+                    .blur(30.dp),
             )
         }
 
@@ -327,8 +327,8 @@ fun GridCollectionView(
                     .size(40.dp)
                     .shadow(6.dp, CircleShape, clip = false)
                     .clip(CircleShape)
-                    .background(ground)
-                    .background(ink.copy(alpha = 0.14f))
+                    .background(ground.copy(alpha = 0.6f))
+                    .background(if (daylight) Color.Black.copy(alpha = 0.05f) else Color.White.copy(alpha = 0.08f))
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) { Icon(GuangYueIcons.ChevronLeft, contentDescription = "返回", tint = ink, modifier = Modifier.size(20.dp)) }

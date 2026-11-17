@@ -543,7 +543,7 @@ fun GuangYueNavHost(
                         }
                         com.guangyue.music.ui.collection.GridCollectionView(
                             title = shownName,
-                            subtitle = tile.subtitle.takeIf { s -> s.isNotBlank() && s != kindLabel } ?: "",
+                            subtitle = tile.subtitle.takeIf { s -> s.isNotBlank() } ?: kindLabel,
                             coverUrl = tile.artwork ?: list.firstOrNull { t -> t.artwork != null }?.artwork,
                             cards = remember(list) { list.map { t -> com.guangyue.music.ui.collection.GridTrackCard(t.key, t.title, t.artist, t.album, t.durationMs, t.artwork) } },
                             loading = tracks == null && !failed,
