@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.displayCutout
@@ -343,6 +344,8 @@ fun GridCollectionView(
                     .align(Alignment.TopCenter)
                     .padding(horizontal = 72.dp)
                     .clip(RoundedCornerShape(16.dp))
+                    // Folia GridViewChrome 标题块：bg-color 20% 底 + backdrop-blur（手机上只铺底色）。
+                    .background(ground.copy(alpha = 0.2f))
                     .clickable { panelOpen = !panelOpen }
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -486,7 +489,13 @@ fun GridCollectionView(
                     Text(title, color = ink, fontSize = if (cutCompact) 16.sp else 20.sp, fontWeight = FontWeight.Bold, lineHeight = if (cutCompact) 21.sp else 26.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = if (cutCompact) 10.dp else 16.dp))
                     Text(countLabel, color = ink.copy(alpha = 0.4f), fontSize = 10.sp, modifier = Modifier.padding(top = 6.dp))
                     if (subtitle.isNotBlank()) {
-                        Text(subtitle, color = ink.copy(alpha = 0.65f), fontSize = 12.sp, lineHeight = 18.sp, maxLines = if (cutCompact) 3 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = if (cutCompact) 8.dp else 12.dp))
+                        // Folia：简介 text-xs、opacity 65、max-h-40 自己滚（长简介不把按钮排推远）。
+                        Text(
+                            subtitle, color = ink.copy(alpha = 0.65f), fontSize = 12.sp, lineHeight = 18.sp,
+                            maxLines = if (cutCompact) 3 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = if (cutCompact) 8.dp else 12.dp)
+                                .then(if (cutCompact) Modifier else Modifier.heightIn(max = 160.dp).verticalScroll(rememberScrollState())),
+                        )
                     }
                     Column(
                         Modifier.padding(top = if (cutCompact) 8.dp else 16.dp).fillMaxWidth(),
@@ -506,6 +515,8 @@ fun GridCollectionView(
 
 @Composable
 private fun Pill(label: String, ink: Color, ground: Color, primary: Boolean = false, danger: Boolean = false, enabled: Boolean = true, full: Boolean = false, compact: Boolean = false, onClick: () -> Unit) {
+    // 11-17：Folia GridViewCutInPanel 按钮排每颗都带 14px 图标（Play 实心 / ListPlus / Plus / RefreshCw …），主键 py-3，其余 py-2.5。
+    val icon = if (full) panelIconFor(label) else null
     val bg = when {
         primary -> ink
         else -> ink.copy(alpha = 0.08f)
@@ -522,9 +533,32 @@ private fun Pill(label: String, ink: Color, ground: Color, primary: Boolean = fa
             .clickable(enabled = enabled, onClick = onClick)
             .graphicsLayer { alpha = if (enabled) 1f else 0.4f }
             // 紧凑档：sonnet 按钮 padding 6px、字号 11px；手机触控最低 40dp。
-            .then(if (compact) Modifier.heightIn(min = 40.dp).padding(horizontal = 16.dp, vertical = 6.dp) else Modifier.padding(horizontal = 20.dp, vertical = 12.dp)),
+            .then(
+                if (compact) Modifier.heightIn(min = 40.dp).padding(horizontal = 16.dp, vertical = 6.dp)
+                else Modifier.heightIn(min = 44.dp).padding(horizontal = 20.dp, vertical = if (primary) 12.dp else 10.dp),
+            ),
         contentAlignment = Alignment.Center,
-    ) { Text(label, color = fg, fontSize = if (compact) 11.sp else 12.sp, fontWeight = FontWeight.Bold) }
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                Icon(icon, null, tint = fg, modifier = Modifier.size(if (compact) 12.dp else 14.dp))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(label, color = fg, fontSize = if (compact) 11.sp else 12.sp, fontWeight = if (primary) FontWeight.Bold else FontWeight.SemiBold)
+        }
+    }
+}
+
+/** 面板按钮的图标（照 Folia GridViewCutInPanel 各键）。 */
+private fun panelIconFor(label: String): androidx.compose.ui.graphics.vector.ImageVector? = when {
+    label.startsWith("播放") -> GuangYueIcons.Play
+    label.contains("队列") -> GuangYueIcons.ListPlus
+    label.contains("添加到歌单") -> GuangYueIcons.Plus
+    label.contains("下载") -> GuangYueIcons.Download
+    label.contains("重新加载") || label.contains("刷新") -> GuangYueIcons.RefreshCw
+    label.contains("改名") || label.contains("重命名") -> GuangYueIcons.Pencil
+    label.contains("删除") -> GuangYueIcons.Trash2
+    else -> null
 }
 
 private fun formatDuration(ms: Long): String {
