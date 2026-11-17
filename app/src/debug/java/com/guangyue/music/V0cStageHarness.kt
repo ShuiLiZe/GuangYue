@@ -479,7 +479,7 @@ fun V0cStage(
                         onOpenSearch = {},
                         onEnterTile = {},
                         onOpenSettings = {},
-                        providerButton = { com.guangyue.music.ui.home.ProviderPill("QQ音乐", !light) {} },
+                        providerButton = { com.guangyue.music.ui.home.ProviderPill("QQ音乐", !light, onClick = {}) },
                         playbackBar = {
                             Box(
                                 Modifier.fillMaxWidth().height(56.dp)

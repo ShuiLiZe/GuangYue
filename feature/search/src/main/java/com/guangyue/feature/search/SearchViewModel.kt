@@ -399,8 +399,14 @@ class SearchViewModel @Inject constructor(
                 runCatching {
                     val downloaded = downloadedLibrary.tracks.value.filter { downloadedLibrary.exists(it) }.map { downloadedLibrary.toPlayable(it) }
                     val scan = com.guangyue.feature.library.viewmodel.DeviceAudio.scanDetailed(appContext)
+                    // 11-17：支持拼音（全拼 / 首字母，Folia commandSearchIndex 同思路）；ICU Han-Latin 需 API 29+。
+                    val toPinyin: ((String) -> String?)? = if (android.os.Build.VERSION.SDK_INT >= 29) {
+                        val tr = runCatching { android.icu.text.Transliterator.getInstance("Han-Latin; Latin-ASCII; Lower") }.getOrNull()
+                        tr?.let { t -> { s: String -> runCatching { t.transliterate(s) }.getOrNull() } }
+                    } else null
+                    val pinyinOf = { f: String -> pinyinCache.getOrPut(f) { LocalSongMatch.keys(f, toPinyin) ?: NO_PINYIN }.takeIf { it !== NO_PINYIN } }
                     com.guangyue.core.data.model.LibraryRules.allSongs(downloaded, scan.tracks).filter { t ->
-                        t.title.contains(query, true) || t.artist.contains(query, true) || t.album.contains(query, true)
+                        LocalSongMatch.matches(query, listOf(t.title, t.artist, t.album), pinyinOf)
                     }
                 }.getOrDefault(emptyList())
             }
@@ -422,6 +428,10 @@ class SearchViewModel @Inject constructor(
             )
         }
     }
+
+    /** 本地歌曲字段 → 拼音键（全拼, 首字母）的缓存；无汉字记 [NO_PINYIN]。 */
+    private val pinyinCache = java.util.concurrent.ConcurrentHashMap<String, Pair<String, String>>()
+    private val NO_PINYIN = "" to ""
 
     /** 本地搜索时的开播列表（原曲目）；不是本地搜索返回 null。 */
     fun localPlaylist(): List<com.guangyue.core.data.model.TrackEntity>? =

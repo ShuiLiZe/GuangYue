@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class GridPagePonderTest {
+class GridSliderPonderTest {
     @Test
     fun chaptersKeepOnlyPresentAnchors() {
         val all = GridPagePonder.ALL.flatMap { c -> c.steps.map { it.anchor } }.toSet()

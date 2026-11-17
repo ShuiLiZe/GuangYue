@@ -1059,7 +1059,8 @@ private fun LyricBar(
     var expanded by remember { mutableStateOf(initialExpanded) }
     var touch by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     LaunchedEffect(expanded, touch) {
-        if (expanded && !runningUnderRobolectric) {
+        // 取证页开场即展开（initialExpanded）时不自动收，等碰过一下再按 5 秒算。
+        if (expanded && !runningUnderRobolectric && !(initialExpanded && touch == 0)) {
             kotlinx.coroutines.delay(5_000)
             expanded = false
         }
@@ -1073,7 +1074,14 @@ private fun LyricBar(
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
     Column(
         Modifier
-            .then(if (expanded && compact) Modifier.width(compactW) else Modifier.fillMaxWidth())
+            .then(
+                when {
+                    expanded && compact -> Modifier.width(compactW)
+                    // 11-17 sonnet 竖屏档：展开态宽 min(100vw - 40px, 22rem)。
+                    expanded -> Modifier.width(minOf(barConf.screenWidthDp - 40f, BAR_PORTRAIT_MAX_WIDTH_DP.toFloat()).dp)
+                    else -> Modifier.fillMaxWidth()
+                },
+            )
             .padding(vertical = if (expanded && compact) GySpace.s else GySpace.l)
             .clip(shape)
             .background(pill)
@@ -1173,65 +1181,59 @@ private fun LyricBar(
                 }
             }
         } else {
-            Column(Modifier.fillMaxWidth().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                // 2026-11-14：folia-sonnet androidPhoneFit 触屏档 —— 歌名两侧钉一对箭头（上一首 / 下一首），
-                // 两侧等宽对称，歌名在中间带居中、过长省略。箭头视觉 16dp，触控 44dp（与本行其它键同档）。
+            // 11-17：竖屏展开态照 folia-sonnet androidPhoneFit 竖屏档（Portrait phone fit）：不再三行叠高，
+            // 收成两行网格——第一行「左 32 播放键 · 中间歌名（两侧箭头、12sp）· 右边两个槽（模式 / 下一首，图标 15）」，
+            // 第二行进度条跨满；宽 min(100vw - 40, 22rem) 居中，内边距 6/10。
+            // 手机触控：视觉尺寸照 Folia，触控区放到 40–44dp（Folia 32px 播放键、3px 内边距的槽在手指下太小）。
+            Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .clickableNoRipple { onTogglePlay(); touch++ }
+                            .semantics { contentDescription = if (playing) pauseLabel else playLabel },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(Modifier.size(32.dp).clip(CircleShape).background(pillInk), contentAlignment = Alignment.Center) {
+                            Icon(
+                                if (playing) GuangYueIcons.Pause else GuangYueIcons.Play,
+                                null,
+                                tint = if (dark) Color(0xFF17171A) else Color.White,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
                     TitleArrow(GuangYueIcons.ChevronLeft, "上一首", pillInk, onPrevious) { touch++ }
                     Text(
                         title,
-                        fontSize = 14.sp,
+                        fontSize = 12.sp,
+                        lineHeight = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = pillInk,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp).clickableNoRipple { expanded = false },
+                        modifier = Modifier.weight(1f).clickableNoRipple { expanded = false },
                     )
                     TitleArrow(GuangYueIcons.ChevronRight, "下一首", pillInk, onNext) { touch++ }
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                        if (modeIcon != null && onCycleMode != null) {
-                            Box(
-                                Modifier.size(40.dp).clip(CircleShape).clickableNoRipple { onCycleMode(); touch++ }
-                                    .semantics { contentDescription = modeLabel },
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(modeIcon, null, tint = pillInk.copy(alpha = 0.8f), modifier = Modifier.size(20.dp)) }
-                        }
+                    if (modeIcon != null && onCycleMode != null) {
+                        Box(
+                            Modifier.size(40.dp).clip(CircleShape).clickableNoRipple { onCycleMode(); touch++ }
+                                .semantics { contentDescription = modeLabel },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(modeIcon, null, tint = pillInk.copy(alpha = 0.8f), modifier = Modifier.size(15.dp)) }
                     }
-                    Spacer(Modifier.width(16.dp))
-                    Box(
-                        Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(pillInk)
-                            .clickableNoRipple { onTogglePlay(); touch++ }
-                            .semantics { contentDescription = if (playing) pauseLabel else playLabel },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            if (playing) GuangYueIcons.Pause else GuangYueIcons.Play,
-                            null,
-                            tint = if (dark) Color(0xFF17171A) else Color.White,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                        if (onNext != null) {
-                            Box(
-                                Modifier.size(40.dp).clip(CircleShape).clickableNoRipple { onNext(); touch++ }
-                                    .semantics { contentDescription = "下一首" },
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(GuangYueIcons.SkipForward, null, tint = pillInk.copy(alpha = 0.8f), modifier = Modifier.size(20.dp)) }
-                        }
+                    if (onNext != null) {
+                        Box(
+                            Modifier.size(40.dp).clip(CircleShape).clickableNoRipple { onNext(); touch++ }
+                                .semantics { contentDescription = "下一首" },
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(GuangYueIcons.SkipForward, null, tint = pillInk.copy(alpha = 0.8f), modifier = Modifier.size(15.dp)) }
                     }
                 }
-                Spacer(Modifier.height(4.dp))
                 Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(formatTime(positionMs), fontSize = 12.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+                    Text(formatTime(positionMs), fontSize = 11.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
                     Spacer(Modifier.width(GySpace.s))
                     Slider(
                         value = progress.coerceIn(0f, 1f),
@@ -1246,10 +1248,10 @@ private fun LyricBar(
                                 Box(Modifier.fillMaxWidth(fraction).height(2.dp).clip(RoundedCornerShape(1.dp)).background(pillInk.copy(alpha = 0.85f)))
                             }
                         },
-                        modifier = Modifier.weight(1f).height(36.dp).semantics { contentDescription = seekBarLabel },
+                        modifier = Modifier.weight(1f).height(28.dp).semantics { contentDescription = seekBarLabel },
                     )
                     Spacer(Modifier.width(GySpace.s))
-                    Text(formatTime(durationMs), fontSize = 12.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
+                    Text(formatTime(durationMs), fontSize = 11.sp, color = pillInk.copy(alpha = 0.7f), fontFamily = FontFamily.Monospace)
                 }
             }
         }
@@ -1259,6 +1261,9 @@ private fun LyricBar(
 
 /** 横屏紧凑档门槛（与浮动胶囊 MINI_COMPACT_SCREEN_DP、歌词样式面板同一条线）。 */
 internal const val BAR_COMPACT_SCREEN_DP = 480
+
+/** sonnet 竖屏档 `min(calc(100vw - 40px), 22rem)` 的 22rem。 */
+internal const val BAR_PORTRAIT_MAX_WIDTH_DP = 352
 
 /** sonnet `min(78vw, 26rem)` 的 26rem。 */
 internal const val BAR_COMPACT_MAX_WIDTH_DP = 416
