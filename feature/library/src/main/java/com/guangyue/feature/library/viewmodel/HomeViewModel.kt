@@ -504,6 +504,44 @@ class HomeViewModel @Inject constructor(
         .catch { emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /**
+     * 11-17：Folia 手机版本地页签的分段（文件夹 / 专辑 / 歌手），同一份「全部歌曲」按专辑、歌手分组。
+     * 文件夹就是 localFolderTiles；这里只出专辑与歌手两组。
+     */
+    val localGroupTiles: StateFlow<Pair<List<HomeTile>, List<HomeTile>>> = combine(downloadedLibrary.tracks, _deviceRevision) { list, _ -> list }
+        .map { list ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val downloaded = list.filter { downloadedLibrary.exists(it) }.map { downloadedLibrary.toPlayable(it) }
+                val scan = DeviceAudio.scanDetailed(appContext)
+                val all = com.guangyue.core.data.model.LibraryRules.allSongs(downloaded, scan.tracks)
+                val albums = all.filter { it.album.isNotBlank() }.groupBy { it.album.trim() }
+                    .entries.sortedBy { it.key.lowercase() }
+                    .map { (name, ts) ->
+                        HomeTile(
+                            key = LibraryTiles.ALBUM + name,
+                            title = name,
+                            subtitle = ts.map { it.artist }.filter { it.isNotBlank() }.distinct().take(2).joinToString(" / ").ifBlank { "专辑" },
+                            artwork = ts.firstNotNullOfOrNull { it.artwork },
+                            kind = HomeTileKind.PLAYLIST,
+                        )
+                    }
+                val artists = all.filter { it.artist.isNotBlank() }.groupBy { it.artist.trim() }
+                    .entries.sortedBy { it.key.lowercase() }
+                    .map { (name, ts) ->
+                        HomeTile(
+                            key = LibraryTiles.ARTIST + name,
+                            title = name,
+                            subtitle = "${ts.size} 首",
+                            artwork = ts.firstNotNullOfOrNull { it.artwork },
+                            kind = HomeTileKind.PLAYLIST,
+                        )
+                    }
+                albums to artists
+            }
+        }
+        .catch { emit(emptyList<HomeTile>() to emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList<HomeTile>() to emptyList())
+
     /** 授权读手机音乐后重数「全部歌曲」。 */
     fun refreshDeviceAudio() { _deviceRevision.value++ }
 
@@ -568,7 +606,20 @@ class HomeViewModel @Inject constructor(
                     runCatching { tracks.purgeDevice(scan.rejectedKeys) }
                     rules.allSongs(downloaded, scan.tracks, tracks.favoriteKeys())
                 }
-                else -> if (which.startsWith(LibraryTiles.FOLDER)) {
+                else -> if (which.startsWith(LibraryTiles.ALBUM) || which.startsWith(LibraryTiles.ARTIST)) {
+                    val downloaded = downloadedLibrary.tracks.value
+                        .filter { downloadedLibrary.exists(it) }
+                        .map { downloadedLibrary.toPlayable(it) }
+                    val scan = DeviceAudio.scanDetailed(appContext)
+                    val all = rules.allSongs(downloaded, scan.tracks, tracks.favoriteKeys())
+                    if (which.startsWith(LibraryTiles.ALBUM)) {
+                        val n = which.removePrefix(LibraryTiles.ALBUM)
+                        all.filter { it.album.trim() == n }
+                    } else {
+                        val n = which.removePrefix(LibraryTiles.ARTIST)
+                        all.filter { it.artist.trim() == n }
+                    }
+                } else if (which.startsWith(LibraryTiles.FOLDER)) {
                     val folder = which.removePrefix(LibraryTiles.FOLDER)
                     val scan = DeviceAudio.scanDetailed(appContext)
                     scan.tracks.filter { scan.folderOf[it.key] == folder }
@@ -1177,6 +1228,9 @@ object LibraryTiles {
     const val RECENT = "lib:recent"
     /** 11-17：手机里的一个文件夹（lib:folder:<路径>）。 */
     const val FOLDER = "lib:folder:"
+    /** 11-17：本地专辑 / 歌手分组（lib:album:<名>、lib:artist:<名>）。 */
+    const val ALBUM = "lib:album:"
+    const val ARTIST = "lib:artist:"
 
     val liked = HomeTile(key = LIKED, title = "我喜欢", subtitle = "收藏的歌曲", kind = HomeTileKind.PLAYLIST)
     val all = HomeTile(key = ALL, title = "全部歌曲", subtitle = "下载与手机里的歌", kind = HomeTileKind.PLAYLIST)

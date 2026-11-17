@@ -230,12 +230,19 @@ fun GridSliderHome(
     emptyAction: (@Composable (String) -> Unit)? = null,
     /** 底部悬浮播放条（Folia FloatingPlayerControls 手机版胶囊）；null = 没在放歌不显示。 */
     playbackBar: (@Composable () -> Unit)? = null,
+    /** 11-17：「本地」页签的分段（Folia LocalGrid3DView sections：文件夹 / 专辑 / 歌手 / 歌单）。 */
+    localSubs: List<GridSubSection> = emptyList(),
+    /** 「本地」页签右侧「刷新」动作（重扫手机音乐）。 */
+    localRefresh: (() -> Unit)? = null,
 ) {
     // Folia 首页页签就是各个数据源本身（歌单 / 推荐 / 探索 / 专辑 / 本地），没有「全部」。
     var tab by rememberSaveable { mutableStateOf(initialTab.coerceIn(0, max(0, sections.size - 1))) }
     val tabs = remember(sections) { sections.map { it.first } }
-    val tiles = remember(sections, tab) {
-        sections.getOrNull(tab)?.second.orEmpty()
+    val isLocalTab = tabs.getOrNull(tab) == "本地" && localSubs.isNotEmpty()
+    var localSub by rememberSaveable { mutableStateOf(0) }
+    val tiles = remember(sections, tab, localSubs, localSub, isLocalTab) {
+        if (isLocalTab) localSubs.getOrNull(localSub)?.tiles.orEmpty()
+        else sections.getOrNull(tab)?.second.orEmpty()
     }
     val compact = LocalConfiguration.current.screenHeightDp < GRID_COMPACT_SCREEN_DP
     val fontScale = LocalDensity.current.fontScale
@@ -275,10 +282,32 @@ fun GridSliderHome(
             onSelect = { tab = it }, onOpenSearch = onOpenSearch,
             onOpenSettings = onOpenSettings, onOpenDownloads = onOpenDownloads, extraTabs = extraTabs, searchHint = searchHint,
         )
+        if (isLocalTab) {
+            // Folia 手机版本地页签：页签下一行「全部」地图胶囊 + 分段（当前段带字，其余只有图标），右侧竖排动作胶囊。
+            Box(Modifier.fillMaxWidth().padding(top = 4.dp).zIndex(5f)) {
+                Row(
+                    Modifier.align(Alignment.Center),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (tiles.size > 1) {
+                        LocalChip(GuangYueIcons.Map, "全部", true, false, inkColor) { mapOpen = true }
+                    }
+                    localSubs.forEachIndexed { i, sub ->
+                        LocalChip(sub.icon, sub.label, i == localSub, i == localSub, inkColor) { localSub = i }
+                    }
+                    // Folia 本地动作里的「刷新」（导入文件夹 / 导入歌单文件是桌面的文件选择，安卓直接读系统媒体库，不放）。
+                    if (localRefresh != null) {
+                        Spacer(Modifier.width(4.dp))
+                        LocalChip(GuangYueIcons.RefreshCw, "刷新", false, false, inkColor, localRefresh)
+                    }
+                }
+            }
+        }
         if (tiles.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 // Folia 空态（OnlineProviderAccountlessPanel / emptyMessage）：圆角方块图标 + 粗标题 + 一行淡说明。
-                val msg = emptyText(tabs.getOrNull(tab).orEmpty())
+                val msg = if (isLocalTab && localSub > 0) "这里还没有${localSubs[localSub].label}。" else emptyText(tabs.getOrNull(tab).orEmpty())
                 if (msg.startsWith("正在加载")) {
                     androidx.compose.material3.CircularProgressIndicator(
                         color = inkColor.copy(alpha = 0.3f), strokeWidth = 2.dp, modifier = Modifier.size(28.dp),
@@ -310,7 +339,7 @@ fun GridSliderHome(
             }
             return@Column
         }
-        if (!compact && tiles.size > 1) {
+        if (!isLocalTab && !compact && tiles.size > 1) {
             // Folia DesktopGrid3DSurface 的「全部」胶囊（MapIcon 13 + 文字），页签下方居中，点开 GridMap。
             Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.Center) {
                 Row(
@@ -330,7 +359,7 @@ fun GridSliderHome(
             }
         }
         // 换页签 = 换一份列表：焦点回到开头（Folia 列表变化走 'none' 直接跳）。
-        key(tab) {
+        key(tab, localSub) {
             val pager = rememberPagerState(
                 initialPage = GridSliderModel.clampFocus(if (tab == initialTab) initialFocus else 0, tiles.size),
                 pageCount = { tiles.size },
@@ -1000,6 +1029,33 @@ private fun GridMapSheet(tiles: List<HomeTile>, ink: Color, ground: Color, onClo
                     Text(t.title, color = ink.copy(alpha = 0.9f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
+        }
+    }
+}
+
+
+/** 11-17：Folia 本地页签的一个分段。 */
+data class GridSubSection(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val tiles: List<HomeTile>)
+
+/** Folia DesktopGrid3DSurface 的小胶囊：图标 13 + 文字 11（分段没选中时只有图标）。 */
+@Composable
+private fun LocalChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, showLabel: Boolean, active: Boolean, ink: Color, onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(ink.copy(alpha = if (active) 0.16f else 0.08f))
+            .border(1.dp, ink.copy(alpha = if (active) 0.12f else 0.06f), RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = label }
+            .padding(horizontal = if (showLabel) 12.dp else 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = ink.copy(alpha = if (active) 0.95f else 0.7f), modifier = Modifier.size(13.dp))
+        if (showLabel) {
+            Spacer(Modifier.width(6.dp))
+            Text(label, color = ink.copy(alpha = if (active) 0.95f else 0.75f), fontSize = 11.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
         }
     }
 }

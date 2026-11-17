@@ -204,6 +204,7 @@ fun GuangYueNavHost(
             val homeMine by vm.playlistsFlow.collectAsStateWithLifecycle()
             // 11-17：本地页签照 Folia 手机版是集合卡（全部歌曲 + 各文件夹），不是单曲。
             val homeLocal by vm.localFolderTiles.collectAsStateWithLifecycle()
+            val homeLocalGroups by vm.localGroupTiles.collectAsStateWithLifecycle()
             // 2026-11-15：歌单页签先列登录账号的歌单（我喜欢置顶，Folia 手机版），再接本地歌单。
             // QQ / 网易云 / 酷狗按当前音源取舍（AccountTiles.forHome：当前平台有账号歌单只列它的，否则都列）。
             val accountTiles by vm.accountTiles.collectAsStateWithLifecycle()
@@ -240,6 +241,14 @@ fun GuangYueNavHost(
                                 }
                             },
                             polaroid = gridCardStyle != com.guangyue.core.prefs.GridCardStyles.IMAGE,
+                            // 11-17 照 Folia 手机版本地页签：分段（文件夹 / 专辑 / 歌手 / 歌单）+ 右侧动作（目录 / 刷新）。
+                            localSubs = listOf(
+                                com.guangyue.music.ui.home.GridSubSection("文件夹", com.guangyue.feature.library.design.icons.GuangYueIcons.FolderOpen, homeLocal),
+                                com.guangyue.music.ui.home.GridSubSection("专辑", com.guangyue.feature.library.design.icons.GuangYueIcons.Disc3, homeLocalGroups.first),
+                                com.guangyue.music.ui.home.GridSubSection("歌手", com.guangyue.feature.library.design.icons.GuangYueIcons.User, homeLocalGroups.second),
+                                com.guangyue.music.ui.home.GridSubSection("歌单", com.guangyue.feature.library.design.icons.GuangYueIcons.ListMusic, homeMine),
+                            ),
+                            localRefresh = { vm.refreshDeviceAudio(); com.guangyue.feature.library.design.StatusToasts.show("已重新扫描本地音乐") },
                             // folia-sonnet 手机版首页：没有底栏，标题旁齿轮进设置，页签胶囊末尾带「去别处」的页签。
                             onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                             onOpenDownloads = { navController.navigate(Routes.DOWNLOADS) { launchSingleTop = true } },
@@ -508,6 +517,8 @@ fun GuangYueNavHost(
             val kindLabel = when {
                 // 11-17：Folia 手机版「全部歌曲」与各文件夹的类型都写 Folder（文件夹）。
                 isLib && (tile.key == com.guangyue.feature.library.viewmodel.LibraryTiles.ALL || tile.key.startsWith(com.guangyue.feature.library.viewmodel.LibraryTiles.FOLDER)) -> "文件夹"
+                isLib && tile.key.startsWith(com.guangyue.feature.library.viewmodel.LibraryTiles.ALBUM) -> "专辑"
+                isLib && tile.key.startsWith(com.guangyue.feature.library.viewmodel.LibraryTiles.ARTIST) -> "歌手"
                 isLib -> "曲库"
                 com.guangyue.feature.library.viewmodel.ArtistTiles.isArtist(tile.key) -> com.guangyue.feature.library.viewmodel.ArtistTiles.kindLabel(tile)
                 com.guangyue.feature.library.viewmodel.AlbumTiles.isAlbum(tile.key) -> "专辑"
