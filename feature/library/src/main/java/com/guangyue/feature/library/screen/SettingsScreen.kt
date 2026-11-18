@@ -155,6 +155,13 @@ fun SettingsScreen(
             add(SettingItem(SettingsPage.HOME, "记住主页卡片位置", "记住主页卡片位置", "切换顶部入口或从播放界面返回时，回到各入口上次浏览的卡片。位置仅在本次打开应用期间保留。", icon(GuangYueIcons.Pin),
                 trailing = { FoliaToggle(checked = rememberHomeCard, onChange = onRememberHomeCard) }))
         }
+        if (gridCardShape != null || gridFalloff != null) {
+            // Folia HomePage 网格卡片组的 preview：GridCardsPreview（七张卡，衰减照 computeHexCardFrame）。
+            val (pvBleed, pvSquare) = gridCardShape ?: (false to false)
+            val (pvScale, pvOpacity) = gridFalloff ?: (0.45f to 0.4f)
+            add(SettingItem(SettingsPage.HOME, "网格卡片", "", null, null,
+                below = { GridCardsPreview(pvScale, pvOpacity, pvBleed, pvSquare) }))
+        }
         if (gridCardShape != null) {
             val (bleed, square) = gridCardShape
             add(SettingItem(SettingsPage.HOME, "网格卡片", "全画幅封面", "让封面图铺满整张网格卡片，歌名和歌手改为叠在封面上的渐变遮罩里显示，做法和队列拼贴一致。", icon(GuangYueIcons.Images),

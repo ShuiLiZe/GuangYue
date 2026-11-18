@@ -163,6 +163,11 @@ internal fun FoliaSettingsShell(
                                         .border(1.dp, hair, RoundedCornerShape(12.dp)),
                                 ) {
                                     rows.forEachIndexed { i, it ->
+                                        // 11-18 Folia kit Group preview：组卡片顶上的预览框（m-3 h-136 圆角 8 --st-pv），标签为空的项只画它。
+                                        if (it.label.isEmpty() && it.below != null) {
+                                            Box(Modifier.fillMaxWidth().padding(12.dp)) { it.below.invoke() }
+                                            return@forEachIndexed
+                                        }
                                         if (i > 0) Box(Modifier.padding(start = 16.dp).fillMaxWidth().height(1.dp).background(hair))
                                         Row(
                                             Modifier.fillMaxWidth().heightIn(min = 56.dp)
