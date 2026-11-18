@@ -18,6 +18,8 @@ data class SubtitleSettings(
     val fontInherits: Boolean = true,
     /** 不继承时字幕自己的字体："sans" / "serif" / "mono"。 */
     val fontStyle: String = "sans",
+    /** Folia subtitleContentMode（副字幕内容）：莫奈 / 静止排进自己版面的那条显示什么；"translation" 翻译 / "none" 不显示（广乐无罗马音）。 */
+    val contentMode: String = "translation",
 ) {
     companion object {
         val DEFAULT = SubtitleSettings()
@@ -28,6 +30,7 @@ data class SubtitleSettings(
             opacity = if (s.opacity.isFinite()) s.opacity.coerceIn(OPACITY_MIN, OPACITY_MAX) else 0.6,
             fontScale = if (s.fontScale.isFinite()) (s.fontScale.coerceIn(0.85, 1.4) / 0.05).let { kotlin.math.round(it) * 0.05 } else 1.0,
             fontStyle = if (s.fontStyle in listOf("sans", "serif", "mono")) s.fontStyle else "sans",
+            contentMode = if (s.contentMode == "none") "none" else "translation",
         )
     }
 }

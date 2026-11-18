@@ -149,6 +149,7 @@ class AppPreferences @Inject constructor(
                 fontScale = prefs.getFloat(KEY_SUBTITLE_FONT_SCALE, 1f).toDouble(),
                 fontInherits = prefs.getBoolean(KEY_SUBTITLE_FONT_INHERITS, true),
                 fontStyle = prefs.getString(KEY_SUBTITLE_FONT_STYLE, "sans") ?: "sans",
+                contentMode = prefs.getString(KEY_SUBTITLE_CONTENT_MODE, "translation") ?: "translation",
             ),
         )
         set(v) {
@@ -162,6 +163,7 @@ class AppPreferences @Inject constructor(
                 .putFloat(KEY_SUBTITLE_FONT_SCALE, s.fontScale.toFloat())
                 .putBoolean(KEY_SUBTITLE_FONT_INHERITS, s.fontInherits)
                 .putString(KEY_SUBTITLE_FONT_STYLE, s.fontStyle)
+                .putString(KEY_SUBTITLE_CONTENT_MODE, s.contentMode)
                 .apply()
         }
 
@@ -404,6 +406,7 @@ class AppPreferences @Inject constructor(
         const val KEY_SUBTITLE_FONT_SCALE = "subtitle_font_scale"
         const val KEY_SUBTITLE_FONT_INHERITS = "subtitle_font_inherits_lyrics"
         const val KEY_SUBTITLE_FONT_STYLE = "subtitle_font_style"
+        const val KEY_SUBTITLE_CONTENT_MODE = "subtitle_content_mode"
         const val KEY_CL_FOCUS = "claddagh_tuning_focus"
         const val KEY_CL_RADIUS = "claddagh_tuning_radius"
         const val KEY_CL_TILT = "claddagh_tuning_tilt"

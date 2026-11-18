@@ -113,3 +113,4 @@
 - 🔧 11-18 隐现背景快捷控件照 `backgrounds/latent/entry.tsx` renderQuickControls：背景类型行选隐现时参数行出「混合 / 像素 / 流体」（displayMode 轮换）、「封面与主题 / 仅封面取色」（colorSource，resolveLatentShaderColors cover-only 分支）两颗胶囊 +「可读性叠色」开关（Layers，overlayEnabled）。只有像素时点阵直接盖底色（不再 soft-light，opacity 1）。存 latent_background_tuning（LatentPrefs，播放页与首页背景共用）。✋ 其余调参（点阵大小 / 速度 / 流体扭曲 / 节拍响应）未做：广乐没有音频频段。
 - 🔧 11-18 样式面板「背景」页去掉「暂无可调参数」：隐现 = 显示方式（像素 / 流体 / 混合）、取色来源（封面与主题 / 仅封面）分段 + 可读性叠色开关；通用 = 添加封面色彩、暗角开关（同播放面板快捷控件，一份设置）。
 - 🔧 11-18 设置「主页与歌单 → 网格卡片」组顶补 GridCardsPreview（Folia pictures.tsx）：136 高预览框里七张示意卡，大小 / 透明度 / 层级照 computeHexCardFrame 随两条滑杆实时变，全画幅时色块铺满、正方形时 78×78。设置外壳支持 kit Group 的 preview（标签为空的项只画预览）。
+- 🔧 11-18 字幕页补「副字幕内容」（Folia options.subtitleContentMode）：翻译 / 不显示，作用于莫奈、静止排进版面的译文（底部字幕不受影响）。存 subtitle_content_mode。✋ 罗马音两项没有（歌词模型无罗马音）；✋ 时计（Cadenza）版面本来不排译文。

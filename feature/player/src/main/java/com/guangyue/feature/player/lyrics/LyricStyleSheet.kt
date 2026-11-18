@@ -1538,6 +1538,18 @@ private fun SubtitleSettingsRows(
     )
     ToggleRow(label = "字幕背景", checked = s.background, accent = accent, onChange = { onChange(s.copy(background = it)) }, note = "为底部字幕添加主题自适应的柔和扩散光晕，提高复杂画面中的可读性。")
     ToggleRow(label = "下一句歌词添加模糊效果", checked = s.upcomingBlur, accent = accent, onChange = { onChange(s.copy(upcomingBlur = it)) })
+    // Folia options.subtitleContentMode「副字幕内容」（✋ 广乐无罗马音：只有 翻译 / 不显示）。
+    SegmentedRow(
+        label = "副字幕内容",
+        options = listOf("translation" to "翻译", "none" to "不显示"),
+        selected = s.contentMode,
+        onChange = { onChange(s.copy(contentMode = it)) },
+    )
+    Text(
+        text = "莫奈和静止排进自己版面的副字幕显示什么。底部字幕按上面的行数和每行内容显示。",
+        fontSize = 12.sp, lineHeight = 18.sp, color = Gyp.t2,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+    )
     // Folia SUBTITLE_FONT_GROUP「字幕字体」：继承歌词字体 → 关掉后单独选字体；字幕缩放 0.85–1.4。
     Text(
         text = "字幕字体",

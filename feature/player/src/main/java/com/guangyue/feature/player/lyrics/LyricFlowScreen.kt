@@ -219,6 +219,10 @@ fun LyricFlowScreen(
     // 当前句在内核时间轴上的下标：U5 的 currentIndex 与 kernelLines 一一对应（同一份歌词）。
     // 对不上（第一句之前、越界）就当没有内核行，整页回落到 U5 原视图。
     val activeLine: Line? = if (currentIndex in kernelLines.indices) kernelLines[currentIndex] else null
+    // 11-18 Folia subtitleContentMode（副字幕内容）：莫奈 / 静止排进自己版面的译文；「不显示」时去掉。
+    val sideLines = remember(kernelLines, subtitleSettings.contentMode) {
+        if (subtitleSettings.contentMode == "none") kernelLines.map { if (it.translation != null) it.copy(translation = null) else it } else kernelLines
+    }
 
     // 字幕层内容：当前句翻译；这一句没有可读翻译时改画后面几行的预告（Folia 同款规则）。
     // `showText` 与舞台一致 —— 空态（加载中 / 失败 / 无歌词）时不画字幕。
@@ -485,7 +489,7 @@ fun LyricFlowScreen(
         if (lyricStyle == LyricStyle.STILL && kernelLines.isNotEmpty() && emptyKind == null) {
             com.guangyue.feature.player.lyrics.visualizer.StillVignette(dark = darkMode)
             com.guangyue.feature.player.lyrics.visualizer.StillLyricStage(
-                lines = kernelLines,
+                lines = sideLines,
                 currentIndex = currentIndex,
                 lyricsFontScale = lyricsFontScale,
                 primaryColor = onBackdrop,
@@ -499,7 +503,7 @@ fun LyricFlowScreen(
             val monetLandscape = monetConf.screenWidthDp > monetConf.screenHeightDp
             // R1b 的横屏沉浸已上提为全样式通用（见函数开头「沉浸」段）。
             com.guangyue.feature.player.lyrics.visualizer.MonetLyricStage(
-                lines = kernelLines,
+                lines = sideLines,
                 currentIndex = currentIndex,
                 clock = clock,
                 title = playback.item?.title.orEmpty(),
