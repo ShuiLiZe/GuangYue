@@ -649,7 +649,10 @@ private fun ControlsBody(
         }
         // GroupLine：mx-1 my-2 h-px。
         Box(Modifier.padding(horizontal = 4.dp, vertical = 8.dp).fillMaxWidth().height(1.dp).background(colors.line))
-        StyleStepperRow(colors, lyricStyleName, onOpenLyricStyle, onStepLyricStyle, glyph = lyricStyle?.let { st ->
+        StyleStepperRow(colors, lyricStyleName, onOpenLyricStyle, onStepLyricStyle, glyph = if (randomStyleName != null) ({ c: Color ->
+            // Folia drawLyricStyleChoiceGlyph：「随机」项画 Shuffle 18。
+            Icon(GuangYueIcons.Shuffle, null, tint = c, modifier = Modifier.size(18.dp))
+        }) else lyricStyle?.let { st ->
             { c: Color -> com.guangyue.feature.player.lyrics.StyleGlyph(st, c, Modifier.size(18.dp)) }
         }, aside = animationIntensity?.let { ai -> { QuickChip(colors, intensityLabel(ai), "动画强度：" + intensityLabel(ai), onCycleIntensity) } },
             params = if (randomStyleName != null) ({
