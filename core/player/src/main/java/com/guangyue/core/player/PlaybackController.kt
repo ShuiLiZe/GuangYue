@@ -360,8 +360,15 @@ class PlaybackController @Inject constructor(
         val fresh = items.filter { it.key != currentKey }
         val remembered = fresh.mapNotNull { it.toCachedTrack() }
         if (remembered.isNotEmpty()) scope.launch { try { remembered.forEach { this@PlaybackController.tracks.cache(it) } } catch (_: Throwable) { } }
-        queue += fresh
-        player.addMediaItems(fresh.map { it.toMediaItem() })
+        // 11-18 Folia queueAddBehavior「加入队列的默认位置」：append 追加到末尾 / next 追加到下一首。
+        if (PlaybackBehavior.flow(context).value.queueAddNext && queue.isNotEmpty()) {
+            val at = (player.currentMediaItemIndex + 1).coerceIn(0, queue.size)
+            queue.addAll(at, fresh)
+            player.addMediaItems(at, fresh.map { it.toMediaItem() })
+        } else {
+            queue += fresh
+            player.addMediaItems(fresh.map { it.toMediaItem() })
+        }
         publish()
     }
 

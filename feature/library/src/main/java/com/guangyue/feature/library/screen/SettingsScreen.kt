@@ -141,6 +141,9 @@ fun SettingsScreen(
         // Folia PlaybackPage「播放行为」（options.settingsHeadingPlaybackBehavior）。
         add(SettingItem(SettingsPage.PLAYBACK, "声音", "暂停/播放淡入淡出", "暂停前淡出，恢复时淡入。", icon(GuangYueIcons.AudioWaveform),
             trailing = { FoliaToggle(checked = playbackFade, onChange = { on -> playbackFade = on; com.guangyue.core.player.PlaybackFade.set(launchCtx, on) }) }))
+        add(SettingItem(SettingsPage.PLAYBACK, "播放行为", "加入队列的默认位置", null, icon(GuangYueIcons.ListPlus),
+            below = { FoliaSegmented(value = if (behavior.queueAddNext) "next" else "append", options = listOf("append" to "追加到末尾", "next" to "追加到下一首"),
+                onSelect = { v -> com.guangyue.core.player.PlaybackBehavior.update(launchCtx) { it.copy(queueAddNext = v == "next") } }) }))
         add(SettingItem(SettingsPage.PLAYBACK, "播放行为", "无法播放时自动跳过", "歌曲需要会员或购买、只能试听、所在地区不可播放，或原因不明无法播放时，倒计时后跳到下一首。网络问题不会跳过。", icon(GuangYueIcons.SkipForward),
             trailing = { FoliaToggle(checked = behavior.autoSkipUnplayable, onChange = { on -> com.guangyue.core.player.PlaybackBehavior.update(launchCtx) { it.copy(autoSkipUnplayable = on) } }) }))
         add(SettingItem(SettingsPage.PLAYBACK, "播放行为", "播放时阻止休眠", "播放期间保持屏幕常亮。", icon(GuangYueIcons.Sun),
