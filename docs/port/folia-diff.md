@@ -114,3 +114,4 @@
 - 🔧 11-18 样式面板「背景」页去掉「暂无可调参数」：隐现 = 显示方式（像素 / 流体 / 混合）、取色来源（封面与主题 / 仅封面）分段 + 可读性叠色开关；通用 = 添加封面色彩、暗角开关（同播放面板快捷控件，一份设置）。
 - 🔧 11-18 设置「主页与歌单 → 网格卡片」组顶补 GridCardsPreview（Folia pictures.tsx）：136 高预览框里七张示意卡，大小 / 透明度 / 层级照 computeHexCardFrame 随两条滑杆实时变，全画幅时色块铺满、正方形时 78×78。设置外壳支持 kit Group 的 preview（标签为空的项只画预览）。
 - 🔧 11-18 字幕页补「副字幕内容」（Folia options.subtitleContentMode）：翻译 / 不显示，作用于莫奈、静止排进版面的译文（底部字幕不受影响）。存 subtitle_content_mode。✋ 罗马音两项没有（歌词模型无罗马音）；✋ 时计（Cadenza）版面本来不排译文。
+- 🔧 11-18 恢复上次的歌曲（Folia autoPlayOnLaunch）：core/player PlaybackSession 把队列（最多 500 首）、当前下标、进度存 files/playback_session.json（换歌 / 暂停即存，播放中每 5 秒）；冷启动还原，不取链不出声，首页播放条与播放页直接显示上次那首，按播放再 prepare。设置 → 通用 →「启动与窗口 → 进入应用后自动播放」（默认关，开 = 启动即续播），切换时提示 Folia 原文。以前广乐重开 App 队列全丢。

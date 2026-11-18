@@ -225,6 +225,36 @@ class PlaybackController @Inject constructor(
             }
         })
 
+        // 11-18 Folia 恢复上次的歌曲：冷启动还原队列 / 下标 / 进度（autoPlayOnLaunch 开着就续播）。
+        scope.launch {
+            val snap = kotlinx.coroutines.withContext(Dispatchers.IO) { PlaybackSession.load(context) } ?: return@launch
+            if (queue.isNotEmpty() || player.mediaItemCount > 0) return@launch
+            queue.clear()
+            queue += snap.items
+            player.setMediaItems(snap.items.map { it.toMediaItem() }, snap.index, snap.positionMs)
+            if (PlaybackSession.autoPlayOnLaunch(context)) play()
+            publish()
+            // 播放器没 prepare 时 currentPosition 仍是 setMediaItems 给的起点，进度条照常显示。
+        }
+        // 存档：换歌 / 暂停时立即存，播放中每 5 秒存一次进度。
+        scope.launch {
+            var lastSaved = 0L
+            var lastKey: String? = null
+            var lastPlaying = false
+            while (true) {
+                delay(1000)
+                if (queue.isEmpty()) continue
+                val key = player.currentMediaItem?.mediaId
+                val playing = player.isPlaying
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (key != lastKey || playing != lastPlaying || (playing && now - lastSaved >= 5000)) {
+                    lastKey = key; lastPlaying = playing; lastSaved = now
+                    val snap = PlaybackSession.Snapshot(queue.toList(), player.currentMediaItemIndex.coerceAtLeast(0), player.currentPosition.coerceAtLeast(0L))
+                    launch(Dispatchers.IO) { PlaybackSession.save(context, snap) }
+                }
+            }
+        }
+
         // ~4 Hz progress ticker while something is loaded: enough for the mini bar, the lyric
         // flow auto-scroll and the stage highlight, cheap enough to run always.
         scope.launch {
@@ -397,10 +427,17 @@ class PlaybackController @Inject constructor(
     }
 
     fun toggle() {
-        if (player.isPlaying) player.pause() else player.play()
+        if (player.isPlaying) player.pause() else play()
     }
 
-    fun play() = player.play()
+    /** 冷启动恢复的队列没 prepare（只显示、不取链）：第一次按播放时再 prepare 并拉起播放服务。 */
+    fun play() {
+        if (player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0) {
+            GuangYuePlaybackService.start(context)
+            player.prepare()
+        }
+        player.play()
+    }
 
     fun pause() = player.pause()
 

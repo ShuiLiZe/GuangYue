@@ -127,8 +127,22 @@ fun SettingsScreen(
         Icon(v, null, tint = Gyp.t2, modifier = Modifier.size(18.dp))
     }
 
+    // 11-18 Folia GeneralPage「启动与窗口 → 进入应用后自动播放」（useAudioSettingsStore autoPlayOnLaunch，默认关）。
+    // 存在 core/player PlaybackSession 读的同一份 SharedPreferences（playback_session / auto_play_on_launch）。
+    val launchCtx = androidx.compose.ui.platform.LocalContext.current
+    val launchPrefs = androidx.compose.runtime.remember { launchCtx.applicationContext.getSharedPreferences("playback_session", android.content.Context.MODE_PRIVATE) }
+    var autoPlayOnLaunch by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(launchPrefs.getBoolean("auto_play_on_launch", false)) }
+
     // 全部设置项（数据驱动：分页与搜索共用一份）。
     val items = buildList {
+        add(SettingItem(SettingsPage.GENERAL, "启动与窗口", "进入应用后自动播放", "打开应用时续播上次的歌曲。关闭时恢复上次的歌曲并保持暂停。", icon(GuangYueIcons.Play),
+            trailing = {
+                FoliaToggle(checked = autoPlayOnLaunch, onChange = { on ->
+                    autoPlayOnLaunch = on
+                    launchPrefs.edit().putBoolean("auto_play_on_launch", on).apply()
+                    com.guangyue.feature.library.design.StatusToasts.show(if (on) "启动后将自动续播上次的歌曲" else "启动后将恢复上次的歌曲并保持暂停")
+                })
+            }))
         if (daylightChoice != null) {
             // Folia AppearancePage「主题 → 明暗模式」（options.daylightMode*、followSystemThemeDesc），分段照它的顺序 浅色 / 深色 / 跟随系统。
             add(SettingItem(SettingsPage.APPEARANCE, "主题", "明暗模式", "根据系统设置自动切换亮色 / 暗色主题；手动切换明暗模式后将关闭此选项。", icon(if (darkMode) GuangYueIcons.Moon else GuangYueIcons.Sun),
@@ -279,7 +293,7 @@ enum class SettingsPage(val label: String, val desc: String = "") {
     GRAPHICS("动画与性能", "背景动画与动态效果。"),
     PLAYBACK("播放控制", "默认播放音质。"),
     LYRICS("歌词", "歌词时间轴。"),
-    GENERAL("通用", "思索等通用行为。"),
+    GENERAL("通用", "启动与思索等通用行为。"),
     INTEGRATION("连接与集成", "音源插件与取链源。"),
     STORAGE("存储与备份", "下载与本机存储。"),
     ABOUT("关于"),
