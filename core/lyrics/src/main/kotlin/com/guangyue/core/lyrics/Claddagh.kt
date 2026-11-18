@@ -217,7 +217,25 @@ object Claddagh {
     }
 
     /**
-     * 一行所有字的一帧（对应 RingLine handler）。无音频：power = 0（scaleFactor = 1）。
+     * RingLine：环半径随低音放大（scaleFactor = min(1 + power·倍率, 上限)）。
+     * power01 = smoothedBass / 255；平静 0.08 / 1.08，标准 0.25 / 1.25，混乱 0.95 / 1.95。
+     */
+    fun ringScale(power01: Double, intensity: AnimationIntensity): Double {
+        val p = if (power01.isFinite()) power01.coerceIn(0.0, 1.0) else 0.0
+        val (mul, cap) = when (intensity) {
+            AnimationIntensity.CALM -> 0.08 to 1.08
+            AnimationIntensity.CHAOTIC -> 0.95 to 1.95
+            AnimationIntensity.NORMAL -> 0.25 to 1.25
+        }
+        return min(1 + p * mul, cap)
+    }
+
+    /** 中轴线变色比例：max(低音, 人声) − 0.02，÷0.58 封顶 1。 */
+    fun axisColorRatio(bass01: Double, vocal01: Double): Double =
+        min(1.0, max(0.0, max(bass01, vocal01) - 0.02) / 0.58)
+
+    /**
+     * 一行所有字的一帧（对应 RingLine handler）。rx 传入时已乘 [ringScale]（Folia currentRx）。
      */
     fun frame(
         glyphs: List<CladdaghGlyph>,

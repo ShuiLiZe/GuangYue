@@ -63,6 +63,8 @@ jobs:
         run: ./gradlew :app:testDebugUnitTest --tests '*ArtistGridCoords*' --no-daemon --stacktrace
       - name: 打乱队列单测（core:player，只跑 QueueShuffle*）
         run: ./gradlew :core:player:testDebugUnitTest --tests '*QueueShuffle*' --no-daemon --stacktrace
+      - name: 音频频谱单测（core:player，只跑 AudioSpectrum*，照 Folia AnalyserNode）
+        run: ./gradlew :core:player:testDebugUnitTest --tests '*AudioSpectrum*' --no-daemon --stacktrace
       - name: 插件取链回落单测（core:plugin，只跑 CredentialFallback*）
         run: ./gradlew :core:plugin:testDebugUnitTest --tests '*CredentialFallback*' --no-daemon --stacktrace
       - name: 编译 debug APK

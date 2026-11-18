@@ -3,7 +3,8 @@
 //
 // V2e「回环」舞台。手机化：
 //  1. 每字的 CSS blur（离焦最多 8px）在画布里用透明度折减近似（×(1 − blur/16)）。
-//  2. 没有音频电平：环不随低音放大，中轴线固定为主色 20% 透明度的渐隐线段。
+//  2. 音频电平取 core:player AudioLevels（ExoPlayer 旁路 FFT，对应 Folia AnalyserNode）：环随平滑低音放大
+//     （ringScale 随动画强度），中轴线随低音 / 人声变色伸缩，副歌时加辉光。
 //  3. 字号 72px × 歌词字号倍率按 dp 计（同流光，避免与系统字号双重放大）。
 package com.guangyue.feature.player.lyrics.visualizer
 
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import com.guangyue.core.lyrics.AnimationIntensity
 import com.guangyue.core.lyrics.Claddagh
 import com.guangyue.core.lyrics.CladdaghTuning
 import com.guangyue.core.lyrics.GraphemeTimings
@@ -50,6 +52,8 @@ internal fun CladdaghStage(
     accentColor: Color,
     fontFamily: FontFamily,
     reduceMotion: Boolean,
+    intensity: AnimationIntensity = AnimationIntensity.NORMAL,
+    secondaryColor: Color? = null,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -82,32 +86,72 @@ internal fun CladdaghStage(
             if (reduceMotion || abs(target - offset.value) > PI * 1.5) offset.snapTo(target)
             else offset.animateTo(target, spring(dampingRatio = (14.0 / (2 * kotlin.math.sqrt(55.0 * 0.9))).toFloat(), stiffness = 55f / 0.9f))
         }
+        // useSpring(bass, 150/25)、useSpring(vocal, 120/24)；副歌辉光每帧 ±0.05 渐变。
+        val bassSpring = remember { AudioSpring(150.0, 25.0) }
+        val vocalSpring = remember { AudioSpring(120.0, 24.0) }
+        val glowRef = remember { doubleArrayOf(0.0) }
         Canvas(Modifier.fillMaxSize()) {
             val d = density.density
             val cx = size.width / 2
             val cy = size.height / 2
-            // 中轴线：宽 300、高 4，旋转 90° − 倾角，两端渐隐。
+            // 先读时钟：每帧重画，电平才跟得上。
+            val time = clock.readForDraw()
+            val now = System.nanoTime()
+            val bands = StageAudio.bands(now)
+            val bass01 = (bassSpring.step(bands.bass, now) / 255.0).coerceIn(0.0, 1.0)
+            val vocal01 = (vocalSpring.step(bands.vocal, now) / 255.0).coerceIn(0.0, 1.0)
+            val isChorus = lines.getOrNull(center)?.isChorus == true
+            val gTarget = if (isChorus) 1.0 else 0.0
+            glowRef[0] = if (abs(gTarget - glowRef[0]) > 0.05) (glowRef[0] + kotlin.math.sign(gTarget - glowRef[0]) * 0.05).coerceIn(0.0, 1.0) else gTarget
+            // 中轴线：宽 300、高 4，旋转 90° − 倾角，两端渐隐；颜色主色→强调色（同色取次色，再同取白），
+            // 透明度 0.2→0.95，长 ×(1 + bass²·1.5)、粗 ×(1 + bass²·0.5)。
             if (tuning.showAxisLine) {
-                val c = primaryColor.copy(alpha = 0.2f)
+                val ratio = Claddagh.axisColorRatio(bass01, vocal01).toFloat()
+                var to = accentColor
+                if (to == primaryColor && secondaryColor != null) to = secondaryColor
+                if (to == primaryColor) to = Color.White
+                val c = Color(
+                    red = primaryColor.red + (to.red - primaryColor.red) * ratio,
+                    green = primaryColor.green + (to.green - primaryColor.green) * ratio,
+                    blue = primaryColor.blue + (to.blue - primaryColor.blue) * ratio,
+                    alpha = 0.2f + 0.75f * ratio,
+                )
+                val bassSqr = (bass01 * bass01).toFloat()
+                val halfW = 150 * d * (1f + bassSqr * 1.5f)
+                val halfH = 2 * d * (1f + bassSqr * 0.5f)
                 rotate((90 - tuning.ellipseTiltDeg).toFloat(), pivot = Offset(cx, cy)) {
+                    val glow = glowRef[0].toFloat()
+                    if (glow > 0.001f) {
+                        // drop-shadow(0 0 (4 + bass·12)·g px) 用一圈更宽更淡的渐隐条近似。
+                        val gs = ((4 + bass01 * 12) * glow).toFloat() * d
+                        val gc = c.copy(alpha = c.alpha * glow * 0.45f)
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                0f to Color.Transparent, 0.2f to gc, 0.8f to gc, 1f to Color.Transparent,
+                                startX = cx - halfW - gs, endX = cx + halfW + gs,
+                            ),
+                            topLeft = Offset(cx - halfW - gs, cy - halfH - gs),
+                            size = androidx.compose.ui.geometry.Size(2 * (halfW + gs), 2 * (halfH + gs)),
+                        )
+                    }
                     drawRect(
                         brush = Brush.horizontalGradient(
                             0f to Color.Transparent, 0.2f to c, 0.8f to c, 1f to Color.Transparent,
-                            startX = cx - 150 * d, endX = cx + 150 * d,
+                            startX = cx - halfW, endX = cx + halfW,
                         ),
-                        topLeft = Offset(cx - 150 * d, cy - 2 * d),
-                        size = androidx.compose.ui.geometry.Size(300 * d, 4 * d),
+                        topLeft = Offset(cx - halfW, cy - halfH),
+                        size = androidx.compose.ui.geometry.Size(2 * halfW, 2 * halfH),
                     )
                 }
             }
             if (lines.isEmpty() || center < 0) return@Canvas
-            val time = clock.readForDraw()
+            val ringRx = rx * Claddagh.ringScale(bass01, intensity)
             val lineOffset = offset.value.toDouble()
             val active = glyphs(center)
             for (idx in (center - 1)..(center + 2)) {
                 val line = lines.getOrNull(idx) ?: continue
                 val gs = glyphs(idx)
-                val frames = Claddagh.frame(gs, line, idx, center, center, lines, active, time, lineOffset, rx, fontPx, tuning)
+                val frames = Claddagh.frame(gs, line, idx, center, center, lines, active, time, lineOffset, ringRx, fontPx, tuning)
                 frames.forEachIndexed { i, f ->
                     if (f == null) return@forEachIndexed
                     val blurFade = (1 - f.blur / 16).coerceIn(0.4, 1.0)

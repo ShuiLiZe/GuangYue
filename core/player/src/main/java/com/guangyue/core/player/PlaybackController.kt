@@ -131,7 +131,7 @@ class PlaybackController @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    val player: ExoPlayer = ExoPlayer.Builder(context)
+    val player: ExoPlayer = ExoPlayer.Builder(context, AudioTapRenderersFactory(context))
         .setMediaSourceFactory(
             androidx.media3.exoplayer.source.DefaultMediaSourceFactory(dataSources.factory()),
         )
@@ -230,6 +230,7 @@ class PlaybackController @Inject constructor(
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                AudioSpectrum.playing = isPlaying
                 // 真播出声了就把重试兜底撤掉。
                 if (isPlaying) {
                     retryWatchdog?.cancel()
@@ -656,4 +657,20 @@ class PlaybackController @Inject constructor(
         /** 二次 prepare 后等多久还没起播就判失败（毫秒）。 */
         private const val PREPARE_TIMEOUT_MS = 8_000L
     }
+}
+
+/** 在默认音频链末尾挂 [AudioSpectrum] 旁路（对应 Folia 的 AnalyserNode），供歌词舞台读电平。 */
+@UnstableApi
+private class AudioTapRenderersFactory(context: Context) :
+    androidx.media3.exoplayer.DefaultRenderersFactory(context) {
+    override fun buildAudioSink(
+        context: Context,
+        enableFloatOutput: Boolean,
+        enableAudioTrackPlaybackParams: Boolean,
+    ): androidx.media3.exoplayer.audio.AudioSink =
+        androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+            .setEnableFloatOutput(enableFloatOutput)
+            .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+            .setAudioProcessors(arrayOf(androidx.media3.exoplayer.audio.TeeAudioProcessor(AudioSpectrum)))
+            .build()
 }

@@ -483,6 +483,7 @@ fun LyricFlowScreen(
                 accentColor = lyricAccent,
                 fontFamily = lyricFont(GuangYueDesign.Serif),
                 reduceMotion = reduceMotion,
+                intensity = lyricCommon.intensity,
             )
         }
         // V2c 静止：Folia 整屏一层（absolute inset-0）+ 暗角；字幕层不画（译文由本层自己排在每句下）。

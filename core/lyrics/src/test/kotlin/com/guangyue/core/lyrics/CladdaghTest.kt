@@ -32,4 +32,18 @@ class CladdaghTest {
         val mid = Claddagh.wordOffset(g, 1.25, null)
         assertEquals((g[0].nominalAngle + g[1].nominalAngle) / 2, mid, 1e-9)
     }
+
+    @Test fun ringScaleFollowsIntensity() {
+        assertEquals(1.0, Claddagh.ringScale(0.0, AnimationIntensity.NORMAL), 1e-9)
+        assertEquals(1.125, Claddagh.ringScale(0.5, AnimationIntensity.NORMAL), 1e-9)
+        assertEquals(1.08, Claddagh.ringScale(1.0, AnimationIntensity.CALM), 1e-9)
+        assertEquals(1.95, Claddagh.ringScale(1.0, AnimationIntensity.CHAOTIC), 1e-9)
+        assertEquals(1.0, Claddagh.ringScale(Double.NaN, AnimationIntensity.CHAOTIC), 1e-9)
+    }
+
+    @Test fun axisColorRatioClamps() {
+        assertEquals(0.0, Claddagh.axisColorRatio(0.01, 0.0), 1e-9)
+        assertEquals(1.0, Claddagh.axisColorRatio(0.9, 0.2), 1e-9)
+        assertEquals(0.28 / 0.58, Claddagh.axisColorRatio(0.1, 0.3), 1e-9)
+    }
 }

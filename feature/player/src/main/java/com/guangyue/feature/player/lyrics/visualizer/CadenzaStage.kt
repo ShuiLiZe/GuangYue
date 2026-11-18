@@ -7,7 +7,8 @@
 //  1. Folia 的辉光是 DOM text-shadow（3 层 40px），这里用 drawText 的 Shadow 一层模拟；逐字辉光（非 CJK）
 //     暂按整词处理（取各字辉光最大值）。
 //  2. 单词的 CSS blur（入场 10px）在 Compose 画布里没有廉价等价物，用透明度过渡代替。
-//  3. 没有音频电平：audioPower 取 0，motionEnergy = 0（只剩 sin 抬升 3dp）。
+//  3. audioPower 取 core:player AudioLevels（ExoPlayer 旁路 FFT）：motionEnergy = power/255·motionAmount，
+//     抬升 sin(t·2.3)·(3 + 8·能量)，逐词漂浮 ±4 / ±2.5。
 package com.guangyue.feature.player.lyrics.visualizer
 
 import androidx.compose.foundation.Canvas
@@ -87,11 +88,13 @@ internal fun CadenzaStage(
         fun advance(time: Double, dt: Double) {
             val p = prepared ?: return
             val lt = timing ?: return
-            val focusY = vh * 0.42 + sin(time * 2.3) * 3.0
+            val energy = if (settleSteps > 0) 0.0 else (StageAudio.bands().power / 255.0).coerceIn(0.0, 1.0)
+            val motionEnergy = energy * tuning.motionAmount
+            val focusY = vh * 0.42 + sin(time * 2.3) * (3.0 + motionEnergy * 8)
             val ordered = p.placements.sortedBy { Cadenza.wordStatus(time, lt, it.word).ordinal.let { o -> if (o == 0) 0 else if (o == 2) 1 else 2 } }
             ordered.forEachIndexed { i, pl ->
                 val st = Cadenza.wordStatus(time, lt, pl.word)
-                states[pl.id] = Cadenza.step(states[pl.id], pl, i, st, time, dt, lt, vw, focusY, 0.0, tuning, intensity)
+                states[pl.id] = Cadenza.step(states[pl.id], pl, i, st, time, dt, lt, vw, focusY, motionEnergy, tuning, intensity)
             }
         }
 
