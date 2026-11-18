@@ -113,6 +113,14 @@ fun GuangYueNavHost(
     val openPlayerAfterPlay: () -> Unit = { if (playbackEntryView != "stay") navController.navigate(Routes.LYRIC_FLOW) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val playbackState by playback.state.collectAsStateWithLifecycle()
+    // 11-18 Folia「播放时阻止休眠」：开着且正在播放时屏幕常亮。
+    val keepAwakeView = androidx.compose.ui.platform.LocalView.current
+    val behaviorSettings by com.guangyue.core.player.PlaybackBehavior.flow(keepAwakeView.context).collectAsStateWithLifecycle()
+    val keepAwake = behaviorSettings.preventDisplaySleep && playbackState.isPlaying
+    androidx.compose.runtime.DisposableEffect(keepAwake) {
+        keepAwakeView.keepScreenOn = keepAwake
+        onDispose { keepAwakeView.keepScreenOn = false }
+    }
 
     // 迷你播放条：三个顶层页共用同一份，避免各页各建一条。
     // 0.0.9（U2）：加了「下一首」按钮（走现有播放器 playback.next()），文案全部走 strings.xml。

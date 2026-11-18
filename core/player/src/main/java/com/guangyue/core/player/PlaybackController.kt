@@ -196,6 +196,19 @@ class PlaybackController @Inject constructor(
                     )
                     android.util.Log.w(TAG, "playback error (final), surfacing: $text")
                     _state.value = _state.value.copy(error = text)
+                    // 11-18 Folia autoSkipUnplayable：不是网络问题（连不上 / 超时）就倒计时 3 秒跳下一首。
+                    val network = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                        error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+                    if (!network && PlaybackBehavior.flow(context).value.autoSkipUnplayable && player.hasNextMediaItem()) {
+                        val failedKey = key
+                        scope.launch {
+                            delay(3000)
+                            if (player.currentMediaItem?.mediaId == failedKey && !player.isPlaying) {
+                                player.seekToNextMediaItem()
+                                play()
+                            }
+                        }
+                    }
                 }
             }
 

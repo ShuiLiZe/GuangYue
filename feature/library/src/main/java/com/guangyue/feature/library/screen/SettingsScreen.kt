@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -133,8 +134,14 @@ fun SettingsScreen(
     val launchPrefs = androidx.compose.runtime.remember { launchCtx.applicationContext.getSharedPreferences("playback_session", android.content.Context.MODE_PRIVATE) }
     var autoPlayOnLaunch by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(launchPrefs.getBoolean("auto_play_on_launch", false)) }
 
+    val behavior by com.guangyue.core.player.PlaybackBehavior.flow(launchCtx).collectAsState()
     // 全部设置项（数据驱动：分页与搜索共用一份）。
     val items = buildList {
+        // Folia PlaybackPage「播放行为」（options.settingsHeadingPlaybackBehavior）。
+        add(SettingItem(SettingsPage.PLAYBACK, "播放行为", "无法播放时自动跳过", "歌曲需要会员或购买、只能试听、所在地区不可播放，或原因不明无法播放时，倒计时后跳到下一首。网络问题不会跳过。", icon(GuangYueIcons.SkipForward),
+            trailing = { FoliaToggle(checked = behavior.autoSkipUnplayable, onChange = { on -> com.guangyue.core.player.PlaybackBehavior.update(launchCtx) { it.copy(autoSkipUnplayable = on) } }) }))
+        add(SettingItem(SettingsPage.PLAYBACK, "播放行为", "播放时阻止休眠", "播放期间保持屏幕常亮。", icon(GuangYueIcons.Sun),
+            trailing = { FoliaToggle(checked = behavior.preventDisplaySleep, onChange = { on -> com.guangyue.core.player.PlaybackBehavior.update(launchCtx) { it.copy(preventDisplaySleep = on) } }) }))
         add(SettingItem(SettingsPage.GENERAL, "启动与窗口", "进入应用后自动播放", "打开应用时续播上次的歌曲。关闭时恢复上次的歌曲并保持暂停。", icon(GuangYueIcons.Play),
             trailing = {
                 FoliaToggle(checked = autoPlayOnLaunch, onChange = { on ->
@@ -291,7 +298,7 @@ enum class SettingsPage(val label: String, val desc: String = "") {
     PLAYER("播放页", "播放后进入的视图、歌词动画、背景与町景。"),
     HOME("主页与歌单", "资料库界面、卡片样式、顶部胶囊入口与卡片位置。"),
     GRAPHICS("动画与性能", "背景动画与动态效果。"),
-    PLAYBACK("播放控制", "默认播放音质。"),
+    PLAYBACK("播放控制", "默认播放音质与播放行为。"),
     LYRICS("歌词", "歌词时间轴。"),
     GENERAL("通用", "启动与思索等通用行为。"),
     INTEGRATION("连接与集成", "音源插件与取链源。"),
