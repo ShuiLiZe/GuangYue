@@ -219,6 +219,10 @@ fun StagePanel(
     /** 11-18 Folia 随机池（选择随机池）：(样式, 名字, 在池里)；null = 不画。 */
     randomPool: List<Triple<com.guangyue.feature.player.lyrics.LyricStyle, String, Boolean>>? = null,
     onRandomPool: (List<com.guangyue.feature.player.lyrics.LyricStyle>) -> Unit = {},
+    commonCoverColor: Boolean = false,
+    onToggleCoverColor: () -> Unit = {},
+    commonVignette: Boolean = true,
+    onToggleVignette: () -> Unit = {},
 ) {
     val colors = stagePanelColors(dark)
     var qualityPick by remember { mutableStateOf(initialQualityPick) }
@@ -346,6 +350,10 @@ fun StagePanel(
                                     onRerollStyle = onRerollStyle,
                                     randomPool = randomPool,
                                     onRandomPool = onRandomPool,
+                                    commonCoverColor = commonCoverColor,
+                                    onToggleCoverColor = onToggleCoverColor,
+                                    commonVignette = commonVignette,
+                                    onToggleVignette = onToggleVignette,
                                 )
                                 StagePanelTab.QUEUE -> QueueBody(
                                     colors = colors,
@@ -633,6 +641,10 @@ private fun ControlsBody(
     /** 11-18 Folia 随机池（选择随机池）：(样式, 名字, 在池里)；null = 不画。 */
     randomPool: List<Triple<com.guangyue.feature.player.lyrics.LyricStyle, String, Boolean>>? = null,
     onRandomPool: (List<com.guangyue.feature.player.lyrics.LyricStyle>) -> Unit = {},
+    commonCoverColor: Boolean = false,
+    onToggleCoverColor: () -> Unit = {},
+    commonVignette: Boolean = true,
+    onToggleVignette: () -> Unit = {},
 ) {
     var poolOpen by remember { mutableStateOf(false) }
     if (randomPool == null) poolOpen = false
@@ -688,6 +700,11 @@ private fun ControlsBody(
                 colors, backgroundName, onOpenBackground, onStepBackground,
                 caption = "背景类型", stepNoun = "背景",
                 glyph = { c -> com.guangyue.feature.player.lyrics.BackgroundGlyph(backgroundId, c, Modifier.size(18.dp)) },
+                // Folia common entry renderQuickControls：添加封面色彩（Cone）/ 暗角（Aperture）。
+                params = if (backgroundId == "common") ({
+                    QuickToggle(colors, accent, commonCoverColor, if (commonCoverColor) "添加封面色彩" else "使用默认色彩", GuangYueIcons.Cone, onToggleCoverColor)
+                    QuickToggle(colors, accent, commonVignette, "暗角", GuangYueIcons.Aperture, onToggleVignette)
+                }) else null,
             )
         }
         Spacer(Modifier.height(4.dp))

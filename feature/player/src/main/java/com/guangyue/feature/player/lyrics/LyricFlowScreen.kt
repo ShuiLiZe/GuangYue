@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -159,6 +160,9 @@ fun LyricFlowScreen(
     onCycleMode: (() -> Unit)? = null,
     /** R2：背景类型——true =「隐现」（Folia 默认，API 33+），false =「通用」（流体 + 几何）。 */
     latentBackground: Boolean = true,
+    /** 11-18 Folia 通用背景：取封面色（关 = 主题底色盖住流体封面层）、暗角。默认保持旧观感（取证 / 旧调用）。 */
+    commonCoverColor: Boolean = true,
+    commonVignette: Boolean = false,
     /** 截图用：播放胶囊一开始就是展开态。 */
     initialBarExpanded: Boolean = false,
     /** 样式入口的无障碍文案（feature:player 无资源表，由 app 侧注入）。 */
@@ -396,13 +400,29 @@ fun LyricFlowScreen(
                     paused = !playback.isPlaying,
                     staticMode = reduceMotion || motionPrefs.staticMode,
                 )
-            } else if (!motionPrefs.staticMode) com.guangyue.feature.player.lyrics.visualizer.GeometricBackgroundLayer(
-                seed = (coverUrl ?: "").hashCode().toLong(),
-                secondaryColor = theme.secondary,
-                accentColor = lyricAccent,
-                // Robolectric 下逐帧循环会让 waitForIdle 永远等不到空闲（截图套件 AppNotIdleException），按暂停画静帧。
-                paused = !playback.isPlaying || reduceMotion || runningUnderRobolectric,
-            )
+            } else {
+                // Folia common entry：没开「添加封面色彩」时只有主题底色（不透明），开了是流体封面层 + 底色 @0.75。
+                if (!commonCoverColor) Box(Modifier.fillMaxSize().background(palette.backgroundColor))
+                if (!motionPrefs.staticMode) com.guangyue.feature.player.lyrics.visualizer.GeometricBackgroundLayer(
+                    seed = (coverUrl ?: "").hashCode().toLong(),
+                    secondaryColor = theme.secondary,
+                    accentColor = lyricAccent,
+                    // Robolectric 下逐帧循环会让 waitForIdle 永远等不到空闲（截图套件 AppNotIdleException），按暂停画静帧。
+                    paused = !playback.isPlaying || reduceMotion || runningUnderRobolectric,
+                )
+                // Folia GeometricBackground.css 暗角：radial-gradient(circle, transparent 40%, rgba(0,0,0,.6))。
+                if (commonVignette) Box(
+                    Modifier.fillMaxSize().drawBehind {
+                        val r = kotlin.math.hypot(size.width, size.height) / 2f
+                        drawRect(
+                            androidx.compose.ui.graphics.Brush.radialGradient(
+                                0.4f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.6f),
+                                center = center, radius = r,
+                            ),
+                        )
+                    },
+                )
+            }
         }
         // ---------------- 浮名：整屏画布（edge-to-edge，系统栏/顶栏/字幕层都浮在它上面） ----------------
         // 对应 Folia VisualizerFume.tsx:333-350：画布是 VisualizerShell 里 absolute inset-0 的一层，

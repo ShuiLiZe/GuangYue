@@ -157,6 +157,16 @@ class LyricStyleViewModel @Inject constructor(
         viewModelScope.launch { preferences.randomStylePerSong = on }
     }
 
+    private val _commonCover = MutableStateFlow(preferences.commonCoverColor)
+    /** 通用背景取封面色（Folia common.useCoverColorBg）。 */
+    val commonCoverColor: StateFlow<Boolean> = _commonCover.asStateFlow()
+    fun setCommonCoverColor(on: Boolean) { _commonCover.value = on; viewModelScope.launch { preferences.commonCoverColor = on } }
+
+    private val _commonVignette = MutableStateFlow(preferences.commonVignette)
+    /** 通用背景暗角（Folia common.disableVignette 取反）。 */
+    val commonVignette: StateFlow<Boolean> = _commonVignette.asStateFlow()
+    fun setCommonVignette(on: Boolean) { _commonVignette.value = on; viewModelScope.launch { preferences.commonVignette = on } }
+
     private val _pool = MutableStateFlow(preferences.randomStylePool)
     /** 随机池（Folia randomVisualizerModes）：参与每首随机的样式 id；空 = 全部。 */
     val randomPool: StateFlow<Set<String>> = _pool.asStateFlow()

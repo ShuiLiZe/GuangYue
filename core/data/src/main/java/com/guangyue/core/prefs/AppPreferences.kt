@@ -278,6 +278,16 @@ class AppPreferences @Inject constructor(
      * R2：歌词舞台背景类型（Folia `visualizerBackgroundMode`）。"latent" = 隐现（Folia 默认
      * DEFAULT_VISUALIZER_BACKGROUND_MODE），"common" = 通用（流体 + 几何）。
      */
+    /** Folia common.useCoverColorBg：通用背景取封面色（流体封面层）；默认关 = 主题底色。 */
+    var commonCoverColor: Boolean
+        get() = prefs.getBoolean(KEY_COMMON_COVER, false)
+        set(value) = prefs.edit().putBoolean(KEY_COMMON_COVER, value).apply()
+
+    /** Folia common.disableVignette 的反面：通用背景画暗角；默认开。 */
+    var commonVignette: Boolean
+        get() = prefs.getBoolean(KEY_COMMON_VIGNETTE, true)
+        set(value) = prefs.edit().putBoolean(KEY_COMMON_VIGNETTE, value).apply()
+
     var visualizerBackgroundId: String
         get() = prefs.getString(KEY_VIS_BACKGROUND, "latent")?.takeIf { it == "latent" || it == "common" } ?: "latent"
         set(value) = prefs.edit().putString(KEY_VIS_BACKGROUND, value).apply()
@@ -359,6 +369,8 @@ class AppPreferences @Inject constructor(
         const val KEY_PONDER_TOUCH_BUTTON = "ponder_touch_button"
         const val KEY_PLAY_ENTRY = "playback_entry_view"
         const val KEY_VIS_BACKGROUND = "visualizer_background_mode"
+        const val KEY_COMMON_COVER = "common_use_cover_color_bg"
+        const val KEY_COMMON_VIGNETTE = "common_vignette"
         const val KEY_HOME_STYLE = "library_home_style"
         const val KEY_COLLECTION_STYLE = "library_collection_style"
         const val FILE = "guangyue_prefs"

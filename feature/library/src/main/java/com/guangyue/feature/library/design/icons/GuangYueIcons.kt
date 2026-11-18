@@ -4706,6 +4706,22 @@ object GuangYueIcons {
             .build()
     }
 
+    /** Cone = lucide `cone`（通用背景「添加封面色彩」快捷开关）。 */
+    val Cone: ImageVector by lazy {
+        ImageVector.Builder(name = "Cone", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
+            .addPath(
+                pathData = addPathNodes("m20.9 18.55-8-15.98a1 1 0 0 0-1.8 0l-8 15.98"),
+                fill = null, stroke = SolidColor(Color.Black), strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round,
+            )
+            .addPath(
+                pathData = addPathNodes("M3 19a9 3 0 1 0 18 0a9 3 0 1 0 -18 0"),
+                fill = null, stroke = SolidColor(Color.Black), strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round,
+            )
+            .build()
+    }
+
     /** Aperture = lucide `aperture` */
     val Aperture: ImageVector by lazy {
         ImageVector.Builder(

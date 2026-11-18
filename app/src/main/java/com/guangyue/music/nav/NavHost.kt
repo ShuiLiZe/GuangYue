@@ -1314,6 +1314,8 @@ fun GuangYueNavHost(
             // 11-18 Folia randomVisualizerModePerSong：开着时每换一首歌另抽一种样式（不重复上一首的）。
             val randomStyle by styleVm.randomStyle.collectAsStateWithLifecycle()
             val randomPool by styleVm.randomPool.collectAsStateWithLifecycle()
+            val commonCover by styleVm.commonCoverColor.collectAsStateWithLifecycle()
+            val commonVignette by styleVm.commonVignette.collectAsStateWithLifecycle()
             var randomPickId by rememberSaveable { mutableStateOf<String?>(null) }
             var randomPickFor by rememberSaveable { mutableStateOf<String?>(null) }
             val songKeyForStyle = playbackState.item?.key
@@ -1400,6 +1402,8 @@ fun GuangYueNavHost(
                     subtitleSettings = subtitleSettings,
                     lyricCommon = lyricCommon,
                     latentBackground = visBackground == "latent",
+                    commonCoverColor = commonCover,
+                    commonVignette = commonVignette,
                 )
                 StagePanelHost(
                     open = panelOpen,
@@ -1431,6 +1435,10 @@ fun GuangYueNavHost(
                     randomStyle = randomStyle,
                     onPickRandom = { styleVm.setRandom(true) },
                     onRerollStyle = { randomPickId = pickRandomLyricStyle(style, randomPool).id },
+                    commonCoverColor = commonCover,
+                    onToggleCoverColor = { styleVm.setCommonCoverColor(!commonCover) },
+                    commonVignette = commonVignette,
+                    onToggleVignette = { styleVm.setCommonVignette(!commonVignette) },
                     randomPool = randomPool,
                     onRandomPool = { ids ->
                         styleVm.setRandomPool(ids)

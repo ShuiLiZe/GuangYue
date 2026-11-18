@@ -109,3 +109,4 @@
 - ✋ 广乐平台来自插件，列可用插件；末行「音源管理…」广乐多的。✋ Folia 新源码（SwitcherPill）点头像直接开登录窗，APK 仍是弹层，照 APK。
 - 🔧 11-18 随机池照 Folia `random/useRandomPool` + `RandomPoolPicker`：随机开着时参数行在「这首抽到的样式」旁多「选择随机池」胶囊，点开在样式行下就地展开 4 列格（样式字形 + 名字，开着 = 强调色环），头行 随机池 · 已选 n/16 · 全选；至少留一种（再关提示「至少选择一种样式」）。每首随机与「另抽」只在池里挑；池变了且这首的样式不在池里就马上另抽。存 random_visualizer_modes（全选存空 = 全部）。✋ Folia 是面板上方弹层，广乐就地展开。
 - ✋ 11-18 模拟器 emulator-5554 下午被别的任务（SteamX 云挂卡）占用且反复重启，本轮起不在它上面点按，改靠 PC 编译 + CI 取证。
+- 🔧 11-18 通用背景快捷开关照 `backgrounds/common/entry.tsx` renderQuickControls：控制页签「背景类型」行选通用时，参数行出「添加封面色彩」（Cone，common.useCoverColorBg，默认关 = 主题底色盖住流体封面层）与「暗角」（Aperture，默认开，radial transparent 40% → 黑 60%）。存 common_use_cover_color_bg / common_vignette。✋ 广乐原先通用背景一直是封面流体 + 无暗角；现跟 Folia 默认（底色 + 暗角），想要原样子点亮「添加封面色彩」、关「暗角」。

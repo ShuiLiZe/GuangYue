@@ -263,6 +263,11 @@ fun StagePanelHost(
     /** 11-18 Folia 随机池：参与随机的样式 id（空 = 全部）与改动回调；null 回调不画「选择随机池」。 */
     randomPool: Set<String> = emptySet(),
     onRandomPool: ((Set<String>) -> Unit)? = null,
+    /** 11-18 Folia 通用背景快捷开关（背景行参数行）：添加封面色彩 / 暗角。 */
+    commonCoverColor: Boolean = false,
+    onToggleCoverColor: () -> Unit = {},
+    commonVignette: Boolean = true,
+    onToggleVignette: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     // 2026-11-10：LocalTrackRepository 从来没人提供（一直是 null），收藏点了只改了图标、没写库——
@@ -400,6 +405,10 @@ fun StagePanelHost(
             onRandomPool?.invoke(if (picked.size >= LyricStylePanelOrder.size) emptySet() else picked.map { it.id }.toSet())
         },
         onOpenLyricStyle = onOpenLyricStyle,
+        commonCoverColor = commonCoverColor,
+        onToggleCoverColor = onToggleCoverColor,
+        commonVignette = commonVignette,
+        onToggleVignette = onToggleVignette,
         lyricStyle = lyricStyle,
         backgroundId = if (backgrounds.isEmpty()) null else background.takeIf { id -> backgrounds.any { it.first == id } } ?: backgrounds.first().first,
         backgroundName = backgrounds.firstOrNull { it.first == background }?.second ?: backgrounds.firstOrNull()?.second.orEmpty(),
