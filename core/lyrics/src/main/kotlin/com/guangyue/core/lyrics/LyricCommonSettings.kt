@@ -3,6 +3,7 @@
 //     字号 SliderRow min 0.85 / max 1.4 / step 0.05，刻度 90% 100% 110% 125%（VisPlayground FONT_SCALE_OPTIONS）；
 //     整体透明度 SliderRow min 0.2 / max 1 / step 0.05（visualizer_opacity，VisualizerBackdrop 整层 opacity）。
 //   字体 FontTiles（theme.fontStyle：sans / serif / mono）。✋ 广乐多一项「跟随样式」（空串，默认）：各舞台原本按样式定的字体；
+//   动画强度：panelTab/controls/AppearanceSection.tsx ANIMATION_INTENSITIES / cycleAnimationIntensity。
 //   ✋ 系统字体（custom）与字重未移植。
 package com.guangyue.core.lyrics
 
@@ -16,6 +17,8 @@ data class LyricCommonSettings(
     val opacity: Double = 1.0,
     /** 歌词字体：""（跟随样式）/ "sans" / "serif" / "mono"。 */
     val fontStyle: String = "",
+    /** 动画强度（Folia theme.animationIntensity：calm / normal / chaotic；播放面板歌词样式行右侧胶囊轮换）。 */
+    val intensity: AnimationIntensity = AnimationIntensity.NORMAL,
 ) {
     companion object {
         val DEFAULT = LyricCommonSettings()
@@ -32,7 +35,16 @@ data class LyricCommonSettings(
             fontScale = snap(if (s.fontScale.isFinite()) s.fontScale.coerceIn(FONT_SCALE_MIN, FONT_SCALE_MAX) else 1.0),
             opacity = snap(if (s.opacity.isFinite()) s.opacity.coerceIn(OPACITY_MIN, OPACITY_MAX) else 1.0),
             fontStyle = if (s.fontStyle in FONT_STYLES) s.fontStyle else "",
+            intensity = s.intensity,
         )
+
+        /** Folia cycleAnimationIntensity：calm → normal → chaotic → calm。 */
+        fun nextIntensity(i: AnimationIntensity): AnimationIntensity =
+            AnimationIntensity.entries[(i.ordinal + 1) % AnimationIntensity.entries.size]
+
+        /** 由存储串读回（未知值回 NORMAL）。 */
+        fun parseIntensity(v: String?): AnimationIntensity =
+            AnimationIntensity.entries.firstOrNull { it.name == v } ?: AnimationIntensity.NORMAL
 
         private fun snap(v: Double) = (v / 0.05).roundToInt() * 0.05
     }

@@ -1385,6 +1385,8 @@ fun GuangYueNavHost(
                         styleSheetSection = 3
                         styleSheetOpen = true
                     },
+                    animationIntensity = lyricCommon.intensity,
+                    onCycleIntensity = { styleVm.updateCommon(lyricCommon.copy(intensity = com.guangyue.core.lyrics.LyricCommonSettings.nextIntensity(lyricCommon.intensity))) },
                     // 2026-11-14：以前「加入歌单」直接跳搜索页（错的）。改成 Folia AddToPlaylistHost：
                     // 弹出歌单选择弹层，把当前这首加进选中的歌单，或新建歌单再加。
                     onAddToPlaylist = {

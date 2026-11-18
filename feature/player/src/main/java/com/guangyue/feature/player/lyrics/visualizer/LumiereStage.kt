@@ -237,6 +237,8 @@ internal fun LumiereStage(
     followThemeAccent: Boolean = false,
     /** 暗场是否取中性灰（见文件头偏离 8）。缺省开。 */
     neutralDarkField: Boolean = true,
+    /** 动画强度（Folia lumiereUnitLayout motion：calm 0.6 / normal 1 / chaotic 1.4）。 */
+    intensity: com.guangyue.core.lyrics.AnimationIntensity = com.guangyue.core.lyrics.AnimationIntensity.NORMAL,
 ) {
     val program = remember(lines, seed, seamless) { compileLumiereProgram(lines, seed, seamless = seamless) }
     val density = LocalDensity.current.density
@@ -272,7 +274,11 @@ internal fun LumiereStage(
     val fogFields = remember { List(2) { LumiereFogField() } }
     val fieldCaches = remember { List(2) { LumiereFieldCache() } }
     val measure = remember(measurePaint) { LumiereTextMeasure { text, px -> measurePaint.textSize = px.toFloat(); measurePaint.measureText(text).toDouble() } }
-    val motion = if (reduceMotion) 0.6 else 1.0
+    val motion = if (reduceMotion) 0.6 else when (intensity) {
+        com.guangyue.core.lyrics.AnimationIntensity.CALM -> 0.6
+        com.guangyue.core.lyrics.AnimationIntensity.NORMAL -> 1.0
+        com.guangyue.core.lyrics.AnimationIntensity.CHAOTIC -> 1.4
+    }
     BoxWithConstraints(modifier.fillMaxSize()) {
         val wDp = constraints.maxWidth / density
         val hDp = constraints.maxHeight / density

@@ -16,4 +16,13 @@ class LyricCommonSettingsTest {
         assertEquals("", LyricCommonSettings.sanitize(LyricCommonSettings(fontStyle = "comic")).fontStyle)
         assertEquals("mono", LyricCommonSettings.sanitize(LyricCommonSettings(fontStyle = "mono")).fontStyle)
     }
+
+    @Test fun `动画强度按 calm normal chaotic 轮换、未知串回 normal`() {
+        assertEquals(AnimationIntensity.CHAOTIC, LyricCommonSettings.nextIntensity(AnimationIntensity.NORMAL))
+        assertEquals(AnimationIntensity.CALM, LyricCommonSettings.nextIntensity(AnimationIntensity.CHAOTIC))
+        assertEquals(AnimationIntensity.NORMAL, LyricCommonSettings.nextIntensity(AnimationIntensity.CALM))
+        assertEquals(AnimationIntensity.NORMAL, LyricCommonSettings.parseIntensity("wild"))
+        assertEquals(AnimationIntensity.CALM, LyricCommonSettings.parseIntensity("CALM"))
+        assertEquals(AnimationIntensity.CHAOTIC, LyricCommonSettings.sanitize(LyricCommonSettings(intensity = AnimationIntensity.CHAOTIC)).intensity)
+    }
 }

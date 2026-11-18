@@ -309,7 +309,7 @@ fun LyricFlowScreen(
                     line = activeLine,
                     clock = clock,
                     tuning = classicTuning,
-                    intensity = AnimationIntensity.NORMAL,
+                    intensity = lyricCommon.intensity,
                     reduceMotion = false,
                     viewportWidthPx = viewportWidthPx,
                     viewportHeightPx = viewportHeightPx,
@@ -416,7 +416,7 @@ fun LyricFlowScreen(
                 lines = kernelLines,
                 clock = clock,
                 tuning = fumeTuning,
-                intensity = AnimationIntensity.NORMAL,
+                intensity = lyricCommon.intensity,
                 lyricsFontScale = lyricsFontScale,
                 activeColor = lyricAccent,
                 baseColor = onBackdrop,
@@ -436,7 +436,7 @@ fun LyricFlowScreen(
                 line = activeLine,
                 clock = clock,
                 tuning = com.guangyue.core.lyrics.CadenzaTuning.DEFAULT,
-                intensity = AnimationIntensity.NORMAL,
+                intensity = lyricCommon.intensity,
                 reduceMotion = reduceMotion,
                 lyricsFontScale = lyricsFontScale,
                 activeColor = lyricAccent,
@@ -553,6 +553,7 @@ fun LyricFlowScreen(
                 songTitle = playback.item?.title,
                 songArtist = playback.item?.artist,
                 songAlbum = playback.item?.album,
+                intensity = lyricCommon.intensity,
             )
         }
         // R5 绘光：Folia lumiere 原版对译（段落 → 镜头 → 光位；暗场 + 光场着色器 + 歌词窗口 + 画框），整屏铺满。
@@ -571,6 +572,7 @@ fun LyricFlowScreen(
                 secondaryColor = theme.secondary,
                 backgroundColor = theme.background,
                 seed = playback.item?.key ?: "lumiere",
+                intensity = lyricCommon.intensity,
             )
         }
         // 町景：Folia machi 城寨夜景（GL 3D 舞台，歌词在楼面大屏上；天气 auto 按 seed，同 Folia 默认）。整屏铺满，字幕层照常画译文。
@@ -796,7 +798,7 @@ fun LyricFlowScreen(
                         line = activeLine,
                         clock = clock,
                         tuning = partitaTuning,
-                        intensity = AnimationIntensity.NORMAL,
+                        intensity = lyricCommon.intensity,
                         reduceMotion = reduceMotion,
                         viewportWidthDp = LocalConfiguration.current.screenWidthDp.toDouble(),
                         windowHeightDp = LocalConfiguration.current.screenHeightDp.toDouble(),
@@ -816,7 +818,7 @@ fun LyricFlowScreen(
                         line = activeLine,
                         clock = clock,
                         tuning = classicTuning,
-                        intensity = AnimationIntensity.NORMAL,
+                        intensity = lyricCommon.intensity,
                         reduceMotion = reduceMotion,
                         viewportWidthPx = viewportWidthPx,
                         viewportHeightPx = stageHeightPx.toDouble(),

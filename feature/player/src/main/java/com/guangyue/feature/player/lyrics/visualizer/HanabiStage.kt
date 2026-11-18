@@ -144,6 +144,7 @@ private class HbRenderer(
     private val bakeTextBloom: Boolean = true,
     /** Folia 逻辑像素（CSS px）→ 画布像素（= 屏幕密度），拼贴里按绝对尺寸画的纹理与下限用。 */
     private val px: Float = 1f,
+    private val motion: Double = 1.0,
 ) {
     private val textures = HbTextures().let { t -> arrayOf(t.glow.extractAlpha(), t.dot.extractAlpha(), t.star4.extractAlpha(), t.streak.extractAlpha(),
         t.ring.extractAlpha(), t.square.extractAlpha(), t.triangle.extractAlpha(), t.petal.extractAlpha()) }
@@ -175,7 +176,7 @@ private class HbRenderer(
     private fun unitOf(index: Int, w: Float, h: Float): HbScene {
         if (w != unitW || h != unitH) { units.clear(); unitW = w; unitH = h; collage.release() }
         units[index]?.let { return it }
-        val scene = hbBuildSceneUnit(program, index, lines, w.toDouble(), h.toDouble(), theme, tuning, fontScale, measure, songTitle, songArtist, px.toDouble())
+        val scene = hbBuildSceneUnit(program, index, lines, w.toDouble(), h.toDouble(), theme, tuning, fontScale, measure, songTitle, songArtist, px.toDouble(), motion)
         bakeAtlas(scene)
         units[index] = scene
         while (units.size > 3) units.remove(units.keys.first())
@@ -867,15 +868,18 @@ internal fun HanabiStage(
     songTitle: String? = null,
     songArtist: String? = null,
     songAlbum: String? = null,
+    /** 动画强度（Folia MOTION：calm 0.6 / normal 1 / chaotic 1.4），乘在字的位移/旋转幅度上。 */
+    intensity: com.guangyue.core.lyrics.AnimationIntensity = com.guangyue.core.lyrics.AnimationIntensity.NORMAL,
 ) {
+    val motion = hbMotionOf(intensity)
     val program = remember(lines, seed) { compileHanabiProgram(lines, seed) }
     val theme = remember(backgroundColor, primaryColor, accentColor, secondaryColor) {
         HbTheme(backgroundColor.toArgb() and 0xffffff, primaryColor.toArgb() and 0xffffff, accentColor.toArgb() and 0xffffff, secondaryColor.toArgb() and 0xffffff)
     }
     val useNodes = Build.VERSION.SDK_INT >= 31
     val density = androidx.compose.ui.platform.LocalDensity.current.density
-    val renderer = remember(lines, program, theme, lyricsFontScale, reduceMotion, songTitle, songArtist, songAlbum, density) {
-        HbRenderer(lines, program, theme, lyricsFontScale, !reduceMotion, songTitle, songArtist, songAlbum, bakeTextBloom = !useNodes, px = density)
+    val renderer = remember(lines, program, theme, lyricsFontScale, reduceMotion, songTitle, songArtist, songAlbum, density, motion) {
+        HbRenderer(lines, program, theme, lyricsFontScale, !reduceMotion, songTitle, songArtist, songAlbum, bakeTextBloom = !useNodes, px = density, motion = motion)
     }
     val nodes = remember { if (useNodes) HbGlowNodes() else null }
     val bg = backgroundColor.toArgb()
@@ -1155,4 +1159,11 @@ private class HbGlowNodes {
         val TINT_SCREEN = floatArrayOf(1f, 0.95f, 0.98f)
         val TINT_FIREWORKS = floatArrayOf(1f, 0.96f, 0.9f)
     }
+}
+
+/** Folia hanabi/scene.ts MOTION。 */
+internal fun hbMotionOf(i: com.guangyue.core.lyrics.AnimationIntensity): Double = when (i) {
+    com.guangyue.core.lyrics.AnimationIntensity.CALM -> 0.6
+    com.guangyue.core.lyrics.AnimationIntensity.NORMAL -> 1.0
+    com.guangyue.core.lyrics.AnimationIntensity.CHAOTIC -> 1.4
 }

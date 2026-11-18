@@ -341,6 +341,8 @@ internal fun hbBuildSceneUnit(
     program: HbProgram, index: Int, lines: List<Line>, width: Double, height: Double, theme: HbTheme, tuning: HbTuning,
     fontScale: Double, measure: (String) -> Double,
     songTitle: String? = null, songArtist: String? = null, px: Double = 1.0,
+    /** Folia scene.ts MOTION[theme.animationIntensity]：calm 0.6 / normal 1 / chaotic 1.4。 */
+    motion: Double = 1.0,
 ): HbScene {
     val paragraph = program.paragraphs[index]
     val lineMap = paragraph.lineIndices.associateWith { lines[it] }
@@ -350,6 +352,7 @@ internal fun hbBuildSceneUnit(
     if (shots.isEmpty()) shots += HbSceneShot(paragraph.id, hanabiProfileOf(""), paragraph.startTime, paragraph.endTime, true, null)
     return HbScene(width, height, "${program.seed}:${paragraph.id}", theme, tuning, shots, paragraph.startTime, paragraph.endTime,
         paragraph.transitionOut?.startTime, hbSpinDirection(program.seed), fontScale, measure,
+        motion = motion,
         motifs = listOfNotNull(songTitle?.trim()?.takeIf { it.isNotEmpty() }) + listOf("HANABI", "花火"),
         openingTitle = if (index == 0) songTitle?.trim()?.takeIf { it.isNotEmpty() } else null,
         openingArtist = if (index == 0 && !songTitle.isNullOrBlank()) songArtist?.trim()?.takeIf { it.isNotEmpty() } else null,

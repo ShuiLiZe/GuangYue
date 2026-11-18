@@ -476,6 +476,8 @@ fun V0cStage(
                     onOpenEqualizer = {}, onStepLyricStyle = {},
                     // 11-18：取景器画样式字形 + 第二行「背景类型」。
                     lyricStyle = LyricStyle.CLASSIC, backgroundId = "latent", backgroundName = "隐现", onStepBackground = {},
+                    // 11-18：歌词样式行右侧动画强度胶囊（14000 = 混乱）。
+                    animationIntensity = if (alt) AnimationIntensity.CHAOTIC else AnimationIntensity.NORMAL, onCycleIntensity = {},
                 )
             }
         } else if (style == "queuepanel") {
