@@ -416,7 +416,8 @@ fun GridCollectionView(
                             Spacer(Modifier.height(12.dp))
                             Pill("重新加载", ink, ground, primary = true, onClick = onRetry)
                         }
-                        else -> Text("这里还没有歌", color = ink.copy(alpha = 0.4f), fontSize = 14.sp)
+                        // Folia GridView 空集合 = t('home.loadingLibrary')「暂无内容」，text-sm opacity-40。
+                        else -> Text("暂无内容", color = ink.copy(alpha = 0.4f), fontSize = 14.sp)
                     }
                 }
             }

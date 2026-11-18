@@ -1333,7 +1333,7 @@ private fun CollectionTrackList(
 ) {
     if (tiles.isEmpty()) {
         Box(Modifier.fillMaxSize().padding(top = topPad.dp), contentAlignment = Alignment.Center) {
-            Text(if (loading) "加载中…" else "这里还没有歌曲", color = ink.copy(alpha = 0.5f), fontSize = 14.sp)
+            Text(if (loading) "加载中…" else "暂无内容", color = ink.copy(alpha = 0.5f), fontSize = 14.sp)
         }
         return
     }
