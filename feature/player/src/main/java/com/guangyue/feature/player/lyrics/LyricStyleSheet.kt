@@ -439,7 +439,7 @@ private fun LyricStylePanelContent(
                 BackgroundPictureGrid(backgrounds, background, accent, onBackground)
                 Spacer(Modifier.height(12.dp))
                 // 11-18 Folia 各背景的设置卡：隐现 = 显示方式 / 取色 / 可读性叠色（LatentBackgroundSettingsCard 手机能落地的三项），
-                // 通用 = 添加封面色彩 / 暗角（CommonBackgroundSettingsCard）。✋ 点阵大小、速度、节拍响应等未做（无音频频段）。
+                // 通用 = 添加封面色彩 / 暗角（CommonBackgroundSettingsCard）。11-19 加 仅在播放页启用动态效果 / 增强节拍响应（接音频频段）。✋ 点阵大小、速度滑杆未做。
                 if (background == "latent") {
                     val bgCtx = androidx.compose.ui.platform.LocalContext.current
                     val L = com.guangyue.feature.player.lyrics.visualizer.LatentPrefs
@@ -456,6 +456,8 @@ private fun LyricStylePanelContent(
                         selected = lp.colorSource,
                         onChange = { c -> L.update(bgCtx) { it.copy(colorSource = c) } },
                     )
+                    ToggleRow(label = "仅在播放页启用动态效果", checked = lp.dynamicOnlyInPlayer, accent = accent, onChange = { on -> L.update(bgCtx) { it.copy(dynamicOnlyInPlayer = on) } }, note = "在主页保持隐现背景静止，以降低 GPU 资源占用。")
+                    ToggleRow(label = "增强节拍响应", checked = lp.enhancedBeatResponse, accent = accent, onChange = { on -> L.update(bgCtx) { it.copy(enhancedBeatResponse = on) } }, note = "让像素和流体速度在宽频能量上升沿产生更明显的节拍脉冲。")
                     ToggleRow(label = "可读性叠色", checked = lp.overlayEnabled, accent = accent, onChange = { on -> L.update(bgCtx) { it.copy(overlayEnabled = on) } })
                 } else if (background == "common" && commonBg != null) {
                     ToggleRow(label = "添加封面色彩", checked = commonBg.first, accent = accent, onChange = { onCommonBg(it, commonBg.second) }, note = "用封面取色的流体层代替默认底色。")

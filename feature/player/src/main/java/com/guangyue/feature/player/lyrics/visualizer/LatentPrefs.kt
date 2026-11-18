@@ -11,12 +11,15 @@ import kotlinx.coroutines.flow.StateFlow
  * - displayMode：both 混合 / dithering 像素 / mesh 流体（showDithering = 不是 mesh，showMesh = 不是 dithering）。
  * - colorSource：cover-theme 封面与主题 / cover-only 仅封面取色（resolveLatentShaderColors）。
  * - overlayEnabled：可读性叠色（底色 @overlayOpacity 0.35）。
+ * - 11-19 enhancedBeatResponse：增强节拍响应（默认开）；dynamicOnlyInPlayer：仅在播放页启用动态效果（默认开，主页背景静止）。
  */
 object LatentPrefs {
     data class Settings(
         val displayMode: String = "both",
         val colorSource: String = "cover-theme",
         val overlayEnabled: Boolean = true,
+        val enhancedBeatResponse: Boolean = true,
+        val dynamicOnlyInPlayer: Boolean = true,
     )
 
     val DISPLAY_MODES = listOf("dithering", "mesh", "both")
@@ -39,6 +42,8 @@ object LatentPrefs {
                 displayMode = p.getString("display_mode", "both").takeIf { it in DISPLAY_MODES } ?: "both",
                 colorSource = p.getString("color_source", "cover-theme").takeIf { it in COLOR_SOURCES } ?: "cover-theme",
                 overlayEnabled = p.getBoolean("overlay_enabled", true),
+                enhancedBeatResponse = p.getBoolean("enhanced_beat_response", true),
+                dynamicOnlyInPlayer = p.getBoolean("dynamic_only_in_player", true),
             )
             loaded = true
         }
@@ -53,6 +58,8 @@ object LatentPrefs {
             .putString("display_mode", next.displayMode)
             .putString("color_source", next.colorSource)
             .putBoolean("overlay_enabled", next.overlayEnabled)
+            .putBoolean("enhanced_beat_response", next.enhancedBeatResponse)
+            .putBoolean("dynamic_only_in_player", next.dynamicOnlyInPlayer)
             .apply()
     }
 }

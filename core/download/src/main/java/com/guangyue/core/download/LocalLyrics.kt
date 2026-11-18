@@ -82,7 +82,7 @@ object LocalLyrics {
     fun read(context: Context, uriOrPath: String?): String? {
         val f = fileOf(context, uriOrPath) ?: return null
         val side = File(sidecarPath(f.path))
-        runCatching { if (side.isFile && side.canRead()) decode(side.readBytes()).takeIf { isTimed(it) } }.getOrNull()?.let { return it }
+        runCatching { if (side.isFile && side.canRead()) decode(side.readBytes()).takeIf { isTimed(it) } else null }.getOrNull()?.let { return it }
         return runCatching {
             if (!f.isFile || !f.canRead()) return@runCatching null
             AudioTagger.toString() // 触发 AudioTagger.init（关 jaudiotagger 日志、Android 模式）

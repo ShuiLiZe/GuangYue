@@ -31,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.exp
 import kotlin.math.max
+import kotlin.math.pow
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -45,8 +46,10 @@ import kotlin.math.sqrt
 //
 // 手机化：
 //  1. WebGL → AGSL RuntimeShader（API 33+）；更低版本与 Robolectric 回落到「通用」背景（流体 + 几何）。
-//  2. 没有音频频段：音频驱动的 speed / u_pxSize / u_distortion / 缩放 / 滤镜都取「静音」值
-//     （smoothed* = 0 时 Folia 的取值），播放 / 暂停之间按 PAUSE_EASE_MS 300 指数过渡、暂停速度 ×0.12，同 Folia。
+//  2. 11-19 起接音频频段（core:player AudioLevels）：updateAudioResponse 逐帧照搬——平滑 power / bass / mid、宽频能量、
+//     上升沿脉冲（增强节拍响应）→ 速度在 base 与 audioSpeed 间插值；u_pxSize、u_distortion、u_swirl、两层缩放、
+//     流体 saturate / brightness、点阵透明度随之变。播放 / 暂停之间按 PAUSE_EASE_MS 300 指数过渡、暂停速度 ×0.12，同 Folia。
+//     ✋ 点阵透明度的低音增量按手机压低后的比例缩（0.25 × 0.2 / 0.55），免得一响就满屏方块。
 //  3. paper 画布像素比：minPixelRatio 1、maxPixelCount 1280×720，与 Folia 一样按 dp（= CSS px）面积封顶，
 //     着色器在这块「虚拟画布」坐标里算（gl_FragCoord 原点在左下，y 翻转）。
 
@@ -62,6 +65,8 @@ internal object LatentTuning {
      */
     const val DITHERING_OPACITY_PHONE = 0.2f
     const val MESH_SPEED = 0.3f
+    const val DITHERING_AUDIO_SPEED = 1.2f
+    const val MESH_AUDIO_SPEED = 2f
     const val MESH_DISTORTION = 0.8f
     const val MESH_SWIRL = 0.1f
     const val OVERLAY_OPACITY = 0.35f
@@ -229,20 +234,35 @@ private fun LatentBackgroundImpl(
     // u_time（秒）：paper ShaderMount 按 speed 累加帧时间。
     var meshTime by remember { mutableFloatStateOf(0f) }
     var ditherTime by remember { mutableFloatStateOf(0f) }
+    // updateAudioResponse 的平滑量（绘制读）。
+    var sPower by remember { mutableFloatStateOf(0f) }
+    var sBass by remember { mutableFloatStateOf(0f) }
+    var sMid by remember { mutableFloatStateOf(0f) }
     val pausedNow by rememberUpdatedState(paused)
+    val enhancedNow by rememberUpdatedState(tune.enhancedBeatResponse)
     LaunchedEffect(staticMode) {
         if (staticMode) return@LaunchedEffect
         var last = 0L
         var playing = if (pausedNow) 0f else 1f
+        var beatSpeed = 0f
+        var prevEnergy = 0f
+        var onset = 0f
         while (true) {
             withFrameNanos { n ->
+                val isPaused = pausedNow
+                val b = StageAudio.bands()
+                val r = LatentAudio.step(
+                    LatentAudio.State(sPower, sBass, sMid, beatSpeed, prevEnergy, onset),
+                    b.power, b.bass, b.lowMid, b.mid, b.vocal, b.treble, isPaused, enhancedNow,
+                )
+                sPower = r.power; sBass = r.bass; sMid = r.mid
+                beatSpeed = r.beatSpeed; prevEnergy = r.prevEnergy; onset = r.onset
                 if (last != 0L) {
                     val dtMs = ((n - last) / 1e6f).coerceAtMost(100f)
                     val step = 1f - exp(-dtMs / LatentTuning.PAUSE_EASE_MS)
-                    playing += ((if (pausedNow) 0f else 1f) - playing) * step
-                    fun speed(base: Float) = base * LatentTuning.PAUSED_SPEED_SCALE + (base - base * LatentTuning.PAUSED_SPEED_SCALE) * playing
-                    meshTime += dtMs * speed(LatentTuning.MESH_SPEED) / 1000f
-                    ditherTime += dtMs * speed(LatentTuning.DITHERING_SPEED) / 1000f
+                    playing += ((if (isPaused) 0f else 1f) - playing) * step
+                    meshTime += dtMs * LatentAudio.speed(LatentTuning.MESH_SPEED, LatentTuning.MESH_AUDIO_SPEED, beatSpeed, playing) / 1000f
+                    ditherTime += dtMs * LatentAudio.speed(LatentTuning.DITHERING_SPEED, LatentTuning.DITHERING_AUDIO_SPEED, beatSpeed, playing) / 1000f
                 }
                 last = n
             }
@@ -250,11 +270,13 @@ private fun LatentBackgroundImpl(
     }
 
     val density = LocalDensity.current.density
-    val meshFilter = remember {
-        val m = ColorMatrix().apply { setToSaturation(1.04f) }
-        m.timesAssign(ColorMatrix(floatArrayOf(0.94f, 0f, 0f, 0f, 0f, 0f, 0.94f, 0f, 0f, 0f, 0f, 0f, 0.94f, 0f, 0f, 0f, 0f, 0f, 1f, 0f)))
-        ColorFilter.colorMatrix(m)
+    // saturate(1.04 + mid·0.34) brightness(0.94 + power·0.16)，按 1/100 量化免得每帧新建滤镜。
+    fun meshFilterOf(sat: Float, bri: Float): ColorFilter {
+        val m = ColorMatrix().apply { setToSaturation(sat) }
+        m.timesAssign(ColorMatrix(floatArrayOf(bri, 0f, 0f, 0f, 0f, 0f, bri, 0f, 0f, 0f, 0f, 0f, bri, 0f, 0f, 0f, 0f, 0f, 1f, 0f)))
+        return ColorFilter.colorMatrix(m)
     }
+    val filterCache = remember { HashMap<Long, ColorFilter>() }
 
     // 11-15：Folia 的点阵是 WebGL 以 pr≈1.8 渲染再由浏览器双线性放大到屏幕密度，边缘天然发柔；
     // 我们按屏幕像素直接画，再叠一层亚像素级模糊（半径≈放大倍数×0.7px）模拟那次放大。
@@ -281,15 +303,18 @@ private fun LatentBackgroundImpl(
         mesh.setFloatUniform("u_res", resW, resH)
         mesh.setFloatUniform("u_k", k)
         mesh.setFloatUniform("u_time", meshTime)
-        mesh.setFloatUniform("u_distortion", LatentTuning.MESH_DISTORTION)
-        mesh.setFloatUniform("u_swirl", LatentTuning.MESH_SWIRL)
+        mesh.setFloatUniform("u_distortion", LatentTuning.MESH_DISTORTION + sPower * 0.62f)
+        mesh.setFloatUniform("u_swirl", LatentTuning.MESH_SWIRL + sMid * 0.38f)
         val arr = FloatArray(24)
         for (i in 0 until 6) {
             val c = blended[2 + i]
             arr[i * 4] = c.red; arr[i * 4 + 1] = c.green; arr[i * 4 + 2] = c.blue; arr[i * 4 + 3] = c.alpha
         }
         mesh.setFloatUniform("u_colors", arr)
-        scale(1.025f) {
+        val satQ = ((1.04f + sMid * 0.34f) * 100).roundToInt()
+        val briQ = ((0.94f + sPower * 0.16f) * 100).roundToInt()
+        val meshFilter = filterCache.getOrPut(satQ.toLong() * 1000 + briQ) { meshFilterOf(satQ / 100f, briQ / 100f) }
+        scale(1.025f + sPower * 0.018f) {
             drawRect(meshBrush, colorFilter = meshFilter)
         }
         }
@@ -299,15 +324,16 @@ private fun LatentBackgroundImpl(
         dither.setFloatUniform("u_k", k)
         dither.setFloatUniform("u_time", ditherTime)
         dither.setFloatUniform("u_pr", pr)
-        dither.setFloatUniform("u_pxSize", LatentTuning.DITHERING_SIZE)
+        dither.setFloatUniform("u_pxSize", max(0.5f, LatentTuning.DITHERING_SIZE - sBass * LatentTuning.DITHERING_SIZE * 0.34f))
         dither.setFloatUniform("u_scale", LatentTuning.DITHERING_SCALE)
         val back = blended[0]
         val front = blended[1]
         dither.setFloatUniform("u_colorBack", back.red, back.green, back.blue, back.alpha)
         dither.setFloatUniform("u_colorFront", front.red, front.green, front.blue, front.alpha)
-        scale(1.015f) {
+        scale(1.015f + sBass * 0.025f) {
             // 只有点阵时（Folia displayMode dithering）点阵直接盖在底色上，不再 soft-light 叠流体。
-            if (showMesh) drawRect(ditherBrush, alpha = LatentTuning.DITHERING_OPACITY_PHONE, blendMode = BlendMode.Softlight)
+            val dAlpha = min(1f, LatentTuning.DITHERING_OPACITY_PHONE + sBass * 0.25f * LatentTuning.DITHERING_OPACITY_PHONE / LatentTuning.DITHERING_OPACITY)
+            if (showMesh) drawRect(ditherBrush, alpha = dAlpha, blendMode = BlendMode.Softlight)
             else drawRect(ditherBrush)
         }
         }
@@ -430,3 +456,40 @@ float4 main(float2 fragCoord) {
   return float4(color, opacity);
 }
 """
+
+/**
+ * Folia LatentBackground.tsx updateAudioResponse 的纯计算（单测锁定）：输入 0..255 频段，输出平滑量与节拍速度。
+ */
+internal object LatentAudio {
+    data class State(val power: Float, val bass: Float, val mid: Float, val beatSpeed: Float, val prevEnergy: Float, val onset: Float)
+
+    private fun norm(v: Double) = (v / 255.0).coerceIn(0.0, 1.0).toFloat()
+    private fun ease(c: Float, t: Float, a: Float) = c + (t - c) * a
+
+    /** resolveLatentBroadbandEnergy：加权宽频能量 ^0.55。 */
+    fun broadband(bass: Double, lowMid: Double, mid: Double, vocal: Double, treble: Double): Float {
+        val e = norm(bass) * 0.22f + norm(lowMid) * 0.18f + norm(mid) * 0.22f + norm(vocal) * 0.28f + norm(treble) * 0.1f
+        return e.toDouble().pow(0.55).toFloat()
+    }
+
+    fun step(
+        s: State, power: Double, bass: Double, lowMid: Double, mid: Double, vocal: Double, treble: Double,
+        paused: Boolean, enhanced: Boolean,
+    ): State {
+        val tPower = if (paused) 0f else norm(power)
+        val tBass = if (paused) 0f else norm(bass)
+        val tEnergy = if (paused) 0f else broadband(bass, lowMid, mid, vocal, treble)
+        val tMid = if (paused) 0f else norm(maxOf(mid, vocal))
+        val onset = if (enhanced) maxOf(s.onset * 0.84f, ((tEnergy - s.prevEnergy) * 7f).coerceIn(0f, 1f)) else 0f
+        val target = if (enhanced) (tEnergy * 0.42f + onset * 0.85f).coerceIn(0f, 1f) else tEnergy.coerceIn(0f, 1f)
+        val beat = ease(s.beatSpeed, target, if (target > s.beatSpeed) 0.42f else 0.14f)
+        return State(ease(s.power, tPower, 0.12f), ease(s.bass, tBass, 0.16f), ease(s.mid, tMid, 0.13f), beat, tEnergy, onset)
+    }
+
+    /** resolveLatentShaderSpeed 在暂停 / 播放两端之间按 playing 插值，夹 0..2。 */
+    fun speed(base: Float, audio: Float, beatSpeed: Float, playing: Float): Float {
+        val pausedSpeed = (base * LatentTuning.PAUSED_SPEED_SCALE).coerceIn(0f, 2f)
+        val playingSpeed = ease(base, audio, beatSpeed).coerceIn(0f, 2f)
+        return ease(pausedSpeed, playingSpeed, playing)
+    }
+}

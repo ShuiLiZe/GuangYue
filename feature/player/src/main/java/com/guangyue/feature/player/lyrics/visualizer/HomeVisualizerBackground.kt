@@ -3,6 +3,7 @@ package com.guangyue.feature.player.lyrics.visualizer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 
@@ -44,11 +45,13 @@ fun HomeVisualizerBackground(
         modifier = modifier.fillMaxSize(),
     ) {
         if (latent) {
+            // 11-19 Folia「仅在播放页启用动态效果」（latent tuning dynamicOnlyInPlayer，默认开）：主页隐现背景静止。
+            val latentTune by LatentPrefs.flow(androidx.compose.ui.platform.LocalContext.current).collectAsState()
             LatentBackgroundLayer(
                 coverUrl = coverUrl,
                 palette = palette,
                 paused = false,
-                staticMode = still,
+                staticMode = still || latentTune.dynamicOnlyInPlayer,
             )
         } else if (!motion.staticMode) {
             GeometricBackgroundLayer(
