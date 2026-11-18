@@ -604,8 +604,8 @@ private fun MonetLandscape(
                                     .graphicsLayer {
                                         // Folia chaotic：y [0,−18,0,18,0]、x [0,−9,0,9,0]、rotate [0,1.2,0,−1.2,0]。
                                         val k = monetDriftKey(drift.value)
-                                        translationX = k * 9f * density
-                                        translationY = k * 18f * density
+                                        translationX = k * 9f * this.density
+                                        translationY = k * 18f * this.density
                                         rotationZ = -k * 1.2f
                                     },
                             ) {

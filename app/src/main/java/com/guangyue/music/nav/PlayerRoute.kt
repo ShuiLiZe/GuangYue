@@ -220,6 +220,8 @@ fun StagePanelHost(
     /** 11-18 歌词样式行右侧动画强度胶囊（Folia AppearanceSection aside）；null 不画。 */
     animationIntensity: com.guangyue.core.lyrics.AnimationIntensity? = null,
     onCycleIntensity: () -> Unit = {},
+    classicWordRotation: Boolean? = null,
+    onToggleWordRotation: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     // 2026-11-10：LocalTrackRepository 从来没人提供（一直是 null），收藏点了只改了图标、没写库——
@@ -357,6 +359,8 @@ fun StagePanelHost(
         onOpenBackground = onOpenBackground,
         animationIntensity = animationIntensity,
         onCycleIntensity = onCycleIntensity,
+        classicWordRotation = classicWordRotation,
+        onToggleWordRotation = onToggleWordRotation,
         queue = queueRows,
         onPickQueueRow = { index -> playback.playAt(index) },
         onRemoveQueueRow = { index -> playback.removeAt(index); revision++ },

@@ -1386,6 +1386,9 @@ fun GuangYueNavHost(
                         styleSheetOpen = true
                     },
                     animationIntensity = lyricCommon.intensity,
+                    // 流光快捷开关：字词旋转（Folia classic entry renderQuickControls）。
+                    classicWordRotation = tuning.enableWordRotation,
+                    onToggleWordRotation = { styleVm.update(tuning.copy(enableWordRotation = !tuning.enableWordRotation)) },
                     onCycleIntensity = { styleVm.updateCommon(lyricCommon.copy(intensity = com.guangyue.core.lyrics.LyricCommonSettings.nextIntensity(lyricCommon.intensity))) },
                     // 2026-11-14：以前「加入歌单」直接跳搜索页（错的）。改成 Folia AddToPlaylistHost：
                     // 弹出歌单选择弹层，把当前这首加进选中的歌单，或新建歌单再加。

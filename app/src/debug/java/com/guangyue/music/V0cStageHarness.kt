@@ -478,6 +478,7 @@ fun V0cStage(
                     lyricStyle = LyricStyle.CLASSIC, backgroundId = "latent", backgroundName = "隐现", onStepBackground = {},
                     // 11-18：歌词样式行右侧动画强度胶囊（14000 = 混乱）。
                     animationIntensity = if (alt) AnimationIntensity.CHAOTIC else AnimationIntensity.NORMAL, onCycleIntensity = {},
+                    classicWordRotation = !alt, onToggleWordRotation = {},
                 )
             }
         } else if (style == "queuepanel") {

@@ -210,6 +210,9 @@ fun StagePanel(
     /** 11-18 Folia AppearanceSection aside：歌词样式行右侧动画强度胶囊（平静 / 标准 / 混乱，点一下轮换）；null 不画。 */
     animationIntensity: com.guangyue.core.lyrics.AnimationIntensity? = null,
     onCycleIntensity: () -> Unit = {},
+    /** 11-18 Folia classic renderQuickControls：流光「字词旋转」快捷开关（样式行下方参数行）；null 不画。 */
+    classicWordRotation: Boolean? = null,
+    onToggleWordRotation: () -> Unit = {},
 ) {
     val colors = stagePanelColors(dark)
     var qualityPick by remember { mutableStateOf(initialQualityPick) }
@@ -331,6 +334,8 @@ fun StagePanel(
                                     onOpenBackground = onOpenBackground,
                                     animationIntensity = animationIntensity,
                                     onCycleIntensity = onCycleIntensity,
+                                    classicWordRotation = classicWordRotation,
+                                    onToggleWordRotation = onToggleWordRotation,
                                 )
                                 StagePanelTab.QUEUE -> QueueBody(
                                     colors = colors,
@@ -609,6 +614,9 @@ private fun ControlsBody(
     onOpenBackground: () -> Unit = {},
     animationIntensity: com.guangyue.core.lyrics.AnimationIntensity? = null,
     onCycleIntensity: () -> Unit = {},
+    /** 11-18 Folia classic renderQuickControls：流光「字词旋转」快捷开关（样式行下方参数行）；null 不画。 */
+    classicWordRotation: Boolean? = null,
+    onToggleWordRotation: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth().padding(end = 2.dp)) {
         if (volume != null && onVolume != null) VolumeRow(colors, accent, volume, onVolume)
@@ -635,7 +643,10 @@ private fun ControlsBody(
         Box(Modifier.padding(horizontal = 4.dp, vertical = 8.dp).fillMaxWidth().height(1.dp).background(colors.line))
         StyleStepperRow(colors, lyricStyleName, onOpenLyricStyle, onStepLyricStyle, glyph = lyricStyle?.let { st ->
             { c: Color -> com.guangyue.feature.player.lyrics.StyleGlyph(st, c, Modifier.size(18.dp)) }
-        }, aside = animationIntensity?.let { ai -> { QuickChip(colors, intensityLabel(ai), "动画强度：" + intensityLabel(ai), onCycleIntensity) } })
+        }, aside = animationIntensity?.let { ai -> { QuickChip(colors, intensityLabel(ai), "动画强度：" + intensityLabel(ai), onCycleIntensity) } },
+            params = if (lyricStyle == com.guangyue.feature.player.lyrics.LyricStyle.CLASSIC && classicWordRotation != null) ({
+                QuickToggle(colors, accent, classicWordRotation, "字词旋转", GuangYueIcons.RotateCw, onToggleWordRotation)
+            }) else null)
         if (backgroundId != null) {
             StyleStepperRow(
                 colors, backgroundName, onOpenBackground, onStepBackground,
@@ -761,8 +772,11 @@ private fun StyleStepperRow(
     glyph: (@Composable (Color) -> Unit)? = null,
     /** Folia ModeStepperRow aside：中间按钮与右箭头之间的小控件（歌词样式行 = 动画强度胶囊）。 */
     aside: (@Composable () -> Unit)? = null,
+    /** Folia ModeStepperRow params：行下方靠右的参数行（各样式自己的快捷开关），与按钮之间留 4 缝。 */
+    params: (@Composable () -> Unit)? = null,
 ) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+  Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (onStep != null) StepArrow(colors, GuangYueIcons.ChevronLeft, "上一个$stepNoun") { onStep(-1) }
         Row(
             Modifier
@@ -799,6 +813,13 @@ private fun StyleStepperRow(
         if (aside != null) { aside(); Spacer(Modifier.width(4.dp)) }
         if (onStep != null) StepArrow(colors, GuangYueIcons.ChevronRight, "下一个$stepNoun") { onStep(1) }
     }
+    if (params != null) {
+        // flex min-h-7 justify-end gap-1.5 pt-1
+        Row(Modifier.fillMaxWidth().heightIn(min = 28.dp).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+            params()
+        }
+    }
+  }
 }
 
 /** Folia animation.calm / normal / chaotic（zh-CN：平静 / 标准 / 混乱）。 */
@@ -806,6 +827,18 @@ internal fun intensityLabel(i: com.guangyue.core.lyrics.AnimationIntensity): Str
     com.guangyue.core.lyrics.AnimationIntensity.CALM -> "平静"
     com.guangyue.core.lyrics.AnimationIntensity.NORMAL -> "标准"
     com.guangyue.core.lyrics.AnimationIntensity.CHAOTIC -> "混乱"
+}
+
+/** Folia shared/QuickControlToggle：28×28 圆角 8；开 = raise 底 + 强调色图标，关 = fill 底 + t3 图标。 */
+@Composable
+private fun QuickToggle(colors: StagePanelColors, accent: Color, active: Boolean, label: String, icon: ImageVector, onToggle: () -> Unit) {
+    Box(
+        Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(if (active) colors.raise else colors.fill)
+            .clickableNoRipple(onToggle).semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, null, tint = if (active) accent else colors.t3, modifier = Modifier.size(14.dp))
+    }
 }
 
 /** Folia shared/QuickControlChip：h-7（28dp）、圆角 8、左右 10、12sp、淡底 fill、字 t2。 */
