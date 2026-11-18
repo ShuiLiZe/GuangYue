@@ -860,18 +860,25 @@ fun ProviderPill(label: String?, dark: Boolean, onClick: () -> Unit, iconUrl: St
  * Folia OnlineProviderAccountlessPanel 的登录行：浅底胶囊「登录 平台」，点开 = 音源 / 插件 / 登录管理。
  */
 @Composable
-fun ProviderLoginPill(label: String?, ink: Color, onClick: () -> Unit, iconUrl: String? = null) {
+fun ProviderLoginPill(
+    label: String?,
+    ink: Color,
+    onClick: () -> Unit,
+    iconUrl: String? = null,
+    others: List<Pair<String, String?>> = emptyList(),
+    onOther: (Int) -> Unit = {},
+) {
     val dark = ink.red + ink.green + ink.blue > 1.5f
     Row(
         Modifier
             .clip(RoundedCornerShape(50))
             .background(ink.copy(alpha = if (dark) 0.10f else 0.06f))
-            .clickable(onClick = onClick)
             .padding(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
             Modifier.clip(RoundedCornerShape(50)).background(ink.copy(alpha = if (dark) 0.12f else 0.08f))
+                .clickable(onClick = onClick)
                 .padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -881,11 +888,28 @@ fun ProviderLoginPill(label: String?, ink: Color, onClick: () -> Unit, iconUrl: 
             Spacer(Modifier.width(10.dp))
             Text(if (label != null) "登录 $label" else "添加音源", color = ink.copy(alpha = 0.9f), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
-        Spacer(Modifier.width(8.dp))
-        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-            Icon(GuangYueIcons.Plug, null, tint = ink.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+        // 11-18 照 Folia APK 首页登录空态：胶囊里登录键右侧排其余平台的记号（28 圆），点一下换到那个平台并开它的扫码登录。
+        if (others.isEmpty()) {
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+                Icon(GuangYueIcons.Plug, null, tint = ink.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(4.dp))
+        } else {
+            Spacer(Modifier.width(4.dp))
+            others.forEachIndexed { i, (name, icon) ->
+                Box(
+                    Modifier.size(36.dp).clip(CircleShape).clickable { onOther(i) }
+                        .semantics { contentDescription = "登录 $name" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(Modifier.size(28.dp).clip(CircleShape).background(providerDiscColor(name)), contentAlignment = Alignment.Center) {
+                        ProviderMark(name, icon, 13.sp, 16.dp)
+                    }
+                }
+            }
+            Spacer(Modifier.width(2.dp))
         }
-        Spacer(Modifier.width(4.dp))
     }
 }
 

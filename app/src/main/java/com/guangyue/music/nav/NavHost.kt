@@ -307,11 +307,28 @@ fun GuangYueNavHost(
                             emptyAction = { label ->
                                 if (label == "歌单") {
                                     val src by vm.currentSource.collectAsStateWithLifecycle()
+                                    val emptyPluginVm: com.guangyue.feature.library.viewmodel.PluginViewModel = hiltViewModel()
+                                    val emptyAll by emptyPluginVm.plugins.collectAsStateWithLifecycle()
+                                    val others = remember(emptyAll, src) {
+                                        fun qr(p: com.guangyue.core.plugin.PluginMeta) = com.guangyue.core.plugin.login.QrPlatform.of(p.platform) ?: com.guangyue.core.plugin.login.QrPlatform.of(p.name)
+                                        val mine = src?.let { qr(it) }
+                                        // 扫码平台在前（每家一个），其余可用音源接后，最多 4 个（Folia APK 胶囊里排 4 个记号）。
+                                        val ok = emptyAll.filter { it.error == null && it.hasSearch && it.id != src?.id }
+                                        val loginable = ok.filter { qr(it) != null && qr(it) != mine }.distinctBy { qr(it) }
+                                        (loginable + ok.filter { qr(it) == null }).take(4)
+                                    }
                                     com.guangyue.music.ui.home.ProviderLoginPill(
                                         label = src?.name,
                                         iconUrl = src?.let { com.guangyue.core.plugin.PluginPlatformIcons.candidatesFor(it).firstOrNull() },
                                         ink = androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
                                         onClick = { if (src != null) loginFor = src else navController.navigate(Routes.PLUGINS) },
+                                        others = others.map { it.displayName to com.guangyue.core.plugin.PluginPlatformIcons.candidatesFor(it).firstOrNull() },
+                                        onOther = { i ->
+                                            others.getOrNull(i)?.let { p ->
+                                                emptyPluginVm.selectSource(p.id)
+                                                if ((com.guangyue.core.plugin.login.QrPlatform.of(p.platform) ?: com.guangyue.core.plugin.login.QrPlatform.of(p.name)) != null) loginFor = p
+                                            }
+                                        },
                                     )
                                 }
                             },
