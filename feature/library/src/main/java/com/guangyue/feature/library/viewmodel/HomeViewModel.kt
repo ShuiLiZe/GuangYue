@@ -71,6 +71,29 @@ class HomeViewModel @Inject constructor(
     /** 正在读账号（登录窗「同步数据」显示「同步中...」）。 */
     val accountSyncing: StateFlow<Boolean> = account.syncing
 
+    /**
+     * 各扫码平台的登录状态（Folia platformRows rowStatus：signed-in / ran-out / signed-out），平台切换弹层用。
+     * 有凭据或已读到歌单 = 已登录；读的时候回了登录过期 = 已失效。
+     */
+    val platformStatus: StateFlow<Map<com.guangyue.core.plugin.login.QrPlatform, String>> by lazy {
+        combine(
+            combine(account.qqPlaylists, account.neteasePlaylists, account.kugouPlaylists) { a, b, c -> Triple(a, b, c) },
+            combine(account.qqExpired, account.neteaseExpired, account.kugouExpired) { a, b, c -> Triple(a, b, c) },
+            account.syncing,
+        ) { lists, expired, _ ->
+            fun st(p: com.guangyue.core.plugin.login.QrPlatform, has: Boolean, ex: Boolean) = when {
+                ex -> "ran-out"
+                has || account.hasCredential(p) -> "signed-in"
+                else -> "signed-out"
+            }
+            mapOf(
+                com.guangyue.core.plugin.login.QrPlatform.QQ to st(com.guangyue.core.plugin.login.QrPlatform.QQ, lists.first.isNotEmpty(), expired.first),
+                com.guangyue.core.plugin.login.QrPlatform.NETEASE to st(com.guangyue.core.plugin.login.QrPlatform.NETEASE, lists.second.isNotEmpty(), expired.second),
+                com.guangyue.core.plugin.login.QrPlatform.KUGOU to st(com.guangyue.core.plugin.login.QrPlatform.KUGOU, lists.third.isNotEmpty(), expired.third),
+            )
+        }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyMap())
+    }
+
     private var accountReadOnStart = false
 
     /** 启动时有凭据就安静地读一次（Folia reason=startup：不弹提示，读不到就先用缓存）。 */

@@ -1978,6 +1978,42 @@ object GuangYueIcons {
             .build()
     }
 
+    /** LogIn = lucide `log-in`（平台切换弹层行尾「扫码登录」）。 */
+    val LogIn: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "LogIn",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        )
+            .addPath(
+                pathData = addPathNodes("m10 17 5-5-5-5"),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .addPath(
+                pathData = addPathNodes("M15 12H3"),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .addPath(
+                pathData = addPathNodes("M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .build()
+    }
+
     /** Sun = lucide `sun` */
     val Sun: ImageVector by lazy {
         ImageVector.Builder(

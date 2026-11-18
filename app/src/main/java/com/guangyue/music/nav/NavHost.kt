@@ -329,6 +329,7 @@ fun GuangYueNavHost(
                                 // Folia SwitcherPill：点开是平台切换（可用音源，点了直接切）+「音源与登录…」。
                                 val pluginVm: com.guangyue.feature.library.viewmodel.PluginViewModel = hiltViewModel()
                                 val all by pluginVm.plugins.collectAsStateWithLifecycle()
+                                val platformStatus by vm.platformStatus.collectAsStateWithLifecycle()
                                 val usable = remember(all, src) {
                                     // 按插件页的顺序（用户自己排的）列出全部没坏的（弹层里可滚）；以前只收体检 OK 的，
                                     // 网络一抖（体检失败）常用的网易云就从切换里消失了。
@@ -340,10 +341,18 @@ fun GuangYueNavHost(
                                     iconUrl = src?.let { com.guangyue.core.plugin.PluginPlatformIcons.candidatesFor(it).firstOrNull() },
                                     dark = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() < 0.5f,
                                     currentId = src?.id,
-                                    options = usable.map { Triple(it.id, it.displayName, com.guangyue.core.plugin.PluginPlatformIcons.candidatesFor(it).firstOrNull()) },
+                                    options = usable.map {
+                                        val qr = com.guangyue.core.plugin.login.QrPlatform.of(it.platform) ?: com.guangyue.core.plugin.login.QrPlatform.of(it.name)
+                                        com.guangyue.music.ui.home.ProviderOption(
+                                            id = it.id, name = it.displayName,
+                                            icon = com.guangyue.core.plugin.PluginPlatformIcons.candidatesFor(it).firstOrNull(),
+                                            status = qr?.let { p -> platformStatus[p] ?: "signed-out" },
+                                        )
+                                    },
                                     onPick = { id -> pluginVm.selectSource(id) },
                                     onManage = { navController.navigate(Routes.PLUGINS) },
-                                    onLogin = { loginFor = src },
+                                    onLogin = { id -> loginFor = usable.firstOrNull { it.id == id } ?: src },
+                                    onBackToPlayer = if (playbackState.item == null) null else ({ navController.navigate(Routes.LYRIC_FLOW) }),
                                 )
                                 loginFor?.let { acc ->
                                     // 2026-11-15 用户：插件变量表单普通人用不了。照 Folia 换成扫码登录（QQ / 网易云 / 酷狗），

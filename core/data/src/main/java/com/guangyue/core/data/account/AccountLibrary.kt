@@ -112,6 +112,13 @@ class AccountLibrary @Inject constructor(
 
     // ———————————————————————— 凭据 ————————————————————————
 
+    /** 本机存着这个平台的登录凭据（平台切换弹层的「已登录 / 未登录」，Folia platformRows rowStatus）。 */
+    fun hasCredential(platform: QrPlatform): Boolean = when (platform) {
+        QrPlatform.QQ -> !prefs.getString("qq_uin", null).isNullOrBlank() && !prefs.getString("qq_key", null).isNullOrBlank()
+        QrPlatform.NETEASE -> !prefs.getString("ne_music_u", null).isNullOrBlank()
+        QrPlatform.KUGOU -> !prefs.getString("kg_token", null).isNullOrBlank()
+    }
+
     /** 扫码成功：把 uin / musickey 存下来（只存在本机私有目录）。 */
     fun saveQqCredential(fields: Map<String, String>) {
         val c = QqCredential.fromFields(fields) ?: return

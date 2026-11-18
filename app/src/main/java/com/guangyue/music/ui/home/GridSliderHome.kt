@@ -939,9 +939,31 @@ private fun ProviderMark(label: String?, iconUrl: String?, letterSize: androidx.
 }
 
 
+/** 平台切换弹层的一行：[status] = signed-in / ran-out / signed-out，null = 这个平台不用登录。 */
+data class ProviderOption(val id: String, val name: String, val icon: String?, val status: String?)
+
+/** 行里第二行的全称（Folia 弹层：平台名下是平台全称，如 波点 / 波点音乐）。 */
+private fun providerFullName(name: String): String {
+    val t = name.lowercase()
+    return when {
+        "qq" in t -> "QQ Music"
+        "网易" in t -> "网易云音乐"
+        "酷狗" in t || "kugou" in t -> "酷狗音乐"
+        "酷我" in t || "kuwo" in t -> "酷我音乐"
+        "咪咕" in t || "migu" in t -> "咪咕音乐"
+        "汽水" in t -> "汽水音乐"
+        "波点" in t -> "波点音乐"
+        "飞牛" in t -> "飞牛音乐"
+        "b站" in t || "bilibili" in t || "哔哩" in t -> "哔哩哔哩"
+        else -> "音源插件"
+    }
+}
+
 /**
- * Folia SwitcherPill 的平台切换：点右下角平台按钮弹出，列出可用音源（点了直接切），末行「音源与登录…」进插件页。
- * [options] = (id, 名称, 图标地址)，第一项之外按插件页顺序；[currentId] 打勾。
+ * Folia 手机版右下平台按钮的弹层（APK 核对 11-18）：头「在线音乐平台」→「返回播放器」行 → 平台行
+ * （40 圆记号 · 名字 14 半粗 / 全称 12 / 状态 12「未登录 · 点击扫码」，行尾登录键；当前平台整行淡底）。
+ * ✋ 广乐的平台来自插件，列的是可用插件；末行「音源管理…」是广乐多的（插件页入口）。
+ * 点行 = 切到这个平台；行尾登录键 / 点未登录的当前平台 = 扫码登录。
  */
 @Composable
 fun ProviderSwitcher(
@@ -949,79 +971,106 @@ fun ProviderSwitcher(
     iconUrl: String?,
     dark: Boolean,
     currentId: String?,
-    options: List<Triple<String, String, String?>>,
+    options: List<ProviderOption>,
     onPick: (String) -> Unit,
     onManage: () -> Unit,
-    onLogin: (() -> Unit)? = null,
+    onLogin: (String) -> Unit = {},
+    onBackToPlayer: (() -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
         ProviderPill(label = label, dark = dark, onClick = { open = true }, iconUrl = iconUrl)
         if (open) {
-            val menu = if (dark) Color(0xFF1F1F22) else Color.White
+            val menu = if (dark) Color(0xFF0E0E10) else Color.White
             val ink = if (dark) Color.White else Color.Black
             val density = LocalDensity.current
             androidx.compose.ui.window.Popup(
                 alignment = Alignment.BottomEnd,
-                offset = with(density) { androidx.compose.ui.unit.IntOffset(0, -(52.dp).roundToPx()) },
+                offset = with(density) { androidx.compose.ui.unit.IntOffset(0, -(56.dp).roundToPx()) },
                 onDismissRequest = { open = false },
                 properties = androidx.compose.ui.window.PopupProperties(focusable = true),
             ) {
                 Column(
                     Modifier
-                        .widthIn(min = 200.dp, max = 260.dp)
-                        .shadow(12.dp, RoundedCornerShape(16.dp))
-                        .clip(RoundedCornerShape(16.dp))
+                        .width(248.dp)
+                        .shadow(16.dp, RoundedCornerShape(22.dp))
+                        .clip(RoundedCornerShape(22.dp))
                         .background(menu)
-                        .border(1.dp, ink.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
-                        .padding(4.dp),
+                        .border(1.dp, ink.copy(alpha = 0.08f), RoundedCornerShape(22.dp))
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
                 ) {
                     Text(
-                        "切换音源", color = ink.copy(alpha = 0.45f), fontSize = 11.sp,
-                        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp),
+                        "在线音乐平台", color = ink.copy(alpha = 0.45f), fontSize = 11.sp,
+                        modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 6.dp),
                     )
-                    Column(Modifier.heightIn(max = 336.dp).verticalScroll(rememberScrollState())) {
-                    options.forEach { (id, name, icon) ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { open = false; if (id != currentId) onPick(id) }
-                                .padding(horizontal = 8.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(Modifier.size(24.dp).clip(CircleShape).background(providerDiscColor(name)), contentAlignment = Alignment.Center) {
-                                ProviderMark(name, icon, 11.sp, 14.dp)
-                            }
-                            Spacer(Modifier.width(10.dp))
-                            Text(name, color = ink.copy(alpha = 0.9f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            if (id == currentId) Icon(GuangYueIcons.Check, null, tint = ink.copy(alpha = 0.8f), modifier = Modifier.size(16.dp))
-                        }
-                    }
-                    }
-                    Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp).background(ink.copy(alpha = 0.08f)))
-                    if (onLogin != null && label != null) Row(
+                    if (onBackToPlayer != null) Row(
                         Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { open = false; onLogin() }
-                            .padding(horizontal = 8.dp, vertical = 10.dp),
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { open = false; onBackToPlayer() }
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(GuangYueIcons.User, null, tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text("登录 $label", color = ink.copy(alpha = 0.9f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Icon(GuangYueIcons.ChevronRight, null, tint = ink.copy(alpha = 0.85f), modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(14.dp))
+                        Text("返回播放器", color = ink.copy(alpha = 0.92f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     }
+                    Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+                        options.forEach { o ->
+                            val current = o.id == currentId
+                            val statusText = when (o.status) {
+                                null -> "无需登录"
+                                "signed-in" -> "已登录"
+                                "ran-out" -> "登录已失效 · 点击重新扫码"
+                                else -> "未登录 · 点击扫码"
+                            }
+                            val canLogin = o.status != null && o.status != "signed-in"
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(if (current) ink.copy(alpha = 0.08f) else Color.Transparent)
+                                    .clickable {
+                                        open = false
+                                        if (!current) onPick(o.id) else if (canLogin) onLogin(o.id)
+                                    }
+                                    .padding(start = 10.dp, end = 4.dp, top = 9.dp, bottom = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(Modifier.size(40.dp).clip(CircleShape).background(providerDiscColor(o.name)), contentAlignment = Alignment.Center) {
+                                    ProviderMark(o.name, o.icon, 16.sp, 20.dp)
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(o.name, color = ink.copy(alpha = 0.95f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(providerFullName(o.name), color = ink.copy(alpha = 0.45f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        statusText,
+                                        color = if (o.status == "ran-out") Color(0xFFE5A50A) else ink.copy(alpha = 0.6f),
+                                        fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                if (canLogin) Box(
+                                    Modifier.size(40.dp).clip(CircleShape)
+                                        .clickable { open = false; onLogin(o.id) }
+                                        .semantics { contentDescription = "扫码登录 ${o.name}" },
+                                    contentAlignment = Alignment.Center,
+                                ) { Icon(GuangYueIcons.LogIn, null, tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(18.dp)) }
+                            }
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp).background(ink.copy(alpha = 0.08f)))
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .clickable { open = false; onManage() }
-                            .padding(horizontal = 8.dp, vertical = 10.dp),
+                            .padding(horizontal = 12.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(GuangYueIcons.Plug, null, tint = ink.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(14.dp))
                         Text("音源管理…", color = ink.copy(alpha = 0.9f), fontSize = 14.sp)
                     }
                 }

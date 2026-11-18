@@ -103,3 +103,7 @@
 - 🔧 11-18 动画强度续接：町景（createMachiRuntime INTENSITY_SCALE 0.7 / 1 / 1.3 乘雨量、雪量 0.75 + 0.25 × 强度；TRAFFIC_CHANCE 0.4 / 0.6 / 0.78 车流）、镜台（resolveDioramaMotionParams 子模式：calm 镜头柔和、chaotic 动感多变，挑镜头的权重也随之变）、莫奈（混乱时横屏大封面 9s 循环漂移摇摆 y ±18 / x ±9 / 转 ±1.2°）。
 - 🔧 11-18 控制页签歌词样式行下补 ModeStepperRow params 参数行（靠右、上留 4、间距 6），流光时出 classic entry 的 renderQuickControls「字词旋转」开关（QuickControlToggle 28×28 圆角 8：开 = raise 底 + 强调色 RotateCw，关 = fill 底 + t3），即流光调参里的 enableWordRotation。✋ 其余样式的快捷开关、背景行 params（通用背景的取封面色 / 暗角）广乐暂无对应设置，未画；✋ 分词（usesWordSegmentation）开关未做。
 - 🔧 11-18 每首随机样式照 AppearanceSection RANDOM_VISUALIZER_CHOICE / randomVisualizerModes.ts：控制页签歌词样式行左右换到最后一项是「随机」（randomVisualizerModePerSong，存 random_visualizer_mode_per_song），开着时每换一首歌另抽一种（pickRandomVisualizerMode：有别的可选时不重复上一首），参数行出「这首抽到的样式」胶囊，点一下另抽（reroll）；选定任一具体样式即关掉随机。✋ 随机池（randomPoolChoose：限定参与抽的样式）未做，全部样式参与。
+
+## 2026-11-18 下午：右下平台按钮弹层照 Folia APK（模拟器核对）
+- 🔧 弹层照 APK：头「在线音乐平台」→「返回播放器」行（有歌时）→ 平台行（40 圆记号 · 名字 14 半粗 / 全称 12 / 状态 12，当前平台整行 8% 淡底，行尾 LogIn 登录键）；宽 248、圆角 22、深色 #0E0E10。状态照 platformRows rowStatus：已登录 / 未登录 · 点击扫码 / 登录已失效 · 点击重新扫码（黄）/ 无需登录（非扫码平台）。点行 = 切平台，点未登录的当前平台或行尾键 = 扫码登录该平台（原先只能登录当前平台）。
+- ✋ 广乐平台来自插件，列可用插件；末行「音源管理…」广乐多的。✋ Folia 新源码（SwitcherPill）点头像直接开登录窗，APK 仍是弹层，照 APK。
