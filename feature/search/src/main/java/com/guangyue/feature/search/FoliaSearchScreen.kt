@@ -146,8 +146,9 @@ fun FoliaSearchScreen(
                 android.content.res.Configuration.ORIENTATION_LANDSCAPE,
         )
 
-        // Folia 手机版：音源条最后是「本地」（从首页本地页签进来时选中它）。
-        SourceRail(
+        // 11-18 用户：主页右下已能换音源，搜索页不再放音源条，搜索跟主页当前音源走；
+        // 从本地页签进来（搜索本地歌曲）就只搜本地。
+        if (false) SourceRail(
             available = state.available,
             sourceId = state.sourceId,
             local = state.local,

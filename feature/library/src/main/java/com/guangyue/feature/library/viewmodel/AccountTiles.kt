@@ -53,9 +53,10 @@ object AccountTiles {
         netease: List<AccountPlaylist>,
         kugou: List<AccountPlaylist> = emptyList(),
     ): List<HomeTile> = when {
-        current == QrPlatform.QQ && qq.isNotEmpty() -> tiles(qq, QrPlatform.QQ)
-        current == QrPlatform.NETEASE && netease.isNotEmpty() -> tiles(netease, QrPlatform.NETEASE)
-        current == QrPlatform.KUGOU && kugou.isNotEmpty() -> tiles(kugou, QrPlatform.KUGOU)
+        // 11-18 用户：换成网易云后歌单还是 QQ 的。当前音源是哪家就只列哪家的账号歌单（没登录就是登录空态，Folia 同）。
+        current == QrPlatform.QQ -> tiles(qq, QrPlatform.QQ)
+        current == QrPlatform.NETEASE -> tiles(netease, QrPlatform.NETEASE)
+        current == QrPlatform.KUGOU -> tiles(kugou, QrPlatform.KUGOU)
         else -> tiles(qq, QrPlatform.QQ) + tiles(netease, QrPlatform.NETEASE) + tiles(kugou, QrPlatform.KUGOU)
     }
 

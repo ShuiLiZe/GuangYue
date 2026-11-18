@@ -193,7 +193,18 @@ class MusicPluginBridge @Inject constructor(
         payload ?: return@withContext null
         // 先带账号（登录后能取会员歌）；取不到 / 报错且确实带了账号时，不带账号再取一次 —— 用户 11-18：
         // 登录 QQ 后插件拿登录 cookie 取链全空，「登录后听歌全都听不了，不登录能听」。保证不比未登录差。
-        val hasAccount = runCatching { readUserVariables(pluginId).values.any { it.isNotBlank() } }.getOrDefault(false)
+        val vars = runCatching { readUserVariables(pluginId) }.getOrDefault(emptyMap())
+        val hasAccount = vars.values.any { it.isNotBlank() }
+        // 11-18：QQ 登录了（含会员）先用账号直接问官方取链，插件带 cookie 取链常常是空的。
+        if (QqVkey.isQq(resolveMeta(pluginId))) {
+            val cred = QqVkey.credOf(vars)
+            if (cred != null) {
+                val direct = runCatching { QqVkey.fetch(http, cred, payload, quality) }
+                    .onFailure { android.util.Log.w("GYACCOUNT", "qq vkey failed: ${it.message}") }.getOrNull()
+                android.util.Log.i("GYACCOUNT", "getMediaSource $pluginId: qq vkey " + if (direct != null) "ok" else "empty")
+                if (direct != null) return@withContext direct
+            }
+        }
         CredentialFallback.run(
             hasAccount = hasAccount,
             withAccount = { mediaSourceOnce(pluginId, payload, quality, anonymous = false) },

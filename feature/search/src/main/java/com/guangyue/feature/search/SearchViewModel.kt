@@ -185,9 +185,10 @@ class SearchViewModel @Inject constructor(
                 // 但全局只有一个是「当前音源」——列表里排在最前，选中即切换。
                 val selectable = list.filter { it.error == null && it.hasSearch }
                 val active = list.firstOrNull { it.enabled && it.error == null && it.hasSearch }
-                val keep = _state.value.sourceId.takeIf { id -> selectable.any { it.id == id } }
+                // 11-18 用户：主页已经能换音源，搜索页不再单独选——永远跟主页的当前音源走。
+                val keep = active?.id
+                    ?: _state.value.sourceId.takeIf { id -> selectable.any { it.id == id } }
                     ?: prefs.lastSourceId.takeIf { id -> selectable.any { it.id == id } }
-                    ?: active?.id
                     ?: selectable.firstOrNull()?.id.orEmpty()
                 val previous = _state.value.sourceId
                 _state.value = _state.value.copy(
