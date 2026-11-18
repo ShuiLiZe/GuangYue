@@ -402,7 +402,8 @@ fun LyricFlowScreen(
                 )
             } else {
                 // Folia common entry：没开「添加封面色彩」时只有主题底色（不透明），开了是流体封面层 + 底色 @0.75。
-                if (!commonCoverColor) Box(Modifier.fillMaxSize().background(palette.backgroundColor))
+                // 隐现在旧系统（API < 33）上退回这里时保持旧观感（流体封面层、无暗角），只有真选了「通用」才照这两个开关。
+                if (!latentBackground && !commonCoverColor) Box(Modifier.fillMaxSize().background(palette.backgroundColor))
                 if (!motionPrefs.staticMode) com.guangyue.feature.player.lyrics.visualizer.GeometricBackgroundLayer(
                     seed = (coverUrl ?: "").hashCode().toLong(),
                     secondaryColor = theme.secondary,
@@ -411,7 +412,7 @@ fun LyricFlowScreen(
                     paused = !playback.isPlaying || reduceMotion || runningUnderRobolectric,
                 )
                 // Folia GeometricBackground.css 暗角：radial-gradient(circle, transparent 40%, rgba(0,0,0,.6))。
-                if (commonVignette) Box(
+                if (!latentBackground && commonVignette) Box(
                     Modifier.fillMaxSize().drawBehind {
                         val r = kotlin.math.hypot(size.width, size.height) / 2f
                         drawRect(
