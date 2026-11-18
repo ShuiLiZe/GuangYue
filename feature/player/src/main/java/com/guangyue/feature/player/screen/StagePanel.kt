@@ -216,6 +216,9 @@ fun StagePanel(
     /** 11-18 Folia「随机」：这首歌抽到的样式名（样式行下方胶囊，点一下另抽）；null = 没开随机。 */
     randomStyleName: String? = null,
     onRerollStyle: () -> Unit = {},
+    /** 11-18 Folia 随机池（选择随机池）：(样式, 名字, 在池里)；null = 不画。 */
+    randomPool: List<Triple<com.guangyue.feature.player.lyrics.LyricStyle, String, Boolean>>? = null,
+    onRandomPool: (List<com.guangyue.feature.player.lyrics.LyricStyle>) -> Unit = {},
 ) {
     val colors = stagePanelColors(dark)
     var qualityPick by remember { mutableStateOf(initialQualityPick) }
@@ -341,6 +344,8 @@ fun StagePanel(
                                     onToggleWordRotation = onToggleWordRotation,
                                     randomStyleName = randomStyleName,
                                     onRerollStyle = onRerollStyle,
+                                    randomPool = randomPool,
+                                    onRandomPool = onRandomPool,
                                 )
                                 StagePanelTab.QUEUE -> QueueBody(
                                     colors = colors,
@@ -625,7 +630,12 @@ private fun ControlsBody(
     /** 11-18 Folia「随机」：这首歌抽到的样式名（样式行下方胶囊，点一下另抽）；null = 没开随机。 */
     randomStyleName: String? = null,
     onRerollStyle: () -> Unit = {},
+    /** 11-18 Folia 随机池（选择随机池）：(样式, 名字, 在池里)；null = 不画。 */
+    randomPool: List<Triple<com.guangyue.feature.player.lyrics.LyricStyle, String, Boolean>>? = null,
+    onRandomPool: (List<com.guangyue.feature.player.lyrics.LyricStyle>) -> Unit = {},
 ) {
+    var poolOpen by remember { mutableStateOf(false) }
+    if (randomPool == null) poolOpen = false
     Column(Modifier.fillMaxWidth().padding(end = 2.dp)) {
         if (volume != null && onVolume != null) VolumeRow(colors, accent, volume, onVolume)
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -656,11 +666,23 @@ private fun ControlsBody(
             { c: Color -> com.guangyue.feature.player.lyrics.StyleGlyph(st, c, Modifier.size(18.dp)) }
         }, aside = animationIntensity?.let { ai -> { QuickChip(colors, intensityLabel(ai), "动画强度：" + intensityLabel(ai), onCycleIntensity) } },
             params = if (randomStyleName != null) ({
-                // Folia：随机时参数行是「这首抽到的样式」胶囊，点一下另抽一种（randomPool.reroll）。
+                // Folia：随机时参数行是「这首抽到的样式」胶囊，点一下另抽一种（randomPool.reroll）；
+                // 旁边「选择随机池」胶囊开随机池（RandomPoolPicker）。
                 QuickChip(colors, randomStyleName, "换一种样式：$randomStyleName", onRerollStyle)
+                if (randomPool != null) {
+                    QuickChip(colors, "选择随机池", "选择随机池：已选 ${randomPool.count { it.third }}/${randomPool.size}") { poolOpen = !poolOpen }
+                }
             }) else if (lyricStyle == com.guangyue.feature.player.lyrics.LyricStyle.CLASSIC && classicWordRotation != null) ({
                 QuickToggle(colors, accent, classicWordRotation, "字词旋转", GuangYueIcons.RotateCw, onToggleWordRotation)
             }) else null)
+        if (poolOpen && randomPool != null) {
+            com.guangyue.feature.player.lyrics.RandomPoolGrid(
+                rows = randomPool,
+                accent = accent,
+                ink = colors.t1, t2 = colors.t2, t3 = colors.t3, line = colors.line, fill = colors.fill,
+                onChange = onRandomPool,
+            )
+        }
         if (backgroundId != null) {
             StyleStepperRow(
                 colors, backgroundName, onOpenBackground, onStepBackground,

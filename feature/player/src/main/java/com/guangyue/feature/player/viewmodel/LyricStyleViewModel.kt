@@ -156,4 +156,13 @@ class LyricStyleViewModel @Inject constructor(
         _random.value = on
         viewModelScope.launch { preferences.randomStylePerSong = on }
     }
+
+    private val _pool = MutableStateFlow(preferences.randomStylePool)
+    /** 随机池（Folia randomVisualizerModes）：参与每首随机的样式 id；空 = 全部。 */
+    val randomPool: StateFlow<Set<String>> = _pool.asStateFlow()
+
+    fun setRandomPool(ids: Set<String>) {
+        _pool.value = ids
+        viewModelScope.launch { preferences.randomStylePool = ids }
+    }
 }

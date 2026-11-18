@@ -269,6 +269,11 @@ class AppPreferences @Inject constructor(
         get() = prefs.getBoolean(KEY_RANDOM_STYLE, false)
         set(value) = prefs.edit().putBoolean(KEY_RANDOM_STYLE, value).apply()
 
+    /** Folia randomVisualizerModes（随机池）：参与每首随机的样式 id；空 = 全部样式。 */
+    var randomStylePool: Set<String>
+        get() = prefs.getStringSet(KEY_RANDOM_POOL, null)?.toSet().orEmpty()
+        set(value) = prefs.edit().putStringSet(KEY_RANDOM_POOL, value).apply()
+
     /**
      * R2：歌词舞台背景类型（Folia `visualizerBackgroundMode`）。"latent" = 隐现（Folia 默认
      * DEFAULT_VISUALIZER_BACKGROUND_MODE），"common" = 通用（流体 + 几何）。
@@ -365,6 +370,7 @@ class AppPreferences @Inject constructor(
         /** 歌词样式 id（V1a）：对应「流光」(classic)，也是未知值的回落目标。 */
         const val KEY_LYRIC_STYLE = "lyrics_style_id"
         const val KEY_RANDOM_STYLE = "random_visualizer_mode_per_song"
+        const val KEY_RANDOM_POOL = "random_visualizer_modes"
         const val DEFAULT_LYRIC_STYLE = "classic"
 
         /** 「流光」歌词样式调参（对应 Folia classic/tuning.ts 的 storage.key = 'classic_tuning'）。 */

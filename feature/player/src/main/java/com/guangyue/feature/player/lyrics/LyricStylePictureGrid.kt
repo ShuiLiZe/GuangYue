@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -216,4 +219,71 @@ internal fun BackgroundPictureGrid(options: List<Pair<String, String>>, selected
 internal fun BackgroundGlyph(id: String, color: Color, modifier: Modifier = Modifier) {
     val strokes = remember(id) { backgroundGlyphOf(id).map { it to PathParser().parsePathString(it.d).toPath() } }
     GlyphCanvas(strokes, color, modifier)
+}
+
+/**
+ * 11-18 照 Folia `RandomPoolPicker` / `PictureChecks`（4 列 compact）：随机池，每格单独开关，至少留一种（再关提示「至少选择一种样式」）。
+ * 头行「随机池」13 半粗 t2，右侧「已选 n/总数」12 t3 +「全选」（全开时置灰）。格子 = 样式字形框 + 名字，开着 = 强调色环、字形与名字 t1。
+ * ✋ Folia 是面板上方弹层（Popover），广乐面板里就地展开在歌词样式行下面；最高 300，多了在里面滚。
+ */
+@Composable
+fun RandomPoolGrid(
+    rows: List<Triple<LyricStyle, String, Boolean>>,
+    accent: Color,
+    ink: Color,
+    t2: Color,
+    t3: Color,
+    line: Color,
+    fill: Color,
+    onChange: (List<LyricStyle>) -> Unit,
+) {
+    val on = rows.filter { it.third }.map { it.first }
+    val allOn = on.size == rows.size
+    Column(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 2.dp)) {
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 2.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("随机池", fontSize = 13.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, color = t2, modifier = Modifier.weight(1f))
+            Text("已选 ${on.size}/${rows.size}", fontSize = 12.sp, color = t3)
+            Box(
+                Modifier.padding(start = 6.dp).clip(RoundedCornerShape(8.dp))
+                    .clickable(enabled = !allOn) { onChange(rows.map { it.first }) }
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+            ) { Text("全选", fontSize = 12.sp, color = if (allOn) t3.copy(alpha = t3.alpha * 0.5f) else ink) }
+        }
+        Column(
+            Modifier.fillMaxWidth().heightIn(max = 300.dp).verticalScroll(rememberScrollState()).padding(horizontal = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            rows.chunked(4).forEach { lineRows ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    lineRows.forEach { (style, name, picked) ->
+                        Column(
+                            Modifier.weight(1f).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                                if (picked) {
+                                    if (on.size <= 1) com.guangyue.feature.library.design.StatusToasts.show("至少选择一种样式")
+                                    else onChange(on - style)
+                                } else onChange(rows.map { it.first }.filter { it in on || it == style })
+                            },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Box(Modifier.fillMaxWidth().aspectRatio(16f / 10f)) {
+                                if (picked) Box(Modifier.fillMaxSize().border(2.dp, accent, RoundedCornerShape(11.dp)))
+                                Box(
+                                    Modifier.fillMaxSize().padding(3.dp).clip(RoundedCornerShape(8.dp))
+                                        .background(fill).border(1.dp, line, RoundedCornerShape(8.dp)),
+                                    contentAlignment = Alignment.Center,
+                                ) { StyleGlyph(style, if (picked) ink else t3, Modifier.size(24.dp)) }
+                            }
+                            Text(
+                                name, fontSize = 11.sp, lineHeight = 16.sp,
+                                fontWeight = if (picked) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (picked) ink else t3, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                            )
+                        }
+                    }
+                    repeat(4 - lineRows.size) { Box(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
 }

@@ -1313,12 +1313,13 @@ fun GuangYueNavHost(
             val storedStyle by styleVm.style.collectAsStateWithLifecycle()
             // 11-18 Folia randomVisualizerModePerSong：开着时每换一首歌另抽一种样式（不重复上一首的）。
             val randomStyle by styleVm.randomStyle.collectAsStateWithLifecycle()
+            val randomPool by styleVm.randomPool.collectAsStateWithLifecycle()
             var randomPickId by rememberSaveable { mutableStateOf<String?>(null) }
             var randomPickFor by rememberSaveable { mutableStateOf<String?>(null) }
             val songKeyForStyle = playbackState.item?.key
             LaunchedEffect(randomStyle, songKeyForStyle) {
                 if (randomStyle && (randomPickId == null || randomPickFor != songKeyForStyle)) {
-                    randomPickId = pickRandomLyricStyle(randomPickId?.let { com.guangyue.feature.player.lyrics.LyricStyle.fromId(it) } ?: storedStyle).id
+                    randomPickId = pickRandomLyricStyle(randomPickId?.let { com.guangyue.feature.player.lyrics.LyricStyle.fromId(it) } ?: storedStyle, randomPool).id
                     randomPickFor = songKeyForStyle
                 }
             }
@@ -1429,7 +1430,13 @@ fun GuangYueNavHost(
                     classicWordRotation = tuning.enableWordRotation,
                     randomStyle = randomStyle,
                     onPickRandom = { styleVm.setRandom(true) },
-                    onRerollStyle = { randomPickId = pickRandomLyricStyle(style).id },
+                    onRerollStyle = { randomPickId = pickRandomLyricStyle(style, randomPool).id },
+                    randomPool = randomPool,
+                    onRandomPool = { ids ->
+                        styleVm.setRandomPool(ids)
+                        // 这首抽到的样式不在池里了：马上另抽一种（Folia 同：随机池变了，当前歌换成池里的）。
+                        if (ids.isNotEmpty() && style.id !in ids) randomPickId = pickRandomLyricStyle(style, ids).id
+                    },
                     onToggleWordRotation = { styleVm.update(tuning.copy(enableWordRotation = !tuning.enableWordRotation)) },
                     onCycleIntensity = { styleVm.updateCommon(lyricCommon.copy(intensity = com.guangyue.core.lyrics.LyricCommonSettings.nextIntensity(lyricCommon.intensity))) },
                     // 2026-11-14：以前「加入歌单」直接跳搜索页（错的）。改成 Folia AddToPlaylistHost：

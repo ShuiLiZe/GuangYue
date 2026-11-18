@@ -191,12 +191,39 @@ internal val LyricStylePanelOrder = listOf(
     LyricStyle.LUMIERE, LyricStyle.MACHI, LyricStyle.DIORAMA, LyricStyle.STILL,
 )
 
-/** Folia pickRandomVisualizerMode：在全部样式里随机挑一种，有别的可选时不挑当前这种。 */
-internal fun pickRandomLyricStyle(current: LyricStyle?, random: kotlin.random.Random = kotlin.random.Random.Default): LyricStyle {
-    val alternatives = LyricStylePanelOrder.filter { it != current }
-    val candidates = alternatives.ifEmpty { LyricStylePanelOrder }
+/** Folia pickRandomVisualizerMode：在随机池（空 = 全部样式）里随机挑一种，有别的可选时不挑当前这种。 */
+internal fun pickRandomLyricStyle(
+    current: LyricStyle?,
+    pool: Set<String> = emptySet(),
+    random: kotlin.random.Random = kotlin.random.Random.Default,
+): LyricStyle {
+    val inPool = LyricStylePanelOrder.filter { pool.isEmpty() || it.id in pool }.ifEmpty { LyricStylePanelOrder }
+    val alternatives = inPool.filter { it != current }
+    val candidates = alternatives.ifEmpty { inPool }
     return candidates[random.nextInt(candidates.size)]
 }
+
+/** 样式的中文名（面板 / 随机池共用）。 */
+internal fun lyricStyleName(ctx: android.content.Context, style: LyricStyle): String = ctx.getString(
+    when (style) {
+        LyricStyle.CLASSIC -> R.string.lyrics_style_classic
+        LyricStyle.FUME -> R.string.lyrics_style_fume
+        LyricStyle.PARTITA -> R.string.lyrics_style_partita
+        LyricStyle.CADENZA -> R.string.lyrics_style_cadenza
+        LyricStyle.STILL -> R.string.lyrics_style_still
+        LyricStyle.MONET -> R.string.lyrics_style_monet
+        LyricStyle.PENDOLO -> R.string.lyrics_style_pendolo
+        LyricStyle.NEBBIA -> R.string.lyrics_style_nebbia
+        LyricStyle.SONNET -> R.string.lyrics_style_sonnet
+        LyricStyle.HANABI -> R.string.lyrics_style_hanabi
+        LyricStyle.TEMPERA -> R.string.lyrics_style_tempera
+        LyricStyle.LUMIERE -> R.string.lyrics_style_lumiere
+        LyricStyle.MACHI -> R.string.lyrics_style_machi
+        LyricStyle.DIORAMA -> R.string.lyrics_style_diorama
+        LyricStyle.TILT -> R.string.lyrics_style_tilt
+        LyricStyle.CLADDAGH -> R.string.lyrics_style_claddagh
+    },
+)
 
 /**
  * P1b：舞台上的浮卡面板外壳（收藏 / 队列 / 音质 / 模式都在 app 层接线，界面在 feature 的 [StagePanel]）。
@@ -233,6 +260,9 @@ fun StagePanelHost(
     randomStyle: Boolean = false,
     onPickRandom: (() -> Unit)? = null,
     onRerollStyle: () -> Unit = {},
+    /** 11-18 Folia 随机池：参与随机的样式 id（空 = 全部）与改动回调；null 回调不画「选择随机池」。 */
+    randomPool: Set<String> = emptySet(),
+    onRandomPool: ((Set<String>) -> Unit)? = null,
 ) {
     val ctx = LocalContext.current
     // 2026-11-10：LocalTrackRepository 从来没人提供（一直是 null），收藏点了只改了图标、没写库——
@@ -362,6 +392,13 @@ fun StagePanelHost(
         lyricStyleName = if (randomStyle) "随机" else styleName,
         randomStyleName = if (randomStyle) styleName else null,
         onRerollStyle = onRerollStyle,
+        randomPool = if (randomStyle && onRandomPool != null) LyricStylePanelOrder.map { st ->
+            Triple(st, lyricStyleName(ctx, st), randomPool.isEmpty() || st.id in randomPool)
+        } else null,
+        onRandomPool = { picked ->
+            // 全选存成空（= 全部，以后加新样式也自动在池里）。
+            onRandomPool?.invoke(if (picked.size >= LyricStylePanelOrder.size) emptySet() else picked.map { it.id }.toSet())
+        },
         onOpenLyricStyle = onOpenLyricStyle,
         lyricStyle = lyricStyle,
         backgroundId = if (backgrounds.isEmpty()) null else background.takeIf { id -> backgrounds.any { it.first == id } } ?: backgrounds.first().first,
