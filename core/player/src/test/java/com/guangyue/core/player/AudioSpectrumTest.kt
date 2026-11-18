@@ -8,11 +8,13 @@ import kotlin.math.sin
 
 /** 频谱分析照 Folia AnalyserNode（fftSize 2048 / smoothing 0.6 / −100..−30 dB）+ getEnergy 分频。 */
 class AudioSpectrumTest {
-    private fun feed(hz: Double, amp: Double, seconds: Double = 0.5, rate: Int = 44100): AudioBands {
+    private fun feed(hz: Double, amp: Double, seconds: Double = 0.5, rate: Int = 44100): AudioBands = feedMany(listOf(hz), amp, seconds, rate)
+
+    private fun feedMany(hzs: List<Double>, amp: Double, seconds: Double = 0.5, rate: Int = 44100): AudioBands {
         val a = SpectrumAnalyzer(rate)
         var last: AudioBands? = null
         val n = (rate * seconds).toInt()
-        for (i in 0 until n) a.push(amp * sin(2 * PI * hz * i / rate))?.let { last = it }
+        for (i in 0 until n) a.push(hzs.sumOf { amp * sin(2 * PI * it * i / rate) })?.let { last = it }
         return last!!
     }
 
@@ -29,9 +31,11 @@ class AudioSpectrumTest {
     }
 
     @Test fun vocalToneLightsVocal() {
-        val b = feed(2000.0, 0.5)
-        assertTrue("vocal ${b.vocal}", b.vocal > 20)
+        // 人声段 1000–3500 Hz 有 117 个频点，单音只亮几格（getEnergy 是平均）；铺五个音才像人声。
+        val b = feedMany(listOf(1200.0, 1700.0, 2200.0, 2700.0, 3200.0), 0.2)
+        assertTrue("vocal ${b.vocal}", b.vocal > 10)
         assertTrue("bass ${b.bass}", b.bass < 5)
+        assertTrue("vocal ${b.vocal} > bass ${b.bass}", b.vocal > b.bass)
     }
 
     @Test fun processMatchesFolia() {

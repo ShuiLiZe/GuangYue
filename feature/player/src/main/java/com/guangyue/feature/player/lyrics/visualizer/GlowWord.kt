@@ -91,12 +91,13 @@ fun GlowWord(
     glowStrengthOverride: Float? = null,
     modifier: Modifier = Modifier,
 ) {
-    val style = remember(fontSizeSp, fontFamily) {
+    val weight = LyricFontWeight.resolve(FontWeight.Medium)
+    val style = remember(fontSizeSp, fontFamily, weight) {
         TextStyle(
             fontSize = fontSizeSp.sp,
             lineHeight = (fontSizeSp * 1.22f).sp,
             fontFamily = fontFamily,
-            fontWeight = FontWeight.Medium,
+            fontWeight = weight,
         )
     }
 

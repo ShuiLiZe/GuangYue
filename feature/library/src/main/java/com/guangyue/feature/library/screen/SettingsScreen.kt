@@ -136,6 +136,8 @@ fun SettingsScreen(
 
     val behavior by com.guangyue.core.player.PlaybackBehavior.flow(launchCtx).collectAsState()
     val stageCard by com.guangyue.core.player.StageCardPrefs.flow(launchCtx).collectAsState()
+    val chrome by com.guangyue.core.player.PlayerChromePrefs.flow(launchCtx).collectAsState()
+    val localLyricsPriority by com.guangyue.core.download.LocalLyricPrefs.flow(launchCtx).collectAsState()
     var playbackFade by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.guangyue.core.player.PlaybackFade.enabled(launchCtx)) }
     // 全部设置项（数据驱动：分页与搜索共用一份）。
     val items = buildList {
@@ -221,6 +223,17 @@ fun SettingsScreen(
             add(SettingItem(SettingsPage.PLAYER, "播放后进入的视图", "播放后进入的视图", "点击播放后默认打开哪个视图。", icon(GuangYueIcons.Play),
                 below = { FlowStyleChips(listOf("player" to "可视化", "stay" to "留在原处"), playbackEntryView, onPickPlaybackEntryView) }))
         }
+        // 11-19 Folia PlayerPage「控制栏」组（options.settingsHeadingControlBar → autoHidePlayerChrome）。
+        add(SettingItem(SettingsPage.PLAYER, "控制栏", "自动隐藏控制栏", "开启后，自动隐藏播放页的进度条和右侧按钮。", icon(GuangYueIcons.EyeOff),
+            trailing = { FoliaToggle(checked = chrome.autoHide, onChange = { on -> com.guangyue.core.player.PlayerChromePrefs.update(launchCtx) { it.copy(autoHide = on) } }) }))
+        // Folia PlayerPage「播放页界面」组（options.labPlayerUiSection）：隐藏底部控制条 / 隐藏右侧按钮 / 始终显示返回按钮。
+        // 底部字幕层的开关在歌词样式窗口「字幕」页（同 Folia 两处入口，这里不重复）；「始终显示切歌按钮」广乐展开胶囊常驻箭头，不列。
+        add(SettingItem(SettingsPage.PLAYER, "播放页界面", "隐藏底部控制条", "仅对播放页生效。可分别隐藏底部控制条和右侧按钮。", icon(GuangYueIcons.EyeOff),
+            trailing = { FoliaToggle(checked = chrome.hideProgressBar, onChange = { on -> com.guangyue.core.player.PlayerChromePrefs.update(launchCtx) { it.copy(hideProgressBar = on) } }) }))
+        add(SettingItem(SettingsPage.PLAYER, "播放页界面", "隐藏右侧按钮", null, icon(GuangYueIcons.SlidersHorizontal),
+            trailing = { FoliaToggle(checked = chrome.hidePanelButton, onChange = { on -> com.guangyue.core.player.PlayerChromePrefs.update(launchCtx) { it.copy(hidePanelButton = on) } }) }))
+        add(SettingItem(SettingsPage.PLAYER, "播放页界面", "始终显示播放页左上角返回按钮", "让播放页左上角的返回按钮保持显示。", icon(GuangYueIcons.ChevronLeft),
+            trailing = { FoliaToggle(checked = chrome.alwaysBackButton, onChange = { on -> com.guangyue.core.player.PlayerChromePrefs.update(launchCtx) { it.copy(alwaysBackButton = on) } }) }))
         // Folia PlayerPage「歌曲信息卡片」组（options.stageTrackPill*）：显示方式 限时 / 常驻 / 不显示 + 显示时长 3–60s。
         add(SettingItem(SettingsPage.PLAYER, "歌曲信息卡片", "显示方式", "播放器中的正在播放卡片：显示一段时间后自动隐藏，或保持常驻 / 隐藏。", icon(GuangYueIcons.Music),
             below = { FoliaSegmented(value = stageCard.mode, options = listOf("auto" to "限时显示", "always" to "常驻显示", "never" to "不显示"),
@@ -264,6 +277,12 @@ fun SettingsScreen(
                 icon(GuangYueIcons.Sparkles),
                 trailing = { FoliaToggle(checked = motion.followSystem, onChange = motion.onFollowSystem) }))
         }
+        // 11-19 Folia LyricsPage「歌词来源」组 → 本地歌曲歌词优先级（options.localLyricsPriority*，默认本地歌词）。
+        add(SettingItem(SettingsPage.LYRICS, "歌词来源", "本地歌曲歌词优先级",
+            "本地歌曲同时存在在线匹配歌词时，选择优先使用的歌词。" + if (localLyricsPriority == "local") "优先使用同目录和内嵌歌词，缺失时再使用在线歌词。" else "优先使用已匹配的在线歌词，缺失时再使用本地歌词。",
+            icon(GuangYueIcons.FileText),
+            below = { FoliaSegmented(value = localLyricsPriority, options = listOf("local" to "本地歌词", "online" to "在线优先"),
+                onSelect = { v -> com.guangyue.core.download.LocalLyricPrefs.set(launchCtx, v) }) }))
         if (globalLyricOffsetMs != null) {
             // Folia LyricsPage「时间与过滤」组 → 全局时间偏移（GlobalLyricOffsetModal 的 ±50 / ±10 步进，±2000ms）。
             add(SettingItem(SettingsPage.LYRICS, "时间与过滤", "全局时间偏移", "整体平移歌词时间轴，补偿蓝牙等输出延迟。", icon(GuangYueIcons.Timer),

@@ -52,6 +52,7 @@ class LyricsViewModel @Inject constructor(
      * 正数让歌词更晚出现（歌词时间 = 播放时间 - 偏移）。
      */
     private val offsets = context.getSharedPreferences("lyric_offsets", Context.MODE_PRIVATE)
+    private val appContext: Context = context.applicationContext
 
     /** 11-18：Folia「歌词 → 全局时间偏移」（设备级，与每首歌的偏移相加：effective = 每首 + 全局）。 */
     private val motionPrefs = com.guangyue.feature.player.lyrics.visualizer.MotionPrefs.flow(context)
@@ -157,11 +158,18 @@ class LyricsViewModel @Inject constructor(
                 // 0.0.18：本地下载的歌把歌词塞在 rawJson（rawLrc / translation）里，先用它，离线也有歌词。
                 val inline = item.rawJson?.let { embeddedLrc(it) }
                 val inlineTrans = item.rawJson?.let { embeddedTranslation(it) }
+                // 11-19 Folia「本地歌曲歌词优先级」：手机本地歌先读同目录 .lrc / 内嵌歌词（local），或先用在线匹配（online）。
+                val device = isDeviceTrack(item)
+                val localFirst = com.guangyue.core.download.LocalLyricPrefs.flow(appContext).value != "online"
+                val localLrc = if (device && inline == null) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    com.guangyue.core.download.LocalLyrics.read(appContext, item.origin.directUrl)
+                } else null
                 var source: com.guangyue.core.plugin.LyricSourceResult? = when {
                     inline != null -> com.guangyue.core.plugin.LyricSourceResult(rawLrc = inline, translation = inlineTrans)
+                    localLrc != null && (localFirst || cached?.lrc == null) -> com.guangyue.core.plugin.LyricSourceResult(rawLrc = localLrc)
                     cached?.lrc != null -> com.guangyue.core.plugin.LyricSourceResult(rawLrc = cached.lrc, translation = cached.translation)
                     // 手机本地歌没有插件可问，直接走自动匹配。
-                    isDeviceTrack(item) -> null
+                    device -> null
                     else -> runCatching {
                         val row = runCatching { tracks.byKey(item.key) }.getOrNull()
                         val songId = item.key.substringAfter(':', item.key)
@@ -197,6 +205,10 @@ class LyricsViewModel @Inject constructor(
                     if (!hasLyric && got?.lrc != null) {
                         source = com.guangyue.core.plugin.LyricSourceResult(rawLrc = got.lrc, translation = got.translation)
                     }
+                }
+                // 在线优先却没匹配到：退回本地歌词。
+                if (source?.rawLrc.isNullOrBlank() && localLrc != null) {
+                    source = com.guangyue.core.plugin.LyricSourceResult(rawLrc = localLrc)
                 }
                 val raw = source?.rawLrc
                 if (raw.isNullOrBlank()) {

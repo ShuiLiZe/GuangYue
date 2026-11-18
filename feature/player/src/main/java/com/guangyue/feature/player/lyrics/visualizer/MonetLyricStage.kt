@@ -347,7 +347,7 @@ private fun MonetRailBox(
                 ) {
                     val textStyle = TextStyle(
                         fontFamily = fontFamily,
-                        fontWeight = if (offset == 0) FontWeight.SemiBold else FontWeight.Medium,
+                        fontWeight = LyricFontWeight.resolve(if (offset == 0) FontWeight.SemiBold else FontWeight.Medium),
                         fontSize = with(density) { lyricDp.dp.toSp() },
                         // Folia measureMonetLineLayout：主文字行高 1.18em，上留 max(0.16em, 8)、下留 max(0.34em, 14)。
                         lineHeight = with(density) { (lyricDp * 1.18f).dp.toSp() },

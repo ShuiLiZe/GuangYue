@@ -51,6 +51,8 @@ jobs:
         run: ./gradlew :core:data:testDebugUnitTest --no-daemon --stacktrace
       - name: 下载音质选择单测（core:download，只跑 DownloadQualityPick*）
         run: ./gradlew :core:download:testDebugUnitTest --tests '*DownloadQualityPick*' --no-daemon --stacktrace
+      - name: 本地歌词单测（core:download，只跑 LocalLyrics*）
+        run: ./gradlew :core:download:testDebugUnitTest --tests '*LocalLyrics*' --no-daemon --stacktrace
       - name: 集合页布局单测（app，只跑 CollectionLayout*）
         run: ./gradlew :app:testDebugUnitTest --tests '*CollectionLayout*' --no-daemon --stacktrace
       - name: 首页 3D 滑卡单测（app，只跑 GridSlider*）

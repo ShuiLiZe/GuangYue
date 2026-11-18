@@ -281,6 +281,8 @@ fun LyricFlowScreen(
     val lyricsFontScale = LocalDensity.current.fontScale.toDouble() *
         (if (lyricStyle.sizesOwnFont()) 1.0 else lyricCommon.fontScale)
     // 「字体」页的字体（Folia theme.fontStyle）：空串 = 跟随样式（各舞台原本的字体）。✋ 自算字号的几个样式字体也自带，不换。
+    // 11-19 Folia「字体」页字重（resolveThemeFontWeight）：各舞台经 LyricFontWeight 读。
+    androidx.compose.runtime.SideEffect { com.guangyue.feature.player.lyrics.visualizer.LyricFontWeight.override = lyricCommon.fontWeight }
     fun lyricFont(default: FontFamily): FontFamily = if (lyricStyle.sizesOwnFont()) default else when (lyricCommon.fontStyle) {
         "sans" -> GuangYueDesign.Sans
         "serif" -> GuangYueDesign.Serif
@@ -338,9 +340,11 @@ fun LyricFlowScreen(
     val immersiveReady = kernelLines.isNotEmpty() && emptyKind == null
     var chromeTouch by remember { mutableIntStateOf(0) }
     var chromeHidden by remember { mutableStateOf(false) }
-    LaunchedEffect(chromeTouch, playback.isPlaying, immersiveReady, panelOpen) {
+    // 11-19 Folia 设置「播放页 → 控制栏 / 播放页界面」。
+    val chrome by com.guangyue.core.player.PlayerChromePrefs.flow(androidx.compose.ui.platform.LocalContext.current).collectAsState()
+    LaunchedEffect(chromeTouch, playback.isPlaying, immersiveReady, panelOpen, chrome.autoHide) {
         chromeHidden = false
-        if (immersiveReady && playback.isPlaying && !panelOpen && !runningUnderRobolectric) {
+        if (chrome.autoHide && immersiveReady && playback.isPlaying && !panelOpen && !runningUnderRobolectric) {
             kotlinx.coroutines.delay(3_000)
             chromeHidden = true
         }
@@ -910,6 +914,7 @@ fun LyricFlowScreen(
             )
 
             // ---------------- 底部播放胶囊 ----------------
+            val showPanelKey = onOpenPanel != null && !chrome.hidePanelButton
             val panelKey: @Composable (androidx.compose.ui.unit.Dp) -> Unit = { keySize ->
                 if (onOpenPanel != null) {
                     val panelPill = if (darkMode) Color(0xFF17171A).copy(alpha = 0.55f) else Color.White.copy(alpha = 0.62f)
@@ -947,7 +952,9 @@ fun LyricFlowScreen(
                 // 11-17：竖屏照 folia-sonnet androidPhoneFit：面板手柄不和胶囊挤一行，贴右缘、抬到胶囊上方（bottom 120px，44px）；
                 // 胶囊自己居中。
                 Box(Modifier.fillMaxWidth().alpha(chromeAlpha)) {
-                LyricBar(
+                if (chrome.hideProgressBar) {
+                    Spacer(Modifier.fillMaxWidth().height(56.dp))
+                } else LyricBar(
                     modifier = Modifier.fillMaxWidth(),
                     positionMs = positionMs,
                     durationMs = playback.durationMs,
@@ -971,14 +978,16 @@ fun LyricFlowScreen(
                     onCycleMode = onCycleMode,
                     initialExpanded = initialBarExpanded,
                 )
-                    if (onOpenPanel != null) {
+                    if (showPanelKey) {
                         // 浮在胶囊上方，不占版面（不挤舞台）。
                         Box(Modifier.align(Alignment.TopEnd).offset(y = (-36).dp).padding(end = 4.dp)) { panelKey(44.dp) }
                     }
                 }
             } else {
             Row(Modifier.fillMaxWidth().alpha(chromeAlpha), verticalAlignment = Alignment.CenterVertically) {
-                LyricBar(
+                if (chrome.hideProgressBar) {
+                    Spacer(Modifier.weight(1f).height(56.dp))
+                } else LyricBar(
                     modifier = Modifier.weight(1f),
                     positionMs = positionMs,
                     durationMs = playback.durationMs,
@@ -1002,7 +1011,7 @@ fun LyricFlowScreen(
                     onCycleMode = onCycleMode,
                     initialExpanded = initialBarExpanded,
                 )
-                if (onOpenPanel != null) {
+                if (showPanelKey) {
                     Spacer(Modifier.width(GySpace.s))
                     panelKey(56.dp)
                 }
@@ -1022,7 +1031,7 @@ fun LyricFlowScreen(
                     modifier = Modifier
                         .offset(x = 20.dp, y = 26.dp)
                         .size(48.dp)
-                        .alpha(chromeAlpha)
+                        .alpha(if (chrome.alwaysBackButton) 1f else chromeAlpha)
                         .clickableNoRipple(onBack)
                         .semantics { contentDescription = backLabel },
                     contentAlignment = Alignment.Center,

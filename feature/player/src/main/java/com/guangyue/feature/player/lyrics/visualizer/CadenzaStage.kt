@@ -70,7 +70,7 @@ internal fun CadenzaStage(
             TextStyle(
                 fontSize = with(density) { (px * density.density).toFloat().toSp() },
                 fontFamily = fontFamily,
-                fontWeight = FontWeight.Bold,
+                fontWeight = LyricFontWeight.resolve(FontWeight.Bold),
             )
         }
         val prepared = remember(line, vw, vh, effective, intensity) {

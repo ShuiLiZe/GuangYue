@@ -97,7 +97,7 @@ internal fun ClassicLyricLine(
     val density = LocalDensity.current
 
     // 布局：与 Folia 一样按 (行, 调参, 强度, 字号, 视口宽) 缓存；同一行不重复计算。
-    val layout: ClassicLineLayout = remember(line, tuning, intensity, viewportWidthPx, lyricsFontScale, measurer) {
+    val layout: ClassicLineLayout = remember(line, tuning, intensity, viewportWidthPx, lyricsFontScale, measurer, LyricFontWeight.override) {
         val pxFontSize = ClassicLayout.pixelFontSize(lyricsFontScale, viewportWidthPx)
         val widths = line.words.map { word ->
             measureWordWidth(measurer, word.text, pxFontSize.toFloat(), density)
@@ -263,7 +263,7 @@ private fun PlainWord(
         text = word.text,
         color = baseColor,
         fontFamily = fontFamily,
-        fontWeight = FontWeight.Medium,
+        fontWeight = LyricFontWeight.resolve(FontWeight.Medium),
         fontSize = fontSizeSp.sp,
         modifier = Modifier.heightIn(min = WordTouchTargetDp.dp),
     )
@@ -348,7 +348,7 @@ internal fun measureWordWidth(
             text = text,
             style = TextStyle(
                 fontSize = with(density) { pxFontSize.toSp() },
-                fontWeight = FontWeight.Medium,
+                fontWeight = LyricFontWeight.resolve(FontWeight.Medium),
             ),
             constraints = Constraints(),
         ).size.width

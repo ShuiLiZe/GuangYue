@@ -25,4 +25,14 @@ class LyricCommonSettingsTest {
         assertEquals(AnimationIntensity.CALM, LyricCommonSettings.parseIntensity("CALM"))
         assertEquals(AnimationIntensity.CHAOTIC, LyricCommonSettings.sanitize(LyricCommonSettings(intensity = AnimationIntensity.CHAOTIC)).intensity)
     }
+
+    @Test fun fontWeightNormalizesLikeFolia() {
+        assertEquals(null, LyricCommonSettings.normalizeFontWeight(null))
+        assertEquals(100, LyricCommonSettings.normalizeFontWeight(20))
+        assertEquals(900, LyricCommonSettings.normalizeFontWeight(1200))
+        assertEquals(450, LyricCommonSettings.normalizeFontWeight(447))
+        assertEquals(440, LyricCommonSettings.normalizeFontWeight(444))
+        assertEquals(700, LyricCommonSettings.sanitize(LyricCommonSettings(fontWeight = 703)).fontWeight)
+        assertEquals(null, LyricCommonSettings.sanitize(LyricCommonSettings()).fontWeight)
+    }
 }

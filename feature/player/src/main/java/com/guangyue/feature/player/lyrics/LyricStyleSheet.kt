@@ -1645,7 +1645,7 @@ private fun ownFontSizeNotice(style: LyricStyle): String? = when (style) {
 /**
  * Folia VisPlaygroundSettingsPanel「字体」页（activeSection === 'common'）：
  * 自己算字号的样式先给一行说明（Row notice）→ 字号（0.85–1.4，步长 0.05，刻度 90/100/110/125%，那几个样式下置灰）
- * → 整体透明度（0.2–1）；字体画框在最上（FontTiles）。✋ 预览文本 / 系统字体 / 字重未移植（见 folia-diff.md）。
+ * → 自动字重 / 字重（100–900）→ 整体透明度（0.2–1）；字体画框在最上（FontTiles）。✋ 预览文本 / 系统字体未移植（见 folia-diff.md）。
  */
 @Composable
 private fun CommonSettingsRows(
@@ -1687,6 +1687,35 @@ private fun CommonSettingsRows(
             min = C.FONT_SCALE_MIN.toFloat(),
             max = C.FONT_SCALE_MAX.toFloat(),
             label = ::formatPercent,
+        )
+    }
+    // Folia：ToggleRow「自动字重」→ Reveal SliderRow sub「字重」100–900 / 步长 10，刻度 纤细 / 常规 / 粗体。
+    var weightSlider by remember { mutableStateOf(s.fontWeight ?: C.FONT_WEIGHT_START) }
+    ToggleRow(
+        label = "自动字重",
+        checked = s.fontWeight == null,
+        accent = accent,
+        onChange = { follow -> onChange(s.copy(fontWeight = if (follow) null else weightSlider)) },
+        note = "使用当前可视化模式设计的默认字重。",
+    )
+    val fw = s.fontWeight
+    if (fw != null) {
+        TuningSliderRow(
+            label = "字重",
+            value = fw.toFloat(),
+            accent = accent,
+            onChange = { v -> val w = C.normalizeFontWeight(Math.round(v)) ?: C.FONT_WEIGHT_START; weightSlider = w; onChange(s.copy(fontWeight = w)) },
+            min = C.FONT_WEIGHT_MIN.toFloat(),
+            max = C.FONT_WEIGHT_MAX.toFloat(),
+            step = 10f,
+            format = { Math.round(it).toString() },
+        )
+        val names = C.FONT_WEIGHT_MARKS.toMap()
+        SliderMarks(
+            marks = C.FONT_WEIGHT_MARKS.map { it.first.toFloat() },
+            min = C.FONT_WEIGHT_MIN.toFloat(),
+            max = C.FONT_WEIGHT_MAX.toFloat(),
+            label = { names[Math.round(it)] ?: Math.round(it).toString() },
         )
     }
     TuningSliderRow(

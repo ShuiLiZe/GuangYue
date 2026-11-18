@@ -276,7 +276,8 @@ internal fun TemperaStage(
             TpRgb.ofArgb(accentColor.toArgb()), TpRgb.ofArgb(secondaryColor.toArgb()),
         )
     }
-    val style = remember(fontFamily) { TextStyle(fontFamily = fontFamily, fontWeight = FontWeight.SemiBold) }
+    val weight = LyricFontWeight.resolve(FontWeight.SemiBold)
+    val style = remember(fontFamily, weight) { TextStyle(fontFamily = fontFamily, fontWeight = weight) }
     val scenes = remember(program, palette, lyricsFontScale, style) { HashMap<Long, TpSceneView>() }
     val widthCache = remember(style) { HashMap<String, Double>() }
     val layoutCache = remember(style) { HashMap<String, TextLayoutResult>() }

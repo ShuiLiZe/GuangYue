@@ -66,7 +66,7 @@ internal fun CladdaghStage(
         val style = TextStyle(
             fontSize = with(density) { fontPx.toFloat().dp.toSp() },
             fontFamily = fontFamily,
-            fontWeight = FontWeight.Bold,
+            fontWeight = LyricFontWeight.resolve(FontWeight.Bold),
             letterSpacing = Claddagh.LETTER_SPACING_EM.em,
         )
         val spacingScale = (1 + tuning.focusScaleRatio) / (1 + CladdaghTuning.DEFAULT.focusScaleRatio)
