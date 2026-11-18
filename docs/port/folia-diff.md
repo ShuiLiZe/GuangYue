@@ -111,3 +111,4 @@
 - ✋ 11-18 模拟器 emulator-5554 下午被别的任务（SteamX 云挂卡）占用且反复重启，本轮起不在它上面点按，改靠 PC 编译 + CI 取证。
 - 🔧 11-18 通用背景快捷开关照 `backgrounds/common/entry.tsx` renderQuickControls：控制页签「背景类型」行选通用时，参数行出「添加封面色彩」（Cone，common.useCoverColorBg，默认关 = 主题底色盖住流体封面层）与「暗角」（Aperture，默认开，radial transparent 40% → 黑 60%）。存 common_use_cover_color_bg / common_vignette。✋ 广乐原先通用背景一直是封面流体 + 无暗角；现跟 Folia 默认（底色 + 暗角），想要原样子点亮「添加封面色彩」、关「暗角」。
 - 🔧 11-18 隐现背景快捷控件照 `backgrounds/latent/entry.tsx` renderQuickControls：背景类型行选隐现时参数行出「混合 / 像素 / 流体」（displayMode 轮换）、「封面与主题 / 仅封面取色」（colorSource，resolveLatentShaderColors cover-only 分支）两颗胶囊 +「可读性叠色」开关（Layers，overlayEnabled）。只有像素时点阵直接盖底色（不再 soft-light，opacity 1）。存 latent_background_tuning（LatentPrefs，播放页与首页背景共用）。✋ 其余调参（点阵大小 / 速度 / 流体扭曲 / 节拍响应）未做：广乐没有音频频段。
+- 🔧 11-18 样式面板「背景」页去掉「暂无可调参数」：隐现 = 显示方式（像素 / 流体 / 混合）、取色来源（封面与主题 / 仅封面）分段 + 可读性叠色开关；通用 = 添加封面色彩、暗角开关（同播放面板快捷控件，一份设置）。

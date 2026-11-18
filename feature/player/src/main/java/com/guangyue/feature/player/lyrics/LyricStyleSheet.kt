@@ -35,6 +35,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -248,6 +249,9 @@ fun LyricStyleSheet(
     backgrounds: List<Pair<String, String>> = emptyList(),
     background: String = "latent",
     onBackground: ((String) -> Unit)? = null,
+    /** 11-18 通用背景两开关（添加封面色彩, 暗角）与改动回调；null 不画。 */
+    commonBg: Pair<Boolean, Boolean>? = null,
+    onCommonBg: (Boolean, Boolean) -> Unit = { _, _ -> },
     /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕 / 2 字体 / 3 背景）。 */
     initialSection: Int = 0,
 ) {
@@ -290,6 +294,8 @@ fun LyricStyleSheet(
             backgrounds = backgrounds,
             background = background,
             onBackground = onBackground,
+            commonBg = commonBg,
+            onCommonBg = onCommonBg,
             initialSection = initialSection,
         )
     }
@@ -331,6 +337,9 @@ private fun LyricStylePanelContent(
     backgrounds: List<Pair<String, String>> = emptyList(),
     background: String = "latent",
     onBackground: ((String) -> Unit)? = null,
+    /** 11-18 通用背景两开关（添加封面色彩, 暗角）与改动回调；null 不画。 */
+    commonBg: Pair<Boolean, Boolean>? = null,
+    onCommonBg: (Boolean, Boolean) -> Unit = { _, _ -> },
     /** 取证用：打开时停在第几页（0 歌词动画 / 1 字幕 / 2 字体 / 3 背景）。 */
     initialSection: Int = 0,
 ) {
@@ -429,13 +438,36 @@ private fun LyricStylePanelContent(
                 )
                 BackgroundPictureGrid(backgrounds, background, accent, onBackground)
                 Spacer(Modifier.height(12.dp))
-                // ✋ Folia 各背景还有自己的参数组（隐现的显示方式 / 取色 / 节拍响应…、通用的几何图形…），广乐背景层暂无这些参数。
-                Text(
-                    text = "这种背景暂无可调参数。",
-                    fontSize = 13.sp,
-                    color = Gyp.t2,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
+                // 11-18 Folia 各背景的设置卡：隐现 = 显示方式 / 取色 / 可读性叠色（LatentBackgroundSettingsCard 手机能落地的三项），
+                // 通用 = 添加封面色彩 / 暗角（CommonBackgroundSettingsCard）。✋ 点阵大小、速度、节拍响应等未做（无音频频段）。
+                if (background == "latent") {
+                    val bgCtx = androidx.compose.ui.platform.LocalContext.current
+                    val L = com.guangyue.feature.player.lyrics.visualizer.LatentPrefs
+                    val lp by L.flow(bgCtx).collectAsState()
+                    SegmentedRow(
+                        label = "显示方式",
+                        options = listOf("dithering" to "像素", "mesh" to "流体", "both" to "混合"),
+                        selected = lp.displayMode,
+                        onChange = { m -> L.update(bgCtx) { it.copy(displayMode = m) } },
+                    )
+                    SegmentedRow(
+                        label = "取色来源",
+                        options = listOf("cover-theme" to "封面与主题", "cover-only" to "仅封面"),
+                        selected = lp.colorSource,
+                        onChange = { c -> L.update(bgCtx) { it.copy(colorSource = c) } },
+                    )
+                    ToggleRow(label = "可读性叠色", checked = lp.overlayEnabled, accent = accent, onChange = { on -> L.update(bgCtx) { it.copy(overlayEnabled = on) } })
+                } else if (background == "common" && commonBg != null) {
+                    ToggleRow(label = "添加封面色彩", checked = commonBg.first, accent = accent, onChange = { onCommonBg(it, commonBg.second) }, note = "用封面取色的流体层代替默认底色。")
+                    ToggleRow(label = "暗角", checked = commonBg.second, accent = accent, onChange = { onCommonBg(commonBg.first, it) })
+                } else {
+                    Text(
+                        text = "这种背景暂无可调参数。",
+                        fontSize = 13.sp,
+                        color = Gyp.t2,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
             } else if (section == 2 && onCommon != null) {
                 CommonSettingsRows(common, style, accent, onCommon)
                 ResetRow(str(strings.reset), accent) { onCommon(com.guangyue.core.lyrics.LyricCommonSettings.DEFAULT) }

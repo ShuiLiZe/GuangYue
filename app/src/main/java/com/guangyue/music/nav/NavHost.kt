@@ -1515,6 +1515,8 @@ fun GuangYueNavHost(
                         backgrounds = listOf("latent" to "隐现", "common" to "通用"),
                         background = visBackground,
                         onBackground = styleVm::pickBackground,
+                        commonBg = commonCover to commonVignette,
+                        onCommonBg = { c, v -> styleVm.setCommonCoverColor(c); styleVm.setCommonVignette(v) },
                         initialSection = styleSheetSection,
                     )
                 }
