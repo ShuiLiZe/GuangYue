@@ -1041,7 +1041,9 @@ fun LyricFlowScreen(
         }
         // 2026-11-14：Folia NowPlayingToast（正在播放 / 接下来播放），手机上停在左上返回键下方
         // （folia-sonnet androidPhoneFit：top 安全区 + 72px、left 12px）。
-        if (showNowPlayingCard) {
+        // 11-18 Folia「歌曲信息卡片 → 显示方式 / 显示时长」（StageCardPrefs）。
+        val stageCard by com.guangyue.core.player.StageCardPrefs.flow(androidx.compose.ui.platform.LocalContext.current).collectAsState()
+        if (showNowPlayingCard && stageCard.mode != "never") {
             androidx.compose.foundation.layout.Box(
                 Modifier
                     .fillMaxSize()
@@ -1058,7 +1060,8 @@ fun LyricFlowScreen(
                     nextUp = nowPlayingNext,
                     isNextUp = nextUpCountdown(playback.positionMs, playback.durationMs),
                     darkMode = darkMode,
-                    holdOpen = nowPlayingHold,
+                    holdOpen = nowPlayingHold || stageCard.mode == "always",
+                    timeoutMs = stageCard.timeoutSec * 1000L,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(start = 12.dp, top = 72.dp)

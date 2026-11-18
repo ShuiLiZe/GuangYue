@@ -135,6 +135,7 @@ fun SettingsScreen(
     var autoPlayOnLaunch by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(launchPrefs.getBoolean("auto_play_on_launch", false)) }
 
     val behavior by com.guangyue.core.player.PlaybackBehavior.flow(launchCtx).collectAsState()
+    val stageCard by com.guangyue.core.player.StageCardPrefs.flow(launchCtx).collectAsState()
     var playbackFade by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.guangyue.core.player.PlaybackFade.enabled(launchCtx)) }
     // 全部设置项（数据驱动：分页与搜索共用一份）。
     val items = buildList {
@@ -220,6 +221,23 @@ fun SettingsScreen(
             add(SettingItem(SettingsPage.PLAYER, "播放后进入的视图", "播放后进入的视图", "点击播放后默认打开哪个视图。", icon(GuangYueIcons.Play),
                 below = { FlowStyleChips(listOf("player" to "可视化", "stay" to "留在原处"), playbackEntryView, onPickPlaybackEntryView) }))
         }
+        // Folia PlayerPage「歌曲信息卡片」组（options.stageTrackPill*）：显示方式 限时 / 常驻 / 不显示 + 显示时长 3–60s。
+        add(SettingItem(SettingsPage.PLAYER, "歌曲信息卡片", "显示方式", "播放器中的正在播放卡片：显示一段时间后自动隐藏，或保持常驻 / 隐藏。", icon(GuangYueIcons.Music),
+            below = { FoliaSegmented(value = stageCard.mode, options = listOf("auto" to "限时显示", "always" to "常驻显示", "never" to "不显示"),
+                onSelect = { m -> com.guangyue.core.player.StageCardPrefs.update(launchCtx) { it.copy(mode = m) } }) }))
+        if (stageCard.mode == "auto") {
+            add(SettingItem(SettingsPage.PLAYER, "歌曲信息卡片", "显示时长", null, icon(GuangYueIcons.Timer),
+                trailing = { Text("${stageCard.timeoutSec}s", color = Gyp.t2, fontSize = 13.sp, style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")) },
+                below = {
+                    androidx.compose.material3.Slider(
+                        value = stageCard.timeoutSec.toFloat(),
+                        onValueChange = { v -> com.guangyue.core.player.StageCardPrefs.update(launchCtx) { it.copy(timeoutSec = Math.round(v)) } },
+                        valueRange = 3f..60f,
+                        colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Gyp.ink, activeTrackColor = Gyp.accent, inactiveTrackColor = Gyp.ink.copy(alpha = 0.15f)),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }))
+        }
         if (lyricStyles.isNotEmpty()) {
             add(SettingItem(SettingsPage.PLAYER, "歌词动画", "歌词样式", "播放舞台上的歌词画法；各样式的参数在舞台的样式弹层里调", icon(GuangYueIcons.Sparkles),
                 below = {
@@ -301,7 +319,7 @@ fun SettingsScreen(
 /** 设置分类（Folia settingsNavModel 的手机子集，顺序与名字照它：外观/播放页/主页与歌单/播放控制/通用/存储与备份，zh-CN options.settingsPage*）。 */
 enum class SettingsPage(val label: String, val desc: String = "") {
     APPEARANCE("外观", "主题与深浅色。"),
-    PLAYER("播放页", "播放后进入的视图、歌词动画、背景与町景。"),
+    PLAYER("播放页", "播放后进入的视图、歌曲信息卡片、歌词动画、背景与町景。"),
     HOME("主页与歌单", "资料库界面、卡片样式、顶部胶囊入口与卡片位置。"),
     GRAPHICS("动画与性能", "背景动画与动态效果。"),
     PLAYBACK("播放控制", "默认播放音质与播放行为。"),

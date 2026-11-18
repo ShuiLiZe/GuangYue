@@ -118,3 +118,4 @@
 - 🔧 11-18 设置「播放控制 → 播放行为」照 Folia PlaybackPage：无法播放时自动跳过（autoSkipUnplayable，默认关：取链最终失败且不是网络连不上 / 超时，3 秒后跳下一首）、播放时阻止休眠（preventDisplaySleepDuringPlayback，默认关：播放中 keepScreenOn）。core/player PlaybackBehavior。✋ 队列默认行为、语音输入暂停、淡入淡出未做。
 - 🔧 11-18 「播放控制 → 声音 → 暂停/播放淡入淡出」照 Folia services/playbackFade（默认开，0.2 秒）：PlaybackController.pause 先把音量线性降到 0 再暂停，play 从 0 升回用户音量；淡出途中再按播放即撤销。通知栏 / 耳机键走 MediaSession 直接暂停，不淡。
 - 🔧 11-18 「播放行为 → 加入队列的默认位置」照 Folia queueAddBehavior：追加到末尾（默认）/ 追加到下一首，作用于各处「加入队列」（appendTracks）。
+- 🔧 11-18 设置「播放页 → 歌曲信息卡片」照 Folia PlayerPage（stageTrackPillMode / stageTrackPillTimeoutSec）：显示方式 限时显示（默认，显示时长 3–60s，默认 10s）/ 常驻显示 / 不显示，作用于播放页左上的正在播放卡片。core/player StageCardPrefs。✋ 调整卡片位置（拖动）、在首页显示、OBS 未做。
