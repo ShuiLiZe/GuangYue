@@ -153,14 +153,13 @@ class AccountLibrary @Inject constructor(
 
     // ———————————————————————— 网络 ————————————————————————
 
-    private fun post(c: QqCredential, body: String): String {
-        val req = Request.Builder().url(QqAccountApi.MUSICU_URL)
+    private fun post(c: QqCredential?, body: String): String {
+        val b = Request.Builder().url(QqAccountApi.MUSICU_URL)
             .header("Referer", "https://y.qq.com/")
             .header("Origin", "https://y.qq.com")
-            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
-            .header("Cookie", QqAccountApi.cookie(c))
-            .post(body.toRequestBody("application/json".toMediaType()))
-            .build()
+            .header("User-Agent", UA)
+        if (c != null) b.header("Cookie", QqAccountApi.cookie(c))
+        val req = b.post(body.toRequestBody("application/json".toMediaType())).build()
         http.newCall(req).execute().use { r ->
             if (!r.isSuccessful) error("HTTP ${r.code}")
             return r.body.string()
@@ -225,36 +224,58 @@ class AccountLibrary @Inject constructor(
         val cached = runCatching { json.decodeFromString(TrackSnapshot.serializer(), qqTracksFile(id).readText()).songs }.getOrNull()
         val c = qqCredential()
         if (c == null) _qqExpired.value = true
-        val fresh: Result<List<AccountSong>> = if (c == null) Result.failure(AccountExpiredException()) else runCatching {
-            val readAll = { liked: Boolean ->
-                val acc = ArrayList<AccountSong>()
-                var begin = 0
-                while (begin < MAX_SONGS) {
-                    val body = if (liked) QqAccountApi.likedSongsBody(c, begin, LIKED_PAGE) else QqAccountApi.songsBody(c, p, begin, PAGE)
-                    val text = post(c, body)
-                    val page = when (val r = QqAccountApi.parseSongs(text)) {
-                        is QqRead.Ok -> r.value
-                        QqRead.Expired -> throw AccountExpiredException()
-                        is QqRead.Failed -> {
-                            android.util.Log.w("GYACCOUNT", "qq tracks ${p.id} liked=$liked refused: ${r.reason} body=${text.take(300)}")
-                            error(r.reason)
-                        }
+        // 一页页读完一张歌单。cred = null 时不带 cookie、comm 不带 authst（未登录时的读法）。
+        fun readAll(cred: QqCredential?, liked: Boolean): List<AccountSong> {
+            val acc = ArrayList<AccountSong>()
+            var begin = 0
+            while (begin < MAX_SONGS) {
+                val body = if (liked && cred != null) QqAccountApi.likedSongsBody(cred, begin, LIKED_PAGE) else QqAccountApi.songsBody(cred, p, begin, PAGE)
+                val text = post(cred, body)
+                val page = when (val r = QqAccountApi.parseSongs(text)) {
+                    is QqRead.Ok -> r.value
+                    QqRead.Expired -> throw AccountExpiredException()
+                    is QqRead.Failed -> {
+                        android.util.Log.w("GYACCOUNT", "qq tracks ${p.id} liked=$liked anon=${cred == null} refused: ${r.reason} body=${text.take(300)}")
+                        error(r.reason)
                     }
-                    if (begin == 0) android.util.Log.i("GYACCOUNT", "qq tracks ${p.id} liked=$liked listed=${page.listed} total=${page.total}")
-                    acc += page.songs
-                    begin += page.listed
-                    val total = page.total
-                    val size = if (liked) LIKED_PAGE else PAGE
-                    if (page.listed == 0 || page.listed < size && total == null || total != null && begin >= total) break
                 }
-                acc.distinctBy { it.id }
+                if (begin == 0) android.util.Log.i("GYACCOUNT", "qq tracks ${p.id} liked=$liked anon=${cred == null} listed=${page.listed} total=${page.total}")
+                acc += page.songs
+                begin += page.listed
+                val total = page.total
+                val size = if (liked) LIKED_PAGE else PAGE
+                if (page.listed == 0 || page.listed < size && total == null || total != null && begin >= total) break
             }
-            val first = runCatching { readAll(false) }
-            val songs = first.getOrNull()
-            if (p.liked && (songs == null || songs.isEmpty() && (p.trackCount ?: 0) > 0)) {
-                if (first.exceptionOrNull() is AccountExpiredException) throw first.exceptionOrNull()!!
-                readAll(true)
-            } else first.getOrThrow()
+            return acc.distinctBy { it.id }
+        }
+        fun readCdInfo(): List<AccountSong> {
+            val url = QqAccountApi.cdInfoUrl(p) ?: error("没有可匿名读取的歌单号")
+            val req = Request.Builder().url(url)
+                .header("Referer", "https://y.qq.com/n/yqq/playlist")
+                .header("User-Agent", UA)
+                .build()
+            val text = http.newCall(req).execute().use { r -> if (!r.isSuccessful) error("HTTP ${r.code}"); r.body.string() }
+            return when (val r = QqAccountApi.parseCdInfo(text)) {
+                is QqRead.Ok -> r.value.songs.distinctBy { it.id }
+                QqRead.Expired -> throw AccountExpiredException()
+                is QqRead.Failed -> error(r.reason)
+            }
+        }
+        // 登录态读法在前（读得到不公开的自建歌单、「我喜欢」）；读不到 / 报错 / 有歌却回空时回落到未登录读法
+        // （用户 11-18：登录后点进歌单「就是不加载歌」）。收藏的歌单 Folia 本来就走匿名路由，这里也让匿名详情排第二。
+        val attempts = ArrayList<Pair<String, () -> List<AccountSong>>>()
+        if (c != null) {
+            attempts += "cred" to { readAll(c, false) }
+            if (p.liked) attempts += "cred-liked" to { readAll(c, true) }
+        }
+        attempts += "anon-cdinfo" to { readCdInfo() }
+        if (!p.liked && p.id.toLongOrNull() != null) attempts += "anon-musicu" to { readAll(null, false) }
+        val fresh: Result<List<AccountSong>> = runCatching {
+            QqFallback.firstWithSongs(
+                expectSongs = (p.trackCount ?: 1) > 0,
+                attempts = attempts,
+                log = { android.util.Log.i("GYACCOUNT", "${p.id}: $it") },
+            )
         }
         fresh.getOrNull()?.let { songs ->
             _qqExpired.value = false
@@ -609,6 +630,7 @@ class AccountLibrary @Inject constructor(
     }
 
     private companion object {
+        private const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
         const val PAGE = 500
         const val LIKED_PAGE = 100
         const val MAX_SONGS = 10_000

@@ -191,14 +191,29 @@ class MusicPluginBridge @Inject constructor(
     ): MediaSourceResult? = withContext(Dispatchers.IO) {
         val payload = musicItemRaw ?: item?.raw ?: item?.toJson()
         payload ?: return@withContext null
+        // 先带账号（登录后能取会员歌）；取不到 / 报错且确实带了账号时，不带账号再取一次 —— 用户 11-18：
+        // 登录 QQ 后插件拿登录 cookie 取链全空，「登录后听歌全都听不了，不登录能听」。保证不比未登录差。
+        val hasAccount = runCatching { readUserVariables(pluginId).values.any { it.isNotBlank() } }.getOrDefault(false)
+        CredentialFallback.run(
+            hasAccount = hasAccount,
+            withAccount = { mediaSourceOnce(pluginId, payload, quality, anonymous = false) },
+            anonymous = { mediaSourceOnce(pluginId, payload, quality, anonymous = true) },
+            log = { android.util.Log.i("GYACCOUNT", "getMediaSource $pluginId: $it") },
+        )
+    }
+
+    private suspend fun mediaSourceOnce(pluginId: String, payload: JsonObject, quality: String, anonymous: Boolean): MediaSourceResult? =
         try {
-            val raw = invoke(pluginId) { call("getMediaSource", payload, JsonPrimitive(quality)) }
+            val raw = invoke(pluginId) {
+                val saved = userVariables
+                if (anonymous) userVariables = { emptyMap() }
+                try { call("getMediaSource", payload, JsonPrimitive(quality)) } finally { userVariables = saved }
+            }
             SearchParser.mediaSource(raw)
         } catch (e: PluginRuntimeException) {
-            android.util.Log.w("GuangYuePlugin", "getMediaSource failed for $pluginId: ${e.message}")
+            android.util.Log.w("GuangYuePlugin", "getMediaSource failed for $pluginId anon=$anonymous: ${e.message}")
             null
         }
-    }
 
     // ------------------------------------------------------------------ metadata / lyrics
 

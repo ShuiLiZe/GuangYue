@@ -181,6 +181,29 @@ object QqAccountApi {
         put("g_tk_new_20200303", g)
     }
 
+    /** 不带登录态的 comm（未登录时的读法）：带凭据读失败时回落用。 */
+    fun anonComm(): JsonObject = buildJsonObject {
+        put("ct", 24)
+        put("cv", 4747474)
+        put("format", "json")
+        put("inCharset", "utf-8")
+        put("outCharset", "utf-8")
+        put("notice", 0)
+        put("platform", "yqq.json")
+        put("needNewCode", 1)
+        put("uin", 0)
+    }
+
+    /**
+     * 匿名歌单详情（Folia song_list_detail / qq-music-api getSongListDetail 同款）：不带 cookie，
+     * 读公开歌单（收藏的、自建公开的）。disstid 不是纯数字（自建歌单只有目录号）时返回 null。
+     */
+    fun cdInfoUrl(p: AccountPlaylist): String? {
+        val id = p.id.toLongOrNull()?.takeIf { it > 0 } ?: return null
+        return "https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?type=1&json=1&utf8=1&onlysong=0" +
+            "&new_format=1&disstid=$id&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=0"
+    }
+
     private fun req(module: String, method: String, param: JsonObject) = buildJsonObject {
         put("module", module)
         put("method", method)
@@ -202,8 +225,8 @@ object QqAccountApi {
     }.toString()
 
     /** 一页歌单曲目。自建歌单带上目录号（含「我喜欢」201），收藏的歌单只按 disstid 读。 */
-    fun songsBody(c: QqCredential, p: AccountPlaylist, begin: Int, num: Int): String = buildJsonObject {
-        put("comm", comm(c))
+    fun songsBody(c: QqCredential?, p: AccountPlaylist, begin: Int, num: Int): String = buildJsonObject {
+        put("comm", if (c == null) anonComm() else comm(c))
         put(
             "req_0",
             req("music.srfDissInfo.aiDissInfo", "uniform_get_Dissinfo", buildJsonObject {
@@ -345,9 +368,9 @@ object QqAccountApi {
             songMid = mid,
             title = songObj.pick("title", "name", "songname") ?: return null,
             artist = singers.joinToString("、").ifBlank { "未知艺术家" },
-            album = album?.pick("title", "name").orEmpty(),
-            albumMid = album?.pick("mid", "pmid").orEmpty(),
-            mediaMid = songObj["file"].obj()?.pick("media_mid").orEmpty(),
+            album = album?.pick("title", "name") ?: songObj.pick("albumname").orEmpty(),
+            albumMid = album?.pick("mid", "pmid") ?: songObj.pick("albummid").orEmpty(),
+            mediaMid = songObj["file"].obj()?.pick("media_mid") ?: songObj.pick("strMediaMid", "media_mid").orEmpty(),
             durationSec = songObj.pick("interval")?.toLongOrNull() ?: 0L,
         )
     }
@@ -364,5 +387,56 @@ object QqAccountApi {
         val songs = list.mapNotNull { it.obj()?.let(::song) }
         val total = data.int("total_song_num", "songlist_size") ?: data["dirinfo"].obj()?.int("songnum")
         return QqRead.Ok(QqSongPage(songs, total, list.size))
+    }
+
+    /**
+     * 解析 [cdInfoUrl] 的响应（`cdlist[0].songlist`，一次回整张）。可能包在 jsonp 回调里，先剥掉。
+     * 没有 cdlist / 没有歌单名（读不到不公开的歌单时上游回空壳）算失败，交给调用方决定。
+     */
+    fun parseCdInfo(body: String): QqRead<QqSongPage> {
+        val trimmed = body.trim().let { t ->
+            val a = t.indexOf('{'); val b = t.lastIndexOf('}')
+            if (a > 0 && b > a) t.substring(a, b + 1) else t
+        }
+        val root = parseRoot(trimmed) ?: return QqRead.Failed("响应读不出来")
+        codeOf(root)?.takeIf { it != 0 }?.let { return QqRead.Failed("匿名歌单详情被拒（code $it）") }
+        val cd = root["cdlist"].arr()?.firstOrNull().obj() ?: return QqRead.Failed("匿名歌单详情没有 cdlist")
+        val list = cd["songlist"].arr().orEmpty()
+        if (list.isEmpty() && cd.pick("dissname") == null) return QqRead.Failed("匿名读不到这张歌单")
+        val songs = list.mapNotNull { it.obj()?.let(::song) }
+        val total = cd.int("total_song_num", "songnum", "cur_song_num")
+        return QqRead.Ok(QqSongPage(songs, total, list.size))
+    }
+}
+
+/**
+ * 登录态读不到时回落到未登录读法（GYACCOUNT 日志）：按顺序试 [attempts]，第一份「拿到歌」的就用；
+ * 都拿不到时，若有一份是「成功但空」（真的空歌单）就回它，否则抛第一份的错（通常是登录态那份，好提示重新登录）。
+ * [expectSongs] = 歌单列表说它有歌：这时「成功但空」也当失败继续往下试。
+ */
+object QqFallback {
+    fun <T> firstWithSongs(
+        expectSongs: Boolean,
+        attempts: List<Pair<String, () -> List<T>>>,
+        log: (String) -> Unit = {},
+    ): List<T> {
+        var empty: List<T>? = null
+        var firstError: Throwable? = null
+        for ((name, run) in attempts) {
+            val r = runCatching(run)
+            val v = r.getOrNull()
+            if (v != null && v.isNotEmpty()) {
+                log("qq tracks via $name n=${v.size}")
+                return v
+            }
+            if (v != null) { log("qq tracks via $name empty"); if (empty == null) empty = v }
+            r.exceptionOrNull()?.let { e ->
+                log("qq tracks via $name failed: ${e.message}")
+                if (firstError == null) firstError = e
+            }
+            if (v != null && !expectSongs) return v
+        }
+        empty?.let { return it }
+        throw firstError ?: IllegalStateException("读取失败")
     }
 }
