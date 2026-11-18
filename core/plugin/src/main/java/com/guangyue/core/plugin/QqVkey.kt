@@ -108,8 +108,8 @@ object QqVkey {
     fun parse(json: String): String? {
         val root = runCatching { Json.parseToJsonElement(json).jsonObject }.getOrNull() ?: return null
         val data = (root["req_0"] as? JsonObject)?.get("data") as? JsonObject ?: return null
-        val sip = ((data["sip"] as? JsonArray)?.firstOrNull() as? JsonPrimitive)?.contentOrNull
-            ?.takeIf { it.isNotBlank() } ?: "https://ws.stream.qqmusic.qq.com/"
+        // sip 常给 http 主机；统一走支持 https 的 ws.stream（官方网页端同用）。
+        val sip = "https://ws.stream.qqmusic.qq.com/"
         val infos = data["midurlinfo"] as? JsonArray ?: return null
         for (e in infos) {
             val purl = ((e as? JsonObject)?.get("purl") as? JsonPrimitive)?.contentOrNull
