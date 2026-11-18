@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.onSizeChanged
@@ -148,6 +149,8 @@ internal fun MonetLyricStage(
     reduceMotion: Boolean,
     onSeekToLine: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    /** 动画强度：混乱时横屏大封面缓慢漂移摇摆（Folia VisualizerMonet monet-cover chaotic 9s 循环）。 */
+    chaotic: Boolean = false,
 ) {
     val density = LocalDensity.current
     val fs = lyricsFontScale.toFloat()
@@ -164,7 +167,7 @@ internal fun MonetLyricStage(
             MonetLandscape(
                 lines, currentIndex, clock, title, artist, album, widthDp, heightDp,
                 artistDp, titleDp, lyricDp, inactiveScale, primaryColor, secondaryColor, backgroundColor,
-                accentColor, fontFamily, coverUrl, reduceMotion, onSeekToLine,
+                accentColor, fontFamily, coverUrl, reduceMotion, onSeekToLine, chaotic && !reduceMotion,
             )
             return@BoxWithConstraints
         }
@@ -469,6 +472,7 @@ private fun MonetLandscape(
     coverUrl: String?,
     reduceMotion: Boolean,
     onSeekToLine: (Int) -> Unit,
+    chaotic: Boolean = false,
 ) {
     val density = LocalDensity.current
     val sp = { v: Float -> with(density) { v.dp.toSp() } }
@@ -591,11 +595,19 @@ private fun MonetLandscape(
                         BoxWithConstraints(Modifier.fillMaxWidth()) {
                             val w = maxWidth
                             val big = w * 1.35135f
+                            val drift = monetChaoticDrift(chaotic)
                             Box(
                                 Modifier
                                     .requiredWidth(big)
                                     // requiredWidth 居中溢出（左缘在 -(big-w)/2），再左移一半，使左缘落在 -35.135%·w（marginLeft）。
-                                    .offset(x = -(big - w) / 2),
+                                    .offset(x = -(big - w) / 2)
+                                    .graphicsLayer {
+                                        // Folia chaotic：y [0,−18,0,18,0]、x [0,−9,0,9,0]、rotate [0,1.2,0,−1.2,0]。
+                                        val k = monetDriftKey(drift.value)
+                                        translationX = k * 9f * density
+                                        translationY = k * 18f * density
+                                        rotationZ = -k * 1.2f
+                                    },
                             ) {
                                 Box(
                                     Modifier
@@ -625,4 +637,29 @@ private fun MonetLandscape(
             }
         }
     }
+}
+
+/** Folia monet-cover chaotic：9s 一圈（delay 0.2s），关时停在 0。 */
+@Composable
+private fun monetChaoticDrift(on: Boolean): androidx.compose.runtime.State<Float> {
+    val tr = androidx.compose.animation.core.rememberInfiniteTransition(label = "monetDrift")
+    val p = tr.animateFloat(
+        0f, 1f,
+        androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(9000, easing = androidx.compose.animation.core.LinearEasing),
+            initialStartOffset = androidx.compose.animation.core.StartOffset(200, androidx.compose.animation.core.StartOffsetType.Delay),
+        ),
+        label = "monetDriftP",
+    )
+    val off = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0f) }
+    return if (on) p else off
+}
+
+/** 关键帧 [0, −1, 0, 1, 0]，四段各 easeInOut（framer keyframes 的逐段缓动）。 */
+internal fun monetDriftKey(p: Float): Float {
+    val seg = (p * 4f).coerceIn(0f, 3.9999f)
+    val i = seg.toInt(); val u = seg - i
+    val e = if (u < 0.5f) 2f * u * u else 1f - (-2f * u + 2f) * (-2f * u + 2f) / 2f
+    val k = floatArrayOf(0f, -1f, 0f, 1f, 0f)
+    return k[i] + (k[i + 1] - k[i]) * e
 }

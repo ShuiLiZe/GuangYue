@@ -122,6 +122,8 @@ private class DioramaStageInput(
     @Volatile var colors: Pair<DioramaParticleColors, DioramaDampedColors>,
     /** 镜台参数里「每帧读」的部分（镜头 / 运动 / 音频、三种跟唱、点云辉光、背景粒子开关）；结构性的走 key 重建。 */
     @Volatile var tuning: DioramaTuning,
+    /** Folia theme.animationIntensity（"calm" / "normal" / "chaotic"）：镜头子模式（resolveDioramaMotionParams）。 */
+    @Volatile var intensity: String = "normal",
 )
 
 /** 挂载窗口：当前行（与转场中离场行）的可见行、当前行单元、粒子缓冲、静止位镜头。 */
@@ -196,7 +198,7 @@ private class DioramaStageRenderer(
     private val corridor = vis.mode == DioramaGeometryMode.CORRIDOR
     private val moteCirc = resolveDioramaMoteCircumference(moteCircumference.toDouble())
     private val moteRadial = resolveDioramaMoteRadial(moteRadialCount.toDouble())
-    private var stageMotion = motionOf(input.tuning)
+    private var stageMotion = motionOf(input.tuning, input.intensity)
     private val motePositions = FloatArray(DIORAMA_MOTE_MAX_POINTS * 3)
     private val moteWritten = newDioramaMoteWritten()
     private var trebleEnv = 0.0
@@ -319,7 +321,7 @@ private class DioramaStageRenderer(
         elapsed += delta
         val t = timeSeconds()
         val tuning = input.tuning
-        stageMotion = motionOf(tuning)
+        stageMotion = motionOf(tuning, input.intensity)
         glowU.glow = tuning.particleGlowIntensity.toFloat()
         val idx = resolveGlobal(t)
         if (w?.globalIndex != idx || w?.outgoingIndex != transitionOutgoing) enter(idx, transitionOutgoing)
@@ -449,6 +451,8 @@ fun DioramaStage(
     density: Double? = null,
     modifier: Modifier = Modifier,
     tuning: DioramaTuning = DioramaTuning.DEFAULT,
+    /** 动画强度（Folia theme.animationIntensity）：calm 镜头柔和 / chaotic 动感多变。 */
+    animationIntensity: com.guangyue.core.lyrics.AnimationIntensity = com.guangyue.core.lyrics.AnimationIntensity.NORMAL,
 ) {
     // 换歌不重建 GLSurfaceView：同一个渲染器里走 Folia 的换歌状态机（新走廊在雾外偏移处生成，镜头一镜到底飞过去）。
     val colors = remember(primaryColor, accentColor, secondaryColor, backgroundColor) {
@@ -463,6 +467,7 @@ fun DioramaStage(
         if (cur.lines !== lines || cur.seed != seed) input.song = DioramaStageSong(lines, seed)
         if (input.colors != colors) input.colors = colors
         if (input.tuning != tuning) input.tuning = tuning
+        input.intensity = animationIntensity.name.lowercase()
     }
     // 结构性参数变了才重建（点云几何 / 密度 / 体积 / 背景粒子圆周、径向）；其余每帧读 input.tuning。
     val vis = DioramaGeometryVisibility(
@@ -505,4 +510,4 @@ fun DioramaStagePreview(
 ) = DioramaStage(lines, { timeSeconds }, backgroundColor, primaryColor, accentColor, secondaryColor, seed, corridor, restCamera, density, modifier, tuning)
 
 /** 镜台参数 → 运镜参数（resolveDioramaMotionParams，主题动效强度暂按 normal）。 */
-private fun motionOf(t: DioramaTuning) = resolveDioramaMotionParams(t.cameraSpeed, t.motionAmount, t.audioReactivity)
+private fun motionOf(t: DioramaTuning, intensity: String) = resolveDioramaMotionParams(t.cameraSpeed, t.motionAmount, t.audioReactivity, intensity)

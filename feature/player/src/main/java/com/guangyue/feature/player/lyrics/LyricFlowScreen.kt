@@ -496,6 +496,7 @@ fun LyricFlowScreen(
                 accentColor = lyricAccent,
                 reduceMotion = reduceMotion,
                 onSeekToLine = onSeekToLine,
+                chaotic = lyricCommon.intensity == AnimationIntensity.CHAOTIC,
                 modifier = if (monetLandscape) Modifier else Modifier.windowInsetsPadding(
                     WindowInsets.statusBars
                         .union(WindowInsets.displayCutout)
@@ -595,6 +596,7 @@ fun LyricFlowScreen(
                 // Folia：三个场景（便利店街角 / 加油站 / 城寨酒吧）默认按歌自动选，设置里可手动定；播放页可拖动镜头。
                 scene = machi.scene,
                 draggable = true,
+                animationIntensity = lyricCommon.intensity,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -610,6 +612,7 @@ fun LyricFlowScreen(
                 seed = playback.item?.key ?: "diorama",
                 modifier = Modifier.fillMaxSize(),
                 tuning = dioramaTuning,
+                animationIntensity = lyricCommon.intensity,
             )
         }
         // R6 凝彩：Folia tempera 原版对译（段落→shot→构图色块 + 拼贴排版 + 文字反色），整屏铺满。

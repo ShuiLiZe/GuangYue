@@ -424,6 +424,10 @@ private class MachiRenderer(
     private val restCamera: Boolean = false,
     /** 播放暂停时氛围时间停住（clock.ts：雨、涟漪、滴水、闪烁、运镜都定格）。 */
     private val paused: () -> Boolean = { false },
+    /** createMachiRuntime INTENSITY_SCALE（calm 0.7 / normal 1 / chaotic 1.3）：乘雨量、雪量。 */
+    private val intensity: Double = 1.0,
+    /** createMachiRuntime TRAFFIC_CHANCE（calm 0.4 / normal 0.6 / chaotic 0.78）：每个车流窗口来车的机会。 */
+    private val trafficChance: Double = MACHI_TRAFFIC_CHANCE,
 ) : GLSurfaceView.Renderer {
     private val mesh = setup.mesh
     private val signs = setup.signs
@@ -796,7 +800,7 @@ private class MachiRenderer(
             updateLights()
         }
         // 会动的件按氛围时钟（风扇转、车按 9.5 s 窗口开过）。
-        val actorFrame = MachiActorFrame(ambient, seed, MACHI_TRAFFIC_CHANCE)
+        val actorFrame = MachiActorFrame(ambient, seed, trafficChance)
         setup.actors.forEach { it.update(actorFrame) }
         val view = (pose.position - pose.target).normalized()
         val wet = light.state.wetness > 0.001
@@ -844,16 +848,16 @@ private class MachiRenderer(
         val lamp = if (konbini) light.look.streetLamps * (0.75 + 0.25 * resolveMachiFlicker(ambient + 3.1, "$seed:street", 0.45))
             else light.look.streetLamps * (0.75 + 0.25 * resolveMachiFlicker(ambient + 4.2, "$seed:lamp", 0.45))
         cones?.draw(vp, floatArrayOf(view.x.toFloat(), view.y.toFloat(), view.z.toFloat()), lampColor, ambient, lamp * (1 - 0.6 * light.state.daylight))
-        // 雨丝 / 水花 / 滴水（MachiWeather.kt）：雨量 = rain × 0.62（audio、chorus 未接，intensity 1）；灯照雨丝程度 1 − 0.9 daylight。
+        // 雨丝 / 水花 / 滴水（MachiWeather.kt）：雨量 = rain × 0.62 × intensity（audio、chorus 未接）；灯照雨丝程度 1 − 0.9 daylight。
         val vx = view.x; val vz = view.z
         val rl = kotlin.math.sqrt(vx * vx + vz * vz)
         weather.draw(
             vp, floatArrayOf((vz / rl).toFloat(), 0f, (-vx / rl).toFloat()), ambient,
-            resolveMachiRainAmount(light.state.rain), light.state.wetness, 1 - 0.9 * light.state.daylight,
+            resolveMachiRainAmount(light.state.rain, intensity = intensity), light.state.wetness, 1 - 0.9 * light.state.daylight,
             rainColor, rainGlintColor, dripColor,
         )
         // 雪：雪量 = snow × (0.75 + 0.25 intensity)；点大小按场景目标每世界单位像素。
-        weather.drawSnow(vp, ambient, light.state.snow, 1 - 0.9 * light.state.daylight, post.sceneH / ((pose.top - pose.bottom) / pose.zoom), snowColor, snowGlintColor)
+        weather.drawSnow(vp, ambient, light.state.snow * (0.75 + 0.25 * intensity), 1 - 0.9 * light.state.daylight, post.sceneH / ((pose.top - pose.bottom) / pose.zoom), snowColor, snowGlintColor)
         // 白气（steam.ts）：朝镜头的软云片，加色、不写深度。
         setup.steam?.let { st ->
             val fx = -view.x; val fy = -view.y; val fz = -view.z
@@ -933,6 +937,8 @@ fun MachiStagePreview(
     scene: String = "kowloon",
     /** 播放页可拖动镜头（Folia OrbitControls）。 */
     draggable: Boolean = false,
+    /** 动画强度（Folia theme.animationIntensity）：雨雪量与车流。 */
+    animationIntensity: com.guangyue.core.lyrics.AnimationIntensity = com.guangyue.core.lyrics.AnimationIntensity.NORMAL,
 ) {
     val palette = remember(backgroundColor, primaryColor, secondaryColor, accentColor, seed) {
         resolveMachiPalette(MachiTheme(backgroundColor.machiHex(), primaryColor.machiHex(), secondaryColor.machiHex(), accentColor.machiHex()), seed)
@@ -970,12 +976,13 @@ fun MachiStagePreview(
     }
     Box(modifier) {
       // 换歌（seed）、换主题（palette → light / signs）时整块 GLSurfaceView 重建：factory 只跑一次，渲染器拿的是建时的模型。
-      androidx.compose.runtime.key(setup, light, lines, restCamera) {
+      androidx.compose.runtime.key(setup, light, lines, restCamera, animationIntensity) {
         AndroidView(
             factory = { ctx ->
                 GLSurfaceView(ctx).apply {
                     setEGLContextClientVersion(3)
-                    setRenderer(MachiRenderer(setup, light, rig, timeSeconds, lines, seed, restCamera, paused))
+                    setRenderer(MachiRenderer(setup, light, rig, timeSeconds, lines, seed, restCamera, paused,
+                        machiIntensityScale(animationIntensity), machiTrafficChance(animationIntensity)))
                     renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                 }
             },
@@ -1069,3 +1076,17 @@ fun MachiStagePreview(
     }
 }
 
+
+/** createMachiRuntime INTENSITY_SCALE。 */
+internal fun machiIntensityScale(i: com.guangyue.core.lyrics.AnimationIntensity): Double = when (i) {
+    com.guangyue.core.lyrics.AnimationIntensity.CALM -> 0.7
+    com.guangyue.core.lyrics.AnimationIntensity.NORMAL -> 1.0
+    com.guangyue.core.lyrics.AnimationIntensity.CHAOTIC -> 1.3
+}
+
+/** createMachiRuntime TRAFFIC_CHANCE。 */
+internal fun machiTrafficChance(i: com.guangyue.core.lyrics.AnimationIntensity): Double = when (i) {
+    com.guangyue.core.lyrics.AnimationIntensity.CALM -> 0.4
+    com.guangyue.core.lyrics.AnimationIntensity.NORMAL -> MACHI_TRAFFIC_CHANCE
+    com.guangyue.core.lyrics.AnimationIntensity.CHAOTIC -> 0.78
+}
