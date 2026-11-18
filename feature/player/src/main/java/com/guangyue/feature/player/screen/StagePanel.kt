@@ -42,6 +42,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -704,6 +705,16 @@ private fun ControlsBody(
                 params = if (backgroundId == "common") ({
                     QuickToggle(colors, accent, commonCoverColor, if (commonCoverColor) "添加封面色彩" else "使用默认色彩", GuangYueIcons.Cone, onToggleCoverColor)
                     QuickToggle(colors, accent, commonVignette, "暗角", GuangYueIcons.Aperture, onToggleVignette)
+                }) else if (backgroundId == "latent") ({
+                    // Folia latent entry renderQuickControls：显示方式 / 取色 两颗轮换胶囊 + 可读性叠色开关。
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    val lp by com.guangyue.feature.player.lyrics.visualizer.LatentPrefs.flow(ctx).collectAsState()
+                    val L = com.guangyue.feature.player.lyrics.visualizer.LatentPrefs
+                    val dl = L.displayLabel(lp.displayMode)
+                    val cl = L.colorLabel(lp.colorSource)
+                    QuickChip(colors, dl, "显示方式：$dl") { L.update(ctx) { it.copy(displayMode = L.cycle(L.DISPLAY_MODES, it.displayMode)) } }
+                    QuickChip(colors, cl, "取色来源：$cl") { L.update(ctx) { it.copy(colorSource = L.cycle(L.COLOR_SOURCES, it.colorSource)) } }
+                    QuickToggle(colors, accent, lp.overlayEnabled, "可读性叠色", GuangYueIcons.Layers) { L.update(ctx) { it.copy(overlayEnabled = !it.overlayEnabled) } }
                 }) else null,
             )
         }

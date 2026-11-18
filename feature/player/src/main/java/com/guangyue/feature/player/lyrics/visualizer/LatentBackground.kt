@@ -10,6 +10,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -86,8 +87,17 @@ val latentBackgroundSupported: Boolean by lazy {
 /** 手机竖屏下 Folia 网页端 Latent 实际的 pixelRatio（sqrt(1280×720 / 360×800) ≈ 1.79）。 */
 private const val LATENT_WEB_PR = 1.79f
 
-internal fun latentShaderColors(cover: List<Color>, palette: CoverPalette): List<Color> {
+internal fun latentShaderColors(cover: List<Color>, palette: CoverPalette, coverOnly: Boolean = false): List<Color> {
     val primary = cover.getOrNull(0) ?: palette.secondaryColor
+    if (coverOnly) {
+        // Folia resolveLatentShaderColors 'cover-only'：点阵底 = 第三色，流体六色全取封面。
+        val secondary = cover.getOrNull(1) ?: primary
+        val tertiary = cover.getOrNull(2) ?: secondary
+        val quaternary = cover.getOrNull(3) ?: primary
+        val quinary = cover.getOrNull(4) ?: secondary
+        val senary = cover.getOrNull(5) ?: tertiary
+        return listOf(tertiary, primary, primary, secondary, tertiary, quaternary, quinary, senary)
+    }
     val secondary = cover.getOrNull(1) ?: palette.primaryColor
     val tertiary = cover.getOrNull(2) ?: primary
     val quaternary = cover.getOrNull(3) ?: secondary
@@ -202,9 +212,14 @@ private fun LatentBackgroundImpl(
             }.getOrNull()?.let { extractRepresentativeColors(it, 6) }.orEmpty()
         }
     }
-    val target = latentShaderColors(cover, palette)
+    // 11-18 Folia latent tuning：显示方式 / 取色 / 可读性叠色（播放面板背景行快捷控件改）。
+    val tune by LatentPrefs.flow(androidx.compose.ui.platform.LocalContext.current).collectAsState()
+    val target = latentShaderColors(cover, palette, tune.colorSource == "cover-only")
     // 换歌柔焦换色（useBlendedColors）。
     val blended = target.mapIndexed { i, c -> animateColorAsState(c, tween(1000), label = "latent$i").value }
+    val bgColor = animateColorAsState(palette.backgroundColor, tween(1000), label = "latentBg").value
+    val showMesh = tune.displayMode != "dithering"
+    val showDither = tune.displayMode != "mesh"
 
     val mesh = remember { RuntimeShader(MESH_AGSL) }
     val dither = remember { RuntimeShader(DITHER_AGSL) }
@@ -260,8 +275,9 @@ private fun LatentBackgroundImpl(
         val resW = (wDp * pr).roundToInt().toFloat()
         val resH = (hDp * pr).roundToInt().toFloat()
 
-        drawRect(blended[0])
+        drawRect(bgColor)
 
+        if (showMesh) {
         mesh.setFloatUniform("u_res", resW, resH)
         mesh.setFloatUniform("u_k", k)
         mesh.setFloatUniform("u_time", meshTime)
@@ -276,7 +292,9 @@ private fun LatentBackgroundImpl(
         scale(1.025f) {
             drawRect(meshBrush, colorFilter = meshFilter)
         }
+        }
 
+        if (showDither) {
         dither.setFloatUniform("u_res", resW, resH)
         dither.setFloatUniform("u_k", k)
         dither.setFloatUniform("u_time", ditherTime)
@@ -288,10 +306,13 @@ private fun LatentBackgroundImpl(
         dither.setFloatUniform("u_colorBack", back.red, back.green, back.blue, back.alpha)
         dither.setFloatUniform("u_colorFront", front.red, front.green, front.blue, front.alpha)
         scale(1.015f) {
-            drawRect(ditherBrush, alpha = LatentTuning.DITHERING_OPACITY_PHONE, blendMode = BlendMode.Softlight)
+            // 只有点阵时（Folia displayMode dithering）点阵直接盖在底色上，不再 soft-light 叠流体。
+            if (showMesh) drawRect(ditherBrush, alpha = LatentTuning.DITHERING_OPACITY_PHONE, blendMode = BlendMode.Softlight)
+            else drawRect(ditherBrush)
+        }
         }
 
-        drawRect(blended[0], alpha = LatentTuning.OVERLAY_OPACITY)
+        if (tune.overlayEnabled) drawRect(bgColor, alpha = LatentTuning.OVERLAY_OPACITY)
     }
 }
 
