@@ -116,3 +116,4 @@
 - 🔧 11-18 字幕页补「副字幕内容」（Folia options.subtitleContentMode）：翻译 / 不显示，作用于莫奈、静止排进版面的译文（底部字幕不受影响）。存 subtitle_content_mode。✋ 罗马音两项没有（歌词模型无罗马音）；✋ 时计（Cadenza）版面本来不排译文。
 - 🔧 11-18 恢复上次的歌曲（Folia autoPlayOnLaunch）：core/player PlaybackSession 把队列（最多 500 首）、当前下标、进度存 files/playback_session.json（换歌 / 暂停即存，播放中每 5 秒）；冷启动还原，不取链不出声，首页播放条与播放页直接显示上次那首，按播放再 prepare。设置 → 通用 →「启动与窗口 → 进入应用后自动播放」（默认关，开 = 启动即续播），切换时提示 Folia 原文。以前广乐重开 App 队列全丢。
 - 🔧 11-18 设置「播放控制 → 播放行为」照 Folia PlaybackPage：无法播放时自动跳过（autoSkipUnplayable，默认关：取链最终失败且不是网络连不上 / 超时，3 秒后跳下一首）、播放时阻止休眠（preventDisplaySleepDuringPlayback，默认关：播放中 keepScreenOn）。core/player PlaybackBehavior。✋ 队列默认行为、语音输入暂停、淡入淡出未做。
+- 🔧 11-18 「播放控制 → 声音 → 暂停/播放淡入淡出」照 Folia services/playbackFade（默认开，0.2 秒）：PlaybackController.pause 先把音量线性降到 0 再暂停，play 从 0 升回用户音量；淡出途中再按播放即撤销。通知栏 / 耳机键走 MediaSession 直接暂停，不淡。

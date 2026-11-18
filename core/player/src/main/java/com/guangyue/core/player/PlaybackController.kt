@@ -440,7 +440,25 @@ class PlaybackController @Inject constructor(
     }
 
     fun toggle() {
-        if (player.isPlaying) player.pause() else play()
+        if (player.isPlaying) pause() else play()
+    }
+
+    /** 用户设的音量（淡入淡出只临时改 player.volume，结束后回到它）。 */
+    private var userVolume = 1f
+    private var fadeJob: Job? = null
+
+    /** Folia services/playbackFade：0.2 秒线性渐变音量。 */
+    private fun fadeTo(target: Float, then: () -> Unit = {}) {
+        fadeJob?.cancel()
+        fadeJob = scope.launch {
+            val from = player.volume
+            val steps = 10
+            for (i in 1..steps) {
+                delay((PlaybackFade.SECONDS * 1000 / steps).toLong())
+                player.volume = from + (target - from) * i / steps
+            }
+            then()
+        }
     }
 
     /** 冷启动恢复的队列没 prepare（只显示、不取链）：第一次按播放时再 prepare 并拉起播放服务。 */
@@ -449,10 +467,30 @@ class PlaybackController @Inject constructor(
             GuangYuePlaybackService.start(context)
             player.prepare()
         }
-        player.play()
+        if (PlaybackFade.enabled(context) && !player.isPlaying) {
+            // 恢复时淡入（Folia playbackFade）。
+            fadeJob?.cancel()
+            player.volume = 0f
+            player.play()
+            fadeTo(userVolume)
+        } else {
+            // 淡出途中又按了播放：撤掉淡出，音量回原值。
+            fadeJob?.cancel()
+            player.volume = userVolume
+            player.play()
+        }
     }
 
-    fun pause() = player.pause()
+    /** 暂停前先淡出 0.2 秒（Folia playbackFade，默认开；设置里可关）。 */
+    fun pause() {
+        if (PlaybackFade.enabled(context) && player.isPlaying) {
+            fadeTo(0f) { player.pause(); player.volume = userVolume }
+        } else {
+            fadeJob?.cancel()
+            player.volume = userVolume
+            player.pause()
+        }
+    }
 
     fun stop() {
         player.stop()
@@ -544,11 +582,13 @@ class PlaybackController @Inject constructor(
     fun prefetchResult(): PrefetchResult = prefetcher.lastResult
 
     fun setVolume(v: Float) {
-        player.volume = v.coerceIn(0f, 1f)
+        fadeJob?.cancel()
+        userVolume = v.coerceIn(0f, 1f)
+        player.volume = userVolume
     }
 
     /** 11-18 播放面板音量行（Folia VolumeRow）读当前值。 */
-    val volume: Float get() = player.volume
+    val volume: Float get() = userVolume
 
     /** 11-18 播放面板「音频效果器」：交给系统均衡器面板的会话号。 */
     val audioSessionId: Int get() = player.audioSessionId
