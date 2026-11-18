@@ -212,6 +212,11 @@ fun StagePanelHost(
     lyricSourceNote: String = "",
     /** 11-18 面板「歌词样式」行左右箭头直接换样式（Folia ModeStepperRow）；null = 不画箭头。 */
     onPickLyricStyle: ((LyricStyle) -> Unit)? = null,
+    /** 11-18 面板「背景类型」行（Folia AppearanceSection）：背景 id → 名字；空表不画。 */
+    backgrounds: List<Pair<String, String>> = emptyList(),
+    background: String = "",
+    onPickBackground: ((String) -> Unit)? = null,
+    onOpenBackground: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     // 2026-11-10：LocalTrackRepository 从来没人提供（一直是 null），收藏点了只改了图标、没写库——
@@ -337,6 +342,16 @@ fun StagePanelHost(
         },
         lyricStyleName = styleName,
         onOpenLyricStyle = onOpenLyricStyle,
+        lyricStyle = lyricStyle,
+        backgroundId = if (backgrounds.isEmpty()) null else background.takeIf { id -> backgrounds.any { it.first == id } } ?: backgrounds.first().first,
+        backgroundName = backgrounds.firstOrNull { it.first == background }?.second ?: backgrounds.firstOrNull()?.second.orEmpty(),
+        onStepBackground = onPickBackground?.takeIf { backgrounds.size > 1 }?.let { pick ->
+            { d: Int ->
+                val i = backgrounds.indexOfFirst { it.first == background }.coerceAtLeast(0)
+                pick(backgrounds[(i + d + backgrounds.size) % backgrounds.size].first)
+            }
+        },
+        onOpenBackground = onOpenBackground,
         queue = queueRows,
         onPickQueueRow = { index -> playback.playAt(index) },
         onRemoveQueueRow = { index -> playback.removeAt(index); revision++ },

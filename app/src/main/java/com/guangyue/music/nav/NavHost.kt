@@ -1287,6 +1287,8 @@ fun GuangYueNavHost(
             val visBackground by styleVm.background.collectAsStateWithLifecycle()
             val lyricContext = LocalContext.current
             var styleSheetOpen by rememberSaveable { mutableStateOf(false) }
+            // 样式面板打开时停哪一页（0 歌词动画 / 3 背景）：面板「背景类型」行点中间直接到背景页。
+            var styleSheetSection by rememberSaveable { mutableStateOf(0) }
             // P1b：面板是舞台上的浮卡（Folia UnifiedPanel），不再整页跳 PLAYER。
             var panelOpen by rememberSaveable { mutableStateOf(false) }
             var panelTab by rememberSaveable { mutableStateOf(com.guangyue.feature.player.screen.StagePanelTab.COVER) }
@@ -1371,9 +1373,18 @@ fun GuangYueNavHost(
                     lyricStyle = style,
                     onOpenLyricStyle = {
                         panelOpen = false
+                        styleSheetSection = 0
                         styleSheetOpen = true
                     },
                     onPickLyricStyle = styleVm::pickStyle,
+                    backgrounds = listOf("latent" to "隐现", "common" to "通用"),
+                    background = visBackground,
+                    onPickBackground = styleVm::pickBackground,
+                    onOpenBackground = {
+                        panelOpen = false
+                        styleSheetSection = 3
+                        styleSheetOpen = true
+                    },
                     // 2026-11-14：以前「加入歌单」直接跳搜索页（错的）。改成 Folia AddToPlaylistHost：
                     // 弹出歌单选择弹层，把当前这首加进选中的歌单，或新建歌单再加。
                     onAddToPlaylist = {
@@ -1442,6 +1453,7 @@ fun GuangYueNavHost(
                         backgrounds = listOf("latent" to "隐现", "common" to "通用"),
                         background = visBackground,
                         onBackground = styleVm::pickBackground,
+                        initialSection = styleSheetSection,
                     )
                 }
             }

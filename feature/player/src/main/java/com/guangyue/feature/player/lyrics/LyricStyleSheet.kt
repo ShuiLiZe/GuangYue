@@ -290,6 +290,7 @@ fun LyricStyleSheet(
             backgrounds = backgrounds,
             background = background,
             onBackground = onBackground,
+            initialSection = initialSection,
         )
     }
 }
@@ -1610,13 +1611,7 @@ private fun CommonSettingsRows(
     onChange: (com.guangyue.core.lyrics.LyricCommonSettings) -> Unit,
 ) {
     val C = com.guangyue.core.lyrics.LyricCommonSettings
-    Text(
-        text = "字体",
-        fontSize = 15.sp,
-        fontWeight = FontWeight.Bold,
-        color = Gyp.ink,
-        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp),
-    )
+    // Folia COMMON_GROUP 是 bare 组（不出组标题），页签名已是「字体」。
     // Folia Row label=字体 below=FontTiles：一行标签，下面 4 列画框（「永Aa」用该字体画，名字在下）。
     Text("字体", fontSize = 14.sp, color = Gyp.ink, modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 8.dp))
     LyricFontTiles(selected = s.fontStyle, accent = accent, onPick = { onChange(s.copy(fontStyle = it)) })

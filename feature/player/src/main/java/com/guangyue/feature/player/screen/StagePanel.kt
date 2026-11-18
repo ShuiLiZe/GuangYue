@@ -200,6 +200,13 @@ fun StagePanel(
     onRepeatMode: ((Int) -> Unit)? = null,
     onOpenEqualizer: (() -> Unit)? = null,
     onStepLyricStyle: ((Int) -> Unit)? = null,
+    /** 取景器字框里画当前样式的字形（Folia entry.tsx glyph）；null 画通用三横。 */
+    lyricStyle: com.guangyue.feature.player.lyrics.LyricStyle? = null,
+    /** 11-18 Folia AppearanceSection 第二行「背景类型」取景器：当前背景 id / 名字；null 不画。 */
+    backgroundId: String? = null,
+    backgroundName: String = "",
+    onStepBackground: ((Int) -> Unit)? = null,
+    onOpenBackground: () -> Unit = {},
 ) {
     val colors = stagePanelColors(dark)
     var qualityPick by remember { mutableStateOf(initialQualityPick) }
@@ -314,6 +321,11 @@ fun StagePanel(
                                     onRepeatMode = onRepeatMode,
                                     onOpenEqualizer = onOpenEqualizer,
                                     onStepLyricStyle = onStepLyricStyle,
+                                    lyricStyle = lyricStyle,
+                                    backgroundId = backgroundId,
+                                    backgroundName = backgroundName,
+                                    onStepBackground = onStepBackground,
+                                    onOpenBackground = onOpenBackground,
                                 )
                                 StagePanelTab.QUEUE -> QueueBody(
                                     colors = colors,
@@ -567,7 +579,9 @@ private fun <T> Segments(
  *    循环（名字就是当前状态：关闭循环 / 列表循环 / 单曲循环，点一下 关→列表→单曲）；✋ Folia 第二块是「智能过渡」，广乐没有，
  *    换成「随机播放」开关（Folia 随机在别处，广乐面板里原本就有这一项，不丢）；「音频效果器」打开系统均衡器（带箭头）。
  *  - 歌词样式取景器（ModeStepperRow）：‹ [48×30 字形框] 「歌词样式」11.5sp t3 / 当前名 14sp + ▾ ›；两侧 28dp 箭头直接换上一个 / 下一个样式，
- *    点中间开样式面板（✋ Folia 是就地展开小图网格，广乐沿用已有样式面板）。✋ 背景类型行、播放页透明背景、主题来源 / 主题名两行广乐暂无对应。
+ *    点中间开样式面板（✋ Folia 是就地展开小图网格，广乐沿用已有样式面板）。
+ *  - 11-18 背景类型取景器（AppearanceSection 第二行）：同一行样式，‹ › 在 隐现 / 通用 间换，点中间开样式面板「背景」页。
+ *    ✋ 播放页透明背景、主题来源 / 主题名两行广乐暂无对应。
  */
 @Composable
 private fun ControlsBody(
@@ -583,6 +597,11 @@ private fun ControlsBody(
     onRepeatMode: ((Int) -> Unit)?,
     onOpenEqualizer: (() -> Unit)?,
     onStepLyricStyle: ((Int) -> Unit)?,
+    lyricStyle: com.guangyue.feature.player.lyrics.LyricStyle? = null,
+    backgroundId: String? = null,
+    backgroundName: String = "",
+    onStepBackground: ((Int) -> Unit)? = null,
+    onOpenBackground: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth().padding(end = 2.dp)) {
         if (volume != null && onVolume != null) VolumeRow(colors, accent, volume, onVolume)
@@ -607,7 +626,16 @@ private fun ControlsBody(
         }
         // GroupLine：mx-1 my-2 h-px。
         Box(Modifier.padding(horizontal = 4.dp, vertical = 8.dp).fillMaxWidth().height(1.dp).background(colors.line))
-        StyleStepperRow(colors, lyricStyleName, onOpenLyricStyle, onStepLyricStyle)
+        StyleStepperRow(colors, lyricStyleName, onOpenLyricStyle, onStepLyricStyle, glyph = lyricStyle?.let { st ->
+            { c: Color -> com.guangyue.feature.player.lyrics.StyleGlyph(st, c, Modifier.size(18.dp)) }
+        })
+        if (backgroundId != null) {
+            StyleStepperRow(
+                colors, backgroundName, onOpenBackground, onStepBackground,
+                caption = "背景类型", stepNoun = "背景",
+                glyph = { c -> com.guangyue.feature.player.lyrics.BackgroundGlyph(backgroundId, c, Modifier.size(18.dp)) },
+            )
+        }
         Spacer(Modifier.height(4.dp))
     }
 }
@@ -714,11 +742,19 @@ private fun QuickTile(
     }
 }
 
-/** Folia ModeStepperRow（歌词样式那一行）。 */
+/** Folia ModeStepperRow（歌词样式 / 背景类型两行共用）。 */
 @Composable
-private fun StyleStepperRow(colors: StagePanelColors, name: String, onOpen: () -> Unit, onStep: ((Int) -> Unit)?) {
+private fun StyleStepperRow(
+    colors: StagePanelColors,
+    name: String,
+    onOpen: () -> Unit,
+    onStep: ((Int) -> Unit)?,
+    caption: String = "歌词样式",
+    stepNoun: String = "歌词样式",
+    glyph: (@Composable (Color) -> Unit)? = null,
+) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (onStep != null) StepArrow(colors, GuangYueIcons.ChevronLeft, "上一个歌词样式") { onStep(-1) }
+        if (onStep != null) StepArrow(colors, GuangYueIcons.ChevronLeft, "上一个$stepNoun") { onStep(-1) }
         Row(
             Modifier
                 .weight(1f)
@@ -733,8 +769,8 @@ private fun StyleStepperRow(colors: StagePanelColors, name: String, onOpen: () -
                     .border(1.dp, colors.line, RoundedCornerShape(6.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                // Folia modeGlyphs FALLBACK_GLYPH：三道横线（首行实、后两行半透明）。✋ 各样式自己的字形未搬。
-                androidx.compose.foundation.Canvas(Modifier.size(18.dp)) {
+                // 11-18：画当前样式 / 背景自己的字形（entry.tsx glyph）；没给时 Folia modeGlyphs FALLBACK_GLYPH 三道横线。
+                if (glyph != null) glyph(colors.t2) else androidx.compose.foundation.Canvas(Modifier.size(18.dp)) {
                     val u = size.width / 24f
                     val sw = 1.6f * u
                     fun line(y: Float, x2: Float, a: Float) = drawLine(colors.t2.copy(alpha = colors.t2.alpha * a), androidx.compose.ui.geometry.Offset(5 * u, y * u), androidx.compose.ui.geometry.Offset(x2 * u, y * u), sw, androidx.compose.ui.graphics.StrokeCap.Round)
@@ -743,7 +779,7 @@ private fun StyleStepperRow(colors: StagePanelColors, name: String, onOpen: () -
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text("歌词样式", fontSize = 11.5.sp, lineHeight = 15.sp, color = colors.t3)
+                Text(caption, fontSize = 11.5.sp, lineHeight = 15.sp, color = colors.t3)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(name, fontSize = 14.sp, lineHeight = 19.sp, color = colors.t1, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     Spacer(Modifier.width(4.dp))
@@ -751,7 +787,7 @@ private fun StyleStepperRow(colors: StagePanelColors, name: String, onOpen: () -
                 }
             }
         }
-        if (onStep != null) StepArrow(colors, GuangYueIcons.ChevronRight, "下一个歌词样式") { onStep(1) }
+        if (onStep != null) StepArrow(colors, GuangYueIcons.ChevronRight, "下一个$stepNoun") { onStep(1) }
     }
 }
 

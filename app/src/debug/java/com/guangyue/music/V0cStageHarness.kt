@@ -474,6 +474,8 @@ fun V0cStage(
                     volume = if (alt) 0f else 0.72f, onVolume = {},
                     repeatMode = if (alt) 2 else 1, onRepeatMode = {},
                     onOpenEqualizer = {}, onStepLyricStyle = {},
+                    // 11-18：取景器画样式字形 + 第二行「背景类型」。
+                    lyricStyle = LyricStyle.CLASSIC, backgroundId = "latent", backgroundName = "隐现", onStepBackground = {},
                 )
             }
         } else if (style == "queuepanel") {

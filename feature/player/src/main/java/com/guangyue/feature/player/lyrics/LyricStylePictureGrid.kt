@@ -210,3 +210,10 @@ internal fun BackgroundPictureGrid(options: List<Pair<String, String>>, selected
         }
     }
 }
+
+/** 背景字形（Folia BackgroundModeGlyph），给播放面板「背景类型」取景器用。 */
+@Composable
+internal fun BackgroundGlyph(id: String, color: Color, modifier: Modifier = Modifier) {
+    val strokes = remember(id) { backgroundGlyphOf(id).map { it to PathParser().parsePathString(it.d).toPath() } }
+    GlyphCanvas(strokes, color, modifier)
+}
