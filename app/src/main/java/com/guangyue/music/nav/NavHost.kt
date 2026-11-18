@@ -1283,7 +1283,19 @@ fun GuangYueNavHost(
             val lyricCommon by styleVm.common.collectAsStateWithLifecycle()
             val lyricOffset by vm.offsetMs.collectAsStateWithLifecycle()
             // V1a：当前样式（流光 / 浮名），同一份 styleVm —— 播放页切好、这里直接生效。
-            val style by styleVm.style.collectAsStateWithLifecycle()
+            val storedStyle by styleVm.style.collectAsStateWithLifecycle()
+            // 11-18 Folia randomVisualizerModePerSong：开着时每换一首歌另抽一种样式（不重复上一首的）。
+            val randomStyle by styleVm.randomStyle.collectAsStateWithLifecycle()
+            var randomPickId by rememberSaveable { mutableStateOf<String?>(null) }
+            var randomPickFor by rememberSaveable { mutableStateOf<String?>(null) }
+            val songKeyForStyle = playbackState.item?.key
+            LaunchedEffect(randomStyle, songKeyForStyle) {
+                if (randomStyle && (randomPickId == null || randomPickFor != songKeyForStyle)) {
+                    randomPickId = pickRandomLyricStyle(randomPickId?.let { com.guangyue.feature.player.lyrics.LyricStyle.fromId(it) } ?: storedStyle).id
+                    randomPickFor = songKeyForStyle
+                }
+            }
+            val style = if (randomStyle) randomPickId?.let { com.guangyue.feature.player.lyrics.LyricStyle.fromId(it) } ?: storedStyle else storedStyle
             val visBackground by styleVm.background.collectAsStateWithLifecycle()
             val lyricContext = LocalContext.current
             var styleSheetOpen by rememberSaveable { mutableStateOf(false) }
@@ -1388,6 +1400,9 @@ fun GuangYueNavHost(
                     animationIntensity = lyricCommon.intensity,
                     // 流光快捷开关：字词旋转（Folia classic entry renderQuickControls）。
                     classicWordRotation = tuning.enableWordRotation,
+                    randomStyle = randomStyle,
+                    onPickRandom = { styleVm.setRandom(true) },
+                    onRerollStyle = { randomPickId = pickRandomLyricStyle(style).id },
                     onToggleWordRotation = { styleVm.update(tuning.copy(enableWordRotation = !tuning.enableWordRotation)) },
                     onCycleIntensity = { styleVm.updateCommon(lyricCommon.copy(intensity = com.guangyue.core.lyrics.LyricCommonSettings.nextIntensity(lyricCommon.intensity))) },
                     // 2026-11-14：以前「加入歌单」直接跳搜索页（错的）。改成 Folia AddToPlaylistHost：

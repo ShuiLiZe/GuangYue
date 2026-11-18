@@ -479,6 +479,8 @@ fun V0cStage(
                     // 11-18：歌词样式行右侧动画强度胶囊（14000 = 混乱）。
                     animationIntensity = if (alt) AnimationIntensity.CHAOTIC else AnimationIntensity.NORMAL, onCycleIntensity = {},
                     classicWordRotation = !alt, onToggleWordRotation = {},
+                    // 14000 = 每首随机：参数行出「这首抽到的样式」胶囊。
+                    randomStyleName = if (alt) "花火" else null, onRerollStyle = {},
                 )
             }
         } else if (style == "queuepanel") {

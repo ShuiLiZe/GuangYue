@@ -143,6 +143,17 @@ class LyricStyleViewModel @Inject constructor(
 
     fun pickStyle(style: LyricStyle) {
         _style.value = style
+        // Folia selectLyricStyleChoice：选定一种具体样式即关掉每首随机。
+        if (_random.value) setRandom(false)
         viewModelScope.launch { preferences.lyricStyleId = style.id }
+    }
+
+    private val _random = MutableStateFlow(preferences.randomStylePerSong)
+    /** 每首歌随机一种样式（Folia randomVisualizerModePerSong）。 */
+    val randomStyle: StateFlow<Boolean> = _random.asStateFlow()
+
+    fun setRandom(on: Boolean) {
+        _random.value = on
+        viewModelScope.launch { preferences.randomStylePerSong = on }
     }
 }

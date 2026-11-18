@@ -213,6 +213,9 @@ fun StagePanel(
     /** 11-18 Folia classic renderQuickControls：流光「字词旋转」快捷开关（样式行下方参数行）；null 不画。 */
     classicWordRotation: Boolean? = null,
     onToggleWordRotation: () -> Unit = {},
+    /** 11-18 Folia「随机」：这首歌抽到的样式名（样式行下方胶囊，点一下另抽）；null = 没开随机。 */
+    randomStyleName: String? = null,
+    onRerollStyle: () -> Unit = {},
 ) {
     val colors = stagePanelColors(dark)
     var qualityPick by remember { mutableStateOf(initialQualityPick) }
@@ -336,6 +339,8 @@ fun StagePanel(
                                     onCycleIntensity = onCycleIntensity,
                                     classicWordRotation = classicWordRotation,
                                     onToggleWordRotation = onToggleWordRotation,
+                                    randomStyleName = randomStyleName,
+                                    onRerollStyle = onRerollStyle,
                                 )
                                 StagePanelTab.QUEUE -> QueueBody(
                                     colors = colors,
@@ -617,6 +622,9 @@ private fun ControlsBody(
     /** 11-18 Folia classic renderQuickControls：流光「字词旋转」快捷开关（样式行下方参数行）；null 不画。 */
     classicWordRotation: Boolean? = null,
     onToggleWordRotation: () -> Unit = {},
+    /** 11-18 Folia「随机」：这首歌抽到的样式名（样式行下方胶囊，点一下另抽）；null = 没开随机。 */
+    randomStyleName: String? = null,
+    onRerollStyle: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxWidth().padding(end = 2.dp)) {
         if (volume != null && onVolume != null) VolumeRow(colors, accent, volume, onVolume)
@@ -644,7 +652,10 @@ private fun ControlsBody(
         StyleStepperRow(colors, lyricStyleName, onOpenLyricStyle, onStepLyricStyle, glyph = lyricStyle?.let { st ->
             { c: Color -> com.guangyue.feature.player.lyrics.StyleGlyph(st, c, Modifier.size(18.dp)) }
         }, aside = animationIntensity?.let { ai -> { QuickChip(colors, intensityLabel(ai), "动画强度：" + intensityLabel(ai), onCycleIntensity) } },
-            params = if (lyricStyle == com.guangyue.feature.player.lyrics.LyricStyle.CLASSIC && classicWordRotation != null) ({
+            params = if (randomStyleName != null) ({
+                // Folia：随机时参数行是「这首抽到的样式」胶囊，点一下另抽一种（randomPool.reroll）。
+                QuickChip(colors, randomStyleName, "换一种样式：$randomStyleName", onRerollStyle)
+            }) else if (lyricStyle == com.guangyue.feature.player.lyrics.LyricStyle.CLASSIC && classicWordRotation != null) ({
                 QuickToggle(colors, accent, classicWordRotation, "字词旋转", GuangYueIcons.RotateCw, onToggleWordRotation)
             }) else null)
         if (backgroundId != null) {

@@ -185,11 +185,18 @@ fun IPlayerRoute(
 }
 
 /** 面板「歌词样式」行左右换的顺序：同样式面板列表（Folia registry order）。 */
-private val LyricStylePanelOrder = listOf(
+internal val LyricStylePanelOrder = listOf(
     LyricStyle.CLASSIC, LyricStyle.CADENZA, LyricStyle.PARTITA, LyricStyle.FUME, LyricStyle.TILT, LyricStyle.CLADDAGH,
     LyricStyle.MONET, LyricStyle.PENDOLO, LyricStyle.NEBBIA, LyricStyle.SONNET, LyricStyle.HANABI, LyricStyle.TEMPERA,
     LyricStyle.LUMIERE, LyricStyle.MACHI, LyricStyle.DIORAMA, LyricStyle.STILL,
 )
+
+/** Folia pickRandomVisualizerMode：在全部样式里随机挑一种，有别的可选时不挑当前这种。 */
+internal fun pickRandomLyricStyle(current: LyricStyle?, random: kotlin.random.Random = kotlin.random.Random.Default): LyricStyle {
+    val alternatives = LyricStylePanelOrder.filter { it != current }
+    val candidates = alternatives.ifEmpty { LyricStylePanelOrder }
+    return candidates[random.nextInt(candidates.size)]
+}
 
 /**
  * P1b：舞台上的浮卡面板外壳（收藏 / 队列 / 音质 / 模式都在 app 层接线，界面在 feature 的 [StagePanel]）。
@@ -222,6 +229,10 @@ fun StagePanelHost(
     onCycleIntensity: () -> Unit = {},
     classicWordRotation: Boolean? = null,
     onToggleWordRotation: () -> Unit = {},
+    /** 11-18 Folia「随机」项（randomVisualizerModePerSong）：开着时 lyricStyle 是这首歌抽到的样式。 */
+    randomStyle: Boolean = false,
+    onPickRandom: (() -> Unit)? = null,
+    onRerollStyle: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     // 2026-11-10：LocalTrackRepository 从来没人提供（一直是 null），收藏点了只改了图标、没写库——
@@ -341,11 +352,16 @@ fun StagePanelHost(
         },
         onStepLyricStyle = onPickLyricStyle?.let { pick ->
             { d: Int ->
-                val i = LyricStylePanelOrder.indexOf(lyricStyle).coerceAtLeast(0)
-                pick(LyricStylePanelOrder[(i + d + LyricStylePanelOrder.size) % LyricStylePanelOrder.size])
+                // Folia visualizerOptions：各样式之后是「随机」（有随机入口时）。
+                val n = LyricStylePanelOrder.size + if (onPickRandom != null) 1 else 0
+                val i = if (randomStyle && onPickRandom != null) n - 1 else LyricStylePanelOrder.indexOf(lyricStyle).coerceAtLeast(0)
+                val j = (i + d + n) % n
+                if (j == LyricStylePanelOrder.size) onPickRandom?.invoke() else pick(LyricStylePanelOrder[j])
             }
         },
-        lyricStyleName = styleName,
+        lyricStyleName = if (randomStyle) "随机" else styleName,
+        randomStyleName = if (randomStyle) styleName else null,
+        onRerollStyle = onRerollStyle,
         onOpenLyricStyle = onOpenLyricStyle,
         lyricStyle = lyricStyle,
         backgroundId = if (backgrounds.isEmpty()) null else background.takeIf { id -> backgrounds.any { it.first == id } } ?: backgrounds.first().first,
