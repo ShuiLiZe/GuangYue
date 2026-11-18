@@ -237,7 +237,8 @@ fun GuangYueNavHost(
             val ponderTouchButton by shellVm.ponderTouchButton.collectAsStateWithLifecycle()
             val gridSections = remember(accountTiles, homeMine, sheets, recent, charts, homeLocal, homeTabsHidden) {
                 val all = listOf(
-                    "歌单" to (accountTiles + homeMine),
+                    // 11-18 照 Folia APK：歌单页签只列在线账号歌单；本地歌单在「本地」页签的「歌单」分段（不再混在这里）。
+                    "歌单" to accountTiles,
                     "电台" to vm.recommended(sheets, recent),
                     "专辑" to emptyList(),
                     "本地" to homeLocal,

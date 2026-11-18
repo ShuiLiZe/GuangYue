@@ -947,14 +947,14 @@ private fun providerFullName(name: String): String {
     val t = name.lowercase()
     return when {
         "qq" in t -> "QQ Music"
-        "网易" in t -> "网易云音乐"
-        "酷狗" in t || "kugou" in t -> "酷狗音乐"
-        "酷我" in t || "kuwo" in t -> "酷我音乐"
-        "咪咕" in t || "migu" in t -> "咪咕音乐"
-        "汽水" in t -> "汽水音乐"
+        "网易" in t -> "NetEase Cloud Music"
+        "酷狗" in t || "kugou" in t -> "KuGou Music"
+        "酷我" in t || "kuwo" in t -> "Kuwo Music"
+        "咪咕" in t || "migu" in t -> "MIGU Music"
+        "汽水" in t -> "Soda Music"
         "波点" in t -> "波点音乐"
         "飞牛" in t -> "飞牛音乐"
-        "b站" in t || "bilibili" in t || "哔哩" in t -> "哔哩哔哩"
+        "b站" in t || "bilibili" in t || "哔哩" in t -> "bilibili"
         else -> "音源插件"
     }
 }
